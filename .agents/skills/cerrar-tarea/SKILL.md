@@ -34,6 +34,7 @@ pnpm build
 ## 2. Documentacion
 
 Si el cambio altera una regla o decision, actualizar en el mismo commit:
+
 - `docs/BUSINESS_RULES.md`: reglas comerciales (fechar las nuevas: "(DD/MM/AAAA)").
 - `docs/DECISIONS.md`: decisiones tecnicas o de producto.
 - `docs/ARCHITECTURE.md`: infraestructura, modulos, transacciones.
@@ -43,6 +44,7 @@ Si el cambio altera una regla o decision, actualizar en el mismo commit:
 ## 3. Informe final
 
 Decir siempre:
+
 - Que se cambio y por que.
 - Que checks pasaron y cuales **no** se pudieron ejecutar (base, navegador, impresora
   fisica, ARCA, produccion).
@@ -50,7 +52,7 @@ Decir siempre:
 
 ## 4. Git
 
-- Trabajar en una rama `feature/<descripcion>` o `fix/<descripcion>`, nunca en `main`.
+- Trabajar en una rama `feature/SISTEMA-<N>` (ver skill `git-equipo`), nunca en `main`.
 - Commit solo si el usuario lo pide. Mensajes estilo convencional en espanol o ingles
   (`feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`).
 - Nunca commitear `.env`, claves, dumps, `data/external-catalog/` ni `SUBIR-A-NETLIFY/`.

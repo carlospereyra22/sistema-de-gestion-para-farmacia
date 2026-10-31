@@ -57,6 +57,14 @@ Guardar en el scratchpad (no en el repo) un JSON con esta forma:
 - `update: true` sin `card`: busca la tarjeta por titulo; se detiene si hay cero o
   mas de una con ese titulo.
 - Sin `card` ni `update`: crea una tarjeta nueva en `list`.
+- `members`: `["me"]` asigna al dueno del token; tambien acepta usernames de miembros
+  del tablero.
+- `epic`: `{ "card": "<link de la epic>", "item": "<texto exacto del item>" }`. Hace
+  lo mismo que **Convertir en tarjeta**: adjunta la epic a la tarjeta nueva y reemplaza
+  el item del checklist de la epic por el link de la tarjeta.
+- Tareas de codigo: titulo `SISTEMA-<N> <Area>: <tarea>` y la rama
+  `feature/SISTEMA-<N>` en la descripcion. N sigue al ultimo usado (ver
+  `git branch -a` y las tarjetas del tablero).
 - Si la simulacion avisa que la tarjeta ya tiene descripcion, mostrarsela al usuario y
   confirmar antes de reemplazarla.
 - `labels` y `checklist` son opcionales; `checklist` agrega una lista "Hecho cuando".

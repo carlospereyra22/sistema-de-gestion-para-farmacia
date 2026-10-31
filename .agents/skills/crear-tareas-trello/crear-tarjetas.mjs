@@ -42,6 +42,8 @@ const boardCards = await trello("GET", `/boards/${board}/cards`);
 const { id: boardId } = await trello("GET", `/boards/${board}`, {
   fields: "id",
 });
+const boardMembers = await trello("GET", `/boards/${board}/members`);
+const me = await trello("GET", "/members/me", { fields: "id,username" });
 
 for (const card of plan.cards) {
   const idLabels = (card.labels ?? []).flatMap((name) => {
@@ -49,13 +51,16 @@ for (const card of plan.cards) {
     if (!id) missing.add(name);
     return id ? [id] : [];
   });
+  const idMembers = (card.members ?? []).map(memberId);
   const existing = await findExisting(card);
+  const epic = card.epic ? await findEpicItem(card.epic) : undefined;
   if (dryRun) {
     const previous = existing?.desc
       ? ` - ya tiene descripcion de ${existing.desc.length} caracteres`
       : "";
+    const parent = epic ? ` - item "${epic.item.name}" de la epic` : "";
     console.log(
-      `[simulacion] ${existing ? `actualizar ${existing.shortUrl}` : "crear"}: ${card.title} (${card.checklist?.length ?? 0} items)${previous}`,
+      `[simulacion] ${existing ? `actualizar ${existing.shortUrl}` : "crear"}: ${card.title} (${card.checklist?.length ?? 0} items, ${idMembers.length} miembros)${parent}${previous}`,
     );
     continue;
   }
@@ -63,14 +68,26 @@ for (const card of plan.cards) {
     ? await trello("PUT", `/cards/${existing.id}`, {
         desc: card.description ?? "",
         ...(idLabels.length ? { idLabels: idLabels.join(",") } : {}),
+        ...(idMembers.length ? { idMembers: idMembers.join(",") } : {}),
       })
     : await trello("POST", "/cards", {
         idList: list.id,
         name: card.title,
         desc: card.description ?? "",
         idLabels: idLabels.join(","),
+        idMembers: idMembers.join(","),
         pos: "bottom",
       });
+  // Igual que "Convertir en tarjeta": el item de la epic pasa a ser el link de la tarjeta.
+  if (epic) {
+    await trello("POST", `/cards/${created.id}/attachments`, {
+      url: epic.card.shortUrl,
+      name: `Epic: ${epic.card.name}`,
+    });
+    await trello("PUT", `/cards/${epic.card.id}/checkItem/${epic.item.id}`, {
+      name: created.shortUrl,
+    });
+  }
   if (card.checklist?.length) {
     const checklist = await trello("POST", `/cards/${created.id}/checklists`, {
       name: "Hecho cuando",
@@ -110,6 +127,38 @@ async function findExisting(card) {
       `Se esperaba una tarjeta "${card.title}" y hay ${matches.length}. Usar "card" con el link.`,
     );
   return matches[0];
+}
+
+// "me" es el dueno del token; el resto, usernames de miembros del tablero.
+function memberId(name) {
+  if (name === "me") return me.id;
+  const found = boardMembers.find(
+    (member) => member.username.toLowerCase() === name.toLowerCase(),
+  );
+  if (!found)
+    fail(
+      `"${name}" no es miembro del tablero. Miembros: ${boardMembers.map((member) => member.username).join(", ")}`,
+    );
+  return found.id;
+}
+
+async function findEpicItem({ card: link, item: itemName }) {
+  const ref = link.match(/trello\.com\/c\/([^/?#]+)/)?.[1] ?? link;
+  const epicCard = await trello("GET", `/cards/${ref}`, {
+    fields: "name,shortUrl,idBoard",
+  });
+  if (epicCard.idBoard !== boardId)
+    fail(`La epic ${epicCard.shortUrl} no pertenece al tablero ${board}.`);
+  const checklists = await trello("GET", `/cards/${epicCard.id}/checklists`);
+  const item = checklists
+    .flatMap((checklist) => checklist.checkItems)
+    .find(
+      (checkItem) =>
+        checkItem.name.trim().toLowerCase() === itemName.trim().toLowerCase(),
+    );
+  if (!item)
+    fail(`La epic ${epicCard.shortUrl} no tiene el item "${itemName}".`);
+  return { card: epicCard, item };
 }
 
 async function trello(method, path, params = {}) {

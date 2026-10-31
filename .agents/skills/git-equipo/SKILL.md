@@ -15,7 +15,7 @@ el otro Codex. Explicar con pasos concretos y comandos; el equipo esta aprendien
    ```bash
    git checkout main
    git pull
-   git checkout -b feature/<descripcion-corta>
+   git checkout -b feature/SISTEMA-<N>
    ```
 2. Trabajar y commitear en la rama (commits chicos y con mensaje claro).
 3. Antes de subir, traer lo nuevo de `main` para detectar conflictos en tu PC:
@@ -24,7 +24,7 @@ el otro Codex. Explicar con pasos concretos y comandos; el equipo esta aprendien
    ```
 4. Correr los checks (skill `cerrar-tarea`) y subir:
    ```bash
-   git push -u origin feature/<descripcion-corta>
+   git push -u origin feature/SISTEMA-<N>
    ```
 5. Abrir el Pull Request en GitHub (`base: main` <- `compare: feature/...`), o con
    `gh pr create --base main`. Describir que cambia y que no se pudo probar.
@@ -36,6 +36,9 @@ el otro Codex. Explicar con pasos concretos y comandos; el equipo esta aprendien
 
 - Nunca trabajar ni hacer push directo a `main`.
 - Una rama por tarea; ramas cortas (dias, no semanas).
+- Nombre de rama: `feature/SISTEMA-<N>`, con N correlativo (SISTEMA-1, SISTEMA-2, ...).
+  N es el de la tarjeta de Trello; si no hay tarjeta, el siguiente al ultimo usado
+  (`git branch -a`). Los commits empiezan con `SISTEMA-<N>`.
 - No usar `git push --force` en ramas compartidas ni en `main`.
 - No commitear `.env`, claves, dumps ni archivos de prueba (ej. `test.txt`).
 - Avisar al companero si la rama toca archivos "calientes": `apps/api/prisma/schema.prisma`,

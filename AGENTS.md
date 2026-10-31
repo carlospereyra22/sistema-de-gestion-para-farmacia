@@ -80,7 +80,7 @@ Una skill nueva va en `.agents/skills/<nombre>/SKILL.md` (frontmatter `name` y
 - Toda operacion futura de base compleja debe considerar transacciones.
 - Todo codigo nuevo debe compilar, tener tests cuando agregue comportamiento y actualizar documentacion si cambia una decision.
 - El backend es la autoridad de precios, permisos, totales y stock. Importes en centavos `BigInt`, nunca float.
-- Trabajar en ramas `feature/...` o `fix/...` y entrar a `main` por Pull Request; nunca push directo a `main`.
+- Trabajar en ramas `feature/SISTEMA-<N>` (numero correlativo, ver `git-equipo`) y entrar a `main` por Pull Request; nunca push directo a `main`.
 - No ejecutar `Publicar Produccion.cmd`, migraciones contra produccion, ni habilitar emision fiscal productiva sin autorizacion explicita del usuario.
 
 ## Before finishing a task
