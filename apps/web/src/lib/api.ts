@@ -2548,6 +2548,8 @@ export type ReportDetail = {
   to: string;
   totalSalesMinor: string;
   saleCount: number;
+  /** Unidades de venta de productos, menos las devueltas en el periodo. */
+  unitsSold: number;
   dailySales: { date: string; totalMinor: string }[];
   cashClosures: {
     count: number;

@@ -154,6 +154,31 @@ rol en Configuracion → Roles y permisos.
 - Tests: `report-period.spec.ts` y `test/report-access.integration.spec.ts`
   (aislamiento entre sucursales y organizaciones, sucursal nueva, inactivas, permisos).
 
+## Web base (SISTEMA-4)
+
+- `reports-workspace.tsx`: titulo "Reportes" en la barra superior (sin encabezado
+  grande), 7 pestanas compactas (las restringidas muestran candado), barra de filtros y
+  contenido de la pestana activa. La vista vive en la URL: `seccion` (pestana),
+  `periodo`, `desde`, `hasta`, `sucursal`, `comparar`; al cambiar de pantalla se borran.
+- `report-filters-bar.tsx`: periodo (Hoy … Este ano, Personalizado), Desde/Hasta siempre
+  editables (al tocarlas pasa a Personalizado y aplica si el rango es valido), sucursal
+  ("Todas las sucursales" solo con 2 o mas), comparar con y Restablecer. Usa el
+  desplegable del sistema (`ProductFilterSelect`), no el `select` nativo.
+- Componentes: `report-kpi.tsx` (valor, variacion con color segun si subir es bueno,
+  ayuda de la formula, "estimado"), `report-states.tsx` (vacio, error con reintento,
+  carga), `report-chart.tsx` (ECharts). Logica en `lib/report-view.ts`,
+  `lib/report-format.ts`, `lib/report-chart-theme.ts`, `lib/reports-api.ts`.
+- Resumen muestra por ahora la vista anterior (`report-legacy-overview.tsx`) con las
+  fechas de la barra; consulta una sucursal por vez (con "Todas" usa la del encabezado
+  y lo avisa). Su cuarta tarjeta es "Unidades vendidas" (`unitsSold` agregado a
+  `reports/detail`). La reemplaza SISTEMA-5.
+- **ECharts** (`echarts@6.1.0`, Apache-2.0): imports modulares y carga diferida; queda
+  en su propio archivo (`report-chart-*.js`) que se descarga solo al abrir Reportes.
+  Produccion: no requiere instalacion manual. `Publicar Produccion.cmd` lo instala con
+  `pnpm install --frozen-lockfile` y lo incluye en el build de `SUBIR-A-NETLIFY`; el
+  servidor Oracle instala solo dependencias de la API. Despues de traer el cambio,
+  cada desarrollador corre `pnpm install` una vez.
+
 ## Tareas
 
 1. **Mapa de metricas y contratos.** Matriz metrica -> fuente -> formula -> limitaciones;

@@ -1,3 +1,5 @@
+import { reportSearchKeys } from "./report-view";
+
 const pages = {
   inicio: "Inicio",
   productos: "Productos",
@@ -51,6 +53,8 @@ export function workspaceLocation(
   if (slug === "inicio") next.delete("pagina");
   else next.set("pagina", slug);
   next.delete("seccion");
+  // Los filtros de Reportes no se arrastran a otras pantallas.
+  for (const key of reportSearchKeys) next.delete(key);
   if (
     (view === "Administración" && tab === "roles") ||
     (view === "Organización" &&

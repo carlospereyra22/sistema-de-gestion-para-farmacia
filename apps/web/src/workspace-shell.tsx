@@ -89,6 +89,7 @@ import { CustomerAccounts } from "./customer-accounts";
 import { DashboardMedicineSearch } from "./dashboard-medicine-search";
 import { DashboardOverview, type DashboardAlert } from "./dashboard-overview";
 import { DashboardWelcome, DashboardDate } from "./dashboard-welcome";
+import { ReportsWorkspace } from "./reports-workspace";
 import { DashboardRecentSales } from "./dashboard-recent-sales";
 import { ProductSyncStatus } from "./product-sync-status";
 import { CatalogReferenceRefresh } from "./catalog-reference-refresh";
@@ -192,7 +193,6 @@ import {
   getParties,
   getPriceLists,
   getReportSummary,
-  getReportDetail,
   getRoles,
   getSales,
   getStock,
@@ -214,7 +214,6 @@ import {
   type Party,
   type PriceList,
   type ReportSummary,
-  type ReportDetail,
   type RoleListItem,
   type Sale,
   type StockLot,
@@ -523,7 +522,8 @@ export function WorkspaceShell({
             view === "Ventas" ||
             view === "Caja" ||
             view === "Cuentas corrientes" ||
-            view === "Categorías y laboratorios") && (
+            view === "Categorías y laboratorios" ||
+            view === "Reportes") && (
             <h1 className="workspace-sales-title">
               {view === "Compras" ? (
                 <ShoppingCart size={22} aria-hidden />
@@ -545,6 +545,8 @@ export function WorkspaceShell({
                 <Shapes size={22} aria-hidden />
               ) : view === "Cuentas corrientes" ? (
                 <NotebookTabs size={22} aria-hidden />
+              ) : view === "Reportes" ? (
+                <ChartNoAxesCombined size={22} aria-hidden />
               ) : (
                 <CashRegisterIcon size={22} />
               )}
@@ -745,7 +747,8 @@ export function WorkspaceShell({
             view !== "Inventario" &&
             view !== "Proveedores" &&
             view !== "Clientes" &&
-            view !== "Compras" && (
+            view !== "Compras" &&
+            view !== "Reportes" && (
               <div className="workspace-page-heading flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
@@ -1017,11 +1020,12 @@ export function WorkspaceShell({
             />
           ) : null}
           {ready && view === "Reportes" ? (
-            <Reports
+            <ReportsWorkspace
               token={accessToken!}
               organizationId={organizationId!}
-              branchId={branchId}
-              onError={setMessage}
+              currentBranchId={branchId}
+              search={searchParams}
+              onSearchChange={setSearchParams}
             />
           ) : null}
         </section>
@@ -6213,452 +6217,6 @@ function Transfers({
   );
 }
 
-function Reports({
-  token,
-  organizationId,
-  branchId,
-  onError,
-}: {
-  token: string;
-  organizationId: string;
-  branchId: string;
-  onError: (value: string) => void;
-}): ReactElement {
-  const [summary, setSummary] = useState<ReportSummary>();
-  const [detail, setDetail] = useState<ReportDetail>();
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const load = async () => {
-    const [nextSummary, nextDetail] = await Promise.all([
-      getReportSummary(token, organizationId, branchId),
-      getReportDetail(
-        token,
-        organizationId,
-        branchId,
-        from || undefined,
-        to || undefined,
-      ),
-    ]);
-    setSummary(nextSummary);
-    setDetail(nextDetail);
-  };
-  useEffect(() => {
-    void load().catch((cause: unknown) =>
-      onError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudieron cargar los reportes.",
-      ),
-    );
-  }, [branchId, onError, organizationId, token]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!summary || !detail)
-    return (
-      <p className="mt-8 border bg-white p-5 text-sm">Cargando reportes…</p>
-    );
-  const reportTotal = Number(detail.totalSalesMinor) / 100;
-  const averageTicket = detail.saleCount ? reportTotal / detail.saleCount : 0;
-  const topQuantity = Math.max(
-    ...detail.topProducts.map((product) => product.quantity),
-    1,
-  );
-  const trend = detail.dailySales.slice(-14);
-  const trendMaximum = Math.max(
-    ...trend.map((day) => Number(day.totalMinor)),
-    1,
-  );
-  if (window.location.origin) {
-    return (
-      <div className="mt-7 space-y-5">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void load().catch((cause: unknown) =>
-              onError(
-                cause instanceof Error
-                  ? cause.message
-                  : "No se pudieron cargar los reportes.",
-              ),
-            );
-          }}
-          className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-        >
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#315da8]">
-              Período de análisis
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Consultá el rendimiento comercial de la sucursal.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <Input
-              label="Desde"
-              type="date"
-              value={from}
-              onChange={setFrom}
-              required={false}
-              labelClassName="mt-0 text-xs text-slate-600"
-              className="h-10 rounded-lg border-slate-300 text-sm"
-            />
-            <Input
-              label="Hasta"
-              type="date"
-              value={to}
-              onChange={setTo}
-              required={false}
-              labelClassName="mt-0 text-xs text-slate-600"
-              className="h-10 rounded-lg border-slate-300 text-sm"
-            />
-            <button className="h-10 rounded-lg bg-[#315da8] px-4 text-sm font-semibold text-white hover:bg-[#254a88]">
-              Actualizar
-            </button>
-          </div>
-        </form>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            [
-              "Ventas",
-              String(detail.saleCount),
-              "operaciones en rango",
-              "#2d8a3f",
-            ],
-            [
-              "Facturación",
-              money(detail.totalSalesMinor),
-              "monto total",
-              "#315da8",
-            ],
-            [
-              "Ticket promedio",
-              money(Math.round(averageTicket * 100)),
-              "por venta",
-              "#7c3aed",
-            ],
-            [
-              "Stock disponible",
-              String(summary.stockUnits),
-              "unidades en sucursal",
-              "#0ea5c9",
-            ],
-          ].map(([label, value, note, color]) => (
-            <article
-              key={label}
-              className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_26px_rgb(35_61_96_/_10%)]"
-              style={{ borderTopWidth: 4, borderTopColor: color }}
-            >
-              <div
-                className="absolute right-5 top-4 grid size-12 place-items-center rounded-2xl bg-slate-100"
-                style={{ color }}
-              >
-                ●
-              </div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                {label}
-              </p>
-              <p
-                className="mt-2 pr-12 text-3xl font-bold tracking-tight"
-                style={{ color }}
-              >
-                {value}
-              </p>
-              <p className="mt-1 text-xs font-medium text-slate-500">{note}</p>
-            </article>
-          ))}
-        </div>
-        <div className="grid gap-5 xl:grid-cols-[1.05fr_1fr]">
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_26px_rgb(35_61_96_/_8%)]">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#315da8]">
-              Ranking
-            </p>
-            <h2 className="mt-1 text-2xl font-bold tracking-tight">
-              Productos top
-            </h2>
-            <div className="mt-5 space-y-3">
-              {detail.topProducts.length ? (
-                detail.topProducts.map((product, index) => {
-                  const palette = [
-                    "#315da8",
-                    "#16a34a",
-                    "#f59e0b",
-                    "#0ea5c9",
-                    "#7c3aed",
-                  ];
-                  return (
-                    <div key={product.productId}>
-                      <div className="flex items-end justify-between gap-3 text-sm">
-                        <div>
-                          <p className="font-semibold">
-                            {index + 1}. {product.productName}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {product.quantity} unidades
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${Math.max((product.quantity / topQuantity) * 100, 6)}%`,
-                            backgroundColor: palette[index % palette.length],
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="py-8 text-sm text-slate-500">
-                  Todavía no hay ventas en el período.
-                </p>
-              )}
-            </div>
-          </section>
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_26px_rgb(35_61_96_/_8%)]">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#315da8]">
-              Cobros
-            </p>
-            <h2 className="mt-1 text-2xl font-bold tracking-tight">
-              Medios de pago
-            </h2>
-            <div className="mt-5 space-y-3">
-              {detail.payments.length ? (
-                detail.payments.map((payment) => (
-                  <div
-                    key={payment.method}
-                    className="flex items-center justify-between rounded-2xl border border-[#d5e1f5] bg-[#f6f9ff] px-4 py-3"
-                  >
-                    <span className="font-semibold text-slate-700">
-                      {payment.method}
-                    </span>
-                    <strong className="text-[#315da8]">
-                      {money(payment.amountMinor)}
-                    </strong>
-                  </div>
-                ))
-              ) : (
-                <p className="py-8 text-sm text-slate-500">
-                  Sin cobros para el período.
-                </p>
-              )}
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-[#edf8f1] p-3">
-                <p className="text-[10px] font-bold uppercase text-[#2d8a3f]">
-                  Vencimientos
-                </p>
-                <p className="mt-1 text-xl font-bold">{summary.expiringLots}</p>
-              </div>
-              <div className="rounded-2xl bg-[#fff7eb] p-3">
-                <p className="text-[10px] font-bold uppercase text-[#d97706]">
-                  Compras pendientes
-                </p>
-                <p className="mt-1 text-xl font-bold">
-                  {summary.pendingPurchases}
-                </p>
-              </div>
-            </div>
-          </section>
-        </div>
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_26px_rgb(35_61_96_/_8%)]">
-          <p className="text-xs font-bold uppercase tracking-wide text-[#315da8]">
-            Evolución
-          </p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight">
-            Tendencia diaria
-          </h2>
-          <div className="mt-6 flex h-52 items-end gap-2">
-            {trend.length ? (
-              trend.map((day) => (
-                <div
-                  key={day.date}
-                  className="flex h-full min-w-0 flex-1 flex-col justify-end text-center"
-                >
-                  <span className="mb-2 text-[10px] font-semibold text-[#2d8a3f]">
-                    {money(day.totalMinor)}
-                  </span>
-                  <div
-                    className="min-h-1 rounded-t-lg bg-gradient-to-t from-[#315da8] to-[#5a8df0]"
-                    style={{
-                      height: `${Math.max((Number(day.totalMinor) / trendMaximum) * 100, 1)}%`,
-                    }}
-                  />
-                  <span className="mt-2 text-[10px] text-slate-500">
-                    {new Date(`${day.date}T12:00:00`).toLocaleDateString(
-                      "es-AR",
-                      { day: "2-digit", month: "2-digit" },
-                    )}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="m-auto text-sm text-slate-500">
-                No hay ventas para graficar.
-              </p>
-            )}
-          </div>
-        </section>
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_26px_rgb(35_61_96_/_8%)]">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-[#315da8]">
-                Control de caja
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">
-                Cierres por día y mes
-              </h2>
-            </div>
-            <p className="text-sm text-slate-500">
-              {detail.cashClosures.count} cierres en el período
-            </p>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            {[
-              [
-                "Efectivo esperado",
-                detail.cashClosures.expectedMinor,
-                "#315da8",
-              ],
-              ["Efectivo contado", detail.cashClosures.countedMinor, "#0f8a78"],
-              [
-                "Diferencia acumulada",
-                detail.cashClosures.differenceMinor,
-                "#e11d48",
-              ],
-            ].map(([label, amount, color]) => (
-              <div key={label} className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold text-slate-500">{label}</p>
-                <p className="mt-2 text-xl font-bold" style={{ color }}>
-                  {money(amount)}
-                </p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 grid gap-5 xl:grid-cols-2">
-            <ClosureReportTable
-              title="Por día"
-              groups={detail.cashClosures.daily}
-            />
-            <ClosureReportTable
-              title="Por mes"
-              groups={detail.cashClosures.monthly}
-              monthly
-            />
-          </div>
-        </section>
-      </div>
-    );
-  }
-  return (
-    <div className="mt-8 grid gap-4 md:grid-cols-3">
-      {[
-        ["Ventas de hoy", money(summary.salesTodayMinor)],
-        ["Operaciones de venta", String(summary.salesTodayCount)],
-        ["Unidades en stock", String(summary.stockUnits)],
-        ["Lotes disponibles", String(summary.stockLots)],
-        ["Vencimientos próximos", String(summary.expiringLots)],
-        ["Compras pendientes", String(summary.pendingPurchases)],
-        ["Cajas abiertas", String(summary.openCashSessions)],
-      ].map(([label, value]) => (
-        <article key={label} className="border bg-white p-5">
-          <p className="text-sm text-slate-500">{label}</p>
-          <p className="mt-3 text-xl font-semibold">{value}</p>
-        </article>
-      ))}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void load().catch((cause: unknown) =>
-            onError(
-              cause instanceof Error
-                ? cause.message
-                : "No se pudieron cargar los reportes.",
-            ),
-          );
-        }}
-        className="mt-6 flex flex-wrap items-end gap-3 border bg-white p-4"
-      >
-        <Input
-          label="Desde"
-          type="date"
-          value={from}
-          onChange={setFrom}
-          required={false}
-        />
-        <Input
-          label="Hasta"
-          type="date"
-          value={to}
-          onChange={setTo}
-          required={false}
-        />
-        <button className="h-10 bg-teal-700 px-4 text-sm text-white">
-          Actualizar
-        </button>
-      </form>
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <section className="border bg-white p-5">
-          <h2 className="font-semibold">
-            Medios de venta (incluye financiación)
-          </h2>
-          {detail.payments.map((payment) => (
-            <p
-              key={payment.method}
-              className="mt-3 flex justify-between text-sm"
-            >
-              <span>{payment.method}</span>
-              <span>{money(payment.amountMinor)}</span>
-            </p>
-          ))}
-          <p className="mt-4 border-t pt-3 text-sm font-semibold">
-            {detail.saleCount} ventas · {money(detail.totalSalesMinor)}
-          </p>
-        </section>
-        <section className="border bg-white p-5">
-          <h2 className="font-semibold">Productos más vendidos</h2>
-          {detail.topProducts.map((product) => (
-            <p
-              key={product.productId}
-              className="mt-3 flex justify-between text-sm"
-            >
-              <span>{product.productName}</span>
-              <span>{product.quantity} un.</span>
-            </p>
-          ))}
-        </section>
-        <section className="border bg-white p-5">
-          <h2 className="font-semibold">Ventas por día</h2>
-          {detail.dailySales.map((day) => (
-            <p key={day.date} className="mt-3 flex justify-between text-sm">
-              <span>
-                {new Date(`${day.date}T12:00:00`).toLocaleDateString("es-AR")}
-              </span>
-              <span>{money(day.totalMinor)}</span>
-            </p>
-          ))}
-        </section>
-        <section className="border bg-white p-5">
-          <h2 className="font-semibold">Vencimientos próximos</h2>
-          {detail.expiring.map((lot) => (
-            <p
-              key={`${lot.productName}-${lot.lotNumber}`}
-              className="mt-3 flex justify-between text-sm"
-            >
-              <span>
-                {lot.productName} · {lot.lotNumber}
-              </span>
-              <span>{lot.quantity} un.</span>
-            </p>
-          ))}
-          <p className="mt-4 border-t pt-3 text-sm">
-            Valor de costo en stock: {money(detail.stockCostMinor)}
-          </p>
-        </section>
-      </div>
-    </div>
-  );
-}
-
 function Administration({
   token,
   organizationId,
@@ -7024,75 +6582,6 @@ function Select({
         ))}
       </select>
     </label>
-  );
-}
-
-function ClosureReportTable({
-  title,
-  groups,
-  monthly = false,
-}: {
-  title: string;
-  groups: {
-    period: string;
-    count: number;
-    expectedMinor: string;
-    countedMinor: string;
-    differenceMinor: string;
-  }[];
-  monthly?: boolean;
-}): ReactElement {
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-100">
-      <h3 className="border-b px-4 py-3 text-sm font-semibold">{title}</h3>
-      {groups.length ? (
-        <table className="w-full min-w-[400px] text-sm">
-          <thead className="text-left text-[11px] uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-2">Período</th>
-              <th className="px-2 py-2 text-right">Cierres</th>
-              <th className="px-2 py-2 text-right">Esperado</th>
-              <th className="px-4 py-2 text-right">Diferencia</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((group) => (
-              <tr key={group.period} className="border-t border-slate-100">
-                <td className="px-4 py-2.5">
-                  {monthly
-                    ? new Date(
-                        `${group.period}-01T12:00:00`,
-                      ).toLocaleDateString("es-AR", {
-                        month: "long",
-                        year: "numeric",
-                      })
-                    : new Date(`${group.period}T12:00:00`).toLocaleDateString(
-                        "es-AR",
-                      )}
-                </td>
-                <td className="px-2 py-2.5 text-right">{group.count}</td>
-                <td className="px-2 py-2.5 text-right">
-                  {money(group.expectedMinor)}
-                </td>
-                <td
-                  className={`px-4 py-2.5 text-right font-semibold ${
-                    group.differenceMinor === "0"
-                      ? "text-teal-700"
-                      : "text-rose-600"
-                  }`}
-                >
-                  {money(group.differenceMinor)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p className="px-4 py-5 text-sm text-slate-500">
-          Sin cierres para este período.
-        </p>
-      )}
-    </div>
   );
 }
 
