@@ -1,0 +1,7 @@
+# Presentación de Caja
+
+La pantalla organiza estado, resumen y apertura/cierre en tres tarjetas; movimiento manual y actividad reciente debajo, e historial de cierres a ancho completo. En pantallas pequeñas se apilan. Configurar cajas abre un popup con búsqueda y listado de cajas existentes a la izquierda y Nueva caja a la derecha. En pantallas pequeñas se apilan. Crear usa la sucursal activa, no abre una sesión y bloquea envíos simultáneos mientras espera la respuesta. Los errores se muestran dentro del popup. No se ofrecen códigos, usuarios autorizados ni caja predeterminada: esas opciones no están soportadas por el circuito actual.
+
+El resumen corresponde a la sesión abierta, no al día civil; la fecha de su cabecera es la de apertura. Ingresos presenta la suma en centavos enteros de `cashSalesMinor` y `manualInMinor`; Egresos muestra `manualOutMinor`; Saldo esperado muestra `expectedAmountMinor` calculado por la API, que incluye el fondo inicial. Las entradas/salidas incluyen los movimientos registrados por otros circuitos; no se presentan como exclusivamente manuales. No se inventan cantidades de cobros, filas de venta ni usuarios ausentes en la respuesta.
+
+Últimos movimientos ordena una copia por fecha descendente y muestra cinco filas, con opción de expandir los movimientos disponibles de la sesión. No realiza escrituras. Se mantienen los formularios y rutas existentes de creación, apertura, cierre, movimiento manual y archivo/restauración de cierres. No se modifica el cálculo del saldo, la persistencia ni el historial.

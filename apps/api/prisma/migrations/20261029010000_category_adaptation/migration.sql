@@ -1,0 +1,3 @@
+ALTER TABLE "Category"
+  ADD COLUMN "matchingTerms" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN "matchingEnabled" BOOLEAN NOT NULL DEFAULT false;

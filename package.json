@@ -1,0 +1,26 @@
+{
+  "name": "sistema-de-gestion",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.0.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @gestion/api --filter @gestion/web dev",
+    "dev:api": "pnpm --filter @gestion/api dev",
+    "dev:web": "pnpm --filter @gestion/web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && pnpm test:thermal",
+    "test:thermal": "node --test scripts/thermal-agent/ticket.test.js scripts/thermal-agent/server.test.js scripts/thermal-agent/recovery.test.js scripts/print-box/delivery.test.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @gestion/api prisma:migrate",
+    "db:seed": "pnpm --filter @gestion/api prisma:seed",
+    "db:studio": "pnpm --filter @gestion/api prisma:studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.0"
+  }
+}

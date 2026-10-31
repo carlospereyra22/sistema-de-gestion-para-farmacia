@@ -1,0 +1,1 @@
+ALTER TABLE "AuthSession" ALTER COLUMN "expiresAt" DROP NOT NULL;

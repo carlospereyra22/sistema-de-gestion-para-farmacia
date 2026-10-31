@@ -1,0 +1,15 @@
+[Unit]
+Description=Gestion PostgreSQL backup and isolated restore check
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gestion-backup
+User=root
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=2h
+StandardOutput=journal
+StandardError=journal

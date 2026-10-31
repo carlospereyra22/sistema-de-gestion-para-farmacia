@@ -1,0 +1,6 @@
+ALTER TABLE "Supplier"
+  ADD COLUMN "phone" VARCHAR(60),
+  ADD COLUMN "email" VARCHAR(160),
+  ADD COLUMN "contactName" VARCHAR(160),
+  ADD COLUMN "address" VARCHAR(250),
+  ADD COLUMN "notes" VARCHAR(1000);

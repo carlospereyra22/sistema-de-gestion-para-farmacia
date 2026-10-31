@@ -1,0 +1,5 @@
+{
+  "port": 17890,
+  "printerName": "Xprinter XP-80",
+  "allowedOrigins": ["http://localhost:5173"]
+}

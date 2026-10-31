@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:18
+    container_name: gestion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gestion_dev
+      POSTGRES_PASSWORD: gestion_dev_password
+      POSTGRES_DB: gestion_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gestion_dev -d gestion_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
