@@ -44,6 +44,7 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
   `DISTRIBUTION.md`.
 - Fiscal: `FISCAL_BILLING.md`, `PRODUCTION_FISCAL_CHECKLIST.md`, `FISCAL_*.md`.
 - Impresion: `THERMAL_TICKETS.md`, `LOCAL_PRINT_AGENT.md`, `PRODUCTION_PRINTING.md`.
+- Reportes: `REPORTS_PLAN.md`, `REPORTS_INTERACTIVE_SPEC.md`.
 - Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`.
 - Operacion: `INICIAR_PRUEBAS.md`, `PUBLICAR_PRODUCCION.md`,
   `LOCAL_PRODUCTION_PARITY.md`, `NETLIFY.md`, `PRODUCTION_BOOTSTRAP.md`.
@@ -61,6 +62,7 @@ Unica carpeta de skills del proyecto, para Codex y Claude Code. No crear copias 
 | Cambiar `schema.prisma` o crear migraciones               | `.agents/skills/migracion-prisma/SKILL.md`        |
 | Terminar cualquier cambio de codigo                       | `.agents/skills/cerrar-tarea/SKILL.md`            |
 | Ramas, commits, pull requests, merge o conflictos de git  | `.agents/skills/git-equipo/SKILL.md`              |
+| Crear o cargar tareas en Trello                           | `.agents/skills/crear-tareas-trello/SKILL.md`     |
 
 Una skill nueva va en `.agents/skills/<nombre>/SKILL.md` (frontmatter `name` y
 `description`) y se agrega a esta tabla.
