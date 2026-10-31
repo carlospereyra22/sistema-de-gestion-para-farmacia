@@ -59,6 +59,8 @@ async function main(): Promise<void> {
     ["PAYABLE_MANAGE", "Registrar facturas de proveedores"],
     ["PURCHASE_MANAGE", "Manage purchases and receipts"],
     ["REPORT_READ", "Read operational reports"],
+    ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
+    ["REPORT_EXPORT", "Exportar reportes"],
   ] as const;
   for (const [code, description] of permissions) {
     await prisma.permission.upsert({

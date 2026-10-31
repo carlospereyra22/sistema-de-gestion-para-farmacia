@@ -282,6 +282,8 @@ const permissionGroups: {
       ["PAYABLE_MANAGE", "Registrar facturas de proveedores"],
       ["PURCHASE_MANAGE", "Crear y recibir compras"],
       ["REPORT_READ", "Ver reportes"],
+      ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
+      ["REPORT_EXPORT", "Exportar reportes"],
     ],
   },
 ];

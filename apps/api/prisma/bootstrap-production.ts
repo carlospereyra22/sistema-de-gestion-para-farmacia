@@ -43,6 +43,8 @@ export const productionPermissions = [
   ["PURCHASE_READ", "Read purchases"],
   ["PURCHASE_MANAGE", "Manage purchases and receipts"],
   ["REPORT_READ", "Read operational reports"],
+  ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
+  ["REPORT_EXPORT", "Exportar reportes"],
 ] as const;
 
 /** One-shot setup for a freshly migrated database, never a password reset. */
