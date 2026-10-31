@@ -1,8 +1,8 @@
 import type { ReactElement, ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, Info, Minus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { ReportKpi } from "@gestion/contracts";
 import { formatKpiValue, kpiTrend, unavailableText } from "./lib/report-format";
-import { reportCardClass } from "./report-states";
+import { ReportHelp, reportCardClass } from "./report-states";
 
 /**
  * Tarjeta de indicador. `help` explica la formula (tooltip); `higherIsBetter`
@@ -36,9 +36,7 @@ export function ReportKpiCard({
       <div className="min-w-0 flex-1">
         <h3 className="flex items-center gap-1 text-xs font-semibold text-slate-600">
           <span className="truncate">{label}</span>
-          <span title={help} aria-label={`Cómo se calcula: ${help}`}>
-            <Info size={13} className="text-slate-400" aria-hidden />
-          </span>
+          <ReportHelp text={help} />
         </h3>
         <p
           className="mt-1 truncate text-2xl font-bold leading-8 tracking-tight text-slate-900 tabular-nums"

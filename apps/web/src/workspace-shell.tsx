@@ -1023,7 +1023,6 @@ export function WorkspaceShell({
             <ReportsWorkspace
               token={accessToken!}
               organizationId={organizationId!}
-              currentBranchId={branchId}
               search={searchParams}
               onSearchChange={setSearchParams}
             />

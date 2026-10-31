@@ -30,7 +30,9 @@ describe("report components", () => {
     expect(html).toContain("1.980,00");
     expect(html).toContain("+98,0 %");
     expect(html).toContain("vs. período anterior");
-    expect(html).toContain("Cómo se calcula: Ventas confirmadas");
+    expect(html).toContain("Ventas confirmadas menos devoluciones.");
+    expect(html).toContain('role="tooltip"');
+    expect(html).not.toContain("title=");
   });
 
   it("la tarjeta sin dato dice No disponible, no cero", () => {
@@ -111,7 +113,6 @@ describe("report components", () => {
       <ReportsWorkspace
         token="t"
         organizationId="o"
-        currentBranchId="b1"
         search={new URLSearchParams("pagina=reportes&seccion=ventas")}
         onSearchChange={noop}
       />,

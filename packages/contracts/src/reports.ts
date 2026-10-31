@@ -142,3 +142,59 @@ export type ReportPage<TRow> = {
   page: number;
   pageSize: number;
 };
+
+/** Totales de cierres de caja de un grupo (dia o mes, en hora de Argentina). */
+export type ReportCashClosureGroup = {
+  period: string;
+  count: number;
+  expectedMinor: MoneyMinor;
+  countedMinor: MoneyMinor;
+  differenceMinor: MoneyMinor;
+};
+
+export type ReportCashClosures = Omit<ReportCashClosureGroup, "period"> & {
+  daily: ReportCashClosureGroup[];
+  monthly: ReportCashClosureGroup[];
+};
+
+export type ReportOverviewKpi =
+  "netSales" | "grossProfit" | "averageTicket" | "unitsSold";
+
+/** Fila de la tabla por sucursal; `grossProfitMinor` es null sin permiso de costos. */
+export type ReportBranchRow = {
+  id: string;
+  name: string;
+  netSalesMinor: MoneyMinor;
+  grossProfitMinor: MoneyMinor | null;
+  tickets: number;
+  unitsSold: number;
+  sharePct: number | null;
+};
+
+export type ReportAlert = {
+  kind: "expired" | "expiring" | "lowStock";
+  /** Cantidad de lotes (vencidos/por vencer) o productos (stock bajo). */
+  count: number;
+  /** Ventana o umbral aplicado: dias para vencimientos, unidades para stock bajo. */
+  threshold: number;
+};
+
+/** Pestana Resumen. Formulas en docs/REPORTS_PLAN.md. */
+export type ReportOverview = ReportResponse<
+  ReportOverviewKpi,
+  {
+    /** Ventas netas por periodo; `previous` alineado por posicion. */
+    salesTrend: ReportSeriesPoint[];
+    trendGranularity: "day" | "month";
+    salesByCategory: ReportBreakdownItem[];
+    /** Sobre ventas facturadas (el vuelto se resta al efectivo). */
+    paymentMethods: ReportBreakdownItem[];
+    /** Top 10 por unidades; `units` netas de devoluciones. */
+    topProducts: (ReportBreakdownItem & { units: number })[];
+  },
+  {
+    branches: ReportBranchRow[];
+    alerts: ReportAlert[];
+    cashClosures: ReportCashClosures;
+  }
+>;

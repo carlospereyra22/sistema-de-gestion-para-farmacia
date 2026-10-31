@@ -168,16 +168,43 @@ rol en Configuracion → Roles y permisos.
   ayuda de la formula, "estimado"), `report-states.tsx` (vacio, error con reintento,
   carga), `report-chart.tsx` (ECharts). Logica en `lib/report-view.ts`,
   `lib/report-format.ts`, `lib/report-chart-theme.ts`, `lib/reports-api.ts`.
-- Resumen muestra por ahora la vista anterior (`report-legacy-overview.tsx`) con las
-  fechas de la barra; consulta una sucursal por vez (con "Todas" usa la del encabezado
-  y lo avisa). Su cuarta tarjeta es "Unidades vendidas" (`unitsSold` agregado a
-  `reports/detail`). La reemplaza SISTEMA-5.
+- Durante SISTEMA-4 el Resumen mostro la vista anterior; SISTEMA-5 la reemplazo
+  (`report-legacy-overview.tsx` se elimino). `reports/detail` queda sin uso en la web
+  (sigue existiendo; `unitsSold` se agrego ahi en SISTEMA-4).
 - **ECharts** (`echarts@6.1.0`, Apache-2.0): imports modulares y carga diferida; queda
   en su propio archivo (`report-chart-*.js`) que se descarga solo al abrir Reportes.
   Produccion: no requiere instalacion manual. `Publicar Produccion.cmd` lo instala con
   `pnpm install --frozen-lockfile` y lo incluye en el build de `SUBIR-A-NETLIFY`; el
   servidor Oracle instala solo dependencias de la API. Despues de traer el cambio,
   cada desarrollador corre `pnpm install` una vez.
+
+## Pestana Resumen (SISTEMA-5)
+
+- API `GET organizations/:organizationId/reports/overview` (`report-overview.service.ts`),
+  filtros `from`, `to`, `branchId`, `comparison`, `lowStockThreshold`,
+  `expiryWindowDays`; otros filtros devuelven 400. Sumas en PostgreSQL con
+  `Prisma.sql` parametrizado; todo sale de las mismas consultas por sucursal, por eso
+  KPIs, tabla por sucursal, evolucion y categorias concilian.
+- KPIs: Ventas netas (facturado − devoluciones del periodo), Ganancia bruta estimada
+  (solo con `REPORT_PROFIT_READ`; si falta, no viaja), Ticket promedio (facturado /
+  tickets) y Unidades vendidas, con variacion contra el periodo comparado. Aviso de
+  cobertura cuando parte de la venta no tiene costo de lote.
+- Graficos: evolucion de ventas **netas** por dia (hasta 92 dias) o por mes, con el
+  periodo anterior punteado; medios de pago en barras sobre lo **facturado** (vuelto
+  restado del efectivo; la suma = facturado, no las netas); ventas netas por categoria;
+  top 10 productos por unidades netas.
+- Tablas: resumen por sucursal (solo con 2 o mas sucursales), alertas de inventario
+  (vencidos, por vencer en 90 dias, stock bajo ≤ 5; estado actual) y cierres de caja
+  por dia y mes con paginado (`report-cash-closures.ts`, compartido con la vista vieja).
+- Web: `report-overview.tsx` (`ReportOverviewTab` carga, `ReportOverviewContent`
+  muestra), `report-cash-closures.tsx`, `lib/report-charts.ts`. Tooltip de ayuda
+  `ReportHelp` con el estilo del sistema.
+- Tests: `report-math.spec.ts`, `test/report-overview.integration.spec.ts` (pago mixto
+  con vuelto, devolucion, anulada, 23:59 vs 00:00, dos sucursales, periodo anterior,
+  cierre de caja, permisos), `report-overview.test.tsx`, `lib/report-charts.test.ts`.
+- Datos de demostracion: para probar localmente se cargaron ventas demo (mayo a
+  octubre 2026, marca `DEMO`, "Sucursal Norte (demo)") con un script fuera del repo.
+  No forman parte del sistema ni de las migraciones.
 
 ## Tareas
 

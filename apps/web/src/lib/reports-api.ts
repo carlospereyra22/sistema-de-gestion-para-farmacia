@@ -1,4 +1,4 @@
-import type { ReportFilterOptions } from "@gestion/contracts";
+import type { ReportFilterOptions, ReportOverview } from "@gestion/contracts";
 import { apiBaseUrl } from "./api";
 
 /** Mensaje de la API (400/403 en espanol) o uno generico. */
@@ -30,4 +30,33 @@ export async function getReportFilterOptions(
       "No se pudieron cargar los filtros de reportes.",
     );
   return (await response.json()) as ReportFilterOptions;
+}
+
+/** Filtros comunes que viajan en la URL de cada reporte. */
+export function reportQuery(view: {
+  from: string;
+  to: string;
+  branchId: string;
+  comparison: string;
+}) {
+  return new URLSearchParams({
+    from: view.from,
+    to: view.to,
+    branchId: view.branchId,
+    comparison: view.comparison,
+  }).toString();
+}
+
+export async function getReportOverview(
+  token: string,
+  organizationId: string,
+  view: Parameters<typeof reportQuery>[0],
+): Promise<ReportOverview> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/reports/overview?${reportQuery(view)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await reportError(response, "No se pudo cargar el Resumen.");
+  return (await response.json()) as ReportOverview;
 }
