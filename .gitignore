@@ -21,3 +21,4 @@ SUBIR A PRODUCCION LANDING/
 __pycache__/
 *.pyc
 data/external-catalog/
+SUBIR-A-NETLIFY-PREPROD/

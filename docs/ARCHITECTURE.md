@@ -1,5 +1,14 @@
 # Architecture
 
+Preproducción (01/11/2026): `gestion_preprod` y `gestion-preprod-api` son un
+ambiente de prueba aislado en el mismo VPS, bajo el puerto loopback 3001 y el
+prefijo HTTPS `/preprod/api/v1/`. Tiene rol, JWT, organización, datos y respaldos
+propios; no replica ni recibe escrituras en `gestion_prod`. El catálogo externo se
+consulta con otro rol de sólo lectura limitado a sus dos proyecciones. La emisión
+fiscal productiva queda deshabilitada por entorno. Su web se entrega en otro sitio
+de Netlify con `SUBIR-A-NETLIFY-PREPROD`; la ruta productiva `/api/v1/` y
+`sistema-de-gestion22` no se modifican. Ver `PREPRODUCCION.md`.
+
 Adaptación automática de categorías (29/10/2026): automaticCategory se ejecuta dentro de resolveExternalCategory sobre el árbol vigente de la organización y los datos de la ficha seleccionada. Conserva permisos, bloqueo organizacional, auditoría de subcategorías faltantes y aislamiento de fuentes. No agrega caché de categorías, tareas en segundo plano ni escrituras masivas sobre el catálogo externo. Se retiraron el popup de propuestas, sus endpoints preview/apply y las reglas manuales. La migración ya aplicada 20261029010000_category_adaptation se conserva sin editar: sus columnas matchingTerms/matchingEnabled quedan sin uso; no se borran datos ni migraciones históricas.
 
 Aplicación instalable (29/10/2026): el manifiesto web usa identidad estable `/`, inicio y alcance en `/`, ventana `standalone` e iconos derivados del logo existente (192/512 y maskable). Chrome/Edge ofrecen instalación nativa bajo HTTPS o localhost; el menú de cuenta muestra Instalar sistema sólo cuando el navegador entrega `beforeinstallprompt`. El evento se consume una sola vez, sin recargar formularios. No se agrega service worker, caché de API, credenciales, cola de ventas ni operación comercial sin conexión. La app instalada usa las mismas rutas, sesión y permisos que el navegador; las versiones siguen el despliegue web habitual y no fuerzan recargas durante una venta. La validación local no equivale a publicar en producción.
