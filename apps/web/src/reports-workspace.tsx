@@ -65,17 +65,21 @@ const upcoming: Partial<Record<ReportTab, string>> = {
 /**
  * Modulo Reportes: pestanas, filtros globales y contenido de la pestana activa.
  * La vista vive en la URL (`?pagina=reportes&seccion=...`) para poder compartirla.
+ * El shell lo conserva montado y oculto (`active` en false) al cambiar de apartado:
+ * oculto no consulta y al volver revalida sin vaciar lo que ya se ve.
  */
 export function ReportsWorkspace({
   token,
   organizationId,
   search,
   onSearchChange,
+  active = true,
 }: {
   token: string;
   organizationId: string;
   search: URLSearchParams;
   onSearchChange: (next: URLSearchParams) => void;
+  active?: boolean;
 }): ReactElement {
   const today = argentineToday();
   const view = readReportView(search, today);
@@ -101,7 +105,9 @@ export function ReportsWorkspace({
       current = false;
     };
   }, [token, organizationId]);
-  useEffect(loadOptions, [loadOptions]);
+  useEffect(() => {
+    if (active) return loadOptions();
+  }, [active, loadOptions]);
 
   const setView = (next: ReportView) =>
     onSearchChange(writeReportView(search, next));
@@ -162,6 +168,7 @@ export function ReportsWorkspace({
             }
           />
           <ReportTabContent
+            active={active}
             tab={view.tab}
             options={options}
             token={token}
@@ -178,6 +185,7 @@ export function ReportsWorkspace({
 }
 
 function ReportTabContent({
+  active,
   tab,
   options,
   token,
@@ -185,6 +193,7 @@ function ReportTabContent({
   view,
   onOpenInventory,
 }: {
+  active: boolean;
   tab: ReportTab;
   options: ReportFilterOptions;
   token: string;
@@ -214,6 +223,7 @@ function ReportTabContent({
   if (tab === "summary")
     return (
       <ReportOverviewTab
+        active={active}
         token={token}
         organizationId={organizationId}
         view={view}
