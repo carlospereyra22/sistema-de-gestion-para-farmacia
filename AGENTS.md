@@ -21,6 +21,8 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
 - `apps/web`: React 19 + Vite 7 + Tailwind 4 + React Router, Vitest. Componentes
   planos en `src/`, logica pura en `src/lib/`, cliente HTTP en `src/lib/api.ts`,
   shell principal `src/workspace-shell.tsx`.
+- `apps/landing`: sitio comercial publico (React + Vite + Tailwind), sitio de
+  Netlify propio. Ver `docs/LANDING.md`.
 - `packages/contracts`: solo tipos compartidos, sin logica.
 - `scripts/`: agente de impresion termica (Node, ESC/POS), lanzadores PowerShell,
   herramientas Python del catalogo externo.
@@ -45,6 +47,7 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
 - Fiscal: `FISCAL_BILLING.md`, `PRODUCTION_FISCAL_CHECKLIST.md`, `FISCAL_*.md`.
 - Impresion: `THERMAL_TICKETS.md`, `LOCAL_PRINT_AGENT.md`, `PRODUCTION_PRINTING.md`.
 - Reportes: `REPORTS_PLAN.md`, `REPORTS_INTERACTIVE_SPEC.md`.
+- Landing comercial: `LANDING.md`.
 - Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`.
 - Operacion: `INICIAR_PRUEBAS.md`, `PUBLICAR_PRODUCCION.md`,
   `LOCAL_PRODUCTION_PARITY.md`, `NETLIFY.md`, `PRODUCTION_BOOTSTRAP.md`.
