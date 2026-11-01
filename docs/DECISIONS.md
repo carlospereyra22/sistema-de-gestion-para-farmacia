@@ -2,6 +2,12 @@
 
 ## DECIDED
 
+- 01/11/2026 (SISTEMA-10): un solo repositorio y una sola rama `main`, sin ramas
+  por ambiente. Entre ambientes viaja un commit de `main` identificado con un tag
+  `vX.Y.Z`; produccion se publica desde el tag ya probado en test. El ambiente hoy
+  llamado "preprod" funciona como test; renombrarlo y agregar una preproduccion
+  real quedan pendientes. Ver la skill `publicar-ambientes`.
+
 - 01/11/2026: preproducción se instala en base, servicio, credenciales y sitio
   Netlify separados; no se clona producción ni se mezcla su información comercial.
   Validar una versión allí no publica ni habilita emisión fiscal productiva. Ver

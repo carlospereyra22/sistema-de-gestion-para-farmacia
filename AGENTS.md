@@ -65,6 +65,7 @@ Unica carpeta de skills del proyecto, para Codex y Claude Code. No crear copias 
 | Cambiar `schema.prisma` o crear migraciones               | `.agents/skills/migracion-prisma/SKILL.md`        |
 | Terminar cualquier cambio de codigo                       | `.agents/skills/cerrar-tarea/SKILL.md`            |
 | Ramas, commits, pull requests, merge o conflictos de git  | `.agents/skills/git-equipo/SKILL.md`              |
+| Publicar en test/produccion, versiones (tags), hotfix     | `.agents/skills/publicar-ambientes/SKILL.md`      |
 | Crear o cargar tareas en Trello                           | `.agents/skills/crear-tareas-trello/SKILL.md`     |
 
 Una skill nueva va en `.agents/skills/<nombre>/SKILL.md` (frontmatter `name` y
