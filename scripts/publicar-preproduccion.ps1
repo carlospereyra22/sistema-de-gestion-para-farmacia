@@ -2,6 +2,7 @@ param(
     [switch]$Provision,
     [switch]$PrepareOnly,
     [switch]$NonInteractive,
+    [switch]$Force,
     [string]$Organization = 'Farmacia Juncos - Preproduccion',
     [string]$Branch = 'Casa Central - Pruebas',
     [string]$Email
@@ -27,9 +28,30 @@ function New-RemoteCommand([string]$Script) {
     return "echo $encoded | base64 -d | bash"
 }
 
+function Get-CommandOutput([string]$Program, [string[]]$Arguments) {
+    $result = & $Program @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "Fallo $Program (codigo $LASTEXITCODE)." }
+    return ($result | Out-String).Trim()
+}
+
+function Get-SourceRevision {
+    $branch = Get-CommandOutput 'git.exe' @('branch', '--show-current')
+    if ($branch -ne 'main') {
+        throw "Preproduccion de prueba solo publica main. Rama actual: $branch. Integra el cambio por PR y ejecuta: git checkout main; git pull."
+    }
+    $changes = Get-CommandOutput 'git.exe' @('status', '--porcelain')
+    if ($changes) {
+        throw 'El arbol de trabajo tiene cambios sin confirmar. Confirmalos o guardalos antes de publicar preproduccion.'
+    }
+    $revision = Get-CommandOutput 'git.exe' @('rev-parse', 'HEAD')
+    if ($revision -notmatch '^[a-f0-9]{40}$') { throw 'No se pudo identificar el commit de main.' }
+    return $revision
+}
+
 if ($Provision -and $PrepareOnly) {
     throw 'Elegí Provision o PrepareOnly, no ambos.'
 }
+$revision = Get-SourceRevision
 if (-not $Provision -and -not $PrepareOnly -and -not $NonInteractive) {
     Add-Type -AssemblyName System.Windows.Forms
     $answer = [Windows.Forms.MessageBox]::Show(
@@ -42,6 +64,22 @@ if (-not $Provision -and -not $PrepareOnly -and -not $NonInteractive) {
 }
 if (-not $PrepareOnly -and -not (Test-Path -LiteralPath $key -PathType Leaf)) {
     throw 'Falta una clave SSH de preproducción. Configurá GESTION_PREPROD_SSH_KEY o instalá la identidad autorizada en %USERPROFILE%\.ssh\oracle-gestion.key.'
+}
+
+if (-not $Provision -and -not $PrepareOnly -and -not $Force) {
+    $revisionCommand = @'
+active=$(systemctl show gestion-preprod-api -p WorkingDirectory --value 2>/dev/null || true)
+release=${active%/apps/api}
+if test -n "$release" && test -f "$release/SOURCE_REVISION"; then
+  cat "$release/SOURCE_REVISION"
+fi
+'@
+    $deployedRevision = Get-CommandOutput 'ssh.exe' (@('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=15','-i',$key,$remote,$revisionCommand))
+    if ($deployedRevision -eq $revision) {
+        Write-Host "SIN CAMBIOS: main ($($revision.Substring(0, 8))) ya esta publicado en preproduccion."
+        Write-Host 'No se reconstruyo, transfirio ni reinicio ningun servicio. Usa -Force solo si necesitas repetir la misma version.'
+        exit 0
+    }
 }
 
 $before = @(Get-ChildItem -LiteralPath (Join-Path $project '.cache\production') -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
@@ -58,6 +96,7 @@ if ($stage.Name -notmatch '^[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$') { throw 'Identifica
 $archive = Join-Path $stage.FullName 'backend.tar.gz'
 $frontend = Join-Path $stage.FullName 'netlify-preprod-ready'
 if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Falta el paquete de API preparado.' }
+Set-Content -LiteralPath (Join-Path $stage.FullName 'SOURCE_REVISION') -Value $revision -NoNewline -Encoding ascii
 Copy-Item -LiteralPath (Join-Path $stage.FullName 'netlify-ready') -Destination $frontend -Recurse
 $redirects = @"
 /api/v1/* https://$remoteHost/preprod/api/v1/:splat 200!
@@ -85,10 +124,14 @@ Run 'scp.exe' ($sshArgs + @($archive, ($remote + ':' + $release + '/backend.tar.
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 $extract = @"
 set -eu
-cd '$release'
-echo '$hash  backend.tar.gz' | sha256sum -c -
-tar -xzf backend.tar.gz
-sed -i 's/\r$//' deploy/oracle/provision-preproduction.sh deploy/oracle/update-preproduction-release.sh
+release='$release'
+test -f "`$release/backend.tar.gz"
+printf '%s  %s\n' '$hash' "`$release/backend.tar.gz" | sha256sum -c -
+tar -xzf "`$release/backend.tar.gz" -C "`$release"
+test -f "`$release/deploy/oracle/provision-preproduction.sh"
+test -f "`$release/deploy/oracle/update-preproduction-release.sh"
+sed -i 's/\r$//' "`$release/deploy/oracle/provision-preproduction.sh" "`$release/deploy/oracle/update-preproduction-release.sh"
+printf '%s' '$revision' > "`$release/SOURCE_REVISION"
 "@
 Run 'ssh.exe' ($sshArgs + @($remote, (New-RemoteCommand $extract)))
 

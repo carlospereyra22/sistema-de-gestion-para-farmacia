@@ -20,6 +20,7 @@ description: Agregar o modificar endpoints, servicios o reglas de negocio en el 
 ## Patrones obligatorios
 
 **Rutas y guards**
+
 - Prefijo global `/api/v1`. Rutas por organizacion: `organizations/:organizationId/...`.
 - Operaciones fisicas (ventas, stock, caja, compras, transferencias, reportes):
   `organizations/:organizationId/branches/:branchId/...` con
@@ -41,6 +42,7 @@ llevan `branchId`. Filtrar siempre por ellos en `where`. Nada de casos especiale
 sucursal concreta.
 
 **Transacciones y auditoria**
+
 - Toda operacion con mas de una escritura va en `this.prisma.$transaction(async (tx) => ...)`.
 - La auditoria se escribe DENTRO de la misma transaccion (`tx.auditLog.create` o
   `audit.recordInTransaction(tx, ...)`) con organizationId, branchId, actorId,
@@ -59,6 +61,7 @@ organizacion y guardan un hash sha256 del payload; mismo id + mismo hash devuelv
 resultado previo, mismo id + hash distinto es 409.
 
 **Dinero y fechas**
+
 - Importes en centavos `BigInt` (`amountMinor`, `unitPriceMinor`...). Nunca float.
   En JSON se devuelven como string (`.toString()`), se reciben como string o entero.
 - Timestamps en UTC. Fechas civiles (vencimientos) como `DATE` calendario Argentina.

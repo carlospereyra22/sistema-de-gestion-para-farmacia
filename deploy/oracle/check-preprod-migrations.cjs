@@ -11,7 +11,9 @@ if (require.main === module) {
     console.error("El entorno no apunta a la base de preproduccion esperada.");
     process.exit(1);
   }
-  const { PrismaClient } = require("../../apps/api/node_modules/@prisma/client");
+  const {
+    PrismaClient,
+  } = require("../../apps/api/node_modules/@prisma/client");
   const prisma = new PrismaClient();
   (async () => {
     const rows = await prisma.$queryRawUnsafe(
