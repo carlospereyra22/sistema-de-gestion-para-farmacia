@@ -11,6 +11,7 @@ it("keeps a single compact barcode field with no second search panel", () => {
       onCode={() => undefined}
       onApply={() => undefined}
       onMedication={() => undefined}
+      onRetailMedicine={() => undefined}
       allowAutomatic
       disabled={false}
     />,

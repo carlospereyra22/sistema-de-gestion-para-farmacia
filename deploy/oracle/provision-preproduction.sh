@@ -43,6 +43,7 @@ GRANT CONNECT ON DATABASE catalogo_juncos_external TO gestion_preprod_catalog;
 \connect catalogo_juncos_external
 GRANT USAGE ON SCHEMA reference_catalog, beauty_odbl TO gestion_preprod_catalog;
 GRANT SELECT ON TABLE reference_catalog.product, beauty_odbl.product TO gestion_preprod_catalog;
+GRANT SELECT ON TABLE reference_catalog.medicine_fallback TO gestion_preprod_catalog;
 SQL
 
 database_url=$(APP_PASSWORD="$app_password" /usr/local/bin/node - <<'NODE'

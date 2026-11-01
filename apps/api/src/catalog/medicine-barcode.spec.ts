@@ -5,6 +5,7 @@ import {
 import { MedicineReferenceController } from "./medicine-reference.controller";
 import type { CatalogService } from "./catalog.service";
 import type { AlfaBetaService } from "./alfabeta.service";
+import type { ExternalCatalogService } from "./external-catalog.service";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 
 const row = {
@@ -92,6 +93,9 @@ describe("medicine barcode lookup", () => {
       { assertPermission } as unknown as CatalogService,
       { byBarcode } as unknown as MedicineReferenceService,
       {} as AlfaBetaService,
+      {
+        medicineFallback: jest.fn().mockResolvedValue([]),
+      } as unknown as ExternalCatalogService,
     );
     const request = { auth: { sub: "actor" } } as AuthenticatedRequest;
     expect(
@@ -109,5 +113,37 @@ describe("medicine barcode lookup", () => {
       controller.barcode(request, "org", row.C_BARRA),
     ).rejects.toThrow("forbidden");
     expect(byBarcode).not.toHaveBeenCalled();
+  });
+  it("offers retail evidence without automatic linking when the official index misses", async () => {
+    const fallback = {
+      name: "Ibu 400 x20",
+      presentation: "20 comprimidos",
+      barcode: "7798420160383",
+      source: "public_farmalife",
+    };
+    const controller = new MedicineReferenceController(
+      {
+        assertPermission: jest.fn().mockResolvedValue(undefined),
+      } as unknown as CatalogService,
+      {
+        byBarcode: jest.fn().mockResolvedValue([]),
+      } as unknown as MedicineReferenceService,
+      {} as AlfaBetaService,
+      {
+        medicineFallback: jest.fn().mockResolvedValue([fallback]),
+      } as unknown as ExternalCatalogService,
+    );
+    expect(
+      await controller.barcode(
+        { auth: { sub: "actor" } } as AuthenticatedRequest,
+        "org",
+        fallback.barcode,
+      ),
+    ).toMatchObject({
+      matches: [],
+      retailMatches: [fallback],
+      automaticSelection: false,
+      officialUnavailable: false,
+    });
   });
 });
