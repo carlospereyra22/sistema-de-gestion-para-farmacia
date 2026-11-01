@@ -67,7 +67,8 @@ Guardar en el scratchpad (no en el repo) un JSON con esta forma:
   `git branch -a` y las tarjetas del tablero).
 - Si la simulacion avisa que la tarjeta ya tiene descripcion, mostrarsela al usuario y
   confirmar antes de reemplazarla.
-- `labels` y `checklist` son opcionales; `checklist` agrega una lista "Hecho cuando".
+- `labels` y `checklist` son opcionales; `checklist` agrega una lista "Hecho cuando"
+  (`checklistName: "Tareas"` para las epics).
 
 Tablero del equipo: **Farmatec**, en el Espacio de trabajo Farmatec
 (`TRELLO_BOARD_ID=avFwigUE`). Hay otro tablero viejo con el mismo nombre en "GRUPO 2
