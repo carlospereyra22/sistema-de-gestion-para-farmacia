@@ -14,6 +14,10 @@ import {
   externalSuggestionGroups,
   type ExternalProductCandidate,
 } from "./lib/external-product";
+import {
+  barcodeLookupDelay,
+  type BarcodeLookupTrigger,
+} from "./lib/barcode-lookup-delay";
 
 type Result = {
   reference: ExternalProductCandidate[];
@@ -68,9 +72,11 @@ export function ExternalProductLookup({
   onKindConfirmed?: (value: boolean) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
+  const [inputCode, setInputCode] = useState(code);
   const root = useRef<HTMLDivElement>(null);
   const optionList = useRef<HTMLDivElement>(null);
   const chosenRequest = useRef("");
+  const nextLookupTrigger = useRef<BarcodeLookupTrigger>("typing");
   const [dismissed, setDismissed] = useState("");
   const [above, setAbove] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -79,15 +85,23 @@ export function ExternalProductLookup({
     message: string;
   }>();
   const barcodeInput = useRef<HTMLInputElement>(null);
+  const requestLookup = (trigger: BarcodeLookupTrigger) => {
+    nextLookupTrigger.current = trigger;
+    setAttempt((current) => current + 1);
+  };
   useProductScanner(
     barcodeInput,
     (value) => {
+      setInputCode(value);
       onCode(value);
-      setAttempt((current) => current + 1);
+      requestLookup("scanner");
     },
     disabled,
   );
   const [state, setState] = useState<LookupState>({ key: "" });
+  useEffect(() => {
+    setInputCode((current) => (current === code ? current : code));
+  }, [code]);
   // A session renewal is not a new barcode search. Keep the displayed result
   // and use the latest credentials on the next scan or explicit retry.
   const credentials = useRef(token);
@@ -108,15 +122,20 @@ export function ExternalProductLookup({
       onKindDetected,
     };
   }, [onMedication, allowAutomatic, disabled, onKindDetected]);
-  const trimmed = code.trim();
+  const trimmed = inputCode.trim();
   const canonical = externalGtin(trimmed);
   const mode = medicationMode ?? (medicationEnabled ? "medicine" : "other");
   const detected = resolveProductKind(mode, knownMedication);
   const key = `${organizationId}:${canonical ?? trimmed}:${mode}:${knownMedication}`;
   const requestKey = `${key}:${attempt}`;
   useEffect(() => {
-    if (!canonical) return;
+    if (!canonical) {
+      nextLookupTrigger.current = "typing";
+      return;
+    }
     const controller = new AbortController();
+    const trigger = nextLookupTrigger.current;
+    nextLookupTrigger.current = "typing";
     const timer = window.setTimeout(() => {
       setState({
         key,
@@ -219,7 +238,7 @@ export function ExternalProductLookup({
           },
         );
       })();
-    }, 200);
+    }, barcodeLookupDelay(trigger));
     return () => {
       window.clearTimeout(timer);
       controller.abort();
@@ -319,11 +338,19 @@ export function ExternalProductLookup({
         <input
           ref={barcodeInput}
           id="external-product-code"
-          value={code}
+          value={inputCode}
           disabled={disabled}
           aria-expanded={showDropdown}
           aria-controls={showDropdown ? "external-product-options" : undefined}
-          onChange={(event) => onCode(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value;
+            nextLookupTrigger.current = "typing";
+            setInputCode(value);
+            if (externalGtin(value.trim())) onCode(value);
+          }}
+          onBlur={() => {
+            if (code !== inputCode) onCode(inputCode);
+          }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" && count && !current?.linked) {
               event.preventDefault();
@@ -336,7 +363,7 @@ export function ExternalProductLookup({
             }
             if (event.key === "Enter") {
               event.preventDefault();
-              setAttempt((value) => value + 1);
+              requestLookup("submit");
             }
           }}
           inputMode="numeric"
@@ -350,7 +377,7 @@ export function ExternalProductLookup({
           onClick={() =>
             count && !current?.linked
               ? setDismissed(showDropdown ? requestKey : "")
-              : setAttempt((value) => value + 1)
+              : requestLookup("submit")
           }
           aria-label="Buscar código de barras"
           className="absolute right-0 top-0 flex h-10 w-9 items-center justify-center text-slate-400 hover:text-teal-700 disabled:opacity-40"

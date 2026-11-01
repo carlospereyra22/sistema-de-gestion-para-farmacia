@@ -47,10 +47,12 @@ type Candidate = {
 export class ExternalCatalogService implements OnModuleDestroy {
   private client?: PrismaClient;
   private connection(organizationId: string): PrismaClient {
-    // Preview only: production activation needs an explicit later implementation/review.
+    const production = process.env.NODE_ENV === "production";
+    const enabled = production
+      ? process.env.EXTERNAL_CATALOG_ENABLED === "true"
+      : process.env.EXTERNAL_CATALOG_PREVIEW === "true";
     if (
-      process.env.EXTERNAL_CATALOG_PREVIEW !== "true" ||
-      process.env.NODE_ENV === "production" ||
+      !enabled ||
       !organizationId ||
       process.env.EXTERNAL_CATALOG_ORGANIZATION_ID !== organizationId
     )
