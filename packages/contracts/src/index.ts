@@ -1,4 +1,59 @@
+import type {
+  ReportComparison,
+  ReportExpiryWindowDays,
+  ReportTab,
+} from "./reports";
+
 export type { ThermalTicket } from "./thermal-ticket";
+export type {
+  MoneyMinor,
+  ReportBreakdownItem,
+  ReportComparison,
+  ReportDataQuality,
+  ReportExpiryWindowDays,
+  ReportFilterOptions,
+  ReportFilters,
+  ReportGranularity,
+  ReportKpi,
+  ReportKpiUnit,
+  ReportMeta,
+  ReportOption,
+  ReportPage,
+  ReportPaymentMethod,
+  ReportResponse,
+  ReportSeriesPoint,
+  ReportTab,
+  ReportUnavailableReason,
+} from "./reports";
+// Los valores van aca: los demas archivos solo exportan tipos (la API los carga sin compilar).
+export const REPORT_TABS = [
+  "summary",
+  "sales",
+  "profitability",
+  "products",
+  "inventory",
+  "purchases",
+  "customers",
+] as const satisfies readonly ReportTab[];
+export const REPORT_DEFAULTS = {
+  timezone: "America/Argentina/Buenos_Aires",
+  rangeDays: 30,
+  maxRangeDays: 366,
+  comparison: "previous",
+  lowStockThreshold: 5,
+  staleDays: 30,
+  expiryWindowDays: 90,
+} as const satisfies {
+  timezone: string;
+  rangeDays: number;
+  maxRangeDays: number;
+  comparison: ReportComparison;
+  lowStockThreshold: number;
+  staleDays: number;
+  expiryWindowDays: ReportExpiryWindowDays;
+};
+/** Valor de `branchId` para pedir todas las sucursales autorizadas del usuario. */
+export const ALL_BRANCHES = "all";
 export type {
   SaleFiscalOptions,
   SaleFiscalCapabilities,

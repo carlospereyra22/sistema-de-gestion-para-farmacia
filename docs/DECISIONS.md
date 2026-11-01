@@ -2,6 +2,8 @@
 
 ## DECIDED
 
+- Reportes interactivos (31/10/2026, SISTEMA-2): las definiciones de cada metrica viven en `docs/REPORTS_PLAN.md` y los tipos en `packages/contracts/src/reports.ts`; todas las pestanas y exportaciones las comparten. Importes como centavos en string. Ventas por medio de pago restan el vuelto al efectivo (la pantalla anterior no lo hacia). Devoluciones se restan en la fecha en que ocurren. Costo y margen son estimados por costo de lote. "Todas las sucursales" se ofrece solo con 2 o mas sucursales autorizadas y se calcula en cada consulta. Umbrales por defecto editables: stock bajo 5, sin movimiento 30 dias, vencimientos 90 dias. Permisos nuevos `REPORT_PROFIT_READ` y `REPORT_EXPORT`.
+
 - La opción «Descartar venta» del aviso de venta pendiente descarta directamente el borrador, sin segunda confirmación. No anula ni elimina ventas registradas; reemplaza la confirmación adicional acordada inicialmente.
 
 - 20/09/2026: la venta pendiente se conserva en memoria al navegar entre apartados o Historial dentro de la misma sesión/sucursal. Al volver al punto de venta se ofrece continuar o descartar con confirmación. No se crea venta ni se reserva stock al suspender; el backend sigue validando al confirmar. Se advierte antes de recargar/cerrar pestaña, cambiar de sucursal o cerrar sesión; no hay recuperación persistente después de recargar. La organización/sucursal delimita el estado para impedir mezclar ventas.
