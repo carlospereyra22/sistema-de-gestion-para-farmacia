@@ -5,8 +5,8 @@ packages:
 allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true
-  "@scarf/scarf": false
+  "@scarf/scarf": true
   esbuild: true
   prisma: true
-  tesseract.js: false
+  tesseract.js: true
   unrs-resolver: true
