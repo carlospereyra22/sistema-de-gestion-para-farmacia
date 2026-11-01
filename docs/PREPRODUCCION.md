@@ -66,7 +66,18 @@ Desde Git Bash:
 ./Publicar\ Preproduccion.sh
 ```
 
-El publicador vuelve a ejecutar los checks, sube otra release, respalda
+El publicador se ejecuta solamente desde un `main` limpio. Antes de preparar una
+release compara el commit actual con el que está activo en test: si es el mismo,
+termina sin reconstruir, transferir ni reiniciar servicios. Para repetir la misma
+versión de manera excepcional se puede usar `-Force`.
+
+Cuando hay un commit nuevo, el publicador vuelve a ejecutar los checks y sube un
+artefacto completo pero acotado (código, migraciones y scripts; nunca
+`node_modules`, catálogos, imágenes ni datos). Esto es intencional: cada release
+es autocontenida, verificable y recuperable. En el VPS pnpm reutiliza su caché,
+por lo que no se vuelve a transferir el proyecto de trabajo entero.
+
+Luego respalda
 `gestion_preprod` a `/var/backups/gestion-preprod/releases/<release>.dump` y prueba
 que puede leerse con `pg_restore --list`. Sólo entonces detiene y actualiza
 `gestion-preprod-api`; el backend productivo no se pausa. Después deja lista una

@@ -125,7 +125,7 @@ No agregar contenedores ni servicios de BI independientes si ECharts y el backen
 
 ### Responsive
 
-- >= 1280 px: 4 KPIs, gráficos en grilla.
+- > = 1280 px: 4 KPIs, gráficos en grilla.
 - 768–1279 px: 2 KPIs por fila y gráficos redistribuidos.
 - < 768 px: una columna, filtros plegables, gráficos que se puedan leer, tablas con desplazamiento horizontal sin romper diseño.
 - Respetar controles de teclado y accesibilidad; datos principales de gráficos disponibles en tablas/leyendas.
@@ -463,11 +463,11 @@ GET /api/v1/reportes/exportar?reporte=ventas&formato=csv&...
 
 ```ts
 type ReportFilters = {
-  from?: string;               // fecha local ISO YYYY-MM-DD
-  to?: string;                 // fecha local ISO YYYY-MM-DD inclusiva a nivel UI
-  branchId?: string;           // ID autorizado o 'all' si el sistema lo soporta
-  comparison?: 'previous' | 'yearAgo' | 'none';
-  granularity?: 'hour' | 'day' | 'week' | 'month';
+  from?: string; // fecha local ISO YYYY-MM-DD
+  to?: string; // fecha local ISO YYYY-MM-DD inclusiva a nivel UI
+  branchId?: string; // ID autorizado o 'all' si el sistema lo soporta
+  comparison?: "previous" | "yearAgo" | "none";
+  granularity?: "hour" | "day" | "week" | "month";
   categoryIds?: string[];
   laboratoryIds?: string[];
   supplierIds?: string[];
@@ -495,8 +495,18 @@ Los IDs/tipos son ejemplos: **usar los tipos reales y la validación del proyect
     "dataQuality": { "partial": false, "warnings": [] }
   },
   "kpis": {
-    "netSales": { "value": 0, "previous": 0, "changePct": null, "available": true },
-    "ticketCount": { "value": 0, "previous": 0, "changePct": null, "available": true }
+    "netSales": {
+      "value": 0,
+      "previous": 0,
+      "changePct": null,
+      "available": true
+    },
+    "ticketCount": {
+      "value": 0,
+      "previous": 0,
+      "changePct": null,
+      "available": true
+    }
   },
   "charts": {
     "salesByDay": [],
@@ -551,7 +561,7 @@ Los IDs/tipos son ejemplos: **usar los tipos reales y la validación del proyect
 
 Agregar botón `Exportar` consistente con el diseño y permisos. Opciones:
 
-1. **CSV**: tabular, UTF-8 con BOM solo si se necesita compatibilidad práctica con Excel; separador/decimales documentados según configuración regional. Proteger contra *CSV formula injection* escapando celdas que comiencen por `=`, `+`, `-`, `@` u otros prefijos peligrosos.
+1. **CSV**: tabular, UTF-8 con BOM solo si se necesita compatibilidad práctica con Excel; separador/decimales documentados según configuración regional. Proteger contra _CSV formula injection_ escapando celdas que comiencen por `=`, `+`, `-`, `@` u otros prefijos peligrosos.
 2. **Excel (.xlsx)**: exportar tablas útiles con encabezados, formatos ARS, fechas y filtros aplicados. Añadir metadatos de rango, sucursal y fecha de generación.
 3. **PDF**: versión imprimible limpia del reporte, con encabezado, KPIs, gráficos exportados a imagen/SVG cuando sea técnicamente viable y tablas paginadas. Puede implementarse primero mediante vista de impresión optimizada si así es más confiable, documentando esa elección.
 4. **PNG de gráfico**: opcional, usando exportación nativa de ECharts cuando aplique.
