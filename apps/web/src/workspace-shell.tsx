@@ -18,6 +18,7 @@ import { InventoryPendingPurchase } from "./inventory-pending-purchase";
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -31,6 +32,14 @@ import { useWorkspaceSidebar } from "./use-workspace-sidebar";
 import { ProductInternalBarcode } from "./product-internal-barcode";
 import { canDismissProductBackdrop } from "./lib/product-backdrop";
 import { SaleQuantityInput } from "./sale-quantity-input";
+import { SaleCatalogTable } from "./sale-catalog-table";
+import { SaleProductDetail } from "./sale-product-detail";
+import {
+  filterSaleCatalog,
+  nextSaleCatalogSelection,
+  saleCatalogRowId,
+  saleCategoryOptions,
+} from "./lib/sale-catalog";
 import { RegisterManager, ClosureVisibility } from "./record-maintenance";
 import { getCashManagement, type CashManagement } from "./lib/api";
 import { cashSettingsRequest, type CashSettings } from "./lib/api";
@@ -144,6 +153,7 @@ import {
   ReceiptText,
   Boxes,
   Banknote,
+  Check,
   LayoutDashboard,
   Shapes,
   ClipboardList,
@@ -299,6 +309,8 @@ const money = (minor: string | number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
     Number(minor) / 100,
   );
+// Sin busqueda se muestra todo el catalogo; el tope evita renderizar miles de filas.
+const SALE_CATALOG_ROW_LIMIT = 200;
 
 const parseArgentineAmountMinor = (value: string): number | undefined => {
   const cleaned = value.trim().replace(/[^\d.,]/g, "");
@@ -3757,8 +3769,10 @@ function Sales({
   };
   const [productId, setProductId] = useState("");
   const [productQuery, setProductQuery] = useState("");
-  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] =
-    useState(0);
+  const [catalogCategoryId, setCatalogCategoryId] = useState("");
+  const [catalogInStockOnly, setCatalogInStockOnly] = useState(false);
+  const [detailQuantity, setDetailQuantity] = useState(1);
+  const catalogId = useId();
   const productSearchRef = useRef<HTMLInputElement>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -3955,20 +3969,21 @@ function Sales({
   const [clientOperationId, setClientOperationId] = useState(() =>
     crypto.randomUUID(),
   );
-  const available = (id: string) =>
-    stock
-      .filter((lot) => lot.productId === id)
-      .reduce(
-        (sum, lot) => sum + withStockAvailability(lot).sellableQuantity,
-        0,
-      );
-  const expiredStock = (id: string) =>
-    stock
-      .filter((lot) => lot.productId === id)
-      .reduce(
-        (sum, lot) => sum + withStockAvailability(lot).expiredQuantity,
-        0,
-      );
+  const stockByProduct = useMemo(() => {
+    const totals = new Map<string, { available: number; expired: number }>();
+    for (const lot of stock) {
+      const current = totals.get(lot.productId) ?? { available: 0, expired: 0 };
+      const lotStock = withStockAvailability(lot);
+      totals.set(lot.productId, {
+        available: current.available + lotStock.sellableQuantity,
+        expired: current.expired + lotStock.expiredQuantity,
+      });
+    }
+    return totals;
+  }, [stock]);
+  const productStock = (id: string) =>
+    stockByProduct.get(id) ?? { available: 0, expired: 0 };
+  const available = (id: string) => productStock(id).available;
   const subtotal = lines.reduce(
     (sum, line) =>
       sum +
@@ -3988,16 +4003,12 @@ function Sales({
   );
   const total = subtotal - discountMinor;
   const searchTerm = productQuery.trim().toLocaleLowerCase();
-  const matchingProducts = products.filter(
-    (item) =>
-      (available(item.id) > 0 || expiredStock(item.id) > 0) &&
-      `${item.name} ${item.barcodes.map((barcode) => barcode.code).join(" ")}`
-        .toLocaleLowerCase()
-        .includes(searchTerm),
-  );
-  const keyboardProducts = matchingProducts
-    .filter((item) => available(item.id) > 0)
-    .slice(0, 8);
+  const catalogMatches = filterSaleCatalog(products, productStock, {
+    query: productQuery,
+    categoryId: catalogCategoryId,
+    inStockOnly: catalogInStockOnly,
+  });
+  const catalogRows = catalogMatches.slice(0, SALE_CATALOG_ROW_LIMIT);
   const exactBarcodeProduct = products.find(
     (item) =>
       available(item.id) > 0 &&
@@ -4005,13 +4016,29 @@ function Sales({
         (barcode) => barcode.code.toLocaleLowerCase() === searchTerm,
       ),
   );
-  const selectProductSuggestion = (id: string) => {
-    const selectedProduct = products.find((item) => item.id === id);
-    if (!selectedProduct) return;
-    setProductId(selectedProduct.id);
-    setProductQuery("");
-    setHighlightedSuggestionIndex(0);
+  // Mientras se escribe, el primer resultado vendible queda elegido para Enter.
+  const selectedCatalogProduct =
+    products.find((item) => item.id === productId) ??
+    (searchTerm
+      ? (exactBarcodeProduct ??
+        catalogRows.find((item) => available(item.id) > 0))
+      : undefined);
+  const focusProductSearch = () =>
     window.requestAnimationFrame(() => productSearchRef.current?.focus());
+  const selectCatalogProduct = (id: string | undefined) => {
+    if (!id) return;
+    setProductId(id);
+    setDetailQuantity(1);
+  };
+  const clearCatalogSelection = () => {
+    setProductId("");
+    setProductQuery("");
+    setDetailQuantity(1);
+    focusProductSearch();
+  };
+  const addCatalogProduct = (id: string, quantity: number) => {
+    if (!addProductToSale(id, quantity)) return;
+    clearCatalogSelection();
   };
   const addProductToSale = (
     selectedProductId: string,
@@ -4054,21 +4081,10 @@ function Sales({
     });
     return true;
   };
-  const add = (event: FormEvent) => {
+  const add = (event: Pick<FormEvent, "preventDefault">) => {
     event.preventDefault();
-    const selectedProductId =
-      productId ||
-      exactBarcodeProduct?.id ||
-      keyboardProducts[highlightedSuggestionIndex]?.id;
-    const requestedQuantity = 1;
-    if (
-      !selectedProductId ||
-      !addProductToSale(selectedProductId, requestedQuantity)
-    )
-      return;
-    setProductId("");
-    setProductQuery("");
-    window.requestAnimationFrame(() => productSearchRef.current?.focus());
+    if (!selectedCatalogProduct) return;
+    addCatalogProduct(selectedCatalogProduct.id, detailQuantity);
   };
   const updateLineQuantity = (
     productIdToUpdate: string,
@@ -4267,7 +4283,7 @@ function Sales({
       event.preventDefault();
       setProductQuery(event.key);
       setProductId("");
-      setHighlightedSuggestionIndex(0);
+      setDetailQuantity(1);
       input.focus();
     };
     window.addEventListener("keydown", focusProductSearch, true);
@@ -4554,131 +4570,133 @@ function Sales({
             onAdd={() => setConceptOpen(true)}
           />
         </div>
-        <form onSubmit={add} className="mt-4 flex min-h-0 flex-1 flex-col">
-          <label className="block text-sm font-medium">
-            Producto
-            <span className="relative mt-1 block">
+        <form
+          onSubmit={add}
+          className="mt-4 flex min-h-0 flex-1 flex-col gap-2.5"
+        >
+          <div className="sale-catalog-filters flex flex-wrap items-center gap-2">
+            <span className="relative min-w-[220px] flex-1">
               <Search
                 size={17}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-teal-700"
               />
               <input
                 ref={productSearchRef}
-                className="h-10 w-full border border-teal-400 bg-white pl-10 pr-10 text-sm"
+                aria-label="Buscar producto"
+                role="combobox"
+                aria-expanded
+                aria-controls={catalogId}
+                aria-activedescendant={
+                  selectedCatalogProduct &&
+                  catalogRows.some(
+                    (item) => item.id === selectedCatalogProduct.id,
+                  )
+                    ? saleCatalogRowId(catalogId, selectedCatalogProduct.id)
+                    : undefined
+                }
+                className="h-11 w-full rounded-lg border border-teal-400 bg-white pl-10 pr-20 text-sm"
                 value={productQuery}
-                placeholder="Escaneá o escribí para buscar"
+                placeholder="Escaneá o buscá por nombre, droga o código"
                 autoComplete="off"
                 onChange={(event) => {
                   setProductQuery(event.target.value);
                   setProductId("");
-                  setHighlightedSuggestionIndex(0);
+                  setDetailQuantity(1);
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    setProductQuery("");
+                  // El form tiene varios campos: el navegador ya no lo envía solo con Enter.
+                  if (event.key === "Enter") {
+                    add(event);
                     return;
                   }
-                  if (!keyboardProducts.length) return;
-                  if (event.key === "ArrowDown") {
+                  if (event.key === "Escape") {
                     event.preventDefault();
-                    setHighlightedSuggestionIndex((current) =>
-                      Math.min(current + 1, keyboardProducts.length - 1),
-                    );
+                    clearCatalogSelection();
+                    return;
                   }
-                  if (event.key === "ArrowUp") {
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                     event.preventDefault();
-                    setHighlightedSuggestionIndex((current) =>
-                      Math.max(current - 1, 0),
+                    selectCatalogProduct(
+                      nextSaleCatalogSelection(
+                        catalogRows,
+                        selectedCatalogProduct?.id,
+                        event.key === "ArrowDown" ? 1 : -1,
+                      ),
                     );
                   }
                 }}
               />
-              <ScanBarcode
-                size={18}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-teal-600"
-              />
+              <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 text-teal-600">
+                <ScanBarcode size={18} />
+                <kbd className="rounded border border-slate-300 px-1 text-[10px] font-medium text-slate-500">
+                  F2
+                </kbd>
+              </span>
             </span>
-          </label>
-          <div className="mt-4 flex min-h-0 flex-1 flex-col">
-            <p className="mb-2 text-xs font-semibold text-slate-600">
-              Resultados
-            </p>
-            <div className="-mx-2 min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto border-y border-slate-100">
-              {matchingProducts.map((item) => (
-                <div
-                  key={item.id}
-                  className={`flex w-full items-center px-1 py-2.5 text-left text-sm ${productId === item.id || (productQuery && keyboardProducts[highlightedSuggestionIndex]?.id === item.id) ? "bg-teal-50 text-teal-950" : "hover:bg-teal-50/60"}`}
-                >
-                  <div className="mr-2 shrink-0">
-                    <ProductThumbnail
-                      token={token}
-                      organizationId={organizationId}
-                      productId={item.id}
-                      name={item.name}
-                      version={item.image?.updatedAt}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => selectProductSuggestion(item.id)}
-                    disabled={available(item.id) <= 0}
-                    className="flex min-w-0 flex-1 items-center text-left"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">
-                        {item.name}
-                      </span>
-                      <span className="block truncate text-[11px] text-slate-500">
-                        {[
-                          item.activeIngredient,
-                          item.concentration,
-                          item.pharmaceuticalForm,
-                          item.presentation,
-                        ]
-                          .filter((detail): detail is string => Boolean(detail))
-                          .join(" · ") || "Sin detalle farmacéutico"}
-                      </span>
-                      <span className="block truncate text-[11px] font-medium text-teal-700">
-                        {available(item.id) > 0
-                          ? `Disponibles: ${available(item.id)} unidades`
-                          : "Sin stock vendible"}
-                      </span>
-                      {expiredStock(item.id) > 0 && (
-                        <span className="block text-[11px] font-medium text-rose-600">
-                          {expiredStock(item.id)} unidades vencidas · No
-                          vendibles
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                  <span className="ml-2 whitespace-nowrap text-xs font-medium text-teal-800">
-                    {money(Number(item.prices[0]?.amountMinor ?? 0))}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Agregar ${item.name}`}
-                    disabled={available(item.id) <= 0}
-                    onClick={() => {
-                      if (!addProductToSale(item.id, 1)) return;
-                      setProductId("");
-                      setProductQuery("");
-                      window.requestAnimationFrame(() =>
-                        productSearchRef.current?.focus(),
-                      );
-                    }}
-                    className="ml-2 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-teal-600 text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
-                  >
-                    <Plus size={15} />
-                  </button>
-                </div>
-              ))}
-              {!matchingProducts.length ? (
-                <p className="flex h-full items-center justify-center px-3 text-center text-sm text-slate-500">
-                  No hay productos con stock para esta búsqueda.
-                </p>
-              ) : null}
+            <div className="w-44 shrink-0 [&>div]:mt-0">
+              <SearchableSaleSelect
+                label="Categoría"
+                floatingOptions
+                options={saleCategoryOptions(products)}
+                value={catalogCategoryId}
+                onChange={(value) => {
+                  setCatalogCategoryId(value);
+                  setProductId("");
+                }}
+              />
             </div>
+            <button
+              type="button"
+              aria-pressed={catalogInStockOnly}
+              onClick={() => {
+                setCatalogInStockOnly((current) => !current);
+                setProductId("");
+                focusProductSearch();
+              }}
+              className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-sm font-medium ${catalogInStockOnly ? "border-teal-300 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+            >
+              {catalogInStockOnly && <Check size={15} />}
+              Con stock
+            </button>
           </div>
+          <SaleCatalogTable
+            idPrefix={catalogId}
+            rows={catalogRows.map((item) => ({
+              product: item,
+              ...productStock(item.id),
+            }))}
+            selectedId={selectedCatalogProduct?.id}
+            hiddenCount={catalogMatches.length - catalogRows.length}
+            onSelect={(id) => {
+              selectCatalogProduct(id);
+              focusProductSearch();
+            }}
+            onAdd={(id) => addCatalogProduct(id, 1)}
+          />
+          <SaleProductDetail
+            token={token}
+            organizationId={organizationId}
+            product={selectedCatalogProduct}
+            available={
+              selectedCatalogProduct ? available(selectedCatalogProduct.id) : 0
+            }
+            quantity={detailQuantity}
+            onQuantityChange={(quantity) => {
+              setDetailQuantity(quantity);
+              focusProductSearch();
+            }}
+            onAdd={() => {
+              if (selectedCatalogProduct)
+                addCatalogProduct(selectedCatalogProduct.id, detailQuantity);
+            }}
+            onClear={clearCatalogSelection}
+            onFinished={focusProductSearch}
+            onInvalid={error}
+          />
+          <p className="text-xs text-slate-500">
+            Doble clic o Enter agrega · <strong>F2</strong> buscar ·{" "}
+            <strong>Esc</strong> limpia
+          </p>
         </form>
         <div className="sales-customer-fields mt-auto grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
           <div className="block text-xs font-medium text-slate-700">
