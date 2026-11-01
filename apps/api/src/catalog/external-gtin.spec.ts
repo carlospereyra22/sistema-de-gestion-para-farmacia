@@ -34,25 +34,37 @@ describe("external catalogue safety", () => {
   ])("rejects %s", (code) => {
     expect(() => canonicalGtin(code)).toThrow();
   });
-  it("stays disabled by default and refuses production even with the preview flag", async () => {
+  it("stays disabled by default and requires an explicit production flag", async () => {
     const previous = process.env.EXTERNAL_CATALOG_PREVIEW;
+    const enabled = process.env.EXTERNAL_CATALOG_ENABLED;
     const node = process.env.NODE_ENV;
+    const organization = process.env.EXTERNAL_CATALOG_ORGANIZATION_ID;
     try {
       delete process.env.EXTERNAL_CATALOG_PREVIEW;
+      delete process.env.EXTERNAL_CATALOG_ENABLED;
       const service = new ExternalCatalogService();
       await expect(service.lookup("7500435211895")).rejects.toThrow(
         "desactivado",
       );
-      process.env.EXTERNAL_CATALOG_PREVIEW = "true";
       process.env.NODE_ENV = "production";
       await expect(service.lookup("7500435211895")).rejects.toThrow(
+        "desactivado",
+      );
+      process.env.EXTERNAL_CATALOG_ENABLED = "true";
+      process.env.EXTERNAL_CATALOG_ORGANIZATION_ID = "other";
+      await expect(service.lookup("7500435211895", "owner")).rejects.toThrow(
         "desactivado",
       );
     } finally {
       if (previous === undefined) delete process.env.EXTERNAL_CATALOG_PREVIEW;
       else process.env.EXTERNAL_CATALOG_PREVIEW = previous;
+      if (enabled === undefined) delete process.env.EXTERNAL_CATALOG_ENABLED;
+      else process.env.EXTERNAL_CATALOG_ENABLED = enabled;
       if (node === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = node;
+      if (organization === undefined)
+        delete process.env.EXTERNAL_CATALOG_ORGANIZATION_ID;
+      else process.env.EXTERNAL_CATALOG_ORGANIZATION_ID = organization;
     }
   });
 });
