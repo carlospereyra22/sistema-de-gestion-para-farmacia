@@ -392,6 +392,11 @@ export function WorkspaceShell({
     if (view === "Proveedores" && organizationId)
       setVisitedSuppliersScope(organizationId);
   }, [view, organizationId]);
+  const [visitedReportsScope, setVisitedReportsScope] = useState("");
+  useEffect(() => {
+    if (view === "Reportes" && organizationId)
+      setVisitedReportsScope(organizationId);
+  }, [view, organizationId]);
   useEffect(() => {
     if (view === "Cuentas corrientes" && organizationId && branchId)
       setVisitedAccountsScope(accountsScope);
@@ -1020,13 +1025,18 @@ export function WorkspaceShell({
               onError={setMessage}
             />
           ) : null}
-          {ready && view === "Reportes" ? (
-            <ReportsWorkspace
-              token={accessToken!}
-              organizationId={organizationId!}
-              search={searchParams}
-              onSearchChange={setSearchParams}
-            />
+          {ready &&
+          (view === "Reportes" || visitedReportsScope === organizationId) ? (
+            <div hidden={view !== "Reportes"}>
+              <ReportsWorkspace
+                key={`reports:${organizationId}`}
+                active={view === "Reportes"}
+                token={accessToken!}
+                organizationId={organizationId!}
+                search={searchParams}
+                onSearchChange={setSearchParams}
+              />
+            </div>
           ) : null}
         </section>
       </div>

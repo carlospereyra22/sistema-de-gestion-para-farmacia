@@ -108,19 +108,24 @@ export function ReportOverviewTab({
   organizationId,
   view,
   onOpenInventory,
+  active = true,
 }: {
   token: string;
   organizationId: string;
   view: ReportView;
   onOpenInventory: () => void;
+  active?: boolean;
 }): ReactElement {
-  const [data, setData] = useState<ReportOverview>();
-  const [error, setError] = useState<string>();
   const { from, to, branchId, comparison } = view;
+  // El resultado se guarda con sus filtros: al volver a Reportes con los mismos
+  // filtros se revalida sin vaciar; con filtros distintos se muestra el esqueleto.
+  const key = JSON.stringify([organizationId, from, to, branchId, comparison]);
+  const [result, setResult] = useState<{ key: string; data: ReportOverview }>();
+  const [error, setError] = useState<string>();
+  const data = result?.key === key ? result.data : undefined;
   const load = useCallback(() => {
     let current = true;
     setError(undefined);
-    setData(undefined);
     getReportOverview(token, organizationId, {
       from,
       to,
@@ -128,7 +133,7 @@ export function ReportOverviewTab({
       comparison,
     })
       .then((next) => {
-        if (current) setData(next);
+        if (current) setResult({ key, data: next });
       })
       .catch((cause: unknown) => {
         if (current)
@@ -141,11 +146,17 @@ export function ReportOverviewTab({
     return () => {
       current = false;
     };
-  }, [token, organizationId, from, to, branchId, comparison]);
-  useEffect(load, [load]);
+  }, [token, organizationId, from, to, branchId, comparison, key]);
+  useEffect(() => {
+    if (active) return load();
+  }, [active, load]);
 
-  if (error) return <ReportErrorState message={error} onRetry={load} />;
-  if (!data) return <ReportSkeleton />;
+  if (!data)
+    return error ? (
+      <ReportErrorState message={error} onRetry={load} />
+    ) : (
+      <ReportSkeleton />
+    );
   return (
     <ReportOverviewContent
       data={data}
