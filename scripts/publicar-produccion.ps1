@@ -5,6 +5,7 @@ $releaseId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToSt
 $stage = Join-Path $project ('.cache\production\' + $releaseId)
 $source = Join-Path $stage 'source'
 $target = Join-Path $project 'SUBIR-A-NETLIFY'
+$tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 $key = Join-Path $env:USERPROFILE '.ssh\oracle-gestion.key'
 $remote = 'ubuntu@163.176.241.51'
 $remoteRelease = '/home/ubuntu/gestion-releases/' + $releaseId
@@ -40,7 +41,8 @@ try {
         $answer = [Windows.Forms.MessageBox]::Show('Se verificara y publicara el backend en el VPS, con respaldo y una pausa breve del servicio. Al terminar se preparara SUBIR-A-NETLIFY. No usar mientras estan cobrando. Continuar?', 'Publicar produccion', 'YesNo', 'Warning')
         if ($answer -ne 'Yes') { exit 0 }
     }
-    foreach ($command in @('pnpm.cmd','node.exe','tar.exe','ssh.exe','scp.exe')) { Get-Command $command -ErrorAction Stop | Out-Null }
+    foreach ($command in @('pnpm.cmd','node.exe','ssh.exe','scp.exe')) { Get-Command $command -ErrorAction Stop | Out-Null }
+    if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) { throw 'Falta el empaquetador tar de Windows.' }
     if (-not $PrepareOnly -and -not (Test-Path -LiteralPath $key -PathType Leaf)) { throw 'Falta la clave SSH de Oracle. No se genero ninguna clave nueva.' }
     Assert-PlainDirectory (Join-Path $project '.cache')
     New-Item -ItemType Directory -Path (Join-Path $project '.cache\production') -Force | Out-Null
@@ -68,6 +70,7 @@ try {
     # Configuracion de pruebas sin secretos; los tests sustituyen el envio RAW.
     Copy-Item -LiteralPath (Join-Path $source 'deploy\oracle\agent-test-config.json') -Destination (Join-Path $source 'scripts\thermal-agent\config.json')
     Copy-Item -LiteralPath (Join-Path $project 'apps\api\prisma\schema.prisma') -Destination (Join-Path $source 'apps\api\prisma\schema.prisma')
+    Copy-Item -LiteralPath (Join-Path $project 'apps\api\prisma\bootstrap-production.ts') -Destination (Join-Path $source 'apps\api\prisma\bootstrap-production.ts')
     Push-Location $source
     try {
         Run 'pnpm.cmd' @('install','--frozen-lockfile')
@@ -90,7 +93,7 @@ try {
         $ready = Join-Path $stage 'netlify-ready'
         Copy-Item -LiteralPath $frontend -Destination $ready -Recurse
         $archive = Join-Path $stage 'backend.tar.gz'
-        Run 'tar.exe' @('-czf',$archive,'--exclude=node_modules','--exclude=dist','--exclude=*.tsbuildinfo','package.json','pnpm-lock.yaml','pnpm-workspace.yaml','apps/api','packages/contracts','deploy/oracle')
+        Run $tar @('-czf',$archive,'--exclude=node_modules','--exclude=dist','--exclude=*.tsbuildinfo','package.json','pnpm-lock.yaml','pnpm-workspace.yaml','apps/api','packages/contracts','deploy/oracle')
     } finally { Pop-Location }
     if ($PrepareOnly) {
         Write-Host "PREPARACION OK: $frontend"

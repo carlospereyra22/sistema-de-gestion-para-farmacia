@@ -2,6 +2,11 @@
 
 ## DECIDED
 
+- 01/11/2026: preproducción se instala en base, servicio, credenciales y sitio
+  Netlify separados; no se clona producción ni se mezcla su información comercial.
+  Validar una versión allí no publica ni habilita emisión fiscal productiva. Ver
+  PREPRODUCCION.md.
+
 - Login y recuperación de acceso (01/11/2026, SISTEMA-7): nueva pantalla de ingreso (`login-screen.tsx`) con panel de producto y tarjeta de acceso, paleta verde azulado intermedia entre el teal del sistema y el azul del logo. Email y contraseña, sin selector de sucursal (se elige después de entrar). «¿La olvidaste?» explica pedir una nueva al administrador, que puede restablecerla (ver BUSINESS_RULES). La recuperación por email queda para la epic Cuentas y seguridad (requiere servicio de correo). «Pedí una demo» y «Volver al sitio» usan `VITE_LANDING_URL`; sin esa variable en producción no se muestran. Nombre provisorio Farmatec.
 - Reportes interactivos (31/10/2026, SISTEMA-2): las definiciones de cada metrica viven en `docs/REPORTS_PLAN.md` y los tipos en `packages/contracts/src/reports.ts`; todas las pestanas y exportaciones las comparten. Importes como centavos en string. Ventas por medio de pago restan el vuelto al efectivo (la pantalla anterior no lo hacia). Devoluciones se restan en la fecha en que ocurren. Costo y margen son estimados por costo de lote. "Todas las sucursales" se ofrece solo con 2 o mas sucursales autorizadas y se calcula en cada consulta. Umbrales por defecto editables: stock bajo 5, sin movimiento 30 dias, vencimientos 90 dias. Permisos nuevos `REPORT_PROFIT_READ` y `REPORT_EXPORT`.
 
