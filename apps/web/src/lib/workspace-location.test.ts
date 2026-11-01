@@ -62,6 +62,15 @@ describe("workspace navigation", () => {
     expect(next.get("other")).toBe("1");
     expect(current.get("seccion")).toBe("history");
   });
+  it("does not carry report filters to other pages", () => {
+    const next = workspaceLocation(
+      new URLSearchParams(
+        "pagina=reportes&seccion=ventas&periodo=custom&desde=2026-10-01&hasta=2026-10-05&sucursal=b1&comparar=none&other=1",
+      ),
+      "Caja",
+    );
+    expect(Object.fromEntries(next)).toEqual({ pagina: "caja", other: "1" });
+  });
   it.each(["general", "fiscal", "branches", "tickets"] as const)(
     "restores the independent organization section %s",
     (tab) => {

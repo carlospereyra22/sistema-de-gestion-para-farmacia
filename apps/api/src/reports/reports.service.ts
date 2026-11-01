@@ -114,60 +114,85 @@ export class ReportsService {
         select: { id: true },
       })
     ).map((register) => register.id);
-    const [sales, payments, productLines, lots, expiring, closures] =
-      await Promise.all([
-        this.prisma.sale.findMany({
-          where: salesWhere,
-          select: { completedAt: true, totalMinor: true },
-          orderBy: { completedAt: "asc" },
-        }),
-        this.prisma.salePayment.groupBy({
-          by: ["method"],
-          where: { sale: salesWhere },
-          _sum: { amountMinor: true },
-        }),
-        this.prisma.saleItem.groupBy({
-          by: ["productId"],
-          where: { sale: salesWhere, productId: { not: null } },
-          _sum: { quantity: true },
-          orderBy: { _sum: { quantity: "desc" } },
-          take: 10,
-        }),
-        this.prisma.productLot.findMany({
-          where: { organizationId, branchId, quantity: { gt: 0 } },
-          select: { productId: true, quantity: true, unitCostMinor: true },
-        }),
-        this.prisma.productLot.findMany({
-          where: {
+    const [
+      sales,
+      payments,
+      productLines,
+      lots,
+      expiring,
+      closures,
+      soldUnits,
+      returnedUnits,
+    ] = await Promise.all([
+      this.prisma.sale.findMany({
+        where: salesWhere,
+        select: { completedAt: true, totalMinor: true },
+        orderBy: { completedAt: "asc" },
+      }),
+      this.prisma.salePayment.groupBy({
+        by: ["method"],
+        where: { sale: salesWhere },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.saleItem.groupBy({
+        by: ["productId"],
+        where: { sale: salesWhere, productId: { not: null } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: 10,
+      }),
+      this.prisma.productLot.findMany({
+        where: { organizationId, branchId, quantity: { gt: 0 } },
+        select: { productId: true, quantity: true, unitCostMinor: true },
+      }),
+      this.prisma.productLot.findMany({
+        where: {
+          organizationId,
+          branchId,
+          quantity: { gt: 0 },
+          expiresAt: { not: null, lte: new Date(Date.now() + 90 * 86400000) },
+        },
+        select: {
+          productId: true,
+          number: true,
+          quantity: true,
+          expiresAt: true,
+        },
+        orderBy: { expiresAt: "asc" },
+        take: 20,
+      }),
+      this.prisma.cashSession.findMany({
+        where: {
+          closedAt: { not: null, gte: start, lte: end },
+          cashRegisterId: { in: registerIds },
+        },
+        select: {
+          id: true,
+          openedAt: true,
+          closedAt: true,
+          openingAmountMinor: true,
+          closingAmountMinor: true,
+          movements: { select: { type: true, amountMinor: true } },
+        },
+      }),
+      // Unidades vendidas (REPORTS_PLAN.md): lineas con producto de ventas
+      // confirmadas, menos las devueltas en el periodo. Sin conceptos manuales.
+      this.prisma.saleItem.aggregate({
+        where: { sale: salesWhere, productId: { not: null } },
+        _sum: { quantity: true },
+      }),
+      this.prisma.customerReturnItem.aggregate({
+        where: {
+          customerReturn: {
             organizationId,
             branchId,
-            quantity: { gt: 0 },
-            expiresAt: { not: null, lte: new Date(Date.now() + 90 * 86400000) },
+            createdAt: { gte: start, lte: end },
           },
-          select: {
-            productId: true,
-            number: true,
-            quantity: true,
-            expiresAt: true,
-          },
-          orderBy: { expiresAt: "asc" },
-          take: 20,
-        }),
-        this.prisma.cashSession.findMany({
-          where: {
-            closedAt: { not: null, gte: start, lte: end },
-            cashRegisterId: { in: registerIds },
-          },
-          select: {
-            id: true,
-            openedAt: true,
-            closedAt: true,
-            openingAmountMinor: true,
-            closingAmountMinor: true,
-            movements: { select: { type: true, amountMinor: true } },
-          },
-        }),
-      ]);
+          saleItem: { productId: { not: null } },
+        },
+        _sum: { quantity: true },
+      }),
+    ]);
     const closurePayments = closures.length
       ? await this.prisma.salePayment.groupBy({
           by: ["cashSessionId"],
@@ -267,6 +292,8 @@ export class ReportsService {
         .reduce((sum, sale) => sum + sale.totalMinor, 0n)
         .toString(),
       saleCount: sales.length,
+      unitsSold:
+        (soldUnits._sum.quantity ?? 0) - (returnedUnits._sum.quantity ?? 0),
       dailySales: [...daily].map(([date, totalMinor]) => ({
         date,
         totalMinor: totalMinor.toString(),
