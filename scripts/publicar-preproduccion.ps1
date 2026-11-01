@@ -74,7 +74,7 @@ if test -n "$release" && test -f "$release/SOURCE_REVISION"; then
   cat "$release/SOURCE_REVISION"
 fi
 '@
-    $deployedRevision = Get-CommandOutput 'ssh.exe' (@('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=15','-i',$key,$remote,$revisionCommand))
+    $deployedRevision = Get-CommandOutput 'ssh.exe' (@('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=15','-i',$key,$remote,(New-RemoteCommand $revisionCommand)))
     if ($deployedRevision -eq $revision) {
         Write-Host "SIN CAMBIOS: main ($($revision.Substring(0, 8))) ya esta publicado en preproduccion."
         Write-Host 'No se reconstruyo, transfirio ni reinicio ningun servicio. Usa -Force solo si necesitas repetir la misma version.'
