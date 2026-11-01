@@ -130,8 +130,29 @@ Privacidad: DNI, CUIT y telefono no se muestran en vistas generales ni exportaci
 | Clientes y cuentas corrientes                                | `REPORT_READ` + `ACCOUNT_READ` (existente)                       |
 | Exportar                                                     | Nuevo `REPORT_EXPORT`: "Exportar reportes"                       |
 
-Los permisos nuevos se crean en SISTEMA-3 y se asignan a OWNER y ADMIN; el dueno los
-ajusta por rol en Configuracion → Roles y permisos.
+Los permisos nuevos se crean en SISTEMA-3 (migracion `20261031000000_report_permissions`,
+seed y bootstrap de produccion) y se asignan a OWNER y ADMIN; el dueno los ajusta por
+rol en Configuracion → Roles y permisos.
+
+## API base (SISTEMA-3)
+
+- Rutas nuevas a nivel organizacion: `organizations/:organizationId/reports/...`, solo
+  con `JwtAccessGuard`. No usan `BranchAccessGuard` porque pueden abarcar varias
+  sucursales: cada endpoint llama a `ReportAccessService.scope()`, que valida permiso y
+  sucursales contra `UserBranch`. Las rutas viejas
+  `organizations/:organizationId/branches/:branchId/reports/{summary,detail}` siguen
+  igual (las usa Inicio).
+- `GET organizations/:organizationId/reports/filter-options` → `ReportFilterOptions`:
+  sucursales activas asignadas, categorias, laboratorios, proveedores (solo con
+  `PURCHASE_READ`) y `access` con lo que el usuario puede ver.
+- `ReportFiltersQuery` (`apps/api/src/reports/report-filters.dto.ts`): DTO comun de
+  filtros para los endpoints de cada pestana. Listas como `?categoryIds=a,b`.
+- `parseReportPeriod` (`report-period.ts`): fechas → `[start, end)` en hora de
+  Argentina, periodo de comparacion, validaciones (400 con mensaje en espanol): fecha
+  invalida, Desde > Hasta, Hasta futura, mas de 366 dias.
+- Errores: sin `REPORT_READ` o sucursal no autorizada → 403.
+- Tests: `report-period.spec.ts` y `test/report-access.integration.spec.ts`
+  (aislamiento entre sucursales y organizaciones, sucursal nueva, inactivas, permisos).
 
 ## Tareas
 
