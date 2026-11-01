@@ -2,6 +2,8 @@
 
 ## DECIDED
 
+- Login y recuperación de acceso (01/11/2026, SISTEMA-7): nueva pantalla de ingreso (`login-screen.tsx`) con panel de producto y tarjeta de acceso, paleta verde azulado intermedia entre el teal del sistema y el azul del logo. Email y contraseña, sin selector de sucursal (se elige después de entrar). «¿La olvidaste?» explica pedir una nueva al administrador, que puede restablecerla (ver BUSINESS_RULES). La recuperación por email queda para la epic Cuentas y seguridad (requiere servicio de correo). «Pedí una demo» y «Volver al sitio» usan `VITE_LANDING_URL`; sin esa variable en producción no se muestran. Nombre provisorio Farmatec.
+
 - La opción «Descartar venta» del aviso de venta pendiente descarta directamente el borrador, sin segunda confirmación. No anula ni elimina ventas registradas; reemplaza la confirmación adicional acordada inicialmente.
 
 - 20/09/2026: la venta pendiente se conserva en memoria al navegar entre apartados o Historial dentro de la misma sesión/sucursal. Al volver al punto de venta se ofrece continuar o descartar con confirmación. No se crea venta ni se reserva stock al suspender; el backend sigue validando al confirmar. Se advierte antes de recargar/cerrar pestaña, cambiar de sucursal o cerrar sesión; no hay recuperación persistente después de recargar. La organización/sucursal delimita el estado para impedir mezclar ventas.

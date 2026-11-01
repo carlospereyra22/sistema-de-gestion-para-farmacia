@@ -210,6 +210,66 @@ export class UsersService {
     });
   }
 
+  /**
+   * Restablece la contrasena de otro usuario de la organizacion y cierra sus
+   * sesiones. El usuario es global: solo se permite si pertenece unicamente a esta
+   * organizacion, para no afectar su acceso a otra. La de un dueno solo la cambia
+   * otro dueno. La auditoria no guarda la contrasena.
+   */
+  async resetPassword(
+    actorId: string,
+    organizationId: string,
+    userId: string,
+    password: string,
+  ) {
+    await this.assertPermission(actorId, organizationId, "USER_MANAGE");
+    if (actorId === userId)
+      throw new ForbiddenException(
+        "No podés restablecer tu propia contraseña desde Usuarios.",
+      );
+    const passwordHash = await hash(password);
+    return this.prisma.$transaction(async (tx) => {
+      const [target, actor] = await Promise.all(
+        [userId, actorId].map((id) =>
+          tx.userOrganization.findUnique({
+            where: { userId_organizationId: { userId: id, organizationId } },
+            include: { roles: { include: { role: true } } },
+          }),
+        ),
+      );
+      if (!target)
+        throw new ForbiddenException("El usuario no pertenece a la farmacia.");
+      const isOwner = (
+        membership: { roles: { role: { code: string } }[] } | null | undefined,
+      ) => membership?.roles.some(({ role }) => role.code === "OWNER") ?? false;
+      if (isOwner(target) && !isOwner(actor))
+        throw new ForbiddenException(
+          "La contraseña de un dueño solo la puede restablecer otro dueño.",
+        );
+      if ((await tx.userOrganization.count({ where: { userId } })) > 1)
+        throw new ForbiddenException(
+          "Este usuario también ingresa a otra farmacia. Pedí el cambio a soporte.",
+        );
+      const now = new Date();
+      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      const revoked = await tx.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "USER",
+          entityId: userId,
+          action: "PASSWORD_RESET_BY_ADMIN",
+          after: { revokedSessions: revoked.count },
+        },
+      });
+      return { revokedSessions: revoked.count };
+    });
+  }
+
   async getCreateOptions(actorId: string, organizationId: string) {
     await this.assertPermission(actorId, organizationId, "USER_MANAGE");
     const [branches, roles] = await this.prisma.$transaction([

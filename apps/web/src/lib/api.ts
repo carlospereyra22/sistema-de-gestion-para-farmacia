@@ -274,6 +274,29 @@ export async function saveUserDisplayName(
     throw await responseError(response, "No se pudo guardar el nombre.");
 }
 
+/** Restablece la contrasena de otro usuario y cierra sus sesiones abiertas. */
+export async function resetUserPassword(
+  token: string,
+  organizationId: string,
+  userId: string,
+  password: string,
+): Promise<{ revokedSessions: number }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/users/${userId}/password`,
+    {
+      method: "PATCH",
+      headers: authJson(token),
+      body: JSON.stringify({ password }),
+    },
+  );
+  if (!response.ok)
+    throw await responseError(
+      response,
+      "No se pudo restablecer la contraseña.",
+    );
+  return (await response.json()) as { revokedSessions: number };
+}
+
 export async function updateUser(
   accessToken: string,
   organizationId: string,

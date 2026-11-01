@@ -116,6 +116,7 @@ import {
 } from "./lib/inventory-search";
 import { ProductFormSection } from "./product-form-section";
 import { StatusToast } from "./status-toast";
+import { UserPasswordDialog } from "./user-password-dialog";
 import { OperationHistory } from "./operation-history";
 import { ProductActionsMenu } from "./product-actions-menu";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
@@ -6755,6 +6756,8 @@ function UsersPanel({
   const [branchId, setBranchId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
+  const [passwordUser, setPasswordUser] = useState<UserListItem | null>(null);
+  const [notice, setNotice] = useState("");
   const deactivate = async (item: UserListItem): Promise<void> => {
     try {
       await updateUser(token, organizationId, item.user.id, {
@@ -6805,6 +6808,26 @@ function UsersPanel({
           onClose={() => setEditingUser(null)}
         />
       )}
+      {passwordUser && (
+        <UserPasswordDialog
+          key={`${organizationId}:${passwordUser.user.id}`}
+          token={token}
+          organizationId={organizationId}
+          user={passwordUser}
+          onDone={(value) => {
+            setNotice(value);
+            onDone();
+          }}
+          onClose={() => setPasswordUser(null)}
+        />
+      )}
+      {notice ? (
+        <StatusToast
+          key={notice}
+          message={notice}
+          onClose={() => setNotice("")}
+        />
+      ) : null}
       <div className="border bg-white">
         {users.map((item) => (
           <div
@@ -6826,6 +6849,14 @@ function UsersPanel({
                 className="rounded-lg border px-3 py-2 text-sm text-teal-700"
               >
                 Editar
+              </button>
+              <button
+                type="button"
+                onClick={() => setPasswordUser(item)}
+                aria-label={`Restablecer contraseña de ${item.user.email}`}
+                className="rounded-lg border px-3 py-2 text-sm text-teal-700"
+              >
+                Contraseña
               </button>
               {item.active ? (
                 <button
