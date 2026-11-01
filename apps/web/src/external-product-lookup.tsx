@@ -207,7 +207,11 @@ export function ExternalProductLookup({
         };
         if (detected !== undefined)
           callbacks.current.onKindDetected?.(detected);
-        if (detected === true) searchMedicine();
+        if (detected === true) {
+          searchMedicine();
+          update({ externalBusy: false });
+          return;
+        }
         void request<Result>(`external-products/barcode/${queryCode}`).then(
           (result) => {
             if (controller.signal.aborted) return;

@@ -24,8 +24,10 @@ function Run([string]$Program, [string[]]$Arguments) {
 }
 
 function New-RemoteCommand([string]$Script) {
-    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Script))
-    return "echo $encoded | base64 -d | bash"
+    # Windows here-strings carry CRLF; bash treats the CR as part of `then`/`fi`.
+    $unixScript = $Script.Replace("`r`n", "`n").Replace("`r", "`n")
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($unixScript))
+    return "printf '%s' '$encoded' | base64 -d | bash -n && printf '%s' '$encoded' | base64 -d | bash"
 }
 
 function Get-CommandOutput([string]$Program, [string[]]$Arguments) {
@@ -117,7 +119,7 @@ if ($PrepareOnly) {
 $sshArgs = @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=15','-o','ServerAliveInterval=15','-i',$key)
 $release = "/home/ubuntu/gestion-preprod-releases/$($stage.Name)"
 if (-not $Provision) {
-    Run 'ssh.exe' ($sshArgs + @($remote, 'test -r /etc/gestion-preprod/environment; test -f /etc/systemd/system/gestion-preprod-api.service'))
+    Run 'ssh.exe' ($sshArgs + @($remote, 'sudo -n test -r /etc/gestion-preprod/environment && test -f /etc/systemd/system/gestion-preprod-api.service'))
 }
 Run 'ssh.exe' ($sshArgs + @($remote, (New-RemoteCommand "set -eu; mkdir -p '$release'")))
 Run 'scp.exe' ($sshArgs + @($archive, ($remote + ':' + $release + '/backend.tar.gz')))

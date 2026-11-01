@@ -86,6 +86,20 @@ it("rejects a non-medication linked to a medicinal source before creating anythi
   ).rejects.toThrow("Es medicamento");
   expect(prisma.$transaction).not.toHaveBeenCalled();
 });
+it("rejects a medicinal reference with a different scanned EAN before creating a product", async () => {
+  const { service, prisma } = setup();
+  await expect(
+    service.create("actor", "org", {
+      name: "IBU 400",
+      priceMinor: 590000,
+      barcode: "7798420160383",
+      isMedication: true,
+      externalReferenceSource: "official",
+      externalReferenceBarcode: "7790839980590",
+    }),
+  ).rejects.toThrow("no coincide");
+  expect(prisma.$transaction).not.toHaveBeenCalled();
+});
 it("detaches a misclassified product and records its brand without changing its price", async () => {
   const { service, tx } = setup();
   await service.updateProduct("actor", "org", "product", {
