@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { cashClosureSummary } from "./report-cash-closures";
 import { dashboardDays } from "./dashboard-days";
 @Injectable()
 export class ReportsService {
@@ -108,77 +109,72 @@ export class ReportsService {
       status: "COMPLETED" as const,
       completedAt: { gte: start, lte: end },
     };
-    const registerIds = (
-      await this.prisma.cashRegister.findMany({
-        where: { branchId },
-        select: { id: true },
-      })
-    ).map((register) => register.id);
-    const [sales, payments, productLines, lots, expiring, closures] =
-      await Promise.all([
-        this.prisma.sale.findMany({
-          where: salesWhere,
-          select: { completedAt: true, totalMinor: true },
-          orderBy: { completedAt: "asc" },
-        }),
-        this.prisma.salePayment.groupBy({
-          by: ["method"],
-          where: { sale: salesWhere },
-          _sum: { amountMinor: true },
-        }),
-        this.prisma.saleItem.groupBy({
-          by: ["productId"],
-          where: { sale: salesWhere, productId: { not: null } },
-          _sum: { quantity: true },
-          orderBy: { _sum: { quantity: "desc" } },
-          take: 10,
-        }),
-        this.prisma.productLot.findMany({
-          where: { organizationId, branchId, quantity: { gt: 0 } },
-          select: { productId: true, quantity: true, unitCostMinor: true },
-        }),
-        this.prisma.productLot.findMany({
-          where: {
+    const [
+      sales,
+      payments,
+      productLines,
+      lots,
+      expiring,
+      cashClosures,
+      soldUnits,
+      returnedUnits,
+    ] = await Promise.all([
+      this.prisma.sale.findMany({
+        where: salesWhere,
+        select: { completedAt: true, totalMinor: true },
+        orderBy: { completedAt: "asc" },
+      }),
+      this.prisma.salePayment.groupBy({
+        by: ["method"],
+        where: { sale: salesWhere },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.saleItem.groupBy({
+        by: ["productId"],
+        where: { sale: salesWhere, productId: { not: null } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: 10,
+      }),
+      this.prisma.productLot.findMany({
+        where: { organizationId, branchId, quantity: { gt: 0 } },
+        select: { productId: true, quantity: true, unitCostMinor: true },
+      }),
+      this.prisma.productLot.findMany({
+        where: {
+          organizationId,
+          branchId,
+          quantity: { gt: 0 },
+          expiresAt: { not: null, lte: new Date(Date.now() + 90 * 86400000) },
+        },
+        select: {
+          productId: true,
+          number: true,
+          quantity: true,
+          expiresAt: true,
+        },
+        orderBy: { expiresAt: "asc" },
+        take: 20,
+      }),
+      cashClosureSummary(this.prisma, [branchId], { gte: start, lte: end }),
+      // Unidades vendidas (REPORTS_PLAN.md): lineas con producto de ventas
+      // confirmadas, menos las devueltas en el periodo. Sin conceptos manuales.
+      this.prisma.saleItem.aggregate({
+        where: { sale: salesWhere, productId: { not: null } },
+        _sum: { quantity: true },
+      }),
+      this.prisma.customerReturnItem.aggregate({
+        where: {
+          customerReturn: {
             organizationId,
             branchId,
-            quantity: { gt: 0 },
-            expiresAt: { not: null, lte: new Date(Date.now() + 90 * 86400000) },
+            createdAt: { gte: start, lte: end },
           },
-          select: {
-            productId: true,
-            number: true,
-            quantity: true,
-            expiresAt: true,
-          },
-          orderBy: { expiresAt: "asc" },
-          take: 20,
-        }),
-        this.prisma.cashSession.findMany({
-          where: {
-            closedAt: { not: null, gte: start, lte: end },
-            cashRegisterId: { in: registerIds },
-          },
-          select: {
-            id: true,
-            openedAt: true,
-            closedAt: true,
-            openingAmountMinor: true,
-            closingAmountMinor: true,
-            movements: { select: { type: true, amountMinor: true } },
-          },
-        }),
-      ]);
-    const closurePayments = closures.length
-      ? await this.prisma.salePayment.groupBy({
-          by: ["cashSessionId"],
-          where: {
-            cashSessionId: { in: closures.map((closure) => closure.id) },
-            method: "CASH",
-            sale: { status: "COMPLETED" },
-          },
-          _sum: { amountMinor: true },
-        })
-      : [];
+          saleItem: { productId: { not: null } },
+        },
+        _sum: { quantity: true },
+      }),
+    ]);
     const productIds = [
       ...new Set(
         [...productLines, ...expiring].flatMap((item) =>
@@ -198,68 +194,6 @@ export class ReportsService {
       const day = this.dateKey(sale.completedAt!);
       daily.set(day, (daily.get(day) ?? 0n) + sale.totalMinor);
     }
-    const cashBySession = new Map(
-      closurePayments.map((payment) => [
-        payment.cashSessionId,
-        payment._sum.amountMinor ?? 0n,
-      ]),
-    );
-    const dailyClosures = new Map<
-      string,
-      {
-        count: number;
-        expectedMinor: bigint;
-        countedMinor: bigint;
-        differenceMinor: bigint;
-      }
-    >();
-    const monthlyClosures = new Map<
-      string,
-      {
-        count: number;
-        expectedMinor: bigint;
-        countedMinor: bigint;
-        differenceMinor: bigint;
-      }
-    >();
-    for (const closure of closures) {
-      const manualIn = closure.movements.reduce(
-        (sum, movement) =>
-          sum + (movement.type === "IN" ? movement.amountMinor : 0n),
-        0n,
-      );
-      const manualOut = closure.movements.reduce(
-        (sum, movement) =>
-          sum + (movement.type === "OUT" ? movement.amountMinor : 0n),
-        0n,
-      );
-      const expected =
-        closure.openingAmountMinor +
-        (cashBySession.get(closure.id) ?? 0n) +
-        manualIn -
-        manualOut;
-      const counted = closure.closingAmountMinor ?? 0n;
-      const difference = counted - expected;
-      const day = this.dateKey(closure.closedAt!);
-      const month = day.slice(0, 7);
-      for (const [key, target] of [
-        [day, dailyClosures],
-        [month, monthlyClosures],
-      ] as const) {
-        const previous = target.get(key) ?? {
-          count: 0,
-          expectedMinor: 0n,
-          countedMinor: 0n,
-          differenceMinor: 0n,
-        };
-        target.set(key, {
-          count: previous.count + 1,
-          expectedMinor: previous.expectedMinor + expected,
-          countedMinor: previous.countedMinor + counted,
-          differenceMinor: previous.differenceMinor + difference,
-        });
-      }
-    }
     return {
       from: start.toISOString(),
       to: end.toISOString(),
@@ -267,24 +201,13 @@ export class ReportsService {
         .reduce((sum, sale) => sum + sale.totalMinor, 0n)
         .toString(),
       saleCount: sales.length,
+      unitsSold:
+        (soldUnits._sum.quantity ?? 0) - (returnedUnits._sum.quantity ?? 0),
       dailySales: [...daily].map(([date, totalMinor]) => ({
         date,
         totalMinor: totalMinor.toString(),
       })),
-      cashClosures: {
-        count: closures.length,
-        expectedMinor: [...dailyClosures.values()]
-          .reduce((sum, item) => sum + item.expectedMinor, 0n)
-          .toString(),
-        countedMinor: [...dailyClosures.values()]
-          .reduce((sum, item) => sum + item.countedMinor, 0n)
-          .toString(),
-        differenceMinor: [...dailyClosures.values()]
-          .reduce((sum, item) => sum + item.differenceMinor, 0n)
-          .toString(),
-        daily: this.serializeClosureGroups(dailyClosures),
-        monthly: this.serializeClosureGroups(monthlyClosures),
-      },
+      cashClosures,
       payments: payments.map((payment) => ({
         method: payment.method,
         amountMinor: (payment._sum.amountMinor ?? 0n).toString(),
@@ -320,27 +243,6 @@ export class ReportsService {
     const value = (type: Intl.DateTimeFormatPartTypes) =>
       parts.find((part) => part.type === type)?.value ?? "";
     return `${value("year")}-${value("month")}-${value("day")}`;
-  }
-  private serializeClosureGroups(
-    groups: Map<
-      string,
-      {
-        count: number;
-        expectedMinor: bigint;
-        countedMinor: bigint;
-        differenceMinor: bigint;
-      }
-    >,
-  ) {
-    return [...groups.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([period, item]) => ({
-        period,
-        count: item.count,
-        expectedMinor: item.expectedMinor.toString(),
-        countedMinor: item.countedMinor.toString(),
-        differenceMinor: item.differenceMinor.toString(),
-      }));
   }
   private async assert(actorId: string, organizationId: string) {
     const member = await this.prisma.userOrganization.findUnique({

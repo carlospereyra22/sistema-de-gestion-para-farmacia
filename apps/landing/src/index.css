@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --color-brand: #087f70;
+  --color-brand-strong: #06695d;
+  --color-brand-soft: #e8faf5;
+  --color-brand-line: #cce8de;
+  --color-surface: #f4f8fa;
+  --color-line: #dce7ef;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  background: white;
+  color: #0f172a;
+  font-family: var(--font-sans);
+}
