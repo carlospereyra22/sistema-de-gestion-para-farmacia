@@ -41,6 +41,9 @@ class UpdateUserDto {
   @IsArray() @ArrayMinSize(1) @IsString({ each: true }) branchIds!: string[];
   @IsArray() @ArrayMinSize(1) @IsString({ each: true }) roleIds!: string[];
 }
+class ResetPasswordDto {
+  @IsString() @MinLength(12) @MaxLength(256) password!: string;
+}
 export class UserDisplayNameDto {
   @IsString() @MaxLength(120) @Matches(/^[^\p{Cc}]*$/u) displayName!: string;
 }
@@ -98,6 +101,20 @@ export class UsersController {
     );
   }
 
+  @Patch(":userId/password")
+  resetPassword(
+    @Param("organizationId") organizationId: string,
+    @Param("userId") userId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ResetPasswordDto,
+  ) {
+    return this.users.resetPassword(
+      request.auth!.sub,
+      organizationId,
+      userId,
+      body.password,
+    );
+  }
   @Patch(":userId")
   update(
     @Param("organizationId") organizationId: string,

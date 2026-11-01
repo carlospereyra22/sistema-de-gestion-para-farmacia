@@ -34,6 +34,7 @@ import {
   type CatalogProduct,
 } from "./lib/api";
 import { WorkspaceShell } from "./workspace-shell";
+import { LoginScreen } from "./login-screen";
 
 const permissionGroups = [
   {
@@ -858,44 +859,13 @@ export function App(): ReactElement {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-6">
-      <form
-        onSubmit={(event) => void submit(event)}
-        className="w-full border border-slate-200 bg-white p-8"
-      >
-        <p className="text-sm font-semibold text-teal-700">ACCESO</p>
-        <h1 className="mt-2 text-3xl font-semibold">Sistema de Gestion</h1>
-        <label className="mt-8 block text-sm font-medium">
-          Email
-          <input
-            required
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="mt-2 h-10 w-full border border-slate-300 px-3"
-          />
-        </label>
-        <label className="mt-5 block text-sm font-medium">
-          Contrasena
-          <input
-            required
-            type="password"
-            minLength={12}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-2 h-10 w-full border border-slate-300 px-3"
-          />
-        </label>
-        {message ? (
-          <p className="mt-4 text-sm text-red-700">{message}</p>
-        ) : null}
-        <button
-          type="submit"
-          className="mt-7 h-10 w-full bg-slate-900 text-sm font-medium text-white"
-        >
-          Iniciar sesion
-        </button>
-      </form>
-    </main>
+    <LoginScreen
+      email={email}
+      password={password}
+      message={message}
+      onEmailChange={setEmail}
+      onPasswordChange={setPassword}
+      onSubmit={submit}
+    />
   );
 }
