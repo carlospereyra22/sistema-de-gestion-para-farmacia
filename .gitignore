@@ -14,6 +14,7 @@ Thumbs.db
 !.vscode/extensions.json
 prisma/dev.db
 SUBIR-A-NETLIFY/
+SUBIR A PRODUCCION LANDING/
 *.dump
 *.dump.partial
 .cache/

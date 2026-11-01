@@ -32,8 +32,9 @@ la misma paleta verde/teal. Esta incluida en `pnpm lint`, `typecheck`, `test` y
    pnpm --filter @gestion/landing build
    ```
    Sin `VITE_APP_URL`, "Ingresar" apunta a `http://localhost:5173` (desarrollo).
-3. Crear un sitio **nuevo** en Netlify y subir `apps/landing/dist` (Netlify Drop),
-   igual que la web del sistema. No usar el sitio de produccion.
+3. La entrega local se prepara en `SUBIR A PRODUCCION LANDING`. Crear un sitio
+   **nuevo** en Netlify y subir esa carpeta con Netlify Drop, igual que la web
+   del sistema. No usar el sitio de produccion.
 
 El dominio propio queda para mas adelante: la landing puede arrancar en un
 subdominio `netlify.app`.
