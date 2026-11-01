@@ -5,6 +5,7 @@ import {
   Param,
   Query,
   Req,
+  ServiceUnavailableException,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -24,6 +25,7 @@ import type { AuthenticatedRequest } from "../auth/auth.types";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { CatalogService } from "./catalog.service";
 import { MedicineReferenceService } from "./medicine-reference.service";
+import { ExternalCatalogService } from "./external-catalog.service";
 
 class MedicineReferenceQueryDto {
   @IsString()
@@ -42,6 +44,7 @@ export class MedicineReferenceController {
     private readonly catalog: CatalogService,
     private readonly references: MedicineReferenceService,
     private readonly alfabeta: AlfaBetaService,
+    private readonly externalCatalog: ExternalCatalogService,
   ) {}
 
   @Get("barcode/:code")
@@ -56,8 +59,41 @@ export class MedicineReferenceController {
       organizationId,
       "CATALOG_MANAGE",
     );
-    const matches = await this.references.byBarcode(code);
-    return { matches, automaticSelection: matches.length === 1 };
+    let matches: Awaited<ReturnType<MedicineReferenceService["byBarcode"]>> =
+      [];
+    let officialUnavailable = false;
+    try {
+      matches = await this.references.byBarcode(code);
+    } catch {
+      officialUnavailable = true;
+    }
+    if (matches.length)
+      return {
+        matches,
+        retailMatches: [],
+        automaticSelection: matches.length === 1,
+        officialUnavailable,
+      };
+    let retailMatches: Awaited<
+      ReturnType<ExternalCatalogService["medicineFallback"]>
+    > = [];
+    try {
+      retailMatches = await this.externalCatalog.medicineFallback(
+        code,
+        organizationId,
+      );
+    } catch {
+      if (officialUnavailable)
+        throw new ServiceUnavailableException(
+          "No se pudo consultar ninguna fuente de medicamentos.",
+        );
+    }
+    return {
+      matches,
+      retailMatches,
+      automaticSelection: false,
+      officialUnavailable,
+    };
   }
 
   @Get("alfabeta")

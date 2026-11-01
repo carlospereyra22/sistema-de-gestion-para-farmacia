@@ -12,3 +12,19 @@ CREATE TABLE IF NOT EXISTS reference_catalog.source_record (
 );
 CREATE INDEX IF NOT EXISTS source_record_batch_source_idx
   ON reference_catalog.source_record (batch_id, source);
+
+-- Exact-code fallback for medicines absent from the official barcode index.
+-- Retailer records remain separate from the official medicine reference.
+CREATE INDEX IF NOT EXISTS source_record_medicine_code_idx
+  ON reference_catalog.source_record ((lpad(payload->>'code', 14, '0')))
+  WHERE status = 'discard' AND payload->>'reason' = 'medicamento_en_categoria_fuente';
+
+CREATE OR REPLACE VIEW reference_catalog.medicine_fallback AS
+SELECT lpad(payload->>'code', 14, '0')::char(14) AS gtin14,
+       source, source_id, payload, observed_at
+FROM reference_catalog.source_record
+WHERE status = 'discard'
+  AND payload->>'reason' = 'medicamento_en_categoria_fuente'
+  AND source IN ('public_farmalife', 'public_farmar', 'public_farmaplus',
+                 'public_farmacorp', 'public_farmamix')
+  AND payload->>'code' ~ '^[0-9]{8,14}$';

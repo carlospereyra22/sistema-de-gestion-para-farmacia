@@ -1,6 +1,9 @@
 import { resolveExternalCategory } from "./lib/api";
 import { PurchasesWorkspace } from "./purchases-workspace";
-import { ExternalProductLookup } from "./external-product-lookup";
+import {
+  ExternalProductLookup,
+  type RetailMedicine,
+} from "./external-product-lookup";
 import {
   externalProductFields,
   externalSaleUnit,
@@ -1731,6 +1734,21 @@ function Products({
     setReferenceSearchDone(false);
     setAlfaReferenceResults([]);
   };
+  const applyRetailMedicine = (reference: RetailMedicine) => {
+    setMedicationMode("medicine");
+    setIsMedication(true);
+    setSelectedReference(undefined);
+    setName(reference.name);
+    setPresentation(reference.presentation);
+    setBrand(reference.brand);
+    externalBrand.current = reference.brand || null;
+    if (!saleUnitEdited.current) setSaleUnit("BOX");
+    const medicationCategory = options?.categories.find(
+      (category) =>
+        category.name.trim().toLocaleLowerCase("es-AR") === "medicamentos",
+    );
+    if (medicationCategory) setCategoryId(medicationCategory.id);
+  };
   const clearMismatchedReference = (value: string) => {
     setReferenceBarcodeWarning("");
     if (
@@ -2524,6 +2542,7 @@ function Products({
                           externalFilled.current = null;
                           applyReference(reference, true);
                         }}
+                        onRetailMedicine={applyRetailMedicine}
                         onCode={(value) => {
                           clearMismatchedReference(value);
                           if (

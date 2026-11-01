@@ -8,6 +8,10 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { canonicalGtin } from "./external-gtin";
 import type { CategoryEvidence } from "./category-classification";
 import { externalCatalogUrl } from "./external-catalog-url";
+import {
+  retailerMedicineMatches,
+  type RetailMedicineRow,
+} from "./retail-medicine-fallback";
 type Candidate = {
   code: string;
   gtin14: string;
@@ -124,6 +128,21 @@ export class ExternalCatalogService implements OnModuleDestroy {
         "No se pudo consultar el catálogo externo. La carga manual sigue disponible.",
       );
     }
+  }
+
+  async medicineFallback(code: string, organizationId: string) {
+    const gtin14 = canonicalGtin(code);
+    const rows = await this.connection(organizationId).$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+        await tx.$executeRaw`SET LOCAL statement_timeout = '3000ms'`;
+        return tx.$queryRaw<RetailMedicineRow[]>(
+          Prisma.sql`SELECT source, payload FROM reference_catalog.medicine_fallback WHERE gtin14=CAST(${gtin14} AS char(14)) ORDER BY observed_at DESC LIMIT 30`,
+        );
+      },
+      { timeout: 5000 },
+    );
+    return retailerMedicineMatches(code, rows);
   }
 
   async categoryEvidence(

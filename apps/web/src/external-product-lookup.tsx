@@ -26,7 +26,17 @@ type Result = {
 };
 type MedicineResult = {
   matches: MedicineReference[];
+  retailMatches: RetailMedicine[];
   automaticSelection: boolean;
+  officialUnavailable?: boolean;
+};
+export type RetailMedicine = {
+  name: string;
+  presentation: string;
+  brand: string;
+  barcode: string;
+  source: string;
+  sourceRef: string;
 };
 type LookupState = {
   key: string;
@@ -47,6 +57,7 @@ export function ExternalProductLookup({
   onCode,
   onApply,
   onMedication,
+  onRetailMedicine,
   allowAutomatic,
   disabled,
   medicationEnabled = true,
@@ -63,6 +74,7 @@ export function ExternalProductLookup({
     candidate: ExternalProductCandidate,
   ) => void | boolean | Promise<void | boolean>;
   onMedication: (reference: MedicineReference) => void;
+  onRetailMedicine: (reference: RetailMedicine) => void;
   allowAutomatic: boolean;
   disabled: boolean;
   medicationEnabled?: boolean;
@@ -250,6 +262,7 @@ export function ExternalProductLookup({
   }, [canonical, key, organizationId, requestKey, detected]);
   const current = state.key === key ? state : undefined;
   const medicines = current?.medicines?.matches ?? [];
+  const retailMedicines = current?.medicines?.retailMatches ?? [];
   const groups = current?.result
     ? externalSuggestionGroups(
         current.result.reference,
@@ -258,11 +271,12 @@ export function ExternalProductLookup({
     : [];
   const count =
     medicines.length +
+    retailMedicines.length +
     groups.reduce((sum, group) => sum + group.rows.length, 0);
   const showDropdown =
     !current?.linked &&
     !medicines.length &&
-    groups.some((group) => group.rows.length) &&
+    (groups.some((group) => group.rows.length) || retailMedicines.length > 0) &&
     dismissed !== requestKey;
   useEffect(() => {
     if (!showDropdown) return;
@@ -472,6 +486,40 @@ export function ExternalProductLookup({
                     )}
                   </button>
                 ))}
+              {retailMedicines.map((item, index) => (
+                <button
+                  key={`${item.source}:${index}`}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    chosenRequest.current = requestKey;
+                    onRetailMedicine(item);
+                    setDismissed(requestKey);
+                    setState((previous) => ({ ...previous, applied: true }));
+                  }}
+                  className="flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left hover:bg-teal-50 focus-visible:bg-teal-50"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
+                    <Package size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block text-xs font-semibold leading-5 text-slate-800">
+                      {item.name}
+                    </strong>
+                    <span className="block text-[11px] text-slate-500">
+                      {item.presentation} · {item.brand}
+                    </span>
+                    <span className="block text-[10px] text-amber-700">
+                      Farmacia: {item.source.replace("public_", "")}. Sin
+                      vínculo oficial ni precio.
+                    </span>
+                  </span>
+                  <ArrowUpRight
+                    size={15}
+                    className="mt-1 shrink-0 text-teal-600"
+                  />
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -518,6 +566,14 @@ export function ExternalProductLookup({
             Datos completados
           </span>
         )}
+        {current?.medicines?.officialUnavailable &&
+          retailMedicines.length > 0 &&
+          !current?.applied && (
+            <span className="text-amber-700">
+              El padrón oficial no respondió. Revisá el envase antes de elegir
+              la ficha de farmacia.
+            </span>
+          )}
         {current?.linked && (
           <span className="text-teal-700">
             Medicamento completado y vinculado. Se guarda al confirmar el
