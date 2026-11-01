@@ -7,6 +7,7 @@ import {
   externalGtin,
 } from "./lib/external-product";
 import { ProductFilterSelect } from "./product-filter-select";
+import { medicineReferenceBarcodeConflict } from "./lib/medicine-reference-barcode";
 import { categoryBranch } from "./lib/category-tree";
 import { SuppliersWorkspace } from "./suppliers-workspace";
 import { CustomersWorkspace } from "./customers-workspace";
@@ -1430,6 +1431,7 @@ function Products({
   >([]);
   const [selectedReference, setSelectedReference] =
     useState<MedicineReference>();
+  const [referenceBarcodeWarning, setReferenceBarcodeWarning] = useState("");
   const scannedMedicine = useRef<MedicineReference | null>(null);
   const priceLocked =
     isMedication &&
@@ -1635,6 +1637,7 @@ function Products({
     setAlfaReferenceResults([]);
     setReferenceLoading(false);
     setReferenceError("");
+    setReferenceBarcodeWarning("");
   };
   const searchReferences = async (source: MedicineReference["source"]) => {
     referenceRequest.current?.abort();
@@ -1646,6 +1649,7 @@ function Products({
     setReferenceSource(source);
     setReferenceResults([]);
     setReferenceError("");
+    setReferenceBarcodeWarning("");
     if (queryText.length < 2) return;
     setReferenceLoading(true);
     try {
@@ -1678,16 +1682,25 @@ function Products({
       if (!controller.signal.aborted) setReferenceLoading(false);
     }
   };
-  const applyReference = (reference: MedicineReference) => {
+  const applyReference = (reference: MedicineReference, fromScan = false) => {
     if (medicationMode === "other") return;
+    if (medicineReferenceBarcodeConflict(barcode, reference.barcode)) {
+      setReferenceBarcodeWarning(
+        `La fuente informa ${reference.barcode}, distinto del código escaneado ${barcode.trim()}. No se vinculó esta ficha. Buscá la presentación en otra fuente o revisá el envase.`,
+      );
+      return;
+    }
+    setReferenceBarcodeWarning(
+      !fromScan && !barcode.trim() && reference.barcode
+        ? `La fuente informa ${reference.barcode}, pero no lo copiamos desde la búsqueda por nombre. Escaneá o escribí el código del envase.`
+        : "",
+    );
     setIsMedication(true);
     if (!editingProduct && !saleUnitEdited.current) setSaleUnit("BOX");
     setSelectedReference(reference);
     if (!editingProduct) setName(reference.name);
     if (reference.priceMinor !== null)
       setPrice(String(reference.priceMinor / 100));
-    if (reference.barcode && !fractionEnabled && saleUnit === "BOX")
-      setBarcode(reference.barcode);
     if (reference.activeIngredient)
       setActiveIngredient(reference.activeIngredient);
     setPresentation(reference.presentation);
@@ -1717,6 +1730,23 @@ function Products({
     setReferenceResults([]);
     setReferenceSearchDone(false);
     setAlfaReferenceResults([]);
+  };
+  const clearMismatchedReference = (value: string) => {
+    setReferenceBarcodeWarning("");
+    if (
+      !selectedReference ||
+      !medicineReferenceBarcodeConflict(value, selectedReference.barcode)
+    )
+      return;
+    const referencePrice = selectedReference.priceMinor;
+    if (referencePrice !== null)
+      setPrice((current) =>
+        current === String(referencePrice / 100) ? "" : current,
+      );
+    setSelectedReference(undefined);
+    setReferenceBarcodeWarning(
+      "El nuevo código no coincide con la ficha vinculada. Revisá el envase y elegí de nuevo la referencia.",
+    );
   };
   const edit = (product: CatalogProduct) => {
     setMedicationMode(
@@ -1752,6 +1782,7 @@ function Products({
     setReferenceError("");
     setReferenceLoading(false);
     setFormOpen(true);
+    setReferenceBarcodeWarning("");
     setEditingProduct(product);
     setGenerateInternalBarcode(false);
     setSuggestedLaboratoryName("");
@@ -2491,10 +2522,10 @@ function Products({
                         onMedication={(reference) => {
                           scannedMedicine.current = reference;
                           externalFilled.current = null;
-                          applyReference(reference);
-                          setBarcode(barcode.trim());
+                          applyReference(reference, true);
                         }}
                         onCode={(value) => {
+                          clearMismatchedReference(value);
                           if (
                             value.trim() !== barcode.trim() &&
                             externalBrand.current
@@ -2690,12 +2721,23 @@ function Products({
                       <Input
                         label="Código de barras"
                         value={barcode}
-                        onChange={setBarcode}
+                        onChange={(value) => {
+                          clearMismatchedReference(value);
+                          setBarcode(value);
+                        }}
                         placeholder="Ej. 7791234567890"
                         required={false}
                         labelClassName="mt-3 text-xs font-semibold text-slate-600"
                         className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
                       />
+                    )}
+                    {referenceBarcodeWarning && (
+                      <p
+                        className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+                        role="alert"
+                      >
+                        {referenceBarcodeWarning}
+                      </p>
                     )}
                   </div>
                   <div

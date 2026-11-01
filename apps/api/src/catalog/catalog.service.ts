@@ -17,6 +17,7 @@ import {
 import { fractionalPrice } from "./fractional-price";
 import { withProductBarcode } from "./product-barcode";
 import { internalBarcode } from "./internal-barcode";
+import { assertMedicineReferenceBarcode } from "./medicine-reference-barcode";
 import {
   branchProductAccess,
   changeBranchProduct,
@@ -614,6 +615,11 @@ export class CatalogService {
           )
             throw new BadRequestException(
               "Activá Es medicamento antes de vincular una referencia medicinal o indicar receta.",
+            );
+          if (isMedication && input.externalReferenceSource)
+            assertMedicineReferenceBarcode(
+              input.barcode,
+              input.externalReferenceBarcode,
             );
           if (!isMedication)
             input = {
@@ -1346,6 +1352,11 @@ export class CatalogService {
     )
       throw new BadRequestException(
         "Activá Es medicamento antes de vincular una referencia medicinal o indicar receta.",
+      );
+    if (isMedication && input.externalReferenceSource)
+      assertMedicineReferenceBarcode(
+        input.barcode,
+        input.externalReferenceBarcode,
       );
     const [category, laboratory] = await Promise.all([
       input.categoryId
