@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Provision,
     [switch]$PrepareOnly,
     [switch]$NonInteractive,
