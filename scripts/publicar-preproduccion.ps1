@@ -59,10 +59,15 @@ $archive = Join-Path $stage.FullName 'backend.tar.gz'
 $frontend = Join-Path $stage.FullName 'netlify-preprod-ready'
 if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Falta el paquete de API preparado.' }
 Copy-Item -LiteralPath (Join-Path $stage.FullName 'netlify-ready') -Destination $frontend -Recurse
-Set-Content -LiteralPath (Join-Path $frontend '_redirects') -NoNewline -Encoding utf8 @"
+$redirects = @"
 /api/v1/* https://$remoteHost/preprod/api/v1/:splat 200!
 /* /index.html 200
 "@
+[IO.File]::WriteAllText(
+    (Join-Path $frontend '_redirects'),
+    $redirects,
+    [Text.UTF8Encoding]::new($false)
+)
 
 if ($PrepareOnly) {
     Write-Host "PREPARACION PREPRODUCCION OK: $frontend"
