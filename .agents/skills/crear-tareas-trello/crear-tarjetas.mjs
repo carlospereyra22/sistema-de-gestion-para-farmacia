@@ -90,7 +90,7 @@ for (const card of plan.cards) {
   }
   if (card.checklist?.length) {
     const checklist = await trello("POST", `/cards/${created.id}/checklists`, {
-      name: "Hecho cuando",
+      name: card.checklistName ?? "Hecho cuando",
     });
     for (const item of card.checklist)
       await trello("POST", `/checklists/${checklist.id}/checkItems`, {

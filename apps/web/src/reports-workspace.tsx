@@ -16,11 +16,7 @@ import {
   Truck,
   type LucideIcon,
 } from "lucide-react";
-import {
-  ALL_BRANCHES,
-  type ReportFilterOptions,
-  type ReportTab,
-} from "@gestion/contracts";
+import { type ReportFilterOptions, type ReportTab } from "@gestion/contracts";
 import { getReportFilterOptions } from "./lib/reports-api";
 import {
   argentineToday,
@@ -34,7 +30,8 @@ import {
   type ReportView,
 } from "./lib/report-view";
 import { ReportFiltersBar } from "./report-filters-bar";
-import { ReportLegacyOverview } from "./report-legacy-overview";
+import { workspaceLocation } from "./lib/workspace-location";
+import { ReportOverviewTab } from "./report-overview";
 import {
   ReportEmptyState,
   ReportErrorState,
@@ -72,14 +69,11 @@ const upcoming: Partial<Record<ReportTab, string>> = {
 export function ReportsWorkspace({
   token,
   organizationId,
-  currentBranchId,
   search,
   onSearchChange,
 }: {
   token: string;
   organizationId: string;
-  /** Sucursal elegida en el encabezado; la vista anterior la usa con "Todas". */
-  currentBranchId: string;
   search: URLSearchParams;
   onSearchChange: (next: URLSearchParams) => void;
 }): ReactElement {
@@ -172,10 +166,10 @@ export function ReportsWorkspace({
             options={options}
             token={token}
             organizationId={organizationId}
-            branchId={branchId}
-            currentBranchId={currentBranchId}
-            from={view.from}
-            to={view.to}
+            view={{ ...view, branchId }}
+            onOpenInventory={() =>
+              onSearchChange(workspaceLocation(search, "Inventario"))
+            }
           />
         </>
       )}
@@ -188,19 +182,15 @@ function ReportTabContent({
   options,
   token,
   organizationId,
-  branchId,
-  currentBranchId,
-  from,
-  to,
+  view,
+  onOpenInventory,
 }: {
   tab: ReportTab;
   options: ReportFilterOptions;
   token: string;
   organizationId: string;
-  branchId: string;
-  currentBranchId: string;
-  from: string;
-  to: string;
+  view: ReportView;
+  onOpenInventory: () => void;
 }): ReactElement {
   if (!options.branches.length)
     return (
@@ -221,28 +211,15 @@ function ReportTabContent({
         />
       </div>
     );
-  if (tab === "summary") {
-    // La vista anterior consulta una sola sucursal: con "Todas" usa la del encabezado.
-    const single =
-      branchId === ALL_BRANCHES
-        ? (options.branches.find((branch) => branch.id === currentBranchId) ??
-          options.branches[0]!)
-        : options.branches.find((branch) => branch.id === branchId)!;
+  if (tab === "summary")
     return (
-      <ReportLegacyOverview
+      <ReportOverviewTab
         token={token}
         organizationId={organizationId}
-        branchId={single.id}
-        from={from}
-        to={to}
-        notice={
-          branchId === ALL_BRANCHES
-            ? `Muestra solo la sucursal ${single.name}; el total de todas las sucursales llega con el Resumen nuevo.`
-            : undefined
-        }
+        view={view}
+        onOpenInventory={onOpenInventory}
       />
     );
-  }
   return (
     <div className={reportCardClass}>
       <ReportEmptyState

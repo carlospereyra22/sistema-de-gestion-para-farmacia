@@ -1,8 +1,49 @@
-import type { ReactElement, ReactNode } from "react";
-import { AlertTriangle, ChartNoAxesCombined, RotateCcw } from "lucide-react";
+import { useId, type ReactElement, type ReactNode } from "react";
+import {
+  AlertTriangle,
+  ChartNoAxesCombined,
+  Info,
+  RotateCcw,
+} from "lucide-react";
 
 export const reportCardClass =
   "rounded-xl border border-[#dce7ef] bg-white shadow-[0_3px_12px_rgb(25_56_74_/_3%)]";
+
+/**
+ * Icono de ayuda con tooltip del sistema (tarjeta blanca, como el del precio en
+ * Ventas). Se abre al pasar el mouse o al enfocar con teclado; sin `title` nativo.
+ */
+export function ReportHelp({
+  title = "Cómo se calcula",
+  text,
+}: {
+  title?: string;
+  text: string;
+}): ReactElement {
+  const id = useId();
+  return (
+    <span className="group relative inline-flex">
+      <span
+        tabIndex={0}
+        aria-describedby={id}
+        aria-label={title}
+        className="inline-flex cursor-help rounded-full text-slate-400 outline-none hover:text-[#087f70] focus-visible:text-[#087f70] focus-visible:ring-2 focus-visible:ring-teal-500/30"
+      >
+        <Info size={13} aria-hidden />
+      </span>
+      <span
+        id={id}
+        role="tooltip"
+        className="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-2 w-64 max-w-[70vw] -translate-x-1/2 rounded-lg border border-[#d3e5e0] bg-white px-3 py-2 text-left text-[11px] font-normal leading-4 text-slate-600 opacity-0 shadow-[0_4px_12px_rgb(15_23_42_/_10%)] transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+      >
+        <strong className="mb-0.5 block font-semibold text-[#0f766e]">
+          {title}
+        </strong>
+        {text}
+      </span>
+    </span>
+  );
+}
 
 /** Sin datos o dato no registrado: explica por que, nunca dibuja ceros ficticios. */
 export function ReportEmptyState({
