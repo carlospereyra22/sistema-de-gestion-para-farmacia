@@ -28,6 +28,31 @@ export function barcodeKindOf(
   return match ? (match.kind ?? "PACKAGE") : undefined;
 }
 
+function searchKey(value: string) {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("es-AR");
+}
+
+// Productos del catálogo cuyo nombre o presentación contiene todas las
+// palabras buscadas. Con `onlyMedicines`, sólo medicamentos (candidatos para
+// asociar un envase importado).
+export function medicinesByName<
+  T extends ProductCodes &
+    Pick<CatalogProduct, "id" | "name" | "presentation" | "isMedication">,
+>(products: readonly T[], query: string, limit = 5, onlyMedicines = true): T[] {
+  const words = searchKey(query).split(/\s+/).filter(Boolean);
+  if (!words.length || searchKey(query).trim().length < 2) return [];
+  const seen = new Set<string>();
+  return products
+    .filter((product) => {
+      if (seen.has(product.id) || (onlyMedicines && !product.isMedication))
+        return false;
+      seen.add(product.id);
+      const text = searchKey(`${product.name} ${product.presentation ?? ""}`);
+      return words.every((word) => text.includes(word));
+    })
+    .slice(0, limit);
+}
+
 // Producto del catálogo que ya tiene este código, con o sin ceros a la
 // izquierda. Sirve para no crear un duplicado del medicamento nacional.
 export function findProductByBarcode<T extends ProductCodes>(

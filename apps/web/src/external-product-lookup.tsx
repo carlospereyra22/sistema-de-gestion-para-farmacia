@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   LoaderCircle,
   Search,
@@ -68,10 +68,15 @@ export function ExternalProductLookup({
   linkedCode,
   onImported,
   catalogOwner,
+  searchInput,
 }: {
   token: string;
   organizationId: string;
   code: string;
+  // Buscador externo (el de arriba del formulario): el componente no dibuja
+  // su propio campo y busca el `code` que recibe. El código guardado del
+  // producto es otro campo, que nunca dispara búsquedas.
+  searchInput?: RefObject<HTMLInputElement | null>;
   // Código copiado desde el medicamento ya vinculado: no se vuelve a consultar
   // mientras se escribe, porque ofrecería vincular la misma ficha otra vez.
   linkedCode?: string;
@@ -79,7 +84,7 @@ export function ExternalProductLookup({
   // nacional como código equivalente (SISTEMA-20).
   onImported?: (code: string) => void;
   // Nombre del producto del catálogo que ya tiene este código: el formulario
-  // lo avisa, así que no se informa "Código no encontrado".
+  // lo avisa y no se consultan las fuentes externas.
   catalogOwner?: string;
   onCode: (value: string) => void;
   onApply: (
@@ -108,7 +113,8 @@ export function ExternalProductLookup({
     key: string;
     message: string;
   }>();
-  const barcodeInput = useRef<HTMLInputElement>(null);
+  const ownInput = useRef<HTMLInputElement>(null);
+  const barcodeInput = searchInput ?? ownInput;
   const requestLookup = (trigger: BarcodeLookupTrigger) => {
     nextLookupTrigger.current = trigger;
     setAttempt((current) => current + 1);
@@ -139,6 +145,7 @@ export function ExternalProductLookup({
     disabled,
     onKindDetected,
     linkedGtin,
+    catalogOwner,
   });
   useEffect(() => {
     callbacks.current = {
@@ -147,8 +154,16 @@ export function ExternalProductLookup({
       disabled,
       onKindDetected,
       linkedGtin,
+      catalogOwner,
     };
-  }, [onMedication, allowAutomatic, disabled, onKindDetected, linkedGtin]);
+  }, [
+    onMedication,
+    allowAutomatic,
+    disabled,
+    onKindDetected,
+    linkedGtin,
+    catalogOwner,
+  ]);
   const trimmed = inputCode.trim();
   const canonical = externalGtin(trimmed);
   const linkedHere = Boolean(canonical && canonical === linkedGtin);
@@ -165,6 +180,8 @@ export function ExternalProductLookup({
     nextLookupTrigger.current = "typing";
     if (trigger === "typing" && canonical === callbacks.current.linkedGtin)
       return;
+    // El código ya es de un producto del catálogo: no se completa uno nuevo.
+    if (callbacks.current.catalogOwner) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setState({
@@ -316,7 +333,7 @@ export function ExternalProductLookup({
     };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
-  }, [showDropdown, requestKey]);
+  }, [showDropdown, requestKey, barcodeInput]);
   const apply = async (candidate: ExternalProductCandidate) => {
     if (disabled || applying) return;
     if (candidate.type_review_reason && medicationMode !== "other") {
@@ -364,66 +381,74 @@ export function ExternalProductLookup({
         }
       }}
     >
-      <label
-        htmlFor="external-product-code"
-        className="mt-3 block text-xs font-semibold text-slate-600"
-      >
-        Código de barras
-      </label>
-      <div className="relative mt-1">
-        <input
-          ref={barcodeInput}
-          id="external-product-code"
-          value={inputCode}
-          disabled={disabled}
-          aria-expanded={showDropdown}
-          aria-controls={showDropdown ? "external-product-options" : undefined}
-          onChange={(event) => {
-            const value = event.target.value;
-            nextLookupTrigger.current = "typing";
-            setInputCode(value);
-            if (externalGtin(value.trim())) onCode(value);
-          }}
-          onBlur={() => {
-            if (code !== inputCode) onCode(inputCode);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown" && count && !current?.linked) {
-              event.preventDefault();
-              setDismissed("");
-              requestAnimationFrame(() =>
-                optionList.current
-                  ?.querySelector<HTMLButtonElement>("button")
-                  ?.focus(),
-              );
-            }
-            if (event.key === "Enter") {
-              event.preventDefault();
-              requestLookup("submit");
-            }
-          }}
-          inputMode="numeric"
-          autoComplete="off"
-          placeholder="Ej. 7791234567890"
-          className="h-10 w-full rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm outline-none placeholder:text-slate-400 focus:border-teal-500"
-        />
-        <button
-          type="button"
-          disabled={disabled || !canonical || applying}
-          onClick={() =>
-            count && !current?.linked
-              ? setDismissed(showDropdown ? requestKey : "")
-              : requestLookup("submit")
-          }
-          aria-label="Buscar código de barras"
-          className="absolute right-0 top-0 flex h-10 w-9 items-center justify-center text-slate-400 hover:text-teal-700 disabled:opacity-40"
+      {!searchInput && (
+        <label
+          htmlFor="external-product-code"
+          className="mt-3 block text-xs font-semibold text-slate-600"
         >
-          {current?.busy && !count ? (
-            <LoaderCircle size={15} className="animate-spin" />
-          ) : (
-            <Search size={15} />
-          )}
-        </button>
+          Código de barras
+        </label>
+      )}
+      <div className={searchInput ? "relative" : "relative mt-1"}>
+        {!searchInput && (
+          <input
+            ref={barcodeInput}
+            id="external-product-code"
+            value={inputCode}
+            disabled={disabled}
+            aria-expanded={showDropdown}
+            aria-controls={
+              showDropdown ? "external-product-options" : undefined
+            }
+            onChange={(event) => {
+              const value = event.target.value;
+              nextLookupTrigger.current = "typing";
+              setInputCode(value);
+              if (externalGtin(value.trim())) onCode(value);
+            }}
+            onBlur={() => {
+              if (code !== inputCode) onCode(inputCode);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" && count && !current?.linked) {
+                event.preventDefault();
+                setDismissed("");
+                requestAnimationFrame(() =>
+                  optionList.current
+                    ?.querySelector<HTMLButtonElement>("button")
+                    ?.focus(),
+                );
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                requestLookup("submit");
+              }
+            }}
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="Ej. 7791234567890"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 !text-sm outline-none placeholder:text-slate-400 focus:border-teal-500"
+          />
+        )}
+        {!searchInput && (
+          <button
+            type="button"
+            disabled={disabled || !canonical || applying}
+            onClick={() =>
+              count && !current?.linked
+                ? setDismissed(showDropdown ? requestKey : "")
+                : requestLookup("submit")
+            }
+            aria-label="Buscar código de barras"
+            className="absolute right-0 top-0 flex h-10 w-9 items-center justify-center text-slate-400 hover:text-teal-700 disabled:opacity-40"
+          >
+            {current?.busy && !count ? (
+              <LoaderCircle size={15} className="animate-spin" />
+            ) : (
+              <Search size={15} />
+            )}
+          </button>
+        )}
         {showDropdown && (
           <div
             ref={optionList}
@@ -621,9 +646,9 @@ export function ExternalProductLookup({
               type="button"
               disabled={disabled}
               onClick={() => onImported(trimmed)}
-              className="mt-1.5 block rounded-md border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100"
+              className="mt-1.5 block rounded-md border border-teal-300 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-100"
             >
-              Es importado: asociarlo a un medicamento nacional
+              ¿Es importado? Asociarlo a un medicamento nacional
             </button>
           )}
       </div>

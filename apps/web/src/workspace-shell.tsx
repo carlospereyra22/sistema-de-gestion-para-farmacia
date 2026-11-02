@@ -14,14 +14,12 @@ import {
   medicineReferenceBarcodeConflict,
   medicineReferenceBarcodeToCopy,
 } from "./lib/medicine-reference-barcode";
-import {
-  findMedicationCategory,
-  isMedicationCategoryName,
-} from "./lib/medication-category";
+import { findMedicationCategory } from "./lib/medication-category";
 import {
   barcodeKindOf,
   equivalentBarcodes,
   findProductByBarcode,
+  medicinesByName,
   primaryBarcodeOf,
 } from "./lib/equivalent-barcodes";
 import { ProductEquivalentBarcodes } from "./product-equivalent-barcodes";
@@ -1512,6 +1510,22 @@ function Products({
   const [actionAnchor, setActionAnchor] = useState<HTMLButtonElement>();
   const [referenceQuery, setReferenceQuery] = useState("");
   const [referenceSearchDone, setReferenceSearchDone] = useState(false);
+  // Desplegable de resultados (catálogo propio y fuente externa): se abre al
+  // escribir o buscar y se cierra al elegir, con Escape o con un clic afuera.
+  const referenceSearchBox = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    if (!searchOpen) return;
+    const close = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !referenceSearchBox.current?.contains(event.target)
+      )
+        setSearchOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [searchOpen]);
   const [referenceResults, setReferenceResults] = useState<MedicineReference[]>(
     [],
   );
@@ -1569,6 +1583,14 @@ function Products({
   const referenceBarcodeCopied = useRef("");
   // EAN de un envase importado que se asocia al medicamento nacional elegido.
   const [importedBarcode, setImportedBarcode] = useState("");
+  const [importTarget, setImportTarget] = useState<CatalogProduct>();
+  // Códigos equivalentes cargados en un producto nuevo: se envían con el alta.
+  const [pendingEquivalents, setPendingEquivalents] = useState<string[]>([]);
+  const [newFormRevision, setNewFormRevision] = useState(0);
+  // Código que se busca desde el buscador de arriba (escrito o escaneado). Es
+  // distinto del código guardado del producto (`barcode`).
+  const [searchCode, setSearchCode] = useState("");
+  const productSearchInput = useRef<HTMLInputElement>(null);
   const scheduleReferenceSearch = (
     source: MedicineReference["source"],
     query: string,
@@ -1605,6 +1627,15 @@ function Products({
     event.preventDefault();
     if (imageBusy || productSaveLock.current || optionCreateLock.current)
       return;
+    // Envase importado de un medicamento que ya está en el catálogo (abierto
+    // para editar): primero se asocia el código; si choca con otro producto
+    // no se guarda nada.
+    const linkImported =
+      editingProduct &&
+      importedBarcode &&
+      importTarget?.id === editingProduct.id
+        ? importedBarcode
+        : "";
     productSaveLock.current = true;
     setProductSaving(true);
     try {
@@ -1625,6 +1656,13 @@ function Products({
                 : null,
           };
       if (editingProduct) {
+        if (linkImported)
+          await addEquivalentBarcode(
+            token,
+            organizationId,
+            editingProduct.id,
+            linkImported,
+          );
         await updateCatalogProduct(token, organizationId, editingProduct.id, {
           generateInternalBarcode,
           brand,
@@ -1684,7 +1722,15 @@ function Products({
           saleUnit,
           prescriptionRequired,
           description: description || undefined,
-          equivalentBarcodes: importedBarcode ? [importedBarcode] : undefined,
+          equivalentBarcodes: [
+            ...(importedBarcode ? [importedBarcode] : []),
+            ...pendingEquivalents,
+          ].filter(
+            (code, index, all) =>
+              all.findIndex(
+                (other) => externalGtin(other) === externalGtin(code),
+              ) === index,
+          ),
           ...(isMedication && selectedReference
             ? {
                 externalReferenceSource: selectedReference.source,
@@ -1717,66 +1763,150 @@ function Products({
       ? findProductByBarcode([...products, ...knownProducts], barcode)
       : undefined;
   // El código escrito o escaneado ya pertenece a un producto del catálogo
-  // (como principal o como equivalente): se avisa en vez de ofrecer crearlo.
-  const barcodeOwner =
-    !editingProduct && !importedBarcode && barcode.trim()
-      ? findProductByBarcode([...products, ...knownProducts], barcode)
+  // (como principal o como equivalente): en vez de crear otro, se abre ese
+  // producto para modificarlo con los datos del padrón ya buscados.
+  const searchedOwner =
+    searchCode && !importedBarcode
+      ? findProductByBarcode([...products, ...knownProducts], searchCode)
       : undefined;
-  const barcodeOwnerKind = barcodeOwner
-    ? barcodeKindOf(barcodeOwner, barcode)
-    : undefined;
-  const linkImportedToExisting = async () => {
-    if (!existingNationalProduct || productSaveLock.current) return;
-    productSaveLock.current = true;
-    setProductSaving(true);
-    setProductSaveError("");
-    try {
-      await addEquivalentBarcode(
-        token,
-        organizationId,
-        existingNationalProduct.id,
-        importedBarcode,
-      );
-      clearForm();
-      done();
-    } catch (cause) {
-      setProductSaveError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudo asociar el código equivalente.",
-      );
-    } finally {
-      productSaveLock.current = false;
-      setProductSaving(false);
+  const barcodeOwner =
+    searchedOwner && searchedOwner.id !== editingProduct?.id
+      ? searchedOwner
+      : undefined;
+  const [openedFromScan, setOpenedFromScan] = useState("");
+  // Código nacional cuya referencia se aplica sola al volver la búsqueda.
+  const autoApplyBarcode = useRef("");
+  useEffect(() => {
+    if (!barcodeOwner) return;
+    const owner = barcodeOwner;
+    const scanned = searchCode;
+    const national = primaryBarcodeOf(owner) ?? scanned;
+    edit(owner);
+    // El buscador conserva el código escaneado; el producto abierto es otro
+    // formulario con su propio código guardado.
+    setSearchCode(scanned);
+    setReferenceQuery(scanned);
+    setOpenedFromScan(
+      barcodeKindOf(owner, scanned) === "EQUIVALENT"
+        ? `Encontrado: envase importado de “${owner.name}”. Revisá y guardá los cambios.`
+        : `Encontrado en tu catálogo: “${owner.name}”. Revisá y guardá los cambios.`,
+    );
+    if (!owner.isMedication && !owner.externalReferenceSource) return;
+    autoApplyBarcode.current = national;
+    void searchReferences("official", undefined, national);
+  }, [barcodeOwner?.id, searchCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Si la búsqueda trae una sola presentación con ese código, se precarga.
+  useEffect(() => {
+    const code = autoApplyBarcode.current;
+    if (!code || referenceLoading || !referenceSearchDone) return;
+    autoApplyBarcode.current = "";
+    const exact = referenceResults.filter(
+      (reference) => externalGtin(reference.barcode) === externalGtin(code),
+    );
+    // Sin coincidencia única se abre Cambiar vinculación para elegir a mano.
+    if (exact.length === 1) applyReference(exact[0]!);
+    else if (referenceResults.length) {
+      setRetailLinkSearchRevision((value) => value + 1);
+      setSearchOpen(true);
     }
+  }, [referenceResults, referenceLoading, referenceSearchDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Medicamentos del catálogo que coinciden con lo escrito mientras se asocia
+  // un envase importado: elegir uno le agrega el código al instante.
+  // Por nombre o por código del nacional.
+  const importQuery = referenceQuery.trim();
+  // Productos propios que coinciden con lo escrito en el buscador: aparecen
+  // primero en el desplegable. Asociando un importado sólo medicamentos (y
+  // también por código del nacional); si no, cualquier producto por nombre.
+  const importCatalogMatches = (
+    importedBarcode && /^\d{8,14}$/.test(importQuery)
+      ? [findProductByBarcode([...products, ...knownProducts], importQuery)]
+      : /^\d+$/.test(importQuery)
+        ? []
+        : medicinesByName(
+            [...products, ...knownProducts],
+            importQuery,
+            5,
+            Boolean(importedBarcode),
+          )
+  )
+    .filter((product): product is CatalogProduct => Boolean(product))
+    .filter(
+      (product) =>
+        product.id !== importTarget?.id && product.id !== editingProduct?.id,
+    );
+  // Abrir un producto propio elegido en el buscador para modificarlo.
+  const openCatalogProduct = (product: CatalogProduct) => {
+    edit(product);
+    setReferenceQuery("");
+    setReferenceSearchDone(false);
+    setOpenedFromScan(
+      `Encontrado en tu catálogo: “${product.name}”. Revisá y guardá los cambios.`,
+    );
   };
+  // Producto del catálogo al que se asocia el envase importado al guardar:
+  // el elegido en la búsqueda o el que ya tiene el código nacional copiado.
+  const importLinkTarget = importedBarcode
+    ? (importTarget ?? existingNationalProduct)
+    : undefined;
+  // El nacional ya está en el catálogo: se abre ese producto con sus datos y
+  // el envase importado queda pendiente hasta Guardar y asociar código.
+  const openImportTarget = (product: CatalogProduct) => {
+    const code = importedBarcode;
+    edit(product);
+    setImportedBarcode(code);
+    setImportTarget(product);
+    setReferenceQuery("");
+    setReferenceSearchDone(false);
+  };
+  useEffect(() => {
+    if (existingNationalProduct) openImportTarget(existingNationalProduct);
+  }, [existingNationalProduct?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const startImportedLink = (code: string) => {
     cancelReferenceSearch();
     referenceRequest.current?.abort();
     referenceBarcodeCopied.current = "";
     setImportedBarcode(code.trim());
+    setImportTarget(undefined);
     setBarcode("");
     setMedicationMode("medicine");
     setIsMedication(true);
     if (!saleUnitEdited.current) setSaleUnit("BOX");
-    setRetailLinkHint(
-      `Buscá el medicamento nacional equivalente al envase importado ${code.trim()}.`,
-    );
-    setRetailLinkSearchRevision((value) => value + 1);
+    // El buscador queda libre para buscar el nacional por nombre.
+    setSearchCode("");
+    setReferenceQuery("");
+    setReferenceResults([]);
+    setReferenceSearchDone(false);
+    setRetailLinkHint("");
+    window.setTimeout(() => productSearchInput.current?.focus(), 0);
   };
-  const clearForm = () => {
+  // Cada código nuevo del buscador empieza un formulario limpio con ese código;
+  // si es de un producto del catálogo, el efecto de `barcodeOwner` lo abre.
+  const startCodeSearch = (value: string) => {
+    const code = value.trim();
+    if (!externalGtin(code) || code === searchCode) return;
+    clearForm(true);
+    setReferenceQuery(code);
+    setSearchCode(code);
+    setBarcode(code);
+  };
+  // `keepOpen` vacía el formulario sin cerrarlo: lo usa cada búsqueda por
+  // código para empezar de cero, sin restos (foto incluida) del anterior.
+  const clearForm = (keepOpen = false) => {
     if (optionCreateLock.current) return;
     setFractionEnabled(false);
     setFractionDivisor("2");
     setFractionMarkup("0");
     setFractionBase("");
-    onEditorClose?.();
+    if (!keepOpen) onEditorClose?.();
     setProductImage(undefined);
     externalImage.current = null;
     setImageBusy(false);
     setProductSaveError("");
     referenceRequest.current?.abort();
-    setFormOpen(false);
+    setFormOpen(keepOpen);
+    setSearchCode("");
+    setPendingEquivalents([]);
+    setNewFormRevision((value) => value + 1);
     setEditingProduct(undefined);
     setGenerateInternalBarcode(false);
     setName("");
@@ -1802,7 +1932,10 @@ function Products({
     setDescription("");
     cancelReferenceSearch();
     referenceBarcodeCopied.current = "";
+    autoApplyBarcode.current = "";
+    setOpenedFromScan("");
     setImportedBarcode("");
+    setImportTarget(undefined);
     setReferenceQuery("");
     setSelectedReference(undefined);
     setReferenceSearchDone(false);
@@ -1907,8 +2040,32 @@ function Products({
       if (!controller.signal.aborted) setReferenceLoading(false);
     }
   };
-  const applyReference = (reference: MedicineReference, fromScan = false) => {
-    if (medicationMode === "other") return;
+  // Elegir un resultado de la búsqueda. Si el formulario es una búsqueda (un
+  // producto nuevo, o uno que se abrió desde el buscador), cada resultado
+  // empieza un formulario limpio, sin avisos ni restos del anterior. Sólo al
+  // editar un producto abierto desde la lista (o asociando un importado) se
+  // reemplazan sus datos y se avisa si cambia el código.
+  const pickReference = (reference: MedicineReference) => {
+    // Una sola elección: al elegir cualquier resultado (catálogo o fuente
+    // externa) se cierra todo el desplegable.
+    setSearchOpen(false);
+    if ((editingProduct && !openedFromScan) || importedBarcode) {
+      applyReference(reference);
+      return;
+    }
+    const query = referenceQuery;
+    clearForm(true);
+    setReferenceQuery(query);
+    applyReference(reference, false, true);
+  };
+  const applyReference = (
+    reference: MedicineReference,
+    fromScan = false,
+    fresh = false,
+  ) => {
+    // Elegir un medicamento de la búsqueda confirma que es medicamento, aunque
+    // el interruptor estuviera apagado.
+    setMedicationMode("medicine");
     cancelReferenceSearch();
     setReferenceBarcodeWarning("");
     // Elegir una referencia de la lista reemplaza todo el medicamento, también
@@ -1917,13 +2074,17 @@ function Products({
       const nextBarcode = medicineReferenceBarcodeToCopy("", reference.barcode);
       const copied = referenceBarcodeCopied.current;
       if (nextBarcode) {
-        if (medicineReferenceBarcodeConflict(barcode, nextBarcode))
+        if (!fresh && medicineReferenceBarcodeConflict(barcode, nextBarcode))
           setReferenceBarcodeWarning(
             `Se reemplazó el código ${barcode.trim()} por ${nextBarcode}, el que informa la presentación elegida. Revisá que coincida con el envase.`,
           );
         referenceBarcodeCopied.current = nextBarcode;
         setBarcode(nextBarcode);
-      } else if (copied && !medicineReferenceBarcodeConflict(barcode, copied)) {
+      } else if (
+        !fresh &&
+        copied &&
+        !medicineReferenceBarcodeConflict(barcode, copied)
+      ) {
         referenceBarcodeCopied.current = "";
         setBarcode("");
       }
@@ -1931,13 +2092,16 @@ function Products({
     }
     // Al cambiar de referencia, los datos que traía la anterior y la nueva no
     // informa se limpian para no mezclar dos medicamentos.
-    const previous = selectedReference;
+    const previous = fresh ? undefined : selectedReference;
     const fromPrevious = (current: string, value: string | undefined) =>
       Boolean(previous && value && current === value);
+    // Empezando limpio ya no se edita el producto que estaba abierto (el
+    // cierre todavía lo ve hasta el próximo render).
+    const editing = fresh ? undefined : editingProduct;
     setIsMedication(true);
-    if (!editingProduct && !saleUnitEdited.current) setSaleUnit("BOX");
+    if (!editing && (fresh || !saleUnitEdited.current)) setSaleUnit("BOX");
     setSelectedReference(reference);
-    if (!editingProduct) setName(reference.name);
+    if (!editing) setName(reference.name);
     if (reference.priceMinor !== null)
       setPrice(String(reference.priceMinor / 100));
     else
@@ -2027,6 +2191,11 @@ function Products({
     );
   };
   const edit = (product: CatalogProduct) => {
+    setOpenedFromScan("");
+    setSearchCode("");
+    autoApplyBarcode.current = "";
+    setImportedBarcode("");
+    setImportTarget(undefined);
     setMedicationMode(
       (product.isMedication ?? Boolean(product.externalReferenceSource))
         ? "medicine"
@@ -2580,7 +2749,7 @@ function Products({
                 </label>
                 <button
                   type="button"
-                  onClick={clearForm}
+                  onClick={() => clearForm()}
                   aria-label="Cerrar"
                   disabled={productSaving || imageBusy || optionCreating}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-800"
@@ -2598,27 +2767,121 @@ function Products({
                     conservará el precio actual.
                   </p>
                 )}
-                {isMedication && (
-                  <ProductFormSection
-                    key={retailLinkSearchRevision}
-                    title={
-                      editingProduct?.externalReferenceName || selectedReference
-                        ? "Cambiar vinculación"
-                        : "Vincular medicamento"
-                    }
-                    defaultOpen={retailLinkSearchRevision > 0}
-                    status={
-                      <ProductSyncStatus
-                        showSource
-                        product={editingProduct}
-                        pendingName={selectedReference?.name}
-                        pendingSource={selectedReference?.source}
-                      />
-                    }
+                {/* Siempre arriba y visible: aparecer sólo con Es medicamento
+                    movía el resto del formulario. */}
+                <ProductFormSection
+                  key={retailLinkSearchRevision}
+                  title={
+                    editingProduct?.externalReferenceName
+                      ? "Cambiar vinculación"
+                      : "Buscar producto"
+                  }
+                  defaultOpen={!editingProduct || retailLinkSearchRevision > 0}
+                  status={
+                    <ProductSyncStatus
+                      showSource
+                      product={editingProduct}
+                      pendingName={selectedReference?.name}
+                      pendingSource={selectedReference?.source}
+                    />
+                  }
+                >
+                  {/* Los resultados se muestran como desplegable sobre el
+                      formulario, sin empujar el resto de los campos. */}
+                  <div
+                    ref={referenceSearchBox}
+                    className="relative"
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && searchOpen) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setSearchOpen(false);
+                      }
+                    }}
                   >
+                    {importedBarcode && (
+                      <div
+                        className="mt-3 rounded-lg border border-teal-200 bg-teal-50/60 px-3 py-2.5 text-xs leading-5 text-slate-700"
+                        role="status"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-semibold text-teal-800">
+                              Asociar envase importado
+                            </span>
+                            <span className="rounded bg-white px-1.5 py-0.5 font-mono text-slate-800 ring-1 ring-teal-200">
+                              {importedBarcode}
+                            </span>
+                            <span aria-hidden="true" className="text-teal-700">
+                              →
+                            </span>
+                            {importLinkTarget ? (
+                              <span className="rounded bg-white px-1.5 py-0.5 ring-1 ring-teal-200">
+                                <strong>{importLinkTarget.name}</strong>
+                                {importLinkTarget.presentation &&
+                                  ` ${importLinkTarget.presentation}`}
+                                {primaryBarcodeOf(importLinkTarget) && (
+                                  <span className="font-mono text-slate-500">
+                                    {" "}
+                                    · {primaryBarcodeOf(importLinkTarget)}
+                                  </span>
+                                )}
+                              </span>
+                            ) : selectedReference ? (
+                              <span className="rounded bg-white px-1.5 py-0.5 ring-1 ring-teal-200">
+                                <strong>{selectedReference.name}</strong>
+                                {selectedReference.presentation &&
+                                  ` ${selectedReference.presentation}`}
+                                {barcode.trim() && (
+                                  <span className="font-mono text-slate-500">
+                                    {" "}
+                                    · {barcode.trim()}
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">
+                                buscá abajo el medicamento nacional por nombre o
+                                por código
+                              </span>
+                            )}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setImportedBarcode("");
+                              setImportTarget(undefined);
+                            }}
+                            disabled={productSaving}
+                            aria-label="Cancelar la asociación del envase importado"
+                            className="grid size-6 shrink-0 place-items-center rounded text-teal-700 hover:bg-teal-100"
+                          >
+                            <X size={14} aria-hidden="true" />
+                          </button>
+                        </div>
+                        {importLinkTarget ? (
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            Ya está en tu catálogo: abajo ves sus datos. Al
+                            apretar <strong>Guardar y asociar código</strong> el
+                            envase importado queda como código equivalente de “
+                            {importLinkTarget.name}”; no se crea otro producto.
+                          </p>
+                        ) : (
+                          selectedReference && (
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              Al guardar se crea el producto con el código
+                              nacional y este envase importado como código
+                              equivalente.
+                            </p>
+                          )
+                        )}
+                      </div>
+                    )}
                     <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex">
                       <input
+                        ref={productSearchInput}
                         value={referenceQuery}
+                        onFocus={() => setSearchOpen(true)}
                         onChange={(event) => {
                           referenceRequest.current?.abort();
                           setReferenceLoading(false);
@@ -2628,28 +2891,60 @@ function Products({
                           setReferenceResults([]);
                           setReferenceError("");
                           setRetailLinkHint("");
-                          scheduleReferenceSearch(
-                            referenceSource,
-                            event.target.value,
-                          );
+                          const value = event.target.value;
+                          setSearchOpen(true);
+                          // Sólo números: es un código (se busca solo al
+                          // completar un EAN-13/14; 8 o 12 dígitos, con Enter).
+                          // Asociando un importado, un código busca el
+                          // nacional (catálogo y padrón) sin reiniciar.
+                          if (importedBarcode) {
+                            scheduleReferenceSearch(referenceSource, value);
+                            return;
+                          }
+                          if (/^\d+$/.test(value.trim())) {
+                            cancelReferenceSearch();
+                            if (value.trim().length >= 13)
+                              startCodeSearch(value);
+                            return;
+                          }
+                          setSearchCode("");
+                          scheduleReferenceSearch(referenceSource, value);
                         }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
-                            void searchReferences(referenceSource);
+                            setSearchOpen(true);
+                            if (
+                              !importedBarcode &&
+                              /^\d+$/.test(referenceQuery.trim())
+                            )
+                              startCodeSearch(referenceQuery);
+                            else void searchReferences(referenceSource);
                           }
                         }}
-                        aria-label="Buscar medicamento en la fuente seleccionada"
+                        inputMode="search"
+                        autoComplete="off"
+                        aria-label="Buscar producto por nombre o código de barras"
                         placeholder={
-                          referenceSource === "alfabeta"
-                            ? "Ej. Actron 400…"
-                            : "Ej. Actron, ibuprofeno o código de barras…"
+                          importedBarcode
+                            ? "Buscá el medicamento nacional por nombre…"
+                            : referenceSource === "alfabeta"
+                              ? "Ej. Actron 400…"
+                              : "Nombre o código de barras (podés escanear)…"
                         }
-                        className="col-span-2 h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm placeholder:text-slate-400"
+                        className="col-span-2 h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 !text-sm placeholder:text-slate-400"
                       />
                       <button
                         type="button"
-                        onClick={() => void searchReferences(referenceSource)}
+                        onClick={() => {
+                          setSearchOpen(true);
+                          if (
+                            !importedBarcode &&
+                            /^\d+$/.test(referenceQuery.trim())
+                          )
+                            startCodeSearch(referenceQuery);
+                          else void searchReferences(referenceSource);
+                        }}
                         disabled={referenceLoading}
                         className="h-10 rounded-md border border-teal-600 bg-white px-4 text-sm font-semibold text-teal-800 hover:bg-teal-50"
                       >
@@ -2670,17 +2965,209 @@ function Products({
                         }}
                       />
                     </div>
-                    {retailLinkHint && (
+                    <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
+                      <strong className="font-semibold text-slate-600">
+                        Por código:
+                      </strong>{" "}
+                      tu catálogo, el padrón oficial (vademécum nacional) y el
+                      catálogo de perfumería.{" "}
+                      <strong className="font-semibold text-slate-600">
+                        Por nombre:
+                      </strong>{" "}
+                      {referenceSource === "official"
+                        ? "padrón oficial (vademécum nacional)"
+                        : referenceSource === "alfabeta"
+                          ? "AlfaBeta"
+                          : "Precios de Remedios"}
+                      ; cambiá la fuente en el selector.
+                    </p>
+                    {openedFromScan && (
                       <p
-                        className="mt-2 text-xs leading-5 text-slate-600"
+                        className="mt-1 flex items-start gap-1 text-[11px] leading-4 text-teal-700"
                         role="status"
                       >
-                        {retailLinkHint}
+                        <Check
+                          size={12}
+                          className="mt-0.5 shrink-0"
+                          aria-hidden="true"
+                        />
+                        {openedFromScan}
                       </p>
                     )}
-                    {referenceSearchDone ? (
-                      <div className="mt-3">
-                        {referenceQuery.trim().length < 2 ? (
+                    <ExternalProductLookup
+                      searchInput={productSearchInput}
+                      medicationMode={medicationMode}
+                      onKindConfirmed={(value) => {
+                        setMedicationMode(value ? "medicine" : "other");
+                        setIsMedication(value);
+                        if (!editingProduct && !saleUnitEdited.current)
+                          setSaleUnit(value ? "BOX" : "UNIT");
+                      }}
+                      knownMedication={
+                        [...products, ...knownProducts].find((product) =>
+                          product.barcodes.some(
+                            (item) =>
+                              externalGtin(item.code) &&
+                              externalGtin(item.code) ===
+                                externalGtin(searchCode),
+                          ),
+                        )?.isMedication
+                      }
+                      onKindDetected={(value) => {
+                        setIsMedication(value);
+                        if (!saleUnitEdited.current)
+                          setSaleUnit(value ? "BOX" : "UNIT");
+                      }}
+                      token={token}
+                      organizationId={organizationId}
+                      code={searchCode}
+                      onImported={searchedOwner ? undefined : startImportedLink}
+                      catalogOwner={searchedOwner?.name}
+                      allowAutomatic={
+                        !name &&
+                        !presentation &&
+                        !selectedReference &&
+                        !activeIngredient &&
+                        !laboratoryId &&
+                        !suggestedLaboratoryName &&
+                        !fractionEnabled &&
+                        !saleUnitEdited.current &&
+                        Boolean(options)
+                      }
+                      onMedication={(reference) => {
+                        scannedMedicine.current = reference;
+                        externalFilled.current = null;
+                        applyReference(reference, true);
+                      }}
+                      onRetailMedicine={applyRetailMedicine}
+                      onCode={startCodeSearch}
+                      disabled={productSaving || imageBusy || optionCreating}
+                      onApply={async (candidate) => {
+                        if (optionCreateLock.current || productSaveLock.current)
+                          return false;
+                        optionCreateLock.current = true;
+                        setOptionCreating(true);
+                        try {
+                          const classification = !categoryId
+                            ? await resolveExternalCategory(
+                                token,
+                                organizationId,
+                                candidate,
+                              )
+                            : null;
+                          if (classification?.categoryId)
+                            setOptions(
+                              await getCatalogOptions(token, organizationId),
+                            );
+                          if (!brand && candidate.brand)
+                            externalBrand.current = candidate.brand;
+                          setBrand(
+                            (current) => current || candidate.brand || "",
+                          );
+                          const fields = externalProductFields(
+                            candidate,
+                            options?.categories ?? [],
+                            { includeImage: productImage === undefined },
+                          );
+                          fields.categoryId = classification?.categoryId ?? "";
+                          const unit = externalSaleUnit(candidate);
+                          if (
+                            unit &&
+                            !saleUnitEdited.current &&
+                            !fractionEnabled &&
+                            !selectedReference
+                          ) {
+                            suggestedSaleUnit.current = unit;
+                            setSaleUnit(unit);
+                          }
+                          externalFilled.current = {
+                            name: name
+                              ? (externalFilled.current?.name ?? "")
+                              : fields.name,
+                            presentation: presentation
+                              ? (externalFilled.current?.presentation ?? "")
+                              : fields.presentation,
+                            categoryId: categoryId
+                              ? (externalFilled.current?.categoryId ?? "")
+                              : fields.categoryId,
+                            description: description
+                              ? (externalFilled.current?.description ?? "")
+                              : fields.description,
+                          };
+                          setName((value) => value || fields.name);
+                          setPresentation(
+                            (value) => value || fields.presentation,
+                          );
+                          setCategoryId((value) => value || fields.categoryId);
+                          setDescription(
+                            (value) => value || fields.description,
+                          );
+                          if (
+                            productImage === undefined &&
+                            candidate.image?.data_url
+                          ) {
+                            externalImage.current = candidate.image.data_url;
+                            setProductImage(candidate.image.data_url);
+                          }
+                          return true;
+                        } finally {
+                          optionCreateLock.current = false;
+                          setOptionCreating(false);
+                        }
+                      }}
+                    />
+                    {searchOpen &&
+                    (referenceSearchDone || importCatalogMatches.length) ? (
+                      <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                        {importCatalogMatches.length > 0 && (
+                          <div className="mb-2">
+                            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                              {importedBarcode
+                                ? "En tu catálogo · se asocia al guardar"
+                                : "En tu catálogo · abrir para modificar"}
+                            </p>
+                            <div className="space-y-1">
+                              {importCatalogMatches.map((product) => (
+                                <button
+                                  key={product.id}
+                                  type="button"
+                                  disabled={productSaving}
+                                  onClick={() => {
+                                    setSearchOpen(false);
+                                    if (importedBarcode)
+                                      openImportTarget(product);
+                                    else openCatalogProduct(product);
+                                  }}
+                                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50/40 px-3 py-2 text-left hover:border-teal-400 hover:bg-teal-50"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-sm font-semibold text-slate-800">
+                                      {product.name}
+                                    </span>
+                                    <span className="block truncate text-xs text-slate-500">
+                                      {[
+                                        product.presentation,
+                                        primaryBarcodeOf(product),
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </span>
+                                  </span>
+                                  <span className="shrink-0 text-xs font-semibold text-teal-800">
+                                    {importedBarcode ? "Elegir" : "Abrir"}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                            {referenceSearchDone && (
+                              <p className="mt-2 px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                Fuente externa · completa un producto nuevo
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {!referenceSearchDone ? null : referenceQuery.trim()
+                            .length < 2 ? (
                           <p className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
                             Ingresá al menos dos caracteres para buscar.
                           </p>
@@ -2700,7 +3187,7 @@ function Products({
                                 item={item}
                                 token={token}
                                 organizationId={organizationId}
-                                onSelect={applyReference}
+                                onSelect={pickReference}
                               />
                             ))}
                           </div>
@@ -2710,7 +3197,7 @@ function Products({
                               <button
                                 key={`${reference.source}-${reference.name}-${reference.presentation}-${reference.laboratory}`}
                                 type="button"
-                                onClick={() => applyReference(reference)}
+                                onClick={() => pickReference(reference)}
                                 className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left hover:border-teal-300 hover:bg-teal-50/40"
                               >
                                 <span className="min-w-0">
@@ -2755,8 +3242,16 @@ function Products({
                         )}
                       </div>
                     ) : null}
-                  </ProductFormSection>
-                )}
+                  </div>
+                  {retailLinkHint && !importedBarcode && (
+                    <p
+                      className="mt-2 text-xs leading-5 text-slate-600"
+                      role="status"
+                    >
+                      {retailLinkHint}
+                    </p>
+                  )}
+                </ProductFormSection>
                 <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="flex items-center gap-2.5 text-sm font-semibold text-slate-700">
@@ -2789,272 +3284,22 @@ function Products({
                       onChange={setName}
                       placeholder="Ej. Actron 600"
                       labelClassName="mt-3 text-xs font-semibold text-slate-600"
-                      className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
+                      className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
                     />
-                    {!editingProduct && (
-                      <ExternalProductLookup
-                        medicationMode={medicationMode}
-                        onKindConfirmed={(value) => {
-                          setMedicationMode(value ? "medicine" : "other");
-                          setIsMedication(value);
-                          if (!editingProduct && !saleUnitEdited.current)
-                            setSaleUnit(value ? "BOX" : "UNIT");
-                        }}
-                        knownMedication={
-                          [...products, ...knownProducts].find((product) =>
-                            product.barcodes.some(
-                              (item) =>
-                                externalGtin(item.code) &&
-                                externalGtin(item.code) ===
-                                  externalGtin(barcode),
-                            ),
-                          )?.isMedication
-                        }
-                        onKindDetected={(value) => {
-                          setIsMedication(value);
-                          if (!saleUnitEdited.current)
-                            setSaleUnit(value ? "BOX" : "UNIT");
-                        }}
-                        token={token}
-                        organizationId={organizationId}
-                        code={barcode}
-                        linkedCode={selectedReference?.barcode}
-                        onImported={
-                          barcodeOwner ? undefined : startImportedLink
-                        }
-                        catalogOwner={barcodeOwner?.name}
-                        allowAutomatic={
-                          !name &&
-                          !presentation &&
-                          !selectedReference &&
-                          !activeIngredient &&
-                          !laboratoryId &&
-                          !suggestedLaboratoryName &&
-                          !fractionEnabled &&
-                          !saleUnitEdited.current &&
-                          Boolean(options)
-                        }
-                        onMedication={(reference) => {
-                          scannedMedicine.current = reference;
-                          externalFilled.current = null;
-                          applyReference(reference, true);
-                        }}
-                        onRetailMedicine={applyRetailMedicine}
-                        onCode={(value) => {
-                          clearMismatchedReference(value);
-                          if (value.trim() !== barcode.trim()) {
-                            referenceRequest.current?.abort();
-                            setReferenceLoading(false);
-                            setReferenceResults([]);
-                            setReferenceSearchDone(false);
-                            setRetailLinkHint("");
-                          }
-                          if (
-                            value.trim() !== barcode.trim() &&
-                            externalBrand.current
-                          ) {
-                            const previousBrand = externalBrand.current;
-                            setBrand((current) =>
-                              current === previousBrand ? "" : current,
-                            );
-                            externalBrand.current = null;
-                          }
-                          if (
-                            value.trim() !== barcode.trim() &&
-                            scannedMedicine.current
-                          ) {
-                            const previous = scannedMedicine.current;
-                            setSelectedReference(undefined);
-                            if (previous.pharmaceuticalForm !== undefined)
-                              setPharmaceuticalForm((current) =>
-                                current === previous.pharmaceuticalForm
-                                  ? ""
-                                  : current,
-                              );
-                            if (previous.concentration !== undefined)
-                              setConcentration((current) =>
-                                current === previous.concentration
-                                  ? ""
-                                  : current,
-                              );
-                            if (previous.prescriptionRequired !== undefined)
-                              setPrescriptionRequired((current) =>
-                                current === previous.prescriptionRequired
-                                  ? false
-                                  : current,
-                              );
-                            setName((current) =>
-                              current === previous.name ? "" : current,
-                            );
-                            setPresentation((current) =>
-                              current === previous.presentation ? "" : current,
-                            );
-                            setActiveIngredient((current) =>
-                              current === previous.activeIngredient
-                                ? ""
-                                : current,
-                            );
-                            setPrice((current) =>
-                              previous.priceMinor !== null &&
-                              current === String(previous.priceMinor / 100)
-                                ? ""
-                                : current,
-                            );
-                            setSuggestedLaboratoryName((current) =>
-                              current === previous.laboratory ? "" : current,
-                            );
-                            setLaboratoryId((current) =>
-                              options?.laboratories
-                                .find((item) => item.id === current)
-                                ?.name.trim()
-                                .toLocaleLowerCase("es-AR") ===
-                              previous.laboratory
-                                .trim()
-                                .toLocaleLowerCase("es-AR")
-                                ? ""
-                                : current,
-                            );
-                            setCategoryId((current) =>
-                              isMedicationCategoryName(
-                                options?.categories.find(
-                                  (item) => item.id === current,
-                                )?.name ?? "",
-                              )
-                                ? ""
-                                : current,
-                            );
-                            scannedMedicine.current = null;
-                          }
-                          const filled = externalFilled.current;
-                          if (
-                            value.trim() !== barcode.trim() &&
-                            externalImage.current
-                          ) {
-                            const previousImage = externalImage.current;
-                            setProductImage((current) =>
-                              current === previousImage ? undefined : current,
-                            );
-                            externalImage.current = null;
-                          }
-                          if (value.trim() !== barcode.trim() && filled) {
-                            if (
-                              !saleUnitEdited.current &&
-                              suggestedSaleUnit.current
-                            )
-                              setSaleUnit("BOX");
-                            suggestedSaleUnit.current = null;
-                            setName((current) =>
-                              current === filled.name ? "" : current,
-                            );
-                            setPresentation((current) =>
-                              current === filled.presentation ? "" : current,
-                            );
-                            setCategoryId((current) =>
-                              current === filled.categoryId ? "" : current,
-                            );
-                            setDescription((current) =>
-                              current === filled.description ? "" : current,
-                            );
-                            externalFilled.current = null;
-                          }
-                          setBarcode(value);
-                        }}
-                        disabled={productSaving || imageBusy || optionCreating}
-                        onApply={async (candidate) => {
-                          if (
-                            optionCreateLock.current ||
-                            productSaveLock.current
-                          )
-                            return false;
-                          optionCreateLock.current = true;
-                          setOptionCreating(true);
-                          try {
-                            const classification = !categoryId
-                              ? await resolveExternalCategory(
-                                  token,
-                                  organizationId,
-                                  candidate,
-                                )
-                              : null;
-                            if (classification?.categoryId)
-                              setOptions(
-                                await getCatalogOptions(token, organizationId),
-                              );
-                            if (!brand && candidate.brand)
-                              externalBrand.current = candidate.brand;
-                            setBrand(
-                              (current) => current || candidate.brand || "",
-                            );
-                            const fields = externalProductFields(
-                              candidate,
-                              options?.categories ?? [],
-                              { includeImage: productImage === undefined },
-                            );
-                            fields.categoryId =
-                              classification?.categoryId ?? "";
-                            const unit = externalSaleUnit(candidate);
-                            if (
-                              unit &&
-                              !saleUnitEdited.current &&
-                              !fractionEnabled &&
-                              !selectedReference
-                            ) {
-                              suggestedSaleUnit.current = unit;
-                              setSaleUnit(unit);
-                            }
-                            externalFilled.current = {
-                              name: name
-                                ? (externalFilled.current?.name ?? "")
-                                : fields.name,
-                              presentation: presentation
-                                ? (externalFilled.current?.presentation ?? "")
-                                : fields.presentation,
-                              categoryId: categoryId
-                                ? (externalFilled.current?.categoryId ?? "")
-                                : fields.categoryId,
-                              description: description
-                                ? (externalFilled.current?.description ?? "")
-                                : fields.description,
-                            };
-                            setName((value) => value || fields.name);
-                            setPresentation(
-                              (value) => value || fields.presentation,
-                            );
-                            setCategoryId(
-                              (value) => value || fields.categoryId,
-                            );
-                            setDescription(
-                              (value) => value || fields.description,
-                            );
-                            if (
-                              productImage === undefined &&
-                              candidate.image?.data_url
-                            ) {
-                              externalImage.current = candidate.image.data_url;
-                              setProductImage(candidate.image.data_url);
-                            }
-                            return true;
-                          } finally {
-                            optionCreateLock.current = false;
-                            setOptionCreating(false);
-                          }
-                        }}
-                      />
-                    )}
-                    {editingProduct && (
-                      <Input
-                        label="Código de barras"
-                        value={barcode}
-                        onChange={(value) => {
-                          clearMismatchedReference(value);
-                          setBarcode(value);
-                        }}
-                        placeholder="Ej. 7791234567890"
-                        required={false}
-                        labelClassName="mt-3 text-xs font-semibold text-slate-600"
-                        className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
-                      />
-                    )}
+                    {/* Código guardado del producto: se corrige a mano y nunca
+                        busca ni cambia de producto (eso lo hace el buscador). */}
+                    <Input
+                      label="Código de barras"
+                      value={barcode}
+                      onChange={(value) => {
+                        clearMismatchedReference(value);
+                        setBarcode(value);
+                      }}
+                      placeholder="Ej. 7791234567890"
+                      required={false}
+                      labelClassName="mt-3 text-xs font-semibold text-slate-600"
+                      className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
+                    />
                     {referenceBarcodeWarning && (
                       <p
                         className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
@@ -3063,90 +3308,39 @@ function Products({
                         {referenceBarcodeWarning}
                       </p>
                     )}
-                    {barcodeOwner && (
-                      <div
-                        className="sm:col-span-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900"
-                        role="status"
-                      >
-                        <span>
-                          El código <strong>{barcode.trim()}</strong> ya está en
-                          tu catálogo
-                          {barcodeOwnerKind === "EQUIVALENT"
-                            ? " como envase importado de "
-                            : " en "}
-                          <strong>“{barcodeOwner.name}”</strong>
-                          {barcodeOwnerKind === "EQUIVALENT" &&
-                            primaryBarcodeOf(barcodeOwner) &&
-                            ` (código nacional ${primaryBarcodeOf(barcodeOwner)})`}
-                          .
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            clearForm();
-                            edit(barcodeOwner);
-                          }}
-                          disabled={productSaving}
-                          className="rounded-md border border-amber-300 bg-white px-3 py-1 font-semibold text-amber-900 hover:bg-amber-100"
-                        >
-                          Editar ese producto
-                        </button>
-                      </div>
-                    )}
-                    {importedBarcode && (
-                      <div
-                        className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs leading-5 text-sky-900"
-                        role="status"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <p>
-                            Envase importado{" "}
-                            <strong className="font-mono">
-                              {importedBarcode}
-                            </strong>
-                            : se guarda como código equivalente del medicamento
-                            nacional.
-                            {!selectedReference &&
-                              " Elegí el medicamento nacional en Vincular medicamento."}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setImportedBarcode("")}
-                            disabled={productSaving}
-                            aria-label="Quitar envase importado"
-                            className="grid size-6 shrink-0 place-items-center rounded text-sky-700 hover:bg-sky-100"
-                          >
-                            <X size={14} aria-hidden="true" />
-                          </button>
-                        </div>
-                        {existingNationalProduct && (
-                          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-sky-200 pt-2">
-                            <span>
-                              Este medicamento ya está en tu catálogo como{" "}
-                              <strong>“{existingNationalProduct.name}”</strong>.
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => void linkImportedToExisting()}
-                              disabled={productSaving}
-                              className="rounded-md bg-sky-700 px-3 py-1 font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
-                            >
-                              Asociar el código a ese producto
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {editingProduct && (
+                    {editingProduct ? (
                       <ProductEquivalentBarcodes
                         key={editingProduct.id}
                         token={token}
                         organizationId={organizationId}
                         productId={editingProduct.id}
                         initialCodes={equivalentBarcodes(editingProduct)}
+                        primaryCode={barcode}
                         disabled={productSaving}
                         onChanged={done}
+                        pendingCodes={
+                          importedBarcode &&
+                          importTarget?.id === editingProduct.id
+                            ? [importedBarcode]
+                            : []
+                        }
+                        onRemovePending={() => {
+                          setImportedBarcode("");
+                          setImportTarget(undefined);
+                        }}
                       />
+                    ) : (
+                      !importedBarcode && (
+                        <ProductEquivalentBarcodes
+                          key={`nuevo-${newFormRevision}`}
+                          token={token}
+                          organizationId={organizationId}
+                          initialCodes={pendingEquivalents}
+                          primaryCode={barcode}
+                          disabled={productSaving}
+                          onPendingChange={setPendingEquivalents}
+                        />
+                      )
                     )}
                   </div>
                   <div
@@ -3249,7 +3443,7 @@ function Products({
                       onChange={setPrice}
                       placeholder="Ej. 9900"
                       labelClassName="mt-0 text-xs font-semibold text-slate-600"
-                      className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
+                      className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
                     />
                     <div className="mt-0 block text-xs font-semibold text-slate-600">
                       <span className="mb-1 block">Se vende por</span>
@@ -3342,7 +3536,7 @@ function Products({
                             placeholder="Ej. Ibuprofeno"
                             required={false}
                             labelClassName="mt-3 text-xs font-semibold text-slate-600"
-                            className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
+                            className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
                           />
                           <Input
                             label="Forma farmacéutica"
@@ -3351,7 +3545,7 @@ function Products({
                             placeholder="Ej. Comprimidos"
                             required={false}
                             labelClassName="mt-3 text-xs font-semibold text-slate-600"
-                            className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
+                            className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
                           />
                           <Input
                             label="Concentración"
@@ -3360,7 +3554,7 @@ function Products({
                             placeholder="Ej. 600 mg"
                             required={false}
                             labelClassName="mt-3 text-xs font-semibold text-slate-600"
-                            className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
+                            className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
                           />
                         </>
                       )}
@@ -3371,7 +3565,7 @@ function Products({
                         placeholder="Ej. Caja x 20 comprimidos · Frasco 250 ml"
                         required={false}
                         labelClassName="mt-3 text-xs font-semibold text-slate-600"
-                        className="h-10 rounded-md border-slate-300 text-sm placeholder:text-slate-400"
+                        className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
                       />
                     </div>
                   </section>
@@ -3398,7 +3592,7 @@ function Products({
               <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:px-7">
                 <button
                   type="button"
-                  onClick={clearForm}
+                  onClick={() => clearForm()}
                   className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-medium text-teal-700 hover:bg-teal-50 disabled:opacity-50"
                   disabled={productSaving || imageBusy || optionCreating}
                 >
@@ -3409,7 +3603,11 @@ function Products({
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-700 px-5 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
                 >
                   <Save size={16} aria-hidden />
-                  {editingProduct ? "Guardar cambios" : "Guardar producto"}
+                  {editingProduct && importLinkTarget
+                    ? "Guardar y asociar código"
+                    : editingProduct
+                      ? "Guardar cambios"
+                      : "Guardar producto"}
                 </button>
               </div>
             </form>
@@ -3543,7 +3741,7 @@ function Products({
         {editingProduct ? (
           <button
             type="button"
-            onClick={clearForm}
+            onClick={() => clearForm()}
             className="mt-2 w-full border py-2 text-sm"
           >
             Cancelar edición

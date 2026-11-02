@@ -287,6 +287,85 @@ model ProductBarcode {
   @@index([productId])
 }
 
+// Copia local de las fuentes de medicamentos (SISTEMA-21), compartida por
+// todas las organizaciones: es información pública, igual para todas. El padrón
+// oficial se reemplaza completo en cada descarga; Precios de Remedios y
+// AlfaBeta guardan lo consultado por nombre (`lookupKey`).
+model MedicineReferenceSnapshot {
+  id                   String   @id @default(uuid()) @db.Uuid
+  source               String   @db.VarChar(20)
+  lookupKey            String   @default("")
+  gtin                 String?  @db.VarChar(14)
+  barcode              String   @default("")
+  name                 String
+  presentation         String   @default("")
+  laboratory           String   @default("")
+  activeIngredient     String   @default("")
+  pharmaceuticalForm   String   @default("")
+  concentration        String   @default("")
+  troquel              String   @default("")
+  saleType             String   @default("")
+  prescriptionRequired Boolean?
+  priceMinor           BigInt?
+  pamiPriceMinor       BigInt?
+  sourceUpdatedAt      String?
+  // Nombre, presentación, laboratorio y droga normalizados para buscar.
+  searchText           String   @default("")
+  runId                String   @db.Uuid
+  refreshedAt          DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([source, gtin])
+  @@index([source, lookupKey])
+}
+
+// Corrida de actualización de precios externos (SISTEMA-21). Una corrida
+// global (sin organizationId) a la vez; las de una farmacia aplican la copia
+// local sin descargar.
+model PriceRefreshRun {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String?              @db.Uuid
+  trigger        String               @db.VarChar(20)
+  status         String               @db.VarChar(20)
+  startedAt      DateTime             @default(now()) @db.Timestamptz(6)
+  finishedAt     DateTime?            @db.Timestamptz(6)
+  snapshotRows   Int?
+  checked        Int                  @default(0)
+  updated        Int                  @default(0)
+  failed         Int                  @default(0)
+  message        String?
+  revertedAt     DateTime?            @db.Timestamptz(6)
+  changes        PriceRefreshChange[]
+
+  @@index([startedAt])
+}
+
+// Precio cambiado por una corrida: permite deshacerla sin pisar cambios
+// manuales posteriores.
+model PriceRefreshChange {
+  id                    String          @id @default(uuid()) @db.Uuid
+  runId                 String          @db.Uuid
+  organizationId        String          @db.Uuid
+  productId             String          @db.Uuid
+  priceListId           String?         @db.Uuid
+  beforeAmountMinor     BigInt?
+  afterAmountMinor      BigInt?
+  beforeReferenceMinor  BigInt?
+  afterReferenceMinor   BigInt
+  createdAt             DateTime        @default(now()) @db.Timestamptz(6)
+  run                   PriceRefreshRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@index([runId])
+  @@index([organizationId, createdAt])
+}
+
+// Ajustes de la plataforma, no de una organización (SISTEMA-21): por ejemplo,
+// pausar la aplicación automática de precios externos.
+model PlatformSetting {
+  key       String   @id @db.VarChar(80)
+  value     Json
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+}
+
 model ProductImage {
   productId      String   @id @db.Uuid
   organizationId String   @db.Uuid

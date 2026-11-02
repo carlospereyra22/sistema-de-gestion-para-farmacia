@@ -2,8 +2,20 @@ import {
   BadGatewayException,
   BadRequestException,
   Injectable,
+  Optional,
 } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
 import { canonicalGtin } from "./external-gtin";
+import {
+  referenceFromSnapshot,
+  snapshotKey,
+} from "./medicine-reference-snapshot";
+
+// La copia local del padrón se usa mientras tenga menos de esto; las corridas
+// de las 09:00 y 17:00 la renuevan.
+const SNAPSHOT_FRESH_MS = 36 * 60 * 60 * 1000;
+const SNAPSHOT_STATE_CACHE_MS = 60 * 1000;
+const SNAPSHOT_CANDIDATES = 300;
 
 type OfficialMedicine = {
   NOMBRE?: unknown;
@@ -183,6 +195,33 @@ function mapOfficialMedicine(item: OfficialMedicine): MedicineReference {
   };
 }
 
+// Filas vigentes del padrón con un GTIN válido; una por código (C_BARRA y
+// GTIN1 pueden diferir). Sin nombre o presentación no sirven para vincular.
+export function officialReferences(payload: unknown[]): MedicineReference[] {
+  const references: MedicineReference[] = [];
+  for (const value of payload) {
+    if (!value || typeof value !== "object") continue;
+    const item = value as OfficialMedicine;
+    if (String(item.BAJA) === "1" || String(item.VIGENCIA) === "0") continue;
+    // Mismo GTIN con o sin ceros a la izquierda cuenta una sola vez.
+    const codes = new Map<string, string>();
+    for (const entry of [item.C_BARRA, item.GTIN1]) {
+      const code = String(entry ?? "").trim();
+      try {
+        const canonical = canonicalGtin(code);
+        if (!codes.has(canonical)) codes.set(canonical, code);
+      } catch {
+        // Código inexistente o inválido en la fuente.
+      }
+    }
+    const mapped = mapOfficialMedicine(item);
+    if (!mapped.name || !mapped.presentation) continue;
+    for (const barcode of codes.values())
+      references.push({ ...mapped, barcode });
+  }
+  return references;
+}
+
 function decodeHtml(value: string): string {
   return value
     .replace(/<br\s*\/?\s*>/gi, " ")
@@ -270,9 +309,89 @@ export class MedicineReferenceService {
     rows: Map<string, MedicineReference[]>;
   };
   private barcodeLoading?: Promise<Map<string, MedicineReference[]>>;
+  private snapshotState?: { fresh: boolean; checkedAt: number };
+
+  constructor(@Optional() private readonly prisma?: PrismaService) {}
+
+  // ¿Hay una copia local reciente del padrón? Se consulta como mucho una vez
+  // por minuto para no sumar una consulta a cada tecla.
+  private async localSnapshotFresh(): Promise<boolean> {
+    if (!this.prisma) return false;
+    if (
+      this.snapshotState &&
+      Date.now() - this.snapshotState.checkedAt < SNAPSHOT_STATE_CACHE_MS
+    )
+      return this.snapshotState.fresh;
+    const latest = await this.prisma.medicineReferenceSnapshot.findFirst({
+      where: { source: "official" },
+      orderBy: { refreshedAt: "desc" },
+      select: { refreshedAt: true },
+    });
+    const fresh = Boolean(
+      latest && Date.now() - latest.refreshedAt.getTime() < SNAPSHOT_FRESH_MS,
+    );
+    this.snapshotState = { fresh, checkedAt: Date.now() };
+    return fresh;
+  }
+
+  // Búsqueda por nombre en la copia local: sin salir a internet. Filtra por
+  // las palabras del nombre y ordena con el mismo puntaje que la fuente.
+  private async searchSnapshot(query: string): Promise<MedicineReference[]> {
+    const prisma = this.prisma!;
+    if (/^\d{8,14}$/.test(query))
+      return (
+        await prisma.medicineReferenceSnapshot.findMany({
+          where: { source: "official", gtin: canonicalGtin(query) },
+          take: MAX_RESULTS,
+        })
+      ).map(referenceFromSnapshot);
+    const words = snapshotKey(query)
+      .split(/[^a-z0-9]+/)
+      .filter((word) => /[a-z]{2,}/.test(word) && !/^x\d+$/.test(word));
+    if (!words.length) return [];
+    const rows = await prisma.medicineReferenceSnapshot.findMany({
+      where: {
+        source: "official",
+        AND: words.map((word) => ({ searchText: { contains: word } })),
+      },
+      take: SNAPSHOT_CANDIDATES,
+    });
+    const best = new Map<string, MedicineReference & { score: number }>();
+    for (const reference of rows.map(referenceFromSnapshot)) {
+      const score = scoreCandidate(
+        [
+          reference.name,
+          reference.presentation,
+          reference.laboratory,
+          reference.activeIngredient,
+        ].join(" "),
+        query,
+      );
+      if (score <= 0) continue;
+      const key = [reference.name, reference.presentation, reference.laboratory]
+        .map(normalized)
+        .join("::");
+      const existing = best.get(key);
+      if (!existing || score > existing.score)
+        best.set(key, { ...reference, score });
+    }
+    return [...best.values()]
+      .sort((first, second) => second.score - first.score)
+      .slice(0, MAX_RESULTS)
+      .map(({ score, ...reference }) => {
+        void score;
+        return reference;
+      });
+  }
 
   async byBarcode(code: string): Promise<MedicineReference[]> {
     const canonical = canonicalGtin(code);
+    if (this.prisma && (await this.localSnapshotFresh()))
+      return (
+        await this.prisma.medicineReferenceSnapshot.findMany({
+          where: { source: "official", gtin: canonical },
+        })
+      ).map(referenceFromSnapshot);
     if (this.barcodeIndex && this.barcodeIndex.expires > Date.now())
       return this.barcodeIndex.rows.get(canonical) ?? [];
     this.barcodeLoading ??= this.loadBarcodeIndex().catch(() => {
@@ -287,9 +406,9 @@ export class MedicineReferenceService {
     }
   }
 
-  private async loadBarcodeIndex(): Promise<Map<string, MedicineReference[]>> {
-    // Upstream searches names, not EAN. Index its public wildcard response in
-    // memory for 30 minutes; never use a name-only match for automatic linking.
+  // Padrón oficial completo y vigente: una sola consulta pública (`%%%`).
+  // Lo usan el índice de escaneo y la actualización de precios (SISTEMA-21).
+  async downloadOfficial(): Promise<MedicineReference[]> {
     const response = await fetch(OFFICIAL_MEDICINE_URL, {
       method: "POST",
       headers: {
@@ -298,7 +417,7 @@ export class MedicineReferenceService {
         Origin: "https://www.argentina.gob.ar",
       },
       body: JSON.stringify({ searchdata: "%%%" }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(60000),
     });
     if (!response.ok)
       throw new BadGatewayException("El padrón no está disponible.");
@@ -307,37 +426,23 @@ export class MedicineReferenceService {
       throw new BadGatewayException(
         "La fuente devolvió un formato no reconocido.",
       );
+    return officialReferences(payload);
+  }
+
+  private async loadBarcodeIndex(): Promise<Map<string, MedicineReference[]>> {
+    // Upstream searches names, not EAN. Index its public wildcard response in
+    // memory for 30 minutes; never use a name-only match for automatic linking.
     const index = new Map<string, Map<string, MedicineReference>>();
-    for (const value of payload) {
-      if (!value || typeof value !== "object") continue;
-      const item = value as OfficialMedicine;
-      if (String(item.BAJA) === "1" || String(item.VIGENCIA) === "0") continue;
-      const matchingCodes = [item.C_BARRA, item.GTIN1]
-        .map((entry) => String(entry ?? "").trim())
-        .filter((entry) => {
-          try {
-            canonicalGtin(entry);
-            return true;
-          } catch {
-            return false;
-          }
-        });
-      for (const matchingCode of matchingCodes) {
-        const reference = {
-          ...mapOfficialMedicine(item),
-          barcode: matchingCode,
-        };
-        if (!reference.name || !reference.presentation) continue;
-        // Retain differing source rows; no name-only or prefix matching for auto-linking.
-        const canonical = canonicalGtin(matchingCode);
-        const matches =
-          index.get(canonical) ?? new Map<string, MedicineReference>();
-        matches.set(
-          JSON.stringify({ ...reference, barcode: canonical }),
-          reference,
-        );
-        index.set(canonical, matches);
-      }
+    for (const reference of await this.downloadOfficial()) {
+      // Retain differing source rows; no name-only or prefix matching for auto-linking.
+      const canonical = canonicalGtin(reference.barcode);
+      const matches =
+        index.get(canonical) ?? new Map<string, MedicineReference>();
+      matches.set(
+        JSON.stringify({ ...reference, barcode: canonical }),
+        reference,
+      );
+      index.set(canonical, matches);
     }
     const rows = new Map(
       [...index].map(([code, matches]) => [code, [...matches.values()]]),
@@ -363,6 +468,8 @@ export class MedicineReferenceService {
     if (source === "preciosderemedios") {
       return this.searchPriceRemedies(searchText);
     }
+    // Con copia local reciente no se consulta el padrón por internet.
+    if (await this.localSnapshotFresh()) return this.searchSnapshot(searchText);
     return this.searchOfficial(searchText);
   }
 

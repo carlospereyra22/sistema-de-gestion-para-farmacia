@@ -2,6 +2,18 @@
 
 ## DECIDED
 
+- 02/11/2026 (SISTEMA-21): Las fuentes de medicamentos se consultan una vez
+  para todo el SaaS y se guardan en una copia local compartida
+  (`MedicineReferenceSnapshot`, sin organizationId: información pública) en la
+  base comercial, no en la base separada del catálogo externo, porque la
+  actualiza la propia API y la usan precios, búsqueda y escaneo. La corrida
+  sigue a las 09:00 y 17:00 de Argentina (horario elegido por el negocio).
+  Sigue dentro del monolito (sin worker ni servicio nuevo); la exclusión entre
+  instancias es un índice único parcial en PostgreSQL. Sin umbral de salto de
+  precio por ahora. Resincronizar, deshacer y pausar se hacen con un comando
+  de servidor hasta que exista un rol de administrador de plataforma. Ver
+  PRODUCTS.md.
+
 - 02/11/2026 (SISTEMA-20): El código de barras es único por organización, no en
   toda la base: dos farmacias (organizaciones) pueden cargar el mismo EAN y las
   sucursales de una farmacia comparten el catálogo. `ProductBarcode` lleva

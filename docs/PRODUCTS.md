@@ -62,6 +62,44 @@ Cuando Es medicamento está activado o el producto ya está identificado como me
 
 La tarea de la API corre a las 09:00 y 17:00 de Argentina (12:00 y 20:00 UTC). Requiere la API encendida; no es un cron del sistema operativo y no recupera horarios perdidos durante una caída. El botón de actualización usa el mismo servicio.
 
+## Buscador del formulario de producto — SISTEMA-21
+
+- **Un solo buscador arriba ("Buscar producto")**, siempre visible, para nombre o código (escrito o escaneado con el lector). Con 13 o 14 dígitos busca solo; 8 o 12, con Enter. Debajo explica dónde busca: por código, catálogo propio + padrón oficial + catálogo de perfumería; por nombre, catálogo propio + la fuente elegida en el selector.
+- **El campo Código de barras de Datos del producto es sólo el dato guardado**: se corrige a mano y nunca busca ni cambia de producto.
+- **Resultados en un desplegable** que no empuja el formulario: primero "En tu catálogo" y después la fuente externa. Elegir cualquier resultado cierra todo el desplegable.
+- **Código o producto propio:** se abre para modificarlo con sus datos (y, si es medicamento vinculado, se precarga la presentación del padrón). **Resultado externo:** empieza un producto nuevo limpio (foto incluida), sin avisos de reemplazo. Sólo al editar un producto abierto desde la lista, elegir otra referencia cambia su vinculación y avisa si cambia el código.
+- **Envase importado:** si el código no aparece y es medicamento, "¿Es importado? Asociarlo a un medicamento nacional" muestra el panel `importado → nacional` y se busca el nacional por nombre o código. Si el nacional ya está en el catálogo se abre ese producto con el código como "pendiente" en Códigos equivalentes y se guarda con "Guardar y asociar código"; si no, se crea con los dos códigos al guardar. Nada se asocia sin apretar el botón.
+- **Códigos equivalentes en productos nuevos:** se cargan como pendientes y se envían con el alta en la misma transacción.
+- Los campos del formulario usan `!text-sm` porque la regla global `input { font: inherit }` de `index.css` pisa las utilidades de tamaño de Tailwind.
+
+## Copia local del padrón y actualización para todas las farmacias — SISTEMA-21
+
+Antes cada producto vinculado de cada farmacia buscaba su precio por nombre en el padrón, en serie y sin caché (hasta ~588 consultas por corrida con 155 productos). Ahora:
+
+- **Una sola descarga por corrida para todo el sistema.** La corrida de las 09:00 y 17:00 baja el padrón completo (`%%%`, ~16.000 presentaciones vigentes, ~16 MB) y reemplaza la copia local `MedicineReferenceSnapshot`, compartida por todas las organizaciones porque es información pública. Medido en local: 155 productos en ~10 s, de los cuales ~8 s son la descarga.
+- **Aplicación sin trabar ventas.** Cada farmacia se compara en memoria contra la copia. Los productos sin cambios no abren transacción (sólo se marca la fecha de revisión en un `UPDATE` por lote); los que cambian usan la misma transacción corta de siempre, con bloqueo del producto, revalidación del vínculo y auditoría.
+- **Precios de Remedios y AlfaBeta** no se pueden descargar completos: se busca una vez por medicamento distinto en toda la corrida (aunque lo tengan muchas farmacias), de a 2 búsquedas simultáneas, y el resultado se guarda en la copia local.
+- **Botón de una farmacia:** aplica la copia local sin descargar el padrón. Para las otras fuentes usa lo guardado y sólo sale a internet si ese medicamento nunca se consultó.
+- **Búsqueda y escaneo** del formulario consultan la copia local mientras tenga menos de 36 horas: responden sin internet y siguen funcionando con el padrón caído. Sin copia reciente vuelven a la fuente externa.
+- **Protección:** si el padrón no responde se conserva la copia anterior; si devuelve menos del 60 % de las filas de la copia vigente se aborta la corrida sin tocar copia ni precios.
+- **Una corrida global a la vez**, aunque haya varias instancias de la API (índice único parcial sobre `PriceRefreshRun` en estado RUNNING). Una corrida colgada más de 2 horas se cierra como FAILED.
+- **Registro:** cada corrida queda en `PriceRefreshRun` (disparador, estado, filas descargadas, revisados, cambiados, errores) y cada precio cambiado en `PriceRefreshChange` con el antes y el después. La auditoría de cada cambio incluye el `runId`.
+
+### Comando de servidor
+
+Se corre en el VPS (o en local) con la API compilada:
+
+```
+pnpm --filter @gestion/api precios estado            # últimas 10 corridas y si hay pausa
+pnpm --filter @gestion/api precios sincronizar       # descarga y aplica a todas las farmacias ya
+pnpm --filter @gestion/api precios deshacer <idCorrida>
+pnpm --filter @gestion/api precios pausar | reanudar
+```
+
+- **Deshacer** restaura precio de venta y referencia de cada producto que cambió esa corrida, salvo los modificados después (a mano o por otra corrida): esos se informan y no se tocan. Si la fuente sigue mal, conviene pausar antes de deshacer para que la próxima corrida no lo vuelva a aplicar.
+- **Pausar** sigue descargando el padrón (la búsqueda queda al día) pero no cambia precios hasta reanudar. Se guarda en `PlatformSetting`.
+- El rol de administrador de plataforma (para hacer esto desde una pantalla) queda para otra tarea.
+
 Antes solo se actualizaba la referencia. Ahora también se reemplaza el importe de la lista «Precio general» para productos activos vendidos por caja. Se aplican aumentos y bajas, sin margen. Las demás listas y las ventas, deudas y costos históricos se conservan. No se convierten precios de caja a blíster/unidad.
 
 Los vínculos anteriores mantienen su proveedor; no se reasignan automáticamente a AlfaBeta. Para cambiarlo, buscar la presentación en el formulario y guardar. AlfaBeta se resuelve por nombre exacto único y presentación exacta única, no por proximidad; si no hay coincidencia segura se conserva el precio. No se recorre todo el catálogo externo: se consultan los productos vinculados, reutilizando la caché existente. El conector público depende del formato del proveedor; no sustituye un acceso comercial acordado.
