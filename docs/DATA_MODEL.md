@@ -12,6 +12,8 @@ Fase 1 agrega `User`, `UserOrganization`, `UserBranch`, `Role`, `Permission`, `R
 
 Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceList` y `ProductPrice`. Todas pertenecen a una organizacion excepto los codigos de barras, que dependen del producto. Cada producto puede tener varios codigos de barras y un precio actual por lista; `amountMinor` se guarda como `BigInt` en centavos de peso argentino. La unidad de venta del producto se persiste como `BOX`, `BLISTER` o `UNIT`; los productos ya existentes conservan `BOX` por defecto. La migracion `20260817222407_add_catalog` esta aplicada en PostgreSQL local.
 
+`20261102144443_product_barcode_per_organization` (SISTEMA-20): `ProductBarcode` suma `organizationId` (completado desde su producto, FK compuesta `(productId, organizationId)` hacia `Product(id, organizationId)`) y `kind` (`PACKAGE`, `INTERNAL`, `EQUIVALENT`; los SG existentes pasan a `INTERNAL`). El unico global de `code` se reemplaza por `(organizationId, code)`. Restricciones CHECK: el principal es siempre `PACKAGE`, `INTERNAL` respeta `SG` + 12 digitos y `EQUIVALENT` es un GTIN numerico de 8 a 14 digitos, nunca principal.
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

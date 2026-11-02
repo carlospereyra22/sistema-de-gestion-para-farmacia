@@ -246,6 +246,7 @@ model Product {
   image          ProductImage?
   branchStates   ProductBranchState[]
 
+  @@unique([id, organizationId])
   @@index([organizationId, name])
   @@index([externalReferenceSource])
 }
@@ -262,14 +263,27 @@ model ProductBranchState {
   @@index([organizationId, branchId, status])
 }
 
-model ProductBarcode {
-  id        String   @id @default(uuid()) @db.Uuid
-  productId String   @db.Uuid
-  code      String   @unique
-  primary   Boolean  @default(false)
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+// Tipo de código (SISTEMA-20): el del envase, el interno SG para etiquetas o
+// el EAN de un envase importado equivalente al medicamento nacional.
+enum ProductBarcodeKind {
+  PACKAGE
+  INTERNAL
+  EQUIVALENT
+}
 
+model ProductBarcode {
+  id             String             @id @default(uuid()) @db.Uuid
+  // Único por organización (SISTEMA-20): dos farmacias pueden cargar el mismo
+  // código; dentro de una farmacia identifica un solo producto.
+  organizationId String             @db.Uuid
+  productId      String             @db.Uuid
+  code           String
+  primary        Boolean            @default(false)
+  kind           ProductBarcodeKind @default(PACKAGE)
+  createdAt      DateTime           @default(now()) @db.Timestamptz(6)
+  product        Product            @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, code])
   @@index([productId])
 }
 

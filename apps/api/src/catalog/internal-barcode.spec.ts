@@ -55,7 +55,13 @@ describe("internal product barcodes", () => {
       true,
     );
     expect(state.create).toHaveBeenCalledWith({
-      data: { productId: "product", code: result.code, primary: false },
+      data: {
+        organizationId: "org",
+        productId: "product",
+        code: result.code,
+        primary: false,
+        kind: "INTERNAL",
+      },
     });
     expect(state.audit).toHaveBeenCalledTimes(1);
     state.findUnique.mockResolvedValue({

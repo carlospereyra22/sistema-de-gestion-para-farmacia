@@ -17,6 +17,10 @@ import {
 import { fractionalPrice } from "./fractional-price";
 import { withProductBarcode } from "./product-barcode";
 import { internalBarcode } from "./internal-barcode";
+import {
+  addEquivalentBarcode,
+  removeEquivalentBarcode,
+} from "./equivalent-barcode";
 import { assertMedicineReferenceBarcode } from "./medicine-reference-barcode";
 import {
   branchProductAccess,
@@ -69,6 +73,41 @@ export class CatalogService {
         );
       throw error;
     }
+  }
+
+  async addEquivalentBarcode(
+    actorId: string,
+    organizationId: string,
+    productId: string,
+    code: string,
+  ) {
+    await this.assert(actorId, organizationId, "CATALOG_MANAGE");
+    try {
+      return await this.prisma.$transaction((tx) =>
+        addEquivalentBarcode(tx, actorId, organizationId, productId, code),
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new ConflictException(
+          `El código ${code.trim()} ya está registrado. Actualizá y volvé a intentarlo.`,
+        );
+      throw error;
+    }
+  }
+
+  async removeEquivalentBarcode(
+    actorId: string,
+    organizationId: string,
+    productId: string,
+    code: string,
+  ) {
+    await this.assert(actorId, organizationId, "CATALOG_MANAGE");
+    return this.prisma.$transaction((tx) =>
+      removeEquivalentBarcode(tx, actorId, organizationId, productId, code),
+    );
   }
 
   async changeBranchProduct(
@@ -136,7 +175,7 @@ export class CatalogService {
         active: true,
         category: { select: { id: true, name: true } },
         laboratory: { select: { id: true, name: true } },
-        barcodes: { select: { code: true, primary: true } },
+        barcodes: { select: { code: true, primary: true, kind: true } },
         prices: {
           where: {
             priceList: {
@@ -750,6 +789,7 @@ export class CatalogService {
               } else {
                 await tx.productBarcode.create({
                   data: {
+                    organizationId,
                     productId,
                     code: input.barcode.trim(),
                     primary: true,
@@ -1340,6 +1380,7 @@ export class CatalogService {
       saleUnit?: "BOX" | "BLISTER" | "UNIT";
       description?: string;
       prescriptionRequired?: boolean;
+      equivalentBarcodes?: string[];
     },
   ) {
     await this.assert(actorId, organizationId, "CATALOG_MANAGE");
@@ -1451,6 +1492,7 @@ export class CatalogService {
           if (input.barcode)
             await tx.productBarcode.create({
               data: {
+                organizationId,
                 productId: product.id,
                 code: input.barcode.trim(),
                 primary: true,
@@ -1505,6 +1547,16 @@ export class CatalogService {
               organizationId,
               product.id,
               true,
+            );
+          // El envase importado queda asociado en la misma transacción: si un
+          // código choca con otro producto no se crea nada.
+          for (const code of input.equivalentBarcodes ?? [])
+            await addEquivalentBarcode(
+              tx,
+              actorId,
+              organizationId,
+              product.id,
+              code,
             );
           return { id: product.id };
         }),

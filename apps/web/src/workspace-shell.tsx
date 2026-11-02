@@ -19,6 +19,13 @@ import {
   isMedicationCategoryName,
 } from "./lib/medication-category";
 import {
+  barcodeKindOf,
+  equivalentBarcodes,
+  findProductByBarcode,
+  primaryBarcodeOf,
+} from "./lib/equivalent-barcodes";
+import { ProductEquivalentBarcodes } from "./product-equivalent-barcodes";
+import {
   compatibleRetailMedicineReferences,
   retailMedicineNameQuery,
 } from "./lib/retail-medicine-link";
@@ -223,6 +230,7 @@ import {
   getCatalogOptions,
   ensureDefaultCatalogCategories,
   searchMedicineReferences,
+  addEquivalentBarcode,
   searchAlfaBeta,
   type AlfaBetaMatch,
   getParties,
@@ -1559,6 +1567,8 @@ function Products({
   const referenceTypingTimer = useRef<number | undefined>(undefined);
   // Código de barras que se copió desde la referencia elegida (no del envase).
   const referenceBarcodeCopied = useRef("");
+  // EAN de un envase importado que se asocia al medicamento nacional elegido.
+  const [importedBarcode, setImportedBarcode] = useState("");
   const scheduleReferenceSearch = (
     source: MedicineReference["source"],
     query: string,
@@ -1674,6 +1684,7 @@ function Products({
           saleUnit,
           prescriptionRequired,
           description: description || undefined,
+          equivalentBarcodes: importedBarcode ? [importedBarcode] : undefined,
           ...(isMedication && selectedReference
             ? {
                 externalReferenceSource: selectedReference.source,
@@ -1698,6 +1709,60 @@ function Products({
       productSaveLock.current = false;
       setProductSaving(false);
     }
+  };
+  // El medicamento nacional elegido para un envase importado ya está en el
+  // catálogo: se le agrega el código en vez de crear un duplicado.
+  const existingNationalProduct =
+    !editingProduct && importedBarcode && barcode.trim()
+      ? findProductByBarcode([...products, ...knownProducts], barcode)
+      : undefined;
+  // El código escrito o escaneado ya pertenece a un producto del catálogo
+  // (como principal o como equivalente): se avisa en vez de ofrecer crearlo.
+  const barcodeOwner =
+    !editingProduct && !importedBarcode && barcode.trim()
+      ? findProductByBarcode([...products, ...knownProducts], barcode)
+      : undefined;
+  const barcodeOwnerKind = barcodeOwner
+    ? barcodeKindOf(barcodeOwner, barcode)
+    : undefined;
+  const linkImportedToExisting = async () => {
+    if (!existingNationalProduct || productSaveLock.current) return;
+    productSaveLock.current = true;
+    setProductSaving(true);
+    setProductSaveError("");
+    try {
+      await addEquivalentBarcode(
+        token,
+        organizationId,
+        existingNationalProduct.id,
+        importedBarcode,
+      );
+      clearForm();
+      done();
+    } catch (cause) {
+      setProductSaveError(
+        cause instanceof Error
+          ? cause.message
+          : "No se pudo asociar el código equivalente.",
+      );
+    } finally {
+      productSaveLock.current = false;
+      setProductSaving(false);
+    }
+  };
+  const startImportedLink = (code: string) => {
+    cancelReferenceSearch();
+    referenceRequest.current?.abort();
+    referenceBarcodeCopied.current = "";
+    setImportedBarcode(code.trim());
+    setBarcode("");
+    setMedicationMode("medicine");
+    setIsMedication(true);
+    if (!saleUnitEdited.current) setSaleUnit("BOX");
+    setRetailLinkHint(
+      `Buscá el medicamento nacional equivalente al envase importado ${code.trim()}.`,
+    );
+    setRetailLinkSearchRevision((value) => value + 1);
   };
   const clearForm = () => {
     if (optionCreateLock.current) return;
@@ -1737,6 +1802,7 @@ function Products({
     setDescription("");
     cancelReferenceSearch();
     referenceBarcodeCopied.current = "";
+    setImportedBarcode("");
     setReferenceQuery("");
     setSelectedReference(undefined);
     setReferenceSearchDone(false);
@@ -2252,7 +2318,21 @@ function Products({
                             )}
                           </td>
                           <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                            {product.barcodes[0]?.code ?? "—"}
+                            {primaryBarcodeOf(product) ??
+                              product.barcodes[0]?.code ??
+                              "—"}
+                            {equivalentBarcodes(product).map((code) => (
+                              <span
+                                key={code}
+                                className="mt-1 flex w-fit items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-800"
+                                title="Código equivalente: envase importado del mismo medicamento"
+                              >
+                                <span className="font-sans font-semibold">
+                                  Importado
+                                </span>
+                                {code}
+                              </span>
+                            ))}
                           </td>
                           <td className="px-4 py-3">
                             {product.laboratory?.name ?? "—"}
@@ -2739,6 +2819,10 @@ function Products({
                         organizationId={organizationId}
                         code={barcode}
                         linkedCode={selectedReference?.barcode}
+                        onImported={
+                          barcodeOwner ? undefined : startImportedLink
+                        }
+                        catalogOwner={barcodeOwner?.name}
                         allowAutomatic={
                           !name &&
                           !presentation &&
@@ -2978,6 +3062,91 @@ function Products({
                       >
                         {referenceBarcodeWarning}
                       </p>
+                    )}
+                    {barcodeOwner && (
+                      <div
+                        className="sm:col-span-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900"
+                        role="status"
+                      >
+                        <span>
+                          El código <strong>{barcode.trim()}</strong> ya está en
+                          tu catálogo
+                          {barcodeOwnerKind === "EQUIVALENT"
+                            ? " como envase importado de "
+                            : " en "}
+                          <strong>“{barcodeOwner.name}”</strong>
+                          {barcodeOwnerKind === "EQUIVALENT" &&
+                            primaryBarcodeOf(barcodeOwner) &&
+                            ` (código nacional ${primaryBarcodeOf(barcodeOwner)})`}
+                          .
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearForm();
+                            edit(barcodeOwner);
+                          }}
+                          disabled={productSaving}
+                          className="rounded-md border border-amber-300 bg-white px-3 py-1 font-semibold text-amber-900 hover:bg-amber-100"
+                        >
+                          Editar ese producto
+                        </button>
+                      </div>
+                    )}
+                    {importedBarcode && (
+                      <div
+                        className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs leading-5 text-sky-900"
+                        role="status"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <p>
+                            Envase importado{" "}
+                            <strong className="font-mono">
+                              {importedBarcode}
+                            </strong>
+                            : se guarda como código equivalente del medicamento
+                            nacional.
+                            {!selectedReference &&
+                              " Elegí el medicamento nacional en Vincular medicamento."}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setImportedBarcode("")}
+                            disabled={productSaving}
+                            aria-label="Quitar envase importado"
+                            className="grid size-6 shrink-0 place-items-center rounded text-sky-700 hover:bg-sky-100"
+                          >
+                            <X size={14} aria-hidden="true" />
+                          </button>
+                        </div>
+                        {existingNationalProduct && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-sky-200 pt-2">
+                            <span>
+                              Este medicamento ya está en tu catálogo como{" "}
+                              <strong>“{existingNationalProduct.name}”</strong>.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void linkImportedToExisting()}
+                              disabled={productSaving}
+                              className="rounded-md bg-sky-700 px-3 py-1 font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
+                            >
+                              Asociar el código a ese producto
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {editingProduct && (
+                      <ProductEquivalentBarcodes
+                        key={editingProduct.id}
+                        token={token}
+                        organizationId={organizationId}
+                        productId={editingProduct.id}
+                        initialCodes={equivalentBarcodes(editingProduct)}
+                        disabled={productSaving}
+                        onChanged={done}
+                      />
                     )}
                   </div>
                   <div

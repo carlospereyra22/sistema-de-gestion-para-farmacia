@@ -2,6 +2,17 @@
 
 ## DECIDED
 
+- 02/11/2026 (SISTEMA-20): El código de barras es único por organización, no en
+  toda la base: dos farmacias (organizaciones) pueden cargar el mismo EAN y las
+  sucursales de una farmacia comparten el catálogo. `ProductBarcode` lleva
+  `organizationId` con FK compuesta `(productId, organizationId)` e índice único
+  `(organizationId, code)`. Se suma el tipo de código: `PACKAGE` (envase),
+  `INTERNAL` (SG de etiquetas) y `EQUIVALENT` (EAN de un envase importado del
+  mismo medicamento, asociado al producto nacional). Un GTIN cuenta igual con o
+  sin ceros a la izquierda al buscar duplicados. Se descartó un catálogo de
+  códigos compartido entre organizaciones: cada farmacia tiene su propio
+  producto (precio, nombre, stock) y sus propias equivalencias. Ver PRODUCTS.md.
+
 - 01/11/2026 (SISTEMA-17): Comprobante A4 por farmacia, aparte del ticket térmico
   de 80 mm (que no cambia). Una plantilla única que cada organización personaliza
   con logo a color (JPEG ≤ 60 KB), color de acento y pie libre; usa los datos del

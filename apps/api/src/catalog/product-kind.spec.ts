@@ -57,9 +57,11 @@ it("generates the internal code only when requested in the product save transact
   });
   expect(tx.productBarcode.create).toHaveBeenCalledWith({
     data: {
+      organizationId: "org",
       productId: "product",
       code: expect.stringMatching(/^SG\d{12}$/),
       primary: false,
+      kind: "INTERNAL",
     },
   });
   expect(prisma.$transaction).toHaveBeenCalledTimes(2);

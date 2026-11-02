@@ -13,6 +13,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsUUID,
@@ -41,6 +43,9 @@ import {
   PricePreviewDto,
 } from "./price-list-updates";
 type SaleUnitValue = "BOX" | "BLISTER" | "UNIT";
+class EquivalentBarcodeDto {
+  @IsString() @MinLength(8) @MaxLength(14) code!: string;
+}
 class CreateProductDto {
   @IsOptional() @IsBoolean() generateInternalBarcode?: boolean;
   @IsOptional() @IsString() @MaxLength(120) brand?: string;
@@ -70,6 +75,12 @@ class CreateProductDto {
   @IsOptional() @IsIn(["BOX", "BLISTER", "UNIT"]) saleUnit?: SaleUnitValue;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsBoolean() prescriptionRequired?: boolean;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(14, { each: true })
+  equivalentBarcodes?: string[];
 }
 class LaboratoryLogoDto {
   @IsString() @MaxLength(82000) dataUrl!: string;
@@ -187,6 +198,35 @@ export class CatalogController {
       organizationId,
       productId,
       false,
+    );
+  }
+  // Códigos equivalentes (SISTEMA-20): EAN de un envase importado del mismo
+  // medicamento, asociado al producto nacional.
+  @Post("products/:productId/equivalent-barcodes") addEquivalentBarcode(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("productId", ParseUUIDPipe) productId: string,
+    @Body() body: EquivalentBarcodeDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.catalog.addEquivalentBarcode(
+      request.auth!.sub,
+      organizationId,
+      productId,
+      body.code,
+    );
+  }
+  @Delete("products/:productId/equivalent-barcodes/:code")
+  removeEquivalentBarcode(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("productId", ParseUUIDPipe) productId: string,
+    @Param("code") code: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.catalog.removeEquivalentBarcode(
+      request.auth!.sub,
+      organizationId,
+      productId,
+      code,
     );
   }
   @Get("products/:productId/image")

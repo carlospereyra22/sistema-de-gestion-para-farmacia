@@ -5,7 +5,7 @@ import { withProductBarcode } from "./product-barcode";
 
 function setup() {
   const lookup = jest.fn();
-  const prisma = { productBarcode: { findUnique: lookup } } as unknown as Pick<
+  const prisma = { productBarcode: { findFirst: lookup } } as unknown as Pick<
     PrismaService,
     "productBarcode"
   >;
@@ -17,7 +17,7 @@ describe("product barcode conflicts", () => {
     const { prisma, lookup, operation } = setup();
     lookup.mockResolvedValue({
       productId: "other",
-      product: { organizationId: "org", name: "ACTRON RAPIDA ACCION" },
+      product: { name: "ACTRON RAPIDA ACCION" },
     });
     await expect(
       withProductBarcode(
@@ -31,30 +31,37 @@ describe("product barcode conflicts", () => {
       "El código de barras 7793640992769 ya está asignado al producto “ACTRON RAPIDA ACCION”",
     );
     expect(operation).not.toHaveBeenCalled();
+  });
+  it("busca solo en la organización, con el GTIN con o sin ceros y sin el producto editado", async () => {
+    const { prisma, lookup, operation } = setup();
+    lookup.mockResolvedValue(null);
+    await withProductBarcode(
+      prisma,
+      "org",
+      "editing",
+      "7793640992769",
+      operation,
+    );
     expect(lookup).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { code: "7793640992769" } }),
+      expect.objectContaining({
+        where: {
+          organizationId: "org",
+          code: { in: ["07793640992769", "7793640992769"] },
+          productId: { not: "editing" },
+        },
+      }),
     );
   });
-  it("does not disclose the name of another organization's product", async () => {
+  it("compara tal cual un código propio que no es GTIN", async () => {
     const { prisma, lookup, operation } = setup();
-    lookup.mockResolvedValue({
-      productId: "other",
-      product: { organizationId: "private", name: "Secret product" },
-    });
-    await expect(
-      withProductBarcode(prisma, "org", undefined, "123", operation),
-    ).rejects.toThrow("ya está asignado a otro producto");
-    expect(operation).not.toHaveBeenCalled();
-  });
-  it("allows keeping a barcode belonging to the product being edited", async () => {
-    const { prisma, lookup, operation } = setup();
-    lookup.mockResolvedValue({
-      productId: "editing",
-      product: { organizationId: "org", name: "ACTRON" },
-    });
-    await expect(
-      withProductBarcode(prisma, "org", "editing", "123", operation),
-    ).resolves.toEqual({ id: "saved" });
+    lookup.mockResolvedValue(null);
+    await withProductBarcode(prisma, "org", undefined, "INT-123", operation);
+    expect(lookup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: "org", code: { in: ["INT-123"] } },
+      }),
+    );
+    expect(operation).toHaveBeenCalledTimes(1);
   });
   it.each([undefined, "", "  "])(
     "allows an optional barcode: %s",
@@ -75,13 +82,13 @@ describe("product barcode conflicts", () => {
     const { prisma, lookup, operation } = setup();
     lookup.mockResolvedValueOnce(null).mockResolvedValueOnce({
       productId: "other",
-      product: { organizationId: "org", name: "ACTRON" },
+      product: { name: "ACTRON" },
     });
     operation.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("duplicate", {
         code: "P2002",
         clientVersion: "test",
-        meta: { target: ["code"] },
+        meta: { target: ["organizationId", "code"] },
       }),
     );
     await expect(

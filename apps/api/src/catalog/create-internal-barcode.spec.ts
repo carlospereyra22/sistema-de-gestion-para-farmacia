@@ -20,7 +20,7 @@ function setup() {
     $queryRaw: jest.fn().mockResolvedValue([]),
   };
   const prisma = {
-    productBarcode: { findUnique: jest.fn().mockResolvedValue(null) },
+    productBarcode: { findFirst: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn(async (run: (value: typeof tx) => Promise<unknown>) =>
       run(tx),
     ),
@@ -44,11 +44,18 @@ it("creates an optional secondary internal code alongside the original barcode a
   ).resolves.toEqual({ id: "product" });
   expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   expect(tx.productBarcode.create.mock.calls.map(([arg]) => arg.data)).toEqual([
-    { productId: "product", code: "7798008191792", primary: true },
     {
+      organizationId: "org",
+      productId: "product",
+      code: "7798008191792",
+      primary: true,
+    },
+    {
+      organizationId: "org",
       productId: "product",
       code: internalBarcodeCode("org", "product"),
       primary: false,
+      kind: "INTERNAL",
     },
   ]);
   expect(tx.auditLog.create).toHaveBeenCalledWith(
