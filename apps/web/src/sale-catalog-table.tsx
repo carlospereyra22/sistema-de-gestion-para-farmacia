@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { CatalogProduct } from "./lib/api";
 import { saleCatalogDetail, saleCatalogRowId } from "./lib/sale-catalog";
 import { stockLevel } from "./lib/stock-level";
+import { ProductThumbnail } from "./product-image";
 
 const money = (minor: string | number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
@@ -17,6 +18,8 @@ export type SaleCatalogRow = {
 // La seleccion se maneja desde el buscador (aria-activedescendant): el foco
 // queda en el campo para que el lector de codigos siga entrando ahi.
 export function SaleCatalogTable({
+  token,
+  organizationId,
   idPrefix,
   rows,
   selectedId,
@@ -24,6 +27,8 @@ export function SaleCatalogTable({
   onSelect,
   onAdd,
 }: {
+  token: string;
+  organizationId: string;
   idPrefix: string;
   rows: SaleCatalogRow[];
   selectedId?: string;
@@ -78,22 +83,35 @@ export function SaleCatalogTable({
                 onDoubleClick={() => onAdd(product.id)}
                 className={`cursor-pointer transition-colors ${selected ? "bg-teal-50/60 shadow-[inset_3px_0_0_#0d9488]" : "hover:bg-slate-50/70"} ${level === "out" ? "opacity-75" : ""}`}
               >
-                <td className="px-3 py-2">
-                  <span
-                    className="block truncate font-medium text-slate-900"
-                    title={product.name}
-                  >
-                    {product.name}
-                  </span>
-                  {level === "out" && expired > 0 ? (
-                    <span className="block truncate text-[11px] text-rose-600">
-                      {expired} vencidas · no vendibles
-                    </span>
-                  ) : (
-                    <span className="block truncate text-[11px] text-slate-500">
-                      {detail || "Sin detalle farmacéutico"}
-                    </span>
-                  )}
+                <td className="px-3 py-2.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {/* Sin ampliar: un clic en la fila sólo la elige. */}
+                    <ProductThumbnail
+                      token={token}
+                      organizationId={organizationId}
+                      productId={product.id}
+                      name={product.name}
+                      version={product.image?.updatedAt}
+                      preview={false}
+                    />
+                    <div className="min-w-0">
+                      <span
+                        className="block truncate text-[15px] font-medium text-slate-900"
+                        title={product.name}
+                      >
+                        {product.name}
+                      </span>
+                      {level === "out" && expired > 0 ? (
+                        <span className="block truncate text-xs text-rose-600">
+                          {expired} vencidas · no vendibles
+                        </span>
+                      ) : (
+                        <span className="block truncate text-xs text-slate-500">
+                          {detail || "Sin detalle farmacéutico"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </td>
                 <td className="sale-catalog-category hidden px-2 py-2 @min-[34rem]:table-cell">
                   {product.category ? (

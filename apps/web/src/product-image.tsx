@@ -167,7 +167,11 @@ export function ImagePreview({
   );
 }
 
-export function ProductThumbnail(props: ImageProps & { preview?: boolean }) {
+export function ProductThumbnail(
+  props: ImageProps & { preview?: boolean; large?: boolean },
+) {
+  // `large` sólo agranda la miniatura ampliable (80 px), p. ej. el detalle de Ventas.
+  const box = props.large ? "size-20" : "size-12";
   const container = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [open, setOpen] = useState(false);
@@ -190,7 +194,7 @@ export function ProductThumbnail(props: ImageProps & { preview?: boolean }) {
   return (
     <div
       ref={container}
-      className={props.preview === false ? "size-9 shrink-0" : "size-12"}
+      className={props.preview === false ? "size-9 shrink-0" : box}
     >
       {src && props.preview === false ? (
         <span className="block size-9 overflow-hidden rounded-lg border border-slate-200 bg-white p-0.5">
@@ -205,7 +209,7 @@ export function ProductThumbnail(props: ImageProps & { preview?: boolean }) {
           type="button"
           onClick={() => setOpen(true)}
           aria-label={`Ampliar foto de ${props.name}`}
-          className="size-12 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 hover:border-teal-400"
+          className={`${box} overflow-hidden rounded-xl border border-slate-200 bg-white p-1 hover:border-teal-400`}
         >
           <img
             src={src}
@@ -216,9 +220,9 @@ export function ProductThumbnail(props: ImageProps & { preview?: boolean }) {
       ) : (
         <span
           title={props.version ? "Foto no disponible" : "Sin foto"}
-          className={`grid place-items-center border border-slate-100 bg-slate-50 text-slate-300 ${props.preview === false ? "size-9 rounded-lg" : "size-12 rounded-xl"}`}
+          className={`grid place-items-center border border-slate-100 bg-slate-50 text-slate-300 ${props.preview === false ? "size-9 rounded-lg" : `${box} rounded-xl`}`}
         >
-          <ImageOff size={20} aria-hidden="true" />
+          <ImageOff size={props.large ? 28 : 20} aria-hidden="true" />
         </span>
       )}
       {open && src && (
