@@ -90,6 +90,10 @@ model Organization {
   fiscalPoints FiscalPoint[]
   fiscalProfile   Json?
   ticketHeader    Json?
+  // Comprobante A4 (SISTEMA-17): logo a color JPEG y opciones de la plantilla.
+  documentLogo          Bytes?
+  documentLogoUpdatedAt DateTime? @db.Timestamptz(6)
+  documentTemplate      Json?
   id              String             @id @default(uuid()) @db.Uuid
   name            String
   active          Boolean            @default(true)

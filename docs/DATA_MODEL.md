@@ -2,7 +2,7 @@
 
 ## Implemented schema
 
-`Organization` tiene UUID, nombre, estado activo y timestamps UTC. `Branch` tiene UUID, `organizationId`, nombre, codigo, estado activo y timestamps UTC.
+`Organization` tiene UUID, nombre, estado activo y timestamps UTC. Desde `20261102020311_organization_document_template` (SISTEMA-17) guarda además el logo a color del comprobante A4 (`documentLogo`, JPEG de hasta 60 KB, y `documentLogoUpdatedAt`) y las opciones de su plantilla en `documentTemplate` (JSON). Son nullable: sin configurar, el A4 usa el encabezado del ticket. El logo blanco y negro del ticket térmico sigue en `ticketHeader.logoRaster`. `Branch` tiene UUID, `organizationId`, nombre, codigo, estado activo y timestamps UTC.
 
 Una organizacion tiene muchas sucursales. La base impone unicidad de `(organizationId, code)` e indice sobre `organizationId`; por lo tanto el mismo codigo puede existir en organizaciones distintas.
 
