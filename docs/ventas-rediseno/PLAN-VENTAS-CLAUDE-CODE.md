@@ -291,6 +291,16 @@ No uses F5, F11 ni F12, ni atajos con Alt. Todos los atajos se bloquean con las 
 - Reescribir `workspace-shell.tsx` por completo: sólo cambian el mínimo necesario y las piezas que se extraen a archivos propios.
 - Pendiente de definir: crear un cliente desde Ventas (idea de la tarjeta de Trello, no está en este plan).
 
+## 5 bis. Cambios acordados durante la implementación (01/11/2026)
+
+- Columnas iguales (`1fr 1fr`) en lugar de 0.86 / 1.14, para que entren los filtros.
+- Pie de Venta actual en una sola fila (descuento, total y Cobrar) para dar más alto a las líneas.
+- Ventana de cobro con alto fijo (580 px) y 700 px de ancho; Exacto a la derecha del importe; el importe se formatea al escribir (`1000` → `1.000,00`).
+- «Dividir en otro medio de pago» se reemplazó por un aviso «Faltan $ X. ¿Con qué medio se completa?» con botones por medio. Enter con importe parcial registra el pago y precarga el resto.
+- Venta confirmada: Imprimir ticket es la acción principal y, al imprimir, Nueva venta pasa a serlo (Enter, Enter). Vista previa del ticket a pedido y X para cerrar. Se conserva el comprobante interno. No hay impresión automática (tampoco la había antes).
+- La pastilla de caja dice «Caja abierta» porque la sesión no expone nombre ni número de caja.
+- Fuera de alcance por ahora: crear un cliente desde Ventas (idea de la tarjeta de Trello).
+
 ## 6. Validación manual (para el informe final)
 
 - [ ] Recorrido completo con el **lector físico**: escanear, cantidad, escanear desde el campo cantidad, cobrar y confirmar.
