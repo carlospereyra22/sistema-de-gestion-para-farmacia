@@ -38,6 +38,7 @@ import {
   filterSaleCatalog,
   nextSaleCatalogSelection,
   saleCatalogRowId,
+  saleProductDetail,
   saleCategoryOptions,
 } from "./lib/sale-catalog";
 import { RegisterManager, ClosureVisibility } from "./record-maintenance";
@@ -4730,8 +4731,8 @@ function Sales({
                 }}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 text-teal-600">
-                <ScanBarcode size={18} />
-                <kbd className="rounded border border-slate-300 px-1 text-[10px] font-medium text-slate-500">
+                <ScanBarcode size={20} />
+                <kbd className="rounded-md border border-slate-300 px-1.5 py-0.5 text-xs font-semibold text-slate-600">
                   F2
                 </kbd>
               </span>
@@ -4833,6 +4834,23 @@ function Sales({
           <SaleGeneralDiscount
             subtotalMinor={subtotal}
             discountMinor={discountMinor}
+            totalDiscountMinor={
+              discountMinor +
+              // Descuento por producto: precio de lista menos el precio rebajado.
+              lines.reduce((sum, line) => {
+                if (line.description || line.requestedUnitPriceMinor == null)
+                  return sum;
+                const list = Number(
+                  products.find((item) => item.id === line.productId)?.prices[0]
+                    ?.amountMinor ?? 0,
+                );
+                return (
+                  sum +
+                  Math.max(list - line.requestedUnitPriceMinor, 0) *
+                    line.quantity
+                );
+              }, 0)
+            }
             disabled={!lines.length || submitting}
             onApply={applyDiscount}
             onInvalid={error}
@@ -4920,7 +4938,7 @@ function Sales({
         }
         lines={
           <div className="sale-cart flex min-h-0 flex-1 flex-col">
-            <div className="sales-cart-row grid gap-2.5 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+            <div className="sales-cart-row grid gap-2.5 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-slate-500">
               <span>Producto</span>
               <span className="text-center">Cantidad</span>
               <span className="text-center">Precio unit.</span>
@@ -4972,14 +4990,16 @@ function Sales({
                             {line.description ?? product?.name}
                           </p>
                           {/* La presentación distingue productos de nombre parecido. */}
-                          {!line.description && product?.presentation && (
-                            <p
-                              className="truncate text-xs text-slate-600"
-                              title={product.presentation}
-                            >
-                              {product.presentation}
-                            </p>
-                          )}
+                          {!line.description &&
+                            product &&
+                            saleProductDetail(product) && (
+                              <p
+                                className="truncate text-xs text-slate-600"
+                                title={saleProductDetail(product)}
+                              >
+                                {saleProductDetail(product)}
+                              </p>
+                            )}
                           <p className="flex items-center gap-2 text-xs text-slate-500">
                             {line.productId === lastAddedId && (
                               <span className="rounded-full bg-teal-100/70 px-2 py-0.5 text-[11px] font-semibold text-teal-800">

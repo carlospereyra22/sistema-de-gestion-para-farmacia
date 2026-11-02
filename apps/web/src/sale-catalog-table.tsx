@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { CatalogProduct } from "./lib/api";
-import { saleCatalogDetail, saleCatalogRowId } from "./lib/sale-catalog";
+import { saleCatalogRowId, saleProductDetail } from "./lib/sale-catalog";
 import { stockLevel } from "./lib/stock-level";
 import { ProductThumbnail } from "./product-image";
 
@@ -8,6 +8,11 @@ const money = (minor: string | number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
     Number(minor) / 100,
   );
+const amount = (minor: string | number) =>
+  new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(minor) / 100);
 
 export type SaleCatalogRow = {
   product: CatalogProduct;
@@ -51,7 +56,7 @@ export function SaleCatalogTable({
         aria-label="Catálogo de productos"
         className="w-full table-fixed text-sm"
       >
-        <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+        <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
           <tr>
             <th className="px-3 py-2.5 text-left">Producto</th>
             <th className="sale-catalog-category hidden w-32 px-2 py-2.5 text-left @min-[34rem]:table-cell">
@@ -60,9 +65,8 @@ export function SaleCatalogTable({
             <th className="w-16 px-2 py-2.5 text-right @min-[34rem]:w-[76px]">
               Stock
             </th>
-            <th className="w-24 px-3 py-2.5 text-right @min-[34rem]:w-[124px]">
-              Precio
-            </th>
+            {/* Ancho para importes de hasta $ 99.999.999,99 sin cortar. */}
+            <th className="w-[132px] px-3 py-2.5 text-right">Precio</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -70,7 +74,7 @@ export function SaleCatalogTable({
             const level = stockLevel(available);
             const price = product.prices[0]?.amountMinor;
             const selected = product.id === selectedId;
-            const detail = saleCatalogDetail(product);
+            const detail = saleProductDetail(product);
             const stockLabel =
               level === "out" ? "sin stock" : `${available} disponibles`;
             return (
@@ -106,7 +110,10 @@ export function SaleCatalogTable({
                           {expired} vencidas · no vendibles
                         </span>
                       ) : (
-                        <span className="block truncate text-xs text-slate-500">
+                        <span
+                          className="block truncate text-xs text-slate-500"
+                          title={detail || undefined}
+                        >
                           {detail || "Sin detalle farmacéutico"}
                         </span>
                       )}
@@ -116,7 +123,7 @@ export function SaleCatalogTable({
                 <td className="sale-catalog-category hidden px-2 py-2 @min-[34rem]:table-cell">
                   {product.category ? (
                     <span
-                      className="inline-flex h-[22px] max-w-full items-center truncate rounded-full bg-slate-100 px-2 text-[11px] font-medium text-slate-600"
+                      className="block truncate text-sm text-slate-600"
                       title={product.category.name}
                     >
                       {product.category.name}
@@ -142,8 +149,19 @@ export function SaleCatalogTable({
                     available
                   )}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
-                  {price === undefined ? "—" : money(price)}
+                <td className="whitespace-nowrap py-2 pl-2 pr-3 text-right font-semibold tabular-nums">
+                  {price === undefined ? (
+                    "—"
+                  ) : (
+                    // El importe reserva el ancho de 9.999.999,99: todos los $ quedan
+                    // en la misma vertical y sólo un precio mayor corre el suyo.
+                    <span className="inline-flex items-baseline gap-1">
+                      <span aria-hidden>$</span>
+                      <span className="inline-block min-w-[10.5ch] text-right">
+                        {amount(price)}
+                      </span>
+                    </span>
+                  )}
                 </td>
               </tr>
             );
