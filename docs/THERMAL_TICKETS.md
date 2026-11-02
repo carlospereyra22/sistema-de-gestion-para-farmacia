@@ -48,3 +48,16 @@ La plantilla HTML y sus utilidades anteriores se conservan, pero no están conec
 Pruebas automatizadas: doble clic, StrictMode, confirmación para copias, almacenamiento fallido, desconexión previa, respuesta perdida, reutilización del ID, recuperación de hijo caído/no respondiente, validación de payload, barcode/corte y formato monetario.
 
 Prueba física pendiente: elegir un comprobante real, pulsar Imprimir ticket UNA vez y cotejar con el V21 en papel (logo, nombre, densidad, $, TOTAL, columnas, descuentos, pagos, barcode, corte). No generar ventas ficticias. La integración se aplica localmente, no implica despliegue en producción.
+
+## Comprobante A4 (SISTEMA-17, 01/11/2026)
+
+Formato aparte del ticket térmico, que no cambia. Se configura en Organización → Tickets y comprobantes:
+
+- **Formato de impresión predeterminado:** Ticket térmico u Hoja A4 para la organización, y por sucursal «Igual que la organización» o uno propio. Se guarda al elegir. Sin configurar queda Ticket.
+- **Comprobante A4:** logo a color, color de acento y pie de página libre (hasta 600 caracteres), con vista previa en vivo y «Ver en tamaño real · PDF».
+
+La hoja (`lib/a4-document.ts`) usa los mismos datos que el ticket (`ThermalTicket` y, si es factura, `trialTicketData`): encabezado con logo y datos del emisor, recuadro con la letra (C factura, X comprobante interno «no válido como factura»), cliente, ítems con títulos repetidos por hoja, forma de pago (sin recibido ni vuelto), totales, CAE y QR, y el pie. Todo texto se escapa; sólo se aceptan colores hexadecimales y logos JPEG. Se imprime con el diálogo del navegador (`a4-preview-dialog.tsx`), donde se elige impresora o «Guardar como PDF».
+
+En Venta confirmada el botón principal es el formato de la sucursal (Enter imprime, Enter siguiente abre una venta nueva) y debajo se ofrece el otro. Pendiente: Imprimir A4 en la ventana de factura y en Historial.
+
+API: `GET/PATCH organizations/:id/document-template` (`?branchId=` devuelve el formato efectivo), `PATCH/DELETE document-logo`, `PATCH branches/:branchId/print-format`. Lectura con ORGANIZATION_READ o SALE_READ; cambios con ORGANIZATION_MANAGE y auditoría.

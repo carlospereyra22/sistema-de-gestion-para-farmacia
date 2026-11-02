@@ -9,6 +9,8 @@ import {
   X,
 } from "lucide-react";
 import { OrganizationTicketSettings } from "./organization-ticket-settings";
+import { OrganizationDocumentTemplate } from "./organization-document-template";
+import { OrganizationPrintFormat } from "./organization-print-format";
 import { FiscalSettingsPanel } from "./fiscal-settings";
 import { UserTicketNameDialog } from "./user-ticket-names";
 import {
@@ -101,6 +103,12 @@ export function OrganizationWorkspace({
       </nav>
       {/* Keep the shared editor mounted: switching tabs cannot discard a logo or unsaved data. */}
       <div hidden={tab === "branches" || tab === "fiscal"}>
+        {tab === "tickets" && (
+          <OrganizationPrintFormat
+            token={token}
+            organizationId={organizationId}
+          />
+        )}
         <OrganizationTicketSettings
           token={token}
           organizationId={organizationId}
@@ -110,6 +118,12 @@ export function OrganizationWorkspace({
             onLogoSaved?.();
           }}
         />
+        {tab === "tickets" && (
+          <OrganizationDocumentTemplate
+            token={token}
+            organizationId={organizationId}
+          />
+        )}
       </div>
       <div hidden={tab !== "fiscal"}>
         <FiscalSettingsPanel token={token} organizationId={organizationId} />

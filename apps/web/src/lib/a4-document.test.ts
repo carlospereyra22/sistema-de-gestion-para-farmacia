@@ -73,7 +73,9 @@ describe("A4 document", () => {
     expect(html).toContain("- $ 478,02");
     expect(html).toContain("$ 30.000,00");
     expect(html).toContain("Efectivo");
-    expect(html).toContain("Vuelto");
+    // En la hoja sólo va la forma de pago: sin recibido ni vuelto.
+    expect(html).not.toContain("Vuelto");
+    expect(html).not.toContain("Recibido en efectivo");
     expect(html).toContain("Gracias por tu compra<br>WhatsApp 376 400-0000");
     expect(html).toContain("#0f9b8e");
     // El logo blanco y negro de la térmica no se usa en el A4.

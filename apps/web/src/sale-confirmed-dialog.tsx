@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { ThermalTicket } from "@gestion/contracts";
 import { Check, Eye, History, Printer, X } from "lucide-react";
+import { A4PreviewDialog } from "./a4-preview-dialog";
+import { a4DocumentHtml, type A4Template } from "./lib/a4-document";
+import type { PrintFormat } from "./lib/document-template-api";
 import { thermalTicketHtml } from "./lib/thermal-ticket";
 import type { SalesPaymentMethod } from "./lib/sales-shortcuts";
 
@@ -19,12 +22,19 @@ const METHOD_LABELS: Record<SalesPaymentMethod, string> = {
   TRANSFER: "Transferencia",
   ACCOUNT: "Cuenta corriente",
 };
+const FORMAT_LABELS: Record<PrintFormat, string> = {
+  TICKET: "ticket",
+  A4: "A4",
+};
+// Hoja A4 (794 × 1123 px) dentro de la columna de vista previa.
+const A4_SCALE = 316 / 794;
 
 export function SaleConfirmedDialog({
   saleId,
   totalMinor,
   customerName,
   payments,
+  template,
   loadTicket,
   onPrint,
   onViewSale,
@@ -34,6 +44,8 @@ export function SaleConfirmedDialog({
   totalMinor: number;
   customerName: string;
   payments: { method: SalesPaymentMethod; amountMinor: number }[];
+  // Plantilla A4 y formato predeterminado de la organización; sin ella, ticket.
+  template?: A4Template & { defaultFormat: PrintFormat };
   loadTicket: () => Promise<ThermalTicket>;
   onPrint: () => void;
   onViewSale: () => void;
@@ -43,8 +55,11 @@ export function SaleConfirmedDialog({
   const newSaleButton = useRef<HTMLButtonElement>(null);
   const [printed, setPrinted] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [a4Open, setA4Open] = useState(false);
   const [ticket, setTicket] = useState<ThermalTicket>();
   const [ticketError, setTicketError] = useState("");
+  const format: PrintFormat = template?.defaultFormat ?? "TICKET";
+  const other: PrintFormat = format === "A4" ? "TICKET" : "A4";
   const paid = payments.reduce((sum, payment) => sum + payment.amountMinor, 0);
   const cashMinor = payments
     .filter((payment) => payment.method === "CASH")
@@ -54,9 +69,10 @@ export function SaleConfirmedDialog({
   useEffect(() => {
     printButton.current?.focus();
   }, []);
-  // El ticket se pide recién cuando se abre la vista previa.
+  // El ticket se pide recién cuando hace falta: vista previa o impresión A4.
+  const needsTicket = previewOpen || a4Open;
   useEffect(() => {
-    if (!previewOpen || ticket) return;
+    if (!needsTicket || ticket) return;
     let active = true;
     void loadTicket()
       .then((value) => {
@@ -67,13 +83,20 @@ export function SaleConfirmedDialog({
           setTicketError(
             cause instanceof Error
               ? cause.message
-              : "No se pudo cargar la vista previa del ticket.",
+              : "No se pudo cargar el comprobante.",
           );
       });
     return () => {
       active = false;
     };
-  }, [loadTicket, previewOpen, ticket]);
+  }, [loadTicket, needsTicket, ticket]);
+  const print = (target: PrintFormat) => {
+    if (target === "A4" && template) setA4Open(true);
+    else onPrint();
+    setPrinted(true);
+    newSaleButton.current?.focus();
+  };
+  const previewA4 = format === "A4" && template;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
       <section
@@ -143,26 +166,32 @@ export function SaleConfirmedDialog({
               </p>
             </div>
           ) : null}
-          {/* Orden del mostrador: Enter imprime y el siguiente Enter abre una venta nueva. */}
+          {/* Orden del mostrador: Enter imprime en el formato predeterminado y el
+              siguiente Enter abre una venta nueva. */}
           <div className="mt-auto grid gap-2 pt-5">
             <button
               ref={printButton}
               type="button"
-              onClick={() => {
-                onPrint();
-                setPrinted(true);
-                newSaleButton.current?.focus();
-              }}
+              onClick={() => print(format)}
               className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl text-base font-semibold ${printed ? secondary : primary}`}
             >
               <Printer size={18} />
-              {printed ? "Reimprimir ticket" : "Imprimir ticket"}
+              {printed ? "Reimprimir" : "Imprimir"} {FORMAT_LABELS[format]}
               {!printed && (
                 <kbd className="rounded border border-white/50 px-1.5 text-[11px] font-medium">
                   Enter
                 </kbd>
               )}
             </button>
+            {template && (
+              <button
+                type="button"
+                onClick={() => print(other)}
+                className="text-center text-xs font-medium text-teal-700 underline-offset-2 hover:underline"
+              >
+                o imprimir en {FORMAT_LABELS[other]}
+              </button>
+            )}
             <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
               <button
                 ref={newSaleButton}
@@ -197,14 +226,29 @@ export function SaleConfirmedDialog({
         </div>
         {previewOpen && (
           <aside
-            aria-label="Vista previa del ticket"
+            aria-label="Vista previa del comprobante"
             className="flex min-h-0 flex-col border-t border-slate-200 bg-slate-100 sm:border-l sm:border-t-0"
           >
             <p className="px-4 pt-3 text-xs font-semibold text-slate-600">
-              Vista previa del ticket · 80 mm
+              {previewA4
+                ? "Vista previa · Hoja A4"
+                : "Vista previa del ticket · 80 mm"}
             </p>
             <div className="m-3 mt-2 min-h-[360px] flex-1 overflow-hidden rounded-lg bg-white shadow-inner sm:h-[480px] sm:flex-none">
-              {ticket ? (
+              {ticket && previewA4 ? (
+                <iframe
+                  title="Vista previa del comprobante A4"
+                  sandbox=""
+                  srcDoc={a4DocumentHtml(ticket, template)}
+                  style={{
+                    width: 794,
+                    height: 1123,
+                    transform: `scale(${A4_SCALE})`,
+                    transformOrigin: "top left",
+                  }}
+                  className="border-0"
+                />
+              ) : ticket ? (
                 <iframe
                   title="Vista previa del ticket"
                   sandbox="allow-same-origin"
@@ -223,6 +267,25 @@ export function SaleConfirmedDialog({
           </aside>
         )}
       </section>
+      {a4Open && template && ticket && (
+        <A4PreviewDialog
+          title={`Comprobante ${ticket.number}`}
+          html={a4DocumentHtml(ticket, template)}
+          autoPrint
+          onClose={() => {
+            setA4Open(false);
+            newSaleButton.current?.focus();
+          }}
+        />
+      )}
+      {a4Open && !ticket && ticketError && (
+        <p
+          role="alert"
+          className="fixed bottom-5 right-5 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow"
+        >
+          {ticketError}
+        </p>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -17,7 +18,7 @@ import type { AuthenticatedRequest } from "../auth/auth.types";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { OrganizationsService } from "./organizations.service";
 import { TicketHeaderDto } from "./ticket-header";
-import { DocumentTemplateDto } from "./document-template";
+import { BranchPrintFormatDto, DocumentTemplateDto } from "./document-template";
 import { IsString, MaxLength } from "class-validator";
 
 class DocumentLogoDto {
@@ -97,10 +98,27 @@ export class OrganizationsController {
   documentTemplate(
     @Param("organizationId", ParseUUIDPipe) organizationId: string,
     @Req() request: AuthenticatedRequest,
+    @Query("branchId", new ParseUUIDPipe({ optional: true }))
+    branchId?: string,
   ) {
     return this.organizations.documentTemplate(
       request.auth!.sub,
       organizationId,
+      branchId,
+    );
+  }
+  @Patch("branches/:branchId/print-format")
+  updateBranchPrintFormat(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: BranchPrintFormatDto,
+  ) {
+    return this.organizations.updateBranchPrintFormat(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      body.printFormat ?? null,
     );
   }
   @Patch("document-template")

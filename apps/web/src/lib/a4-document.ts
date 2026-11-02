@@ -72,7 +72,7 @@ export function a4DocumentHtml(
       : "";
   const totals = `<table class="totals">${ticket.subtotalMinor != null ? `<tr><th>Subtotal</th><td>${money(ticket.subtotalMinor)}</td></tr>` : ""}${discount}<tr class="grand"><th>Total</th><td>${money(ticket.totalMinor)}</td></tr></table>`;
   const payments = ticket.payments.length
-    ? `<div class="payments"><h3>Forma de pago</h3>${ticket.payments.map((p) => `<p><span>${escape(paymentName(p.method))}</span><span>${money(p.amountMinor)}</span></p>`).join("")}${ticket.receivedMinor != null ? `<p><span>Recibido en efectivo</span><span>${money(ticket.receivedMinor)}</span></p>` : ""}${ticket.changeMinor != null ? `<p><span>Vuelto</span><span>${money(ticket.changeMinor)}</span></p>` : ""}${ticket.balanceAfterMinor != null ? `<p><span>Saldo pendiente</span><span>${money(ticket.balanceAfterMinor)}</span></p>` : ""}</div>`
+    ? `<div class="payments"><h3>Forma de pago</h3>${ticket.payments.map((p) => `<p><span>${escape(paymentName(p.method))}</span><span>${money(p.amountMinor)}</span></p>`).join("")}${ticket.balanceAfterMinor != null ? `<p><span>Saldo pendiente</span><span>${money(ticket.balanceAfterMinor)}</span></p>` : ""}</div>`
     : "<div></div>";
   const fiscalBlock = fiscal
     ? `<section class="fiscal">${fiscal.demo ? '<p class="demo">Homologación · Sin validez fiscal</p>' : fiscal.qrUrl ? `<div class="qr">${fiscalQrSvg(fiscal.qrUrl)}</div>` : ""}<div><p><span>${fiscal.demo ? "CAE de homologación:" : "CAE:"}</span> ${escape(fiscal.cae)}</p><p><span>Vencimiento CAE:</span> ${escape(fiscal.caeExpires)}</p>${fiscal.originalNumber ? `<p><span>Comprobante asociado:</span> ${escape(fiscal.originalNumber)}</p>` : ""}</div></section>`
@@ -100,7 +100,7 @@ table.totals .grand th,table.totals .grand td{border-top:2px solid ${accent};fon
 .demo{font-weight:700;color:#b45309}.legend{margin-top:4mm;font-size:8.5pt;color:#475569;text-align:center}.note{margin-top:3mm;font-size:9pt}
 footer{margin-top:6mm;padding-top:3mm;border-top:1px solid #cbd5e1;font-size:8.5pt;color:#475569;text-align:center;break-inside:avoid}
 .cancelled{position:absolute;top:70mm;left:0;right:0;text-align:center;font-size:48pt;font-weight:800;color:rgba(190,18,60,.18);transform:rotate(-18deg)}
-@media print{html,body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+@media screen{body{padding:12mm 0}}@media print{html,body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
 </style></head><body><main class="page">${ticket.cancelled ? '<div class="cancelled" aria-hidden="true">ANULADA</div>' : ""}
 <header><div class="issuer">${logo ? `<img src="${logo}" alt="">` : ""}<h1>${escape(ticket.store.name)}</h1>${issuer}</div>
 <div class="letter"><strong>${escape(letter)}</strong>${fiscal ? "" : "<small>No válido como factura</small>"}</div>

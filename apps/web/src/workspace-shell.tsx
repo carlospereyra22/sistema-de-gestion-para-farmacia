@@ -135,6 +135,10 @@ import { SaleCurrentPanel } from "./sale-current-panel";
 import { SaleGeneralDiscount } from "./sale-general-discount";
 import { SaleCheckoutDialog } from "./sale-checkout-dialog";
 import { SaleConfirmedDialog } from "./sale-confirmed-dialog";
+import {
+  getDocumentTemplate,
+  type DocumentTemplateSettings,
+} from "./lib/document-template-api";
 import { shouldFocusSalesBackground } from "./lib/sales-background-focus";
 import { CatalogOptionsManager } from "./catalog-options-manager";
 import { CatalogOptionSelect } from "./catalog-option-select";
@@ -4574,6 +4578,24 @@ function Sales({
   const printReceipt = () => {
     if (receipt) setTicketSaleId(receipt.sale.id);
   };
+  // Plantilla A4 y formato de impresión de esta sucursal; se recarga al volver a
+  // Ventas por si cambió en Organización. Sin respuesta se imprime ticket.
+  const [documentTemplate, setDocumentTemplate] =
+    useState<DocumentTemplateSettings>();
+  useEffect(() => {
+    if (!active) return;
+    let current = true;
+    void getDocumentTemplate(token, organizationId, branchId)
+      .then((template) => {
+        if (current) setDocumentTemplate(template);
+      })
+      .catch(() => {
+        if (current) setDocumentTemplate(undefined);
+      });
+    return () => {
+      current = false;
+    };
+  }, [active, token, organizationId, branchId]);
   const receiptSaleId = receipt?.sale.id;
   const loadReceiptTicket = useCallback(
     () => getSaleTicket(token, organizationId, branchId, receiptSaleId!),
@@ -5298,6 +5320,12 @@ function Sales({
           totalMinor={Number(receipt.sale.totalMinor)}
           customerName={receipt.customerName}
           payments={receipt.payments}
+          template={
+            documentTemplate && {
+              ...documentTemplate,
+              defaultFormat: documentTemplate.effectiveFormat,
+            }
+          }
           loadTicket={loadReceiptTicket}
           onPrint={printReceipt}
           onViewSale={() => {

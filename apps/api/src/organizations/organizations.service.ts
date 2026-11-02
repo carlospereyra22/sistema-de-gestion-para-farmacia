@@ -13,7 +13,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import { readTicketHeader, type TicketHeaderDto } from "./ticket-header";
 import {
   readDocumentTemplate,
+  readPrintFormat,
   type DocumentTemplateDto,
+  type PrintFormat,
 } from "./document-template";
 import { decodeProductImage } from "../catalog/product-image";
 import {
@@ -266,26 +268,78 @@ export class OrganizationsService {
   }
 
   // Lectura para imprimir: también la necesita quien vende (SALE_READ).
-  async documentTemplate(actorId: string, organizationId: string) {
+  // Con branchId devuelve además el formato de esa sucursal y el que se usa al vender.
+  async documentTemplate(
+    actorId: string,
+    organizationId: string,
+    branchId?: string,
+  ) {
     await this.assertPermission(actorId, organizationId, [
       "ORGANIZATION_READ",
       "SALE_READ",
     ]);
-    const organization = await this.prisma.organization.findUniqueOrThrow({
-      where: { id: organizationId },
-      select: {
-        documentTemplate: true,
-        documentLogo: true,
-        documentLogoUpdatedAt: true,
-      },
-    });
+    const [organization, branch] = await Promise.all([
+      this.prisma.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: {
+          documentTemplate: true,
+          documentLogo: true,
+          documentLogoUpdatedAt: true,
+        },
+      }),
+      branchId
+        ? this.prisma.branch.findFirst({
+            where: { id: branchId, organizationId, deletedAt: null },
+            select: { printFormat: true },
+          })
+        : null,
+    ]);
+    if (branchId && !branch)
+      throw new NotFoundException("La sucursal no está disponible.");
+    const template = readDocumentTemplate(organization.documentTemplate);
+    const branchFormat = readPrintFormat(branch?.printFormat);
     return {
-      ...readDocumentTemplate(organization.documentTemplate),
+      ...template,
+      branchFormat,
+      effectiveFormat: branchFormat ?? template.defaultFormat,
       logo: organization.documentLogo
         ? `data:image/jpeg;base64,${Buffer.from(organization.documentLogo).toString("base64")}`
         : null,
       logoUpdatedAt: organization.documentLogoUpdatedAt,
     };
+  }
+  async updateBranchPrintFormat(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    printFormat: PrintFormat | null,
+  ) {
+    await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
+    return this.prisma.$transaction(async (tx) => {
+      const branch = await tx.branch.findFirst({
+        where: { id: branchId, organizationId, deletedAt: null },
+        select: { id: true, printFormat: true },
+      });
+      if (!branch)
+        throw new NotFoundException("La sucursal no está disponible.");
+      await tx.branch.update({
+        where: { id: branchId },
+        data: { printFormat },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          branchId,
+          actorId,
+          entityType: "BRANCH",
+          entityId: branchId,
+          action: "BRANCH_PRINT_FORMAT_UPDATED",
+          before: { printFormat: branch.printFormat },
+          after: { printFormat },
+        },
+      });
+      return { branchId, printFormat };
+    });
   }
   async updateDocumentTemplate(
     actorId: string,
@@ -293,8 +347,21 @@ export class OrganizationsService {
     input: DocumentTemplateDto,
   ) {
     await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
-    const data = readDocumentTemplate(input);
     return this.prisma.$transaction(async (tx) => {
+      // Se bloquea la fila: dos pantallas guardando a la vez no se pisan los campos.
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId}::uuid FOR UPDATE`;
+      const current = await tx.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: { documentTemplate: true },
+      });
+      const provided = Object.fromEntries(
+        // null o ausente = no se cambia ese campo.
+        Object.entries(input).filter(([, value]) => value != null),
+      );
+      const data = readDocumentTemplate({
+        ...readDocumentTemplate(current.documentTemplate),
+        ...provided,
+      });
       await tx.organization.update({
         where: { id: organizationId },
         data: { documentTemplate: { ...data } },
@@ -356,6 +423,7 @@ export class OrganizationsService {
         city: true,
         province: true,
         phone: true,
+        printFormat: true,
       },
       orderBy: { name: "asc" },
     });

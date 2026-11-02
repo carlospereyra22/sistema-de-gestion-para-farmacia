@@ -326,6 +326,8 @@ model Branch {
   city            String       @default("") @db.VarChar(100)
   province        String       @default("") @db.VarChar(100)
   phone           String       @default("") @db.VarChar(40)
+  // Formato de impresión de la sucursal (TICKET/A4); null = el de la organización.
+  printFormat     String?      @db.VarChar(10)
   deletedAt       DateTime?    @db.Timestamptz(6)
   id              String       @id @default(uuid()) @db.Uuid
   organizationId  String       @db.Uuid

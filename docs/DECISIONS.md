@@ -2,6 +2,16 @@
 
 ## DECIDED
 
+- 01/11/2026 (SISTEMA-17): Comprobante A4 por farmacia, aparte del ticket térmico
+  de 80 mm (que no cambia). Una plantilla única que cada organización personaliza
+  con logo a color (JPEG ≤ 60 KB), color de acento y pie libre; usa los datos del
+  encabezado del ticket y, si es factura, los fiscales (CAE, QR). Se imprime desde
+  el navegador (impresora o «Guardar como PDF»). El formato predeterminado
+  (TICKET/A4) se define por organización y cada sucursal puede usar uno propio;
+  sin configurar queda TICKET. El A4 no calcula importes y muestra sólo la forma
+  de pago (sin recibido ni vuelto). Lectura con ORGANIZATION_READ o SALE_READ,
+  cambios con ORGANIZATION_MANAGE y auditoría. Ver THERMAL_TICKETS.md.
+
 - 01/11/2026 (SISTEMA-16): Rediseño de Ventas: catálogo + Venta actual
   protagonista en dos columnas iguales y cobro en una ventana. Se elimina la
   columna fija de cobro. El descuento general admite % o $, pero siempre se envía
