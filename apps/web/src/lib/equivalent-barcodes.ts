@@ -54,14 +54,18 @@ export function medicinesByName<
 }
 
 // Producto del catálogo que ya tiene este código, con o sin ceros a la
-// izquierda. Sirve para no crear un duplicado del medicamento nacional.
+// izquierda. Sirve para no crear un duplicado del medicamento nacional. Los
+// códigos que no son GTIN público (uso interno, prefijo 2) se comparan exactos.
 export function findProductByBarcode<T extends ProductCodes>(
   products: readonly T[],
   code: string,
 ): T | undefined {
-  const gtin = externalGtin(code.trim());
-  if (!gtin) return undefined;
+  const trimmed = code.trim();
+  if (!trimmed) return undefined;
+  const gtin = externalGtin(trimmed);
   return products.find((product) =>
-    product.barcodes.some((barcode) => externalGtin(barcode.code) === gtin),
+    product.barcodes.some((barcode) =>
+      gtin ? externalGtin(barcode.code) === gtin : barcode.code === trimmed,
+    ),
   );
 }
