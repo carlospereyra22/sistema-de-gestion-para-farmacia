@@ -336,6 +336,19 @@
   gap: 12px;
   padding: 11px 20px;
   border-top: 3px solid var(--metric-accent);
+  background: transparent;
+  transition: background-color 120ms;
+}
+.catalog-summary-metric:hover {
+  background: color-mix(in srgb, var(--metric-wash) 60%, white);
+}
+.catalog-summary-metric[aria-pressed="true"] {
+  background: var(--metric-wash);
+  box-shadow: inset 0 -2px 0 var(--metric-accent);
+}
+.catalog-summary-metric:focus-visible {
+  outline: 2px solid var(--metric-accent);
+  outline-offset: -2px;
 }
 .catalog-summary-metric + .catalog-summary-metric::after {
   content: "";
@@ -346,16 +359,6 @@
   width: 1px;
   background: #e8edf2;
 }
-.catalog-metric-total {
-  --metric-accent: #428caa;
-  --metric-ink: #28738e;
-  --metric-wash: #f0f8fb;
-}
-.catalog-metric-active {
-  --metric-accent: #0d9e88;
-  --metric-ink: #008b78;
-  --metric-wash: #edfbf6;
-}
 .catalog-metric-empty {
   --metric-accent: #fb7185;
   --metric-ink: #e44363;
@@ -365,6 +368,16 @@
   --metric-accent: #f6ac43;
   --metric-ink: #e58c16;
   --metric-wash: #fff7eb;
+}
+.catalog-metric-expiring {
+  --metric-accent: #a78bfa;
+  --metric-ink: #7c5cd6;
+  --metric-wash: #f5f2ff;
+}
+.catalog-metric-expired {
+  --metric-accent: #dc2626;
+  --metric-ink: #c81e1e;
+  --metric-wash: #fef2f2;
 }
 .catalog-summary-icon {
   display: grid;
@@ -540,22 +553,17 @@
   padding: 0;
   font-size: 11px;
 }
+/* Buscadores arriba (producto 4/5, lote 1/5); debajo los nueve filtros y
+   Limpiar filtros en filas de cinco. */
 @media (min-width: 1100px) {
   .product-catalog-controls {
-    grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
   .product-catalog-search {
-    grid-column: 1 / -1;
+    grid-column: span 4;
   }
-}
-@media (min-width: 1800px) {
-  .product-catalog-controls {
-    grid-template-columns:
-      minmax(250px, 2.5fr) repeat(4, minmax(110px, 1fr))
-      minmax(135px, 1.2fr) auto;
-  }
-  .product-catalog-search {
-    grid-column: auto;
+  .product-catalog-lot-search {
+    grid-column: span 1;
   }
 }
 @media (max-width: 639px) {

@@ -2,6 +2,17 @@
 
 ## DECIDED
 
+- 02/11/2026 (SISTEMA-22): Las tablas del sistema pasan a un estilo único
+  (`apps/web/src/data-table.tsx`): 14 px dato principal, 12 px encabezados y
+  secundarios, números alineados a la derecha, estado con punto y texto y
+  acciones con botones de ícono. Productos es la primera; el resto se migra en
+  tareas siguientes. En Productos se quitan los indicadores Total y Activos (no
+  indicaban nada que hacer) y quedan Sin stock, Stock bajo, Por vencer y
+  Vencidos, que filtran la tabla. Los filtros adicionales dejan de estar en una
+  ventana aparte. Estado y Próx. venc. siguen el orden de lotes acordado (por
+  vencer, normales, vencidos) y respetan los filtros de stock y vencimiento.
+  Sin cambios de API ni de base. Ver PRODUCTS.md.
+
 - 02/11/2026 (SISTEMA-21): Las fuentes de medicamentos se consultan una vez
   para todo el SaaS y se guardan en una copia local compartida
   (`MedicineReferenceSnapshot`, sin organizationId: información pública) en la

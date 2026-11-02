@@ -1,0 +1,102 @@
+import { useState } from "react";
+import type { StockLot } from "./lib/api";
+import { StatusLabel } from "./data-table";
+import { withStockAvailability } from "./lib/stock-availability";
+
+// Lotes que se ven de entrada; el resto queda detrás de "Ver N más".
+const VISIBLE_LOTS = 5;
+
+// Detalle de lotes que se despliega debajo de un producto en la tabla.
+export function ProductLotsDetail({
+  productName,
+  lots,
+  hidden = 0,
+}: {
+  productName: string;
+  lots: Pick<
+    StockLot,
+    | "id"
+    | "number"
+    | "quantity"
+    | "expiresAt"
+    | "expiryStatus"
+    | "sellableQuantity"
+  >[];
+  // Lotes del producto que no se muestran por los filtros activos.
+  hidden?: number;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? lots : lots.slice(0, VISIBLE_LOTS);
+  const rest = lots.length - visible.length;
+  return (
+    <div className="max-w-xl">
+      <table aria-label={`Lotes de ${productName}`} className="w-full text-sm">
+        <thead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th scope="col" className="py-1.5 pr-4 text-left">
+              Lote
+            </th>
+            <th scope="col" className="py-1.5 pr-4 text-left">
+              Vence
+            </th>
+            <th scope="col" className="py-1.5 pr-4 text-right">
+              Unidades
+            </th>
+            <th scope="col" className="py-1.5 text-left">
+              Estado
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200/70">
+          {visible.map((original) => {
+            const lot = withStockAvailability(original);
+            return (
+              <tr key={lot.id}>
+                <td className="py-1.5 pr-4 text-slate-700">{lot.number}</td>
+                <td className="py-1.5 pr-4 tabular-nums text-slate-700">
+                  {lot.expiresAt
+                    ? new Date(lot.expiresAt).toLocaleDateString("es-AR", {
+                        timeZone: "UTC",
+                      })
+                    : "Sin fecha"}
+                </td>
+                <td className="py-1.5 pr-4 text-right font-medium tabular-nums text-slate-800">
+                  {lot.quantity}
+                </td>
+                <td className="py-1.5">
+                  {lot.expiryStatus === "EXPIRED" ? (
+                    <StatusLabel tone="danger">
+                      Vencido · no vendible
+                    </StatusLabel>
+                  ) : lot.expiryStatus === "EXPIRING_SOON" ? (
+                    <StatusLabel tone="warning">Por vencer</StatusLabel>
+                  ) : (
+                    <StatusLabel tone="ok">Disponible</StatusLabel>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {rest > 0 || showAll ? (
+        <button
+          type="button"
+          onClick={() => setShowAll((current) => !current)}
+          className="mt-1.5 text-xs font-medium text-teal-700 hover:underline"
+        >
+          {showAll
+            ? "Ver menos"
+            : `Ver ${rest} ${rest === 1 ? "lote" : "lotes"} más`}
+        </button>
+      ) : null}
+      {hidden > 0 ? (
+        <p className="mt-1.5 text-xs text-slate-500">
+          {hidden === 1
+            ? "1 lote más no se muestra por los filtros."
+            : `${hidden} lotes más no se muestran por los filtros.`}
+        </p>
+      ) : null}
+    </div>
+  );
+}

@@ -7,7 +7,7 @@ import {
 import { ProductCatalogToolbar } from "./product-catalog-toolbar";
 
 describe("product catalog header", () => {
-  it("uses physical stock for existing no-stock count and sellable quantities for the agreed low-stock threshold", () => {
+  it("muestra sin stock, stock bajo, por vencer y vencidos como botones de filtro", () => {
     const html = renderToStaticMarkup(
       <ProductCatalogMetrics
         products={[
@@ -18,51 +18,95 @@ describe("product catalog header", () => {
           { id: "e", active: true },
         ]}
         stock={[
-          { productId: "b", quantity: 20, sellableQuantity: 0 },
-          { productId: "c", quantity: 5, sellableQuantity: 5 },
-          { productId: "d", quantity: 1, sellableQuantity: 1 },
-          { productId: "e", quantity: 6, sellableQuantity: 6 },
+          {
+            productId: "b",
+            quantity: 20,
+            sellableQuantity: 0,
+            expiryStatus: "EXPIRED",
+          },
+          {
+            productId: "c",
+            quantity: 5,
+            sellableQuantity: 5,
+            expiryStatus: "EXPIRING_SOON",
+          },
+          {
+            productId: "d",
+            quantity: 1,
+            sellableQuantity: 1,
+            expiryStatus: "AVAILABLE",
+          },
+          {
+            productId: "e",
+            quantity: 6,
+            sellableQuantity: 6,
+            expiryStatus: "AVAILABLE",
+          },
         ]}
+        selected="low"
+        onSelect={() => undefined}
       />,
     );
-    expect(html).toMatch(/>5<\/p>.*?Total de productos/);
-    expect(html).toMatch(/>4<\/p>.*?Activos/);
-    expect(html).toMatch(/>1<\/p>.*?Sin stock/);
-    expect(html).toMatch(/>1<\/p>.*?Stock bajo/);
+    expect(html).not.toContain("Total de productos");
+    expect(html).not.toContain("Activos");
+    for (const label of ["Sin stock", "Stock bajo", "Por vencer", "Vencidos"])
+      expect(html).toMatch(new RegExp(`>1</span>.*?${label}`));
+    expect(html.match(/<button/g)).toHaveLength(4);
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>.*?Stock bajo/);
   });
-  it("provides one title, accessible filters and the existing create action", () => {
+  const emptyFilters = {
+    query: "",
+    category: "",
+    laboratory: "",
+    status: "",
+    stock: "",
+    expiry: "",
+    reference: "",
+    lot: "",
+  };
+  it("muestra todos los filtros en la barra, sin ventana aparte, y Limpiar filtros al final", () => {
     expect(renderToStaticMarkup(<ProductCatalogTitle />)).toContain("<h1");
     const html = renderToStaticMarkup(
       <ProductCatalogToolbar
-        filters={{
-          query: "",
-          category: "",
-          laboratory: "",
-          status: "",
-          stock: "",
-          expiry: "",
-          reference: "",
-        }}
+        filters={emptyFilters}
         onChange={() => {}}
         onAdditionalChange={() => {}}
       />,
     );
     for (const label of [
       "Buscar productos",
+      "Buscar por lote",
       "Categoría",
       "Laboratorio",
       "Estado",
       "Stock",
       "Vencimiento",
+      "Tipo",
+      "Precio automático",
+      "Foto",
+      "Código de barras",
     ])
       expect(html).toContain(`aria-label="${label}"`);
-    expect(html.match(/role="combobox"/g)).toHaveLength(5);
+    expect(html.match(/role="combobox"/g)).toHaveLength(9);
     expect(html).not.toContain("<select");
-    expect(html).not.toContain("Más filtros");
+    expect(html).not.toContain('aria-haspopup="dialog"');
     expect(html).not.toContain("Nuevo producto");
-    expect(html.indexOf('aria-haspopup="dialog"')).toBeGreaterThan(
-      html.indexOf('aria-label="Vencimiento"'),
+    expect(html.indexOf("Limpiar filtros")).toBeGreaterThan(
+      html.indexOf('aria-label="Código de barras"'),
     );
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>.*?Limpiar filtros/);
+  });
+  it("habilita Limpiar filtros y cuenta búsqueda, filtros y adicionales", () => {
+    const html = renderToStaticMarkup(
+      <ProductCatalogToolbar
+        filters={{ ...emptyFilters, lot: "L-23", stock: "low" }}
+        additional={{ reference: "", image: "without", barcode: "" }}
+        onChange={() => {}}
+        onAdditionalChange={() => {}}
+      />,
+    );
+    expect(html).not.toMatch(/disabled=""[^>]*>.*?Limpiar filtros/);
+    expect(html).toMatch(/Limpiar filtros.*?>3<\/span>/);
   });
 });

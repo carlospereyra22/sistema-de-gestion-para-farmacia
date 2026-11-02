@@ -1,6 +1,15 @@
-import { Box, Boxes, BadgeCheck, PackageX, PackageMinus } from "lucide-react";
+import {
+  Box,
+  CalendarClock,
+  CalendarX2,
+  PackageX,
+  PackageMinus,
+} from "lucide-react";
 import type { CatalogProduct, StockLot } from "./lib/api";
-import { stockLevel } from "./lib/stock-level";
+import {
+  catalogMetricCounts,
+  type CatalogMetricKey,
+} from "./lib/product-catalog-metrics";
 
 export function ProductCatalogTitle() {
   return (
@@ -17,67 +26,73 @@ export function ProductCatalogTitle() {
   );
 }
 
+const metrics = [
+  {
+    key: "out",
+    label: "Sin stock",
+    icon: PackageX,
+    tone: "catalog-metric-empty",
+  },
+  {
+    key: "low",
+    label: "Stock bajo",
+    icon: PackageMinus,
+    tone: "catalog-metric-low",
+  },
+  {
+    key: "expiring",
+    label: "Por vencer (90 días)",
+    icon: CalendarClock,
+    tone: "catalog-metric-expiring",
+  },
+  {
+    key: "expired",
+    label: "Vencidos",
+    icon: CalendarX2,
+    tone: "catalog-metric-expired",
+  },
+] as const;
+
 export function ProductCatalogMetrics({
   products,
   stock,
+  selected,
+  onSelect,
 }: {
   products: Pick<CatalogProduct, "id" | "active">[];
-  stock: Pick<StockLot, "productId" | "quantity" | "sellableQuantity">[];
+  stock: Pick<
+    StockLot,
+    "productId" | "quantity" | "sellableQuantity" | "expiryStatus"
+  >[];
+  selected?: CatalogMetricKey;
+  onSelect: (key: CatalogMetricKey) => void;
 }) {
-  const quantities = new Map<string, number>();
-  for (const lot of stock)
-    quantities.set(
-      lot.productId,
-      (quantities.get(lot.productId) ?? 0) + lot.quantity,
-    );
-  const active = products.filter((p) => p.active);
-  const sellable = new Map<string, number>();
-  for (const lot of stock)
-    sellable.set(
-      lot.productId,
-      (sellable.get(lot.productId) ?? 0) + lot.sellableQuantity,
-    );
-  const metrics = [
-    {
-      label: "Total de productos",
-      value: products.length,
-      icon: Boxes,
-      tone: "catalog-metric-total",
-    },
-    {
-      label: "Activos",
-      value: active.length,
-      icon: BadgeCheck,
-      tone: "catalog-metric-active",
-    },
-    {
-      label: "Sin stock",
-      value: active.filter((p) => (quantities.get(p.id) ?? 0) === 0).length,
-      icon: PackageX,
-      tone: "catalog-metric-empty",
-    },
-    {
-      label: "Stock bajo",
-      value: active.filter((p) => stockLevel(sellable.get(p.id) ?? 0) === "low")
-        .length,
-      icon: PackageMinus,
-      tone: "catalog-metric-low",
-    },
-  ];
+  const counts = catalogMetricCounts(products, stock);
   return (
     <div aria-label="Resumen del catálogo" className="catalog-summary-metrics">
-      {metrics.map(({ label, value, icon: Icon, tone }) => (
-        <div key={label} className={`catalog-summary-metric ${tone}`}>
+      {metrics.map(({ key, label, icon: Icon, tone }) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={selected === key}
+          title={
+            selected === key
+              ? "Quitar el filtro"
+              : "Mostrar sólo estos productos"
+          }
+          onClick={() => onSelect(key)}
+          className={`catalog-summary-metric ${tone}`}
+        >
           <span aria-hidden="true" className="catalog-summary-icon">
             <Icon size={25} strokeWidth={1.65} />
           </span>
-          <div className="min-w-0">
-            <p className="text-[26px] font-semibold leading-8 tracking-tight tabular-nums text-slate-800">
-              {value.toLocaleString("es-AR")}
-            </p>
-            <p className="text-xs text-slate-500">{label}</p>
-          </div>
-        </div>
+          <span className="min-w-0 text-left">
+            <span className="block text-[26px] font-semibold leading-8 tracking-tight tabular-nums text-slate-800">
+              {counts[key].toLocaleString("es-AR")}
+            </span>
+            <span className="block text-[13px] text-slate-500">{label}</span>
+          </span>
+        </button>
       ))}
     </div>
   );
