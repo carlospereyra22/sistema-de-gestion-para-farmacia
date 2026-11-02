@@ -136,6 +136,18 @@ def retail_scope(name, brand, category, full_catalog=False):
             status, group, sub, reason = 'candidate', 'Higiene corporal', 'Jabones de uso personal', ''
     # Explicit retailer taxonomy refines a candidate, never overrules exclusion.
     if status == 'candidate':
+        source_subcategories = {
+            'Tinturas y coloración': 'Coloración y oxidantes',
+            'Maquillaje y uñas': 'Maquillaje y manicura',
+            'Higiene bucal': 'Accesorios y cuidado bucal',
+            'Afeitado y depilación': 'Afeitado y depilación',
+            'Desodorantes': 'Desodorantes y antitranspirantes',
+            'Higiene femenina': 'Protección e higiene íntima',
+            'Adultos e incontinencia': 'Protección absorbente',
+            'Cabello': 'Tratamientos y peinado',
+            'Perfumería': 'Fragancias',
+            'Protección solar': 'Protectores y postsolares',
+        }
         for pattern, mapped in [
             (r'\b(tinturas?|coloracion)\b', 'Tinturas y coloración'),
             (r'\bmaquillaje\b', 'Maquillaje y uñas'),
@@ -149,6 +161,8 @@ def retail_scope(name, brand, category, full_catalog=False):
             (r'\bsolar\b', 'Protección solar'),
         ]:
             if re.search(pattern, path):
+                if group != mapped:
+                    sub = source_subcategories[mapped]
                 group = mapped
                 break
     return status, group, sub, reason
