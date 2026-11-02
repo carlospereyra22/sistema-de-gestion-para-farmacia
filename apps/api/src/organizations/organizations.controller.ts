@@ -3,7 +3,9 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -15,6 +17,12 @@ import type { AuthenticatedRequest } from "../auth/auth.types";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { OrganizationsService } from "./organizations.service";
 import { TicketHeaderDto } from "./ticket-header";
+import { DocumentTemplateDto } from "./document-template";
+import { IsString, MaxLength } from "class-validator";
+
+class DocumentLogoDto {
+  @IsString() @MaxLength(82000) dataUrl!: string;
+}
 import { FiscalProfileDto } from "./fiscal-profile";
 import { FiscalPointDto, FiscalPointStatusDto } from "./fiscal-point.dto";
 
@@ -81,6 +89,53 @@ export class OrganizationsController {
       request.auth!.sub,
       organizationId,
       body,
+    );
+  }
+
+  @Get("document-template")
+  @Header("Cache-Control", "private, no-store")
+  documentTemplate(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.organizations.documentTemplate(
+      request.auth!.sub,
+      organizationId,
+    );
+  }
+  @Patch("document-template")
+  updateDocumentTemplate(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: DocumentTemplateDto,
+  ) {
+    return this.organizations.updateDocumentTemplate(
+      request.auth!.sub,
+      organizationId,
+      body,
+    );
+  }
+  @Patch("document-logo")
+  saveDocumentLogo(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: DocumentLogoDto,
+  ) {
+    return this.organizations.saveDocumentLogo(
+      request.auth!.sub,
+      organizationId,
+      body.dataUrl,
+    );
+  }
+  @Delete("document-logo")
+  removeDocumentLogo(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.organizations.saveDocumentLogo(
+      request.auth!.sub,
+      organizationId,
+      null,
     );
   }
 

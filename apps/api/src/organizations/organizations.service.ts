@@ -12,6 +12,11 @@ import type { FiscalPointDto } from "./fiscal-point.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { readTicketHeader, type TicketHeaderDto } from "./ticket-header";
 import {
+  readDocumentTemplate,
+  type DocumentTemplateDto,
+} from "./document-template";
+import { decodeProductImage } from "../catalog/product-image";
+import {
   readFiscalProfile,
   validateFiscalDraft,
   type FiscalProfileDto,
@@ -260,6 +265,84 @@ export class OrganizationsService {
     });
   }
 
+  // Lectura para imprimir: también la necesita quien vende (SALE_READ).
+  async documentTemplate(actorId: string, organizationId: string) {
+    await this.assertPermission(actorId, organizationId, [
+      "ORGANIZATION_READ",
+      "SALE_READ",
+    ]);
+    const organization = await this.prisma.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+      select: {
+        documentTemplate: true,
+        documentLogo: true,
+        documentLogoUpdatedAt: true,
+      },
+    });
+    return {
+      ...readDocumentTemplate(organization.documentTemplate),
+      logo: organization.documentLogo
+        ? `data:image/jpeg;base64,${Buffer.from(organization.documentLogo).toString("base64")}`
+        : null,
+      logoUpdatedAt: organization.documentLogoUpdatedAt,
+    };
+  }
+  async updateDocumentTemplate(
+    actorId: string,
+    organizationId: string,
+    input: DocumentTemplateDto,
+  ) {
+    await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
+    const data = readDocumentTemplate(input);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { documentTemplate: { ...data } },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "ORGANIZATION",
+          entityId: organizationId,
+          action: "DOCUMENT_TEMPLATE_UPDATED",
+          after: { ...data },
+        },
+      });
+      return data;
+    });
+  }
+  async saveDocumentLogo(
+    actorId: string,
+    organizationId: string,
+    dataUrl: string | null,
+  ) {
+    await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
+    const content =
+      dataUrl === null ? null : new Uint8Array(decodeProductImage(dataUrl));
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.organization.update({
+        where: { id: organizationId },
+        data: {
+          documentLogo: content,
+          documentLogoUpdatedAt: content === null ? null : new Date(),
+        },
+        select: { documentLogoUpdatedAt: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "ORGANIZATION",
+          entityId: organizationId,
+          action:
+            content === null ? "DOCUMENT_LOGO_REMOVED" : "DOCUMENT_LOGO_SAVED",
+        },
+      });
+      return { logoUpdatedAt: result.documentLogoUpdatedAt };
+    });
+  }
+
   async listBranches(actorId: string, organizationId: string) {
     await this.assertPermission(actorId, organizationId, "ORGANIZATION_READ");
     return this.prisma.branch.findMany({
@@ -475,11 +558,14 @@ export class OrganizationsService {
     });
   }
 
+  // Acepta un código o varios alternativos (alcanza con tener uno).
   private async assertPermission(
     actorId: string,
     organizationId: string,
-    permissionCode: string,
+    permissionCode: string | readonly string[],
   ): Promise<void> {
+    const codes =
+      typeof permissionCode === "string" ? [permissionCode] : permissionCode;
     const membership = await this.prisma.userOrganization.findUnique({
       where: { userId_organizationId: { userId: actorId, organizationId } },
       include: {
@@ -495,8 +581,8 @@ export class OrganizationsService {
     const allowed =
       membership?.active &&
       membership.roles.some(({ role }) =>
-        role.permissions.some(
-          ({ permission }) => permission.code === permissionCode,
+        role.permissions.some(({ permission }) =>
+          codes.includes(permission.code),
         ),
       );
     if (!allowed)
