@@ -20,7 +20,10 @@ function fixture() {
     roles: [
       {
         role: {
-          permissions: [{ permission: { code: "ORGANIZATION_MANAGE" } }],
+          permissions: [
+            { permission: { code: "ORGANIZATION_MANAGE" } },
+            { permission: { code: "ORGANIZATION_READ" } },
+          ],
         },
       },
     ],
@@ -33,6 +36,7 @@ function fixture() {
       update: jest.fn().mockResolvedValue({ ...branch, active: false }),
       create: jest.fn().mockResolvedValue(branch),
     },
+    userBranch: { create: jest.fn().mockResolvedValue({}) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     cashRegister: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -51,12 +55,36 @@ function fixture() {
   const transaction = jest.fn(
     async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   );
+  const listBranches = jest.fn();
   const service = new OrganizationsService({
     userOrganization: { findUnique: member },
+    branch: { findMany: listBranches },
     $transaction: transaction,
   } as unknown as PrismaService);
-  return { service, tx, member, transaction };
+  return { service, tx, member, transaction, listBranches };
 }
+
+it("reports which branches the actor may operate without hiding destinations", async () => {
+  const f = fixture();
+  f.listBranches.mockResolvedValue([
+    { ...branch, userMemberships: [{ userId: "actor" }] },
+    { ...branch, id: "other", userMemberships: [] },
+  ]);
+  await expect(f.service.listBranches("actor", "org")).resolves.toEqual([
+    { ...branch, canAccess: true },
+    { ...branch, id: "other", canAccess: false },
+  ]);
+  expect(f.listBranches).toHaveBeenCalledWith(
+    expect.objectContaining({
+      select: expect.objectContaining({
+        userMemberships: {
+          where: { userId: "actor" },
+          select: { userId: true },
+        },
+      }),
+    }),
+  );
+});
 
 it("normalizes and validates branch fields without example defaults", () => {
   const input = plainToInstance(BranchDto, {
@@ -219,6 +247,9 @@ it("creates a branch with contact data and audit in the same transaction", async
       data: expect.objectContaining({ action: "CREATED", actorId: "actor" }),
     }),
   );
+  expect(f.tx.userBranch.create).toHaveBeenCalledWith({
+    data: { userId: "actor", branchId: "branch" },
+  });
 });
 it("reports duplicate branch codes without bypassing organization uniqueness", async () => {
   const f = fixture();

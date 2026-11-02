@@ -108,6 +108,7 @@ export class TransfersService {
   ) {
     await this.assert(actorId, organizationId);
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Transfer" WHERE id = ${id}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE`;
       const transfer = await tx.transfer.findFirst({
         where: { id, organizationId, sourceBranchId, status: "PREPARED" },
         include: { items: true },
@@ -158,6 +159,7 @@ export class TransfersService {
   ) {
     await this.assert(actorId, organizationId);
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Transfer" WHERE id = ${id}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE`;
       const transfer = await tx.transfer.findFirst({
         where: {
           id,
