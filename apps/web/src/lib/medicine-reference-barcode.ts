@@ -13,3 +13,14 @@ export function medicineReferenceBarcodeConflict(
   const referenceGtin = externalGtin(reference);
   return !productGtin || !referenceGtin || productGtin !== referenceGtin;
 }
+
+// Código que se copia al formulario al vincular una referencia: el de la
+// fuente, si es un EAN válido y no hay otro código cargado.
+export function medicineReferenceBarcodeToCopy(
+  productBarcode: string,
+  referenceBarcode: string,
+): string {
+  if (productBarcode.trim()) return "";
+  const reference = referenceBarcode.trim();
+  return externalGtin(reference) ? reference : "";
+}

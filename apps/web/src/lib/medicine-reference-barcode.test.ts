@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { medicineReferenceBarcodeConflict } from "./medicine-reference-barcode";
+import {
+  medicineReferenceBarcodeConflict,
+  medicineReferenceBarcodeToCopy,
+} from "./medicine-reference-barcode";
 
 describe("medicine reference barcode", () => {
   it("rejects the official IBU barcode when it differs from the scanned package", () => {
@@ -16,5 +19,19 @@ describe("medicine reference barcode", () => {
 
   it("allows a name search without a scanned product barcode", () => {
     expect(medicineReferenceBarcodeConflict("", "7790839980590")).toBe(false);
+  });
+
+  it("copia el código de la referencia elegida por nombre", () => {
+    expect(medicineReferenceBarcodeToCopy("", "7795378001058")).toBe(
+      "7795378001058",
+    );
+  });
+
+  it("no pisa un código cargado ni copia códigos inválidos o vacíos", () => {
+    expect(
+      medicineReferenceBarcodeToCopy("7795378001058", "7795378001065"),
+    ).toBe("");
+    expect(medicineReferenceBarcodeToCopy("", "")).toBe("");
+    expect(medicineReferenceBarcodeToCopy("", "123")).toBe("");
   });
 });

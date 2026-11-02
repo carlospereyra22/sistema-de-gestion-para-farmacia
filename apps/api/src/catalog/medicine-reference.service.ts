@@ -135,6 +135,28 @@ function scoreCandidate(candidate: string, query: string): number {
   return score;
 }
 
+const STRENGTH_PATTERN =
+  /(\d+(?:[.,]\d+)?)\s*(mg|mcg|µg|g|ui|%)(?:\s*\/\s*((?:\d+(?:[.,]\d+)?\s*)?(?:ml|g|dosis)))?(?=$|[\s.,;)])/gi;
+
+// El padrón público deja POTENCIA vacío; la dosis suele venir escrita en la
+// presentación ("500 mg comp.x 20") o en el nombre ("ACTRON PEDIATRICO 4%").
+// El tamaño del envase ("x 30 g") no es una dosis y se descarta.
+export function concentrationFromText(...values: string[]): string {
+  for (const value of values) {
+    for (const match of value.matchAll(STRENGTH_PATTERN)) {
+      const before = value.slice(0, match.index);
+      if (/(?:^|[^a-z])x\s*$/i.test(before) || /[\d.,]$/.test(before)) continue;
+      const [, amount, unit = "", per] = match;
+      const strength =
+        unit === "%" ? `${amount}%` : `${amount} ${unit.toLowerCase()}`;
+      return per
+        ? `${strength}/${per.replace(/\s+/g, " ").toLowerCase()}`
+        : strength;
+    }
+  }
+  return "";
+}
+
 function mapOfficialMedicine(item: OfficialMedicine): MedicineReference {
   return {
     source: "official",
@@ -154,7 +176,7 @@ function mapOfficialMedicine(item: OfficialMedicine): MedicineReference {
         ? [text(item.POTENCIA), text(item.UPOTENCIA)]
             .filter((part) => part && part !== "undefined")
             .join(" ")
-        : "",
+        : concentrationFromText(text(item.PRESENTACION), text(item.NOMBRE)),
     prescriptionRequired: text(item.TIPO_DE_VENTA)
       ? /receta/i.test(text(item.TIPO_DE_VENTA))
       : undefined,

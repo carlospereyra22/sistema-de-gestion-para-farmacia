@@ -10,12 +10,19 @@ description: Checklist para terminar una tarea en el sistema de farmacia - ejecu
 Desde la raiz, en este orden:
 
 ```powershell
-pnpm format
+$archivos = @(git diff --name-only --diff-filter=ACMR HEAD) + @(git ls-files --others --exclude-standard)
+if ($archivos.Count) { pnpm exec prettier --write --ignore-unknown @archivos }
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+- **No correr `pnpm format`** (`prettier --write .`): reescribe todo el repo con
+  finales de linea LF y, con `core.autocrlf=true` en Windows, git marca cientos de
+  archivos como modificados sin cambios reales. Formatear solo los archivos de la
+  tarea, como arriba. Si igual pasa, restaurar los que no son de la tarea con
+  `git checkout -- <archivo>` y confirmar con `git status --short`.
 
 - `pnpm test` incluye los tests de integracion de `apps/api/test/`, que necesitan
   PostgreSQL local `gestion_dev` y `apps/api/.env` con `DATABASE_URL`. Si la base no

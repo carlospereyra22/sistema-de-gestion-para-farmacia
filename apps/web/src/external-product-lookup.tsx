@@ -65,10 +65,14 @@ export function ExternalProductLookup({
   knownMedication,
   onKindDetected,
   onKindConfirmed,
+  linkedCode,
 }: {
   token: string;
   organizationId: string;
   code: string;
+  // Código copiado desde el medicamento ya vinculado: no se vuelve a consultar
+  // mientras se escribe, porque ofrecería vincular la misma ficha otra vez.
+  linkedCode?: string;
   onCode: (value: string) => void;
   onApply: (
     candidate: ExternalProductCandidate,
@@ -120,11 +124,13 @@ export function ExternalProductLookup({
   useEffect(() => {
     credentials.current = token;
   }, [token]);
+  const linkedGtin = linkedCode ? externalGtin(linkedCode.trim()) : null;
   const callbacks = useRef({
     onMedication,
     allowAutomatic,
     disabled,
     onKindDetected,
+    linkedGtin,
   });
   useEffect(() => {
     callbacks.current = {
@@ -132,10 +138,12 @@ export function ExternalProductLookup({
       allowAutomatic,
       disabled,
       onKindDetected,
+      linkedGtin,
     };
-  }, [onMedication, allowAutomatic, disabled, onKindDetected]);
+  }, [onMedication, allowAutomatic, disabled, onKindDetected, linkedGtin]);
   const trimmed = inputCode.trim();
   const canonical = externalGtin(trimmed);
+  const linkedHere = Boolean(canonical && canonical === linkedGtin);
   const mode = medicationMode ?? (medicationEnabled ? "medicine" : "other");
   const detected = resolveProductKind(mode, knownMedication);
   const key = `${organizationId}:${canonical ?? trimmed}:${mode}:${knownMedication}`;
@@ -145,9 +153,11 @@ export function ExternalProductLookup({
       nextLookupTrigger.current = "typing";
       return;
     }
-    const controller = new AbortController();
     const trigger = nextLookupTrigger.current;
     nextLookupTrigger.current = "typing";
+    if (trigger === "typing" && canonical === callbacks.current.linkedGtin)
+      return;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setState({
         key,
@@ -574,6 +584,12 @@ export function ExternalProductLookup({
               la ficha de farmacia.
             </span>
           )}
+        {!current && linkedHere && (
+          <span className="text-teal-700">
+            Código tomado del medicamento vinculado. Se guarda al confirmar el
+            producto.
+          </span>
+        )}
         {current?.linked && (
           <span className="text-teal-700">
             Medicamento completado y vinculado. Se guarda al confirmar el
