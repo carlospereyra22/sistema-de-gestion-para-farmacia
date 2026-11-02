@@ -67,6 +67,7 @@ PC: esos equipos requieren actualización compatible antes de usar funciones nue
 - La tarea remota continúa si se corta SSH. Revisar su estado y `DEPLOYED_OK`
   antes de intentar otro despliegue; no asumir que falló o que terminó.
 - Antes de las migraciones, un error deja la API anterior activa.
+- La migración ya aplicada `20261031000000_report_permissions` tiene bytes CRLF en producción, aunque el archivo del commit actual usa LF. En la release `20261101-225918-75bfdaa1` se copió únicamente ese archivo desde la release productiva anterior y se verificaron los checksums de las 63 migraciones aplicadas antes de reintentar. No editar la migración en Git ni omitir el control: futuros empaquetados desde Windows deben conservar los bytes que espera cada ambiente.
 - Desde que comienza la migración, un error puede dejar la API detenida o sin
   salud. Se requiere revisión técnica; el botón no inventa una reversión segura.
 - No hay rollback automático de base: restaurar un dump puede perder operaciones

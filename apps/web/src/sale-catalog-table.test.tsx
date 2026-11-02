@@ -33,8 +33,11 @@ const render = (selectedId?: string) =>
       rows={[
         {
           product: product("p1", "Omeprazol 20 mg", {
+            isMedication: true,
             activeIngredient: "Omeprazol",
+            concentration: "20 mg",
             pharmaceuticalForm: "Cápsulas",
+            presentation: "Caja x 14",
             category: { id: "c1", name: "Gastro" },
           }),
           available: 41,
@@ -54,9 +57,11 @@ it("renders an accessible catalog grid with category, stock and price", () => {
   const html = render();
   expect(html).toContain('aria-label="Catálogo de productos"');
   expect(html).toContain('role="grid"');
-  expect(html).toContain("Omeprazol · Cápsulas");
+  expect(html).toContain("20 mg · Caja x 14");
+  expect(html).not.toContain("Cápsulas");
   expect(html).toContain("Gastro");
   expect(html).toContain('aria-label="Omeprazol 20 mg, 41 disponibles, $');
+  // Productos que no son medicamento sin datos cargados, como antes.
   expect(html).toContain("Sin detalle farmacéutico");
 });
 

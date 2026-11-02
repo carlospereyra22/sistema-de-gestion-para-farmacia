@@ -961,7 +961,9 @@
 .discount-amount-field input,
 /* El recuadro del importe ya marca el foco: el input interno no suma otro. */
 .sale-checkout-amount input,
-.sale-checkout-amount input:focus {
+.sale-checkout-amount input:focus,
+.sale-general-discount-field input,
+.sale-general-discount-field input:focus {
   border: 0;
   box-shadow: none;
 }

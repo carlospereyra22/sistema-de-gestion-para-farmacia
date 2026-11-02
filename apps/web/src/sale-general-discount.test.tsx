@@ -7,6 +7,7 @@ it("offers percent and amount modes with an accessible input", () => {
     <SaleGeneralDiscount
       subtotalMinor={1_000_000}
       discountMinor={0}
+      totalDiscountMinor={0}
       disabled={false}
       onApply={() => {}}
       onInvalid={() => {}}
@@ -17,4 +18,6 @@ it("offers percent and amount modes with an accessible input", () => {
   expect(html).toContain('aria-label="Descuento en pesos"');
   expect(html).toContain('aria-pressed="true"');
   expect(html).toContain('aria-label="Porcentaje de descuento general"');
+  // El símbolo del modo elegido acompaña al número.
+  expect(html).toMatch(/<\/span>?.*%<\/span><\/label>|%<\/span><\/label>/);
 });

@@ -11,6 +11,7 @@ type SaleCatalogProduct = Pick<
   CatalogProduct,
   | "id"
   | "name"
+  | "isMedication"
   | "activeIngredient"
   | "concentration"
   | "pharmaceuticalForm"
@@ -22,14 +23,22 @@ type SaleCatalogProduct = Pick<
 export const saleCatalogRowId = (idPrefix: string, productId: string) =>
   `${idPrefix}-${productId}`;
 
-export function saleCatalogDetail(product: SaleCatalogProduct): string {
-  return [
-    product.activeIngredient,
-    product.concentration,
-    product.pharmaceuticalForm,
-    product.presentation,
-  ]
-    .filter((detail): detail is string => Boolean(detail))
+// Los medicamentos muestran sólo concentración y presentación, que es lo que
+// distingue dos de igual nombre; el resto conserva su detalle completo. Sin marca
+// explícita, la droga indica que es medicamento.
+export function saleProductDetail(product: SaleCatalogProduct): string {
+  const medication = product.isMedication ?? Boolean(product.activeIngredient);
+  return (
+    medication
+      ? [product.concentration, product.presentation]
+      : [
+          product.activeIngredient,
+          product.concentration,
+          product.pharmaceuticalForm,
+          product.presentation,
+        ]
+  )
+    .filter((detail): detail is string => Boolean(detail?.trim()))
     .join(" · ");
 }
 
