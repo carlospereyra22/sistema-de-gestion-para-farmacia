@@ -1,12 +1,21 @@
 import type { ThermalTicket } from "@gestion/contracts";
 import type { FiscalTrial } from "./api";
-import { thermalTicketHtml } from "./thermal-ticket";
+import { thermalTicketHtml, type ThermalFiscalDetails } from "./thermal-ticket";
 
 const date = (value: string | null) =>
   value?.length === 8
     ? `${value.slice(6, 8)}/${value.slice(4, 6)}/${value.slice(0, 4)}`
     : "—";
 export function trialTicket(trial: FiscalTrial) {
+  const { ticket, fiscal } = trialTicketData(trial);
+  return thermalTicketHtml(ticket, "", fiscal);
+}
+
+// Datos del comprobante autorizado: los comparten el ticket térmico y el A4.
+export function trialTicketData(trial: FiscalTrial): {
+  ticket: ThermalTicket;
+  fiscal: ThermalFiscalDetails;
+} {
   if (trial.status !== "AUTHORIZED" || !trial.cae || !trial.number)
     throw new Error("Sólo se imprimen comprobantes autorizados por ARCA.");
   const production = trial.environment === "PRODUCTION";
@@ -57,7 +66,7 @@ export function trialTicket(trial: FiscalTrial) {
         : "PRUEBA · SIN MOVIMIENTOS DE STOCK NI CAJA",
   };
   const document = trial.saleSnapshot?.recipient.docNumber;
-  return thermalTicketHtml(ticket, "", {
+  const fiscal: ThermalFiscalDetails = {
     letter: [11, 13].includes(trial.voucherType) ? "C" : "B",
     number: `${String(trial.point).padStart(5, "0")}-${String(trial.number).padStart(8, "0")}`,
     date: date(trial.date),
@@ -91,5 +100,6 @@ export function trialTicket(trial: FiscalTrial) {
               6: "Monotributista",
             } as Record<number, string>
           )[trial.saleSnapshot?.recipient.vatId ?? 5],
-  });
+  };
+  return { ticket, fiscal };
 }
