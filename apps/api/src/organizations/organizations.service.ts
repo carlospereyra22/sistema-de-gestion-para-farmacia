@@ -412,7 +412,7 @@ export class OrganizationsService {
 
   async listBranches(actorId: string, organizationId: string) {
     await this.assertPermission(actorId, organizationId, "ORGANIZATION_READ");
-    return this.prisma.branch.findMany({
+    const branches = await this.prisma.branch.findMany({
       where: { organizationId, deletedAt: null },
       select: {
         id: true,
@@ -424,9 +424,17 @@ export class OrganizationsService {
         province: true,
         phone: true,
         printFormat: true,
+        userMemberships: {
+          where: { userId: actorId },
+          select: { userId: true },
+        },
       },
       orderBy: { name: "asc" },
     });
+    return branches.map(({ userMemberships, ...branch }) => ({
+      ...branch,
+      canAccess: userMemberships.length > 0,
+    }));
   }
 
   async createBranch(
@@ -459,6 +467,9 @@ export class OrganizationsService {
             province: true,
             phone: true,
           },
+        });
+        await tx.userBranch.create({
+          data: { userId: actorId, branchId: branch.id },
         });
         await tx.auditLog.create({
           data: {

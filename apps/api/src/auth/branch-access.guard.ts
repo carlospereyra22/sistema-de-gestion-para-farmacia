@@ -32,7 +32,9 @@ export class BranchAccessGuard implements CanActivate {
       select: { userId: true },
     });
     if (!assignment)
-      throw new ForbiddenException("You do not have access to this branch.");
+      throw new ForbiddenException(
+        "No tenés acceso a esta sucursal. Pedile a un administrador que te la asigne desde Usuarios.",
+      );
     return true;
   }
 }

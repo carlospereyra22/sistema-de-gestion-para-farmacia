@@ -150,6 +150,7 @@ export type BranchListItem = {
   code: string;
   name: string;
   active: boolean;
+  canAccess?: boolean;
   address?: string;
   city?: string;
   province?: string;

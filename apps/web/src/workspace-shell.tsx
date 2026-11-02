@@ -11,6 +11,10 @@ import {
 } from "./lib/external-product";
 import { ProductFilterSelect } from "./product-filter-select";
 import { medicineReferenceBarcodeConflict } from "./lib/medicine-reference-barcode";
+import {
+  compatibleRetailMedicineReferences,
+  retailMedicineNameQuery,
+} from "./lib/retail-medicine-link";
 import { categoryBranch } from "./lib/category-tree";
 import { SuppliersWorkspace } from "./suppliers-workspace";
 import { CustomersWorkspace } from "./customers-workspace";
@@ -26,6 +30,12 @@ import {
 } from "react";
 import { DirectTicketPrint } from "./direct-ticket-print";
 import { SearchableSaleSelect } from "./searchable-sale-select";
+import { TransferList } from "./transfer-list";
+import { PendingSaleConfirmDialog } from "./pending-sale-confirm-dialog";
+import {
+  findTransferProductsByBarcode,
+  singleAvailableTransferLotId,
+} from "./lib/transfer-product-lookup";
 import { NavigationRail } from "./navigation-rail";
 import { SidebarToggle } from "./sidebar-toggle";
 import { useWorkspaceSidebar } from "./use-workspace-sidebar";
@@ -376,10 +386,13 @@ export function WorkspaceShell({
   }>();
   const applyBranches = (items: BranchListItem[]) => {
     setBranches(items);
+    const accessible = items.filter(
+      (item) => item.active && item.canAccess !== false,
+    );
     setBranchId((current) =>
-      items.some((item) => item.id === current && item.active)
+      accessible.some((item) => item.id === current)
         ? current
-        : (items.find((item) => item.active)?.id ?? ""),
+        : (accessible[0]?.id ?? ""),
     );
   };
   const [branchId, setBranchId] = useState("");
@@ -421,6 +434,9 @@ export function WorkspaceShell({
       setVisitedAccountsScope(accountsScope);
   }, [view, organizationId, branchId, accountsScope]);
   const [pendingSale, setPendingSale] = useState(false);
+  const [pendingSaleConfirmation, setPendingSaleConfirmation] = useState<
+    { action: "branch"; branchId: string } | { action: "logout" } | null
+  >(null);
   const [listEditingProduct, setListEditingProduct] =
     useState<CatalogProduct>();
   useEffect(() => {
@@ -496,16 +512,14 @@ export function WorkspaceShell({
   };
   const branchSelector = (
     <AccountBranchSelector
-      branches={branches.filter((item) => item.active)}
+      branches={branches.filter(
+        (item) => item.active && item.canAccess !== false,
+      )}
       value={branchId}
       onChange={(id) => {
-        if (
-          !pendingSale ||
-          window.confirm(
-            "Hay una venta pendiente en esta sucursal. Si cambiás de sucursal se descartará. ¿Continuar?",
-          )
-        )
-          setBranchId(id);
+        if (pendingSale)
+          setPendingSaleConfirmation({ action: "branch", branchId: id });
+        else setBranchId(id);
       }}
     />
   );
@@ -518,7 +532,7 @@ export function WorkspaceShell({
     >
       <header
         ref={sidebar.header}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
         <div className="flex items-center gap-3">
           <SidebarToggle
@@ -548,6 +562,7 @@ export function WorkspaceShell({
             view === "Caja" ||
             view === "Cuentas corrientes" ||
             view === "Categorías y laboratorios" ||
+            view === "Transferencias" ||
             view === "Reportes") && (
             <h1 className="workspace-sales-title">
               {view === "Compras" ? (
@@ -572,6 +587,8 @@ export function WorkspaceShell({
                 <NotebookTabs size={22} aria-hidden />
               ) : view === "Reportes" ? (
                 <ChartNoAxesCombined size={22} aria-hidden />
+              ) : view === "Transferencias" ? (
+                <ArrowLeftRight size={22} aria-hidden />
               ) : (
                 <CashRegisterIcon size={22} />
               )}
@@ -608,6 +625,17 @@ export function WorkspaceShell({
                 branches={branches}
               />
             </>
+          )}
+          {ready && view === "Transferencias" && (
+            <OperationHistory
+              key={`${view}-${organizationId}-${branchId}`}
+              kind={view}
+              token={accessToken!}
+              organizationId={organizationId!}
+              branchId={branchId}
+              products={products}
+              branches={branches}
+            />
           )}
           {ready && view === "Productos" && (
             <CatalogReferenceRefresh
@@ -688,13 +716,8 @@ export function WorkspaceShell({
               branches.find((item) => item.id === branchId)?.name ?? "Cargando…"
             }
             onLogout={() => {
-              if (
-                !pendingSale ||
-                window.confirm(
-                  "Hay una venta pendiente. Si cerrás sesión se descartará. ¿Querés salir?",
-                )
-              )
-                onLogout();
+              if (pendingSale) setPendingSaleConfirmation({ action: "logout" });
+              else onLogout();
             }}
           />
         </div>
@@ -775,7 +798,15 @@ export function WorkspaceShell({
             </button>
           </nav>
         </NavigationRail>
-        <section className="workspace-content min-w-0 bg-[#f4f8fa] p-4 lg:px-7 lg:py-3">
+        <section
+          className={`workspace-content min-w-0 bg-[#f4f8fa] p-4 lg:px-7 lg:py-3 ${view === "Transferencias" ? "flex flex-col" : ""}`}
+        >
+          {accessToken && organizationId && branches.length > 0 && !branchId ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
+              No tenés una sucursal asignada. Pedile a un administrador que te
+              dé acceso desde Usuarios.
+            </div>
+          ) : null}
           {view !== "Ventas" &&
             view !== "Listas de precios" &&
             view !== "Caja" &&
@@ -787,25 +818,13 @@ export function WorkspaceShell({
             view !== "Proveedores" &&
             view !== "Clientes" &&
             view !== "Compras" &&
+            view !== "Transferencias" &&
             view !== "Reportes" && (
               <div className="workspace-page-heading flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
                     {view}
                   </h1>
-                </div>
-                <div className="workspace-page-actions flex min-w-0 flex-wrap items-center gap-2">
-                  {ready && view === "Transferencias" && (
-                    <OperationHistory
-                      key={`${view}-${organizationId}-${branchId}`}
-                      kind={view}
-                      token={accessToken!}
-                      organizationId={organizationId!}
-                      branchId={branchId}
-                      products={products}
-                      branches={branches}
-                    />
-                  )}
                 </div>
               </div>
             )}
@@ -1053,6 +1072,7 @@ export function WorkspaceShell({
               branchId={branchId}
               branches={branches}
               products={operationalProducts}
+              sharedProducts={organizationProducts}
               stock={stock}
               done={() => void refresh()}
               onError={setMessage}
@@ -1073,6 +1093,30 @@ export function WorkspaceShell({
           ) : null}
         </section>
       </div>
+      {pendingSaleConfirmation ? (
+        <PendingSaleConfirmDialog
+          action={pendingSaleConfirmation.action}
+          currentBranch={
+            branches.find((branch) => branch.id === branchId)?.name ??
+            "esta sucursal"
+          }
+          nextBranch={
+            pendingSaleConfirmation.action === "branch"
+              ? branches.find(
+                  (branch) => branch.id === pendingSaleConfirmation.branchId,
+                )?.name
+              : undefined
+          }
+          onCancel={() => setPendingSaleConfirmation(null)}
+          onConfirm={() => {
+            const confirmation = pendingSaleConfirmation;
+            setPendingSaleConfirmation(null);
+            if (confirmation.action === "branch")
+              setBranchId(confirmation.branchId);
+            else onLogout();
+          }}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1464,6 +1508,8 @@ function Products({
   const [selectedReference, setSelectedReference] =
     useState<MedicineReference>();
   const [referenceBarcodeWarning, setReferenceBarcodeWarning] = useState("");
+  const [retailLinkSearchRevision, setRetailLinkSearchRevision] = useState(0);
+  const [retailLinkHint, setRetailLinkHint] = useState("");
   const scannedMedicine = useRef<MedicineReference | null>(null);
   const priceLocked =
     isMedication &&
@@ -1670,18 +1716,24 @@ function Products({
     setReferenceLoading(false);
     setReferenceError("");
     setReferenceBarcodeWarning("");
+    setRetailLinkSearchRevision(0);
+    setRetailLinkHint("");
   };
-  const searchReferences = async (source: MedicineReference["source"]) => {
+  const searchReferences = async (
+    source: MedicineReference["source"],
+    retailName?: string,
+  ) => {
     referenceRequest.current?.abort();
     const controller = new AbortController();
     referenceRequest.current = controller;
     setAlfaReferenceResults([]);
-    const queryText = referenceQuery.trim();
+    const queryText = (retailName ?? referenceQuery).trim();
     setReferenceSearchDone(true);
     setReferenceSource(source);
     setReferenceResults([]);
     setReferenceError("");
     setReferenceBarcodeWarning("");
+    if (!retailName) setRetailLinkHint("");
     if (queryText.length < 2) return;
     setReferenceLoading(true);
     try {
@@ -1695,14 +1747,57 @@ function Products({
         if (!controller.signal.aborted) setAlfaReferenceResults(found);
         return;
       }
-      const found = await searchMedicineReferences(
-        token,
-        organizationId,
-        queryText,
-        source,
-        controller.signal,
-      );
-      if (!controller.signal.aborted) setReferenceResults(found);
+      let found: MedicineReference[];
+      try {
+        found = await searchMedicineReferences(
+          token,
+          organizationId,
+          queryText,
+          source,
+          controller.signal,
+        );
+      } catch (cause) {
+        if (source !== "official" || !retailName || controller.signal.aborted)
+          throw cause;
+        setRetailLinkHint(
+          "El padrón oficial no respondió. Buscamos una referencia por nombre; revisá la presentación antes de vincular.",
+        );
+        setReferenceSource("preciosderemedios");
+        found = await searchMedicineReferences(
+          token,
+          organizationId,
+          retailMedicineNameQuery(queryText),
+          "preciosderemedios",
+          controller.signal,
+        );
+        if (!controller.signal.aborted) setReferenceResults(found);
+        return;
+      }
+      if (controller.signal.aborted) return;
+      if (source === "official" && retailName) {
+        const compatible = compatibleRetailMedicineReferences(barcode, found);
+        if (compatible.length) {
+          setReferenceResults(compatible);
+          setRetailLinkHint(
+            "Encontramos posibles referencias oficiales. Revisá la presentación antes de vincular.",
+          );
+          return;
+        }
+        setRetailLinkHint(
+          "El padrón no tiene una coincidencia segura con este código. Buscamos otra referencia por nombre; revisá la presentación antes de vincular.",
+        );
+        setReferenceSource("preciosderemedios");
+        const alternatives = await searchMedicineReferences(
+          token,
+          organizationId,
+          retailMedicineNameQuery(queryText),
+          "preciosderemedios",
+          controller.signal,
+        );
+        if (!controller.signal.aborted) setReferenceResults(alternatives);
+        return;
+      }
+      setReferenceResults(found);
     } catch (cause) {
       if (!controller.signal.aborted)
         setReferenceError(
@@ -1762,6 +1857,7 @@ function Products({
     setReferenceResults([]);
     setReferenceSearchDone(false);
     setAlfaReferenceResults([]);
+    setRetailLinkHint("");
   };
   const applyRetailMedicine = (reference: RetailMedicine) => {
     setMedicationMode("medicine");
@@ -1770,6 +1866,12 @@ function Products({
     setName(reference.name);
     setPresentation(reference.presentation);
     setBrand(reference.brand);
+    setReferenceQuery(reference.name);
+    setRetailLinkSearchRevision((value) => value + 1);
+    setRetailLinkHint(
+      "Buscando una referencia para vincular este medicamento…",
+    );
+    void searchReferences("official", reference.name);
     externalBrand.current = reference.brand || null;
     if (!saleUnitEdited.current) setSaleUnit("BOX");
     const medicationCategory = options?.categories.find(
@@ -1828,6 +1930,8 @@ function Products({
     setReferenceSearchDone(false);
     setReferenceError("");
     setReferenceLoading(false);
+    setRetailLinkSearchRevision(0);
+    setRetailLinkHint("");
     setFormOpen(true);
     setReferenceBarcodeWarning("");
     setEditingProduct(product);
@@ -2353,12 +2457,13 @@ function Products({
                 )}
                 {isMedication && (
                   <ProductFormSection
+                    key={retailLinkSearchRevision}
                     title={
                       editingProduct?.externalReferenceName || selectedReference
                         ? "Cambiar vinculación"
                         : "Vincular medicamento"
                     }
-                    defaultOpen={false}
+                    defaultOpen={retailLinkSearchRevision > 0}
                     status={
                       <ProductSyncStatus
                         showSource
@@ -2379,6 +2484,7 @@ function Products({
                           setReferenceSearchDone(false);
                           setReferenceResults([]);
                           setReferenceError("");
+                          setRetailLinkHint("");
                         }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
@@ -2412,9 +2518,18 @@ function Products({
                           setReferenceSearchDone(false);
                           setReferenceLoading(false);
                           setReferenceError("");
+                          setRetailLinkHint("");
                         }}
                       />
                     </div>
+                    {retailLinkHint && (
+                      <p
+                        className="mt-2 text-xs leading-5 text-slate-600"
+                        role="status"
+                      >
+                        {retailLinkHint}
+                      </p>
+                    )}
                     {referenceSearchDone ? (
                       <div className="mt-3">
                         {referenceQuery.trim().length < 2 ? (
@@ -2574,6 +2689,13 @@ function Products({
                         onRetailMedicine={applyRetailMedicine}
                         onCode={(value) => {
                           clearMismatchedReference(value);
+                          if (value.trim() !== barcode.trim()) {
+                            referenceRequest.current?.abort();
+                            setReferenceLoading(false);
+                            setReferenceResults([]);
+                            setReferenceSearchDone(false);
+                            setRetailLinkHint("");
+                          }
                           if (
                             value.trim() !== barcode.trim() &&
                             externalBrand.current
@@ -5791,6 +5913,7 @@ function Transfers({
   branchId,
   branches,
   products,
+  sharedProducts,
   stock,
   done,
   onError,
@@ -5800,14 +5923,33 @@ function Transfers({
   branchId: string;
   branches: BranchListItem[];
   products: CatalogProduct[];
+  sharedProducts: CatalogProduct[];
   stock: StockLot[];
   done: () => void;
   onError: (value: string) => void;
 }): ReactElement {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [destinationBranchId, setDestinationBranchId] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [productId, setProductId] = useState("");
   const [lotId, setLotId] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const availableLots = stock.filter((lot) => lot.quantity > 0);
+  const availableProductIds = new Set(
+    availableLots.map((lot) => lot.productId),
+  );
+  const availableProducts = products.filter((product) =>
+    availableProductIds.has(product.id),
+  );
+  const barcodeMatches = findTransferProductsByBarcode(
+    availableProducts,
+    availableLots,
+    barcode,
+  );
+  const selectedLot = availableLots.find(
+    (lot) => lot.id === lotId && lot.productId === productId,
+  );
   const load = async () => {
     try {
       setTransfers(await getTransfers(token, organizationId, branchId));
@@ -5824,20 +5966,27 @@ function Transfers({
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
   const create = async (event: FormEvent) => {
     event.preventDefault();
-    const selectedLot = stock.find((lot) => lot.id === lotId);
+    const destination = branches.find(
+      (branch) => branch.id === destinationBranchId && branch.active,
+    );
     if (
+      !destination ||
+      destination.id === branchId ||
       !selectedLot ||
+      !Number.isInteger(Number(quantity)) ||
       Number(quantity) < 1 ||
       Number(quantity) > selectedLot.quantity
     )
       return onError(
-        "Indicá un lote y una cantidad disponible para transferir.",
+        "Elegí una sucursal destino, un lote y una cantidad disponible para transferir.",
       );
     try {
       await createTransfer(token, organizationId, branchId, {
         destinationBranchId,
         items: [{ lotId, quantity: Number(quantity) }],
       });
+      setBarcode("");
+      setProductId("");
       setLotId("");
       setQuantity("1");
       await load();
@@ -5850,6 +5999,8 @@ function Transfers({
     }
   };
   const advance = async (transfer: Transfer) => {
+    if (advancingId !== null) return;
+    setAdvancingId(transfer.id);
     try {
       if (
         transfer.status === "PREPARED" &&
@@ -5868,110 +6019,173 @@ function Transfers({
           ? cause.message
           : "No se pudo actualizar la transferencia.",
       );
+    } finally {
+      setAdvancingId(null);
     }
   };
-  const branchName = (id: string) =>
-    branches.find((branch) => branch.id === id)?.name ?? "Sucursal desconocida";
   return (
-    <div className="workspace-split mt-8 grid gap-6">
-      <div className="border bg-white">
-        {transfers.map((transfer) => {
-          const action =
-            transfer.status === "PREPARED" &&
-            transfer.sourceBranchId === branchId
-              ? "Despachar"
-              : transfer.status === "IN_TRANSIT" &&
-                  transfer.destinationBranchId === branchId
-                ? "Recibir"
-                : undefined;
-          return (
-            <article key={transfer.id} className="border-b p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-medium">{transfer.status}</p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {branchName(transfer.sourceBranchId)} →{" "}
-                    {branchName(transfer.destinationBranchId)}
-                  </p>
-                </div>
-                {action ? (
-                  <button
-                    type="button"
-                    onClick={() => void advance(transfer)}
-                    className="border border-teal-700 px-3 py-1.5 text-sm text-teal-800"
-                  >
-                    {action}
-                  </button>
-                ) : null}
-              </div>
-              <ul className="mt-3 text-sm text-slate-600">
-                {transfer.items.map((item) => (
-                  <li key={item.id}>
-                    {products.find((product) => product.id === item.productId)
-                      ?.name ?? "Producto"}{" "}
-                    · {item.quantity} un.
-                  </li>
-                ))}
-              </ul>
-            </article>
-          );
-        })}
-        {!transfers.length ? (
-          <p className="p-5 text-sm text-slate-500">
-            No hay transferencias para esta sucursal.
-          </p>
-        ) : null}
-      </div>
+    <div className="workspace-split mt-1 grid flex-1 items-stretch gap-5">
+      <TransferList
+        transfers={transfers}
+        branchId={branchId}
+        branches={branches}
+        products={sharedProducts}
+        busyId={advancingId}
+        onAdvance={(transfer) => void advance(transfer)}
+      />
       <form
         onSubmit={(event) => void create(event)}
-        className="border bg-white p-5"
+        className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
       >
-        <h2 className="font-semibold">Nueva transferencia</h2>
-        <label className="mt-4 block text-sm">
-          Sucursal destino
-          <select
-            required
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
+            <ArrowLeftRight size={19} aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">
+              Nueva transferencia
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Elegí el destino y el lote que vas a enviar.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="text-xs font-semibold text-slate-600">
+            Sucursal destino
+          </label>
+          <SearchableSaleSelect
+            label="Sucursal destino"
             value={destinationBranchId}
-            onChange={(event) => setDestinationBranchId(event.target.value)}
-            className="mt-1 h-10 w-full border px-3"
-          >
-            <option value="">Seleccionar…</option>
-            {branches
+            onChange={setDestinationBranchId}
+            placeholder="Buscar sucursal…"
+            floatingOptions
+            options={branches
               .filter((branch) => branch.active && branch.id !== branchId)
-              .map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-          </select>
+              .map((branch) => ({ value: branch.id, label: branch.name }))}
+          />
+          {branches.find((branch) => branch.id === destinationBranchId)
+            ?.canAccess === false ? (
+            <p className="mt-1.5 text-xs leading-5 text-slate-500">
+              Podés enviar a esta sucursal. Para recibir, un administrador debe
+              asignarte acceso desde Usuarios.
+            </p>
+          ) : null}
+        </div>
+        <label className="mt-4 block">
+          <span className="text-xs font-semibold text-slate-600">
+            Código de barras
+          </span>
+          <span className="mt-1 flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 shadow-sm focus-within:border-teal-500">
+            <ScanBarcode
+              size={18}
+              aria-hidden
+              className="shrink-0 text-teal-700"
+            />
+            <input
+              type="text"
+              value={barcode}
+              onChange={(event) => {
+                const code = event.target.value;
+                const matches = findTransferProductsByBarcode(
+                  availableProducts,
+                  availableLots,
+                  code,
+                );
+                const matchedProductId =
+                  matches.length === 1 ? matches[0].id : "";
+                setBarcode(code);
+                setProductId(matchedProductId);
+                setLotId(
+                  singleAvailableTransferLotId(availableLots, matchedProductId),
+                );
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.preventDefault();
+              }}
+              placeholder="Escaneá y presioná Enter"
+              autoComplete="off"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm font-normal text-slate-700 outline-none placeholder:text-slate-400"
+            />
+          </span>
         </label>
-        <label className="mt-4 block text-sm">
-          Lote de origen
-          <select
-            required
+        {barcode.trim() &&
+        barcodeMatches.length === 0 &&
+        barcode.trim().length >= 8 ? (
+          <p className="mt-1.5 text-xs text-amber-700">
+            No hay un producto con stock para ese código.
+          </p>
+        ) : null}
+        {barcodeMatches.length > 1 ? (
+          <p className="mt-1.5 text-xs text-slate-500">
+            El código coincide con varios productos. Elegí el correcto.
+          </p>
+        ) : null}
+        <div className="mt-4">
+          <label className="text-xs font-semibold text-slate-600">
+            Nombre del producto
+          </label>
+          <SearchableSaleSelect
+            label="Nombre del producto"
+            value={productId}
+            onChange={(value) => {
+              setProductId(value);
+              if (!barcodeMatches.some((product) => product.id === value))
+                setBarcode("");
+              setLotId(singleAvailableTransferLotId(availableLots, value));
+            }}
+            placeholder="Buscar producto…"
+            floatingOptions
+            options={(barcodeMatches.length > 1
+              ? barcodeMatches
+              : availableProducts
+            ).map((product) => ({ value: product.id, label: product.name }))}
+          />
+        </div>
+        <div className="mt-4">
+          <label className="text-xs font-semibold text-slate-600">
+            Lote de origen
+          </label>
+          <SearchableSaleSelect
+            label="Lote de origen"
             value={lotId}
-            onChange={(event) => setLotId(event.target.value)}
-            className="mt-1 h-10 w-full border px-3"
-          >
-            <option value="">Seleccionar…</option>
-            {stock
-              .filter((lot) => lot.quantity > 0)
-              .map((lot) => (
-                <option key={lot.id} value={lot.id}>
-                  {lot.productName} · lote {lot.number} · {lot.quantity} un.
-                </option>
-              ))}
-          </select>
+            onChange={setLotId}
+            placeholder={
+              productId ? "Elegir lote…" : "Primero elegí un producto"
+            }
+            floatingOptions
+            disabled={!productId}
+            options={availableLots
+              .filter((lot) => lot.productId === productId)
+              .map((lot) => ({
+                value: lot.id,
+                label: `Lote ${lot.number} · ${lot.quantity} un.`,
+              }))}
+          />
+          {selectedLot && (
+            <p className="mt-1.5 text-xs text-slate-500">
+              Disponible: {selectedLot.quantity} unidades
+            </p>
+          )}
+        </div>
+        <label className="mt-4 block text-xs font-semibold text-slate-600">
+          Cantidad
+          <input
+            type="number"
+            min={1}
+            max={selectedLot?.quantity}
+            step={1}
+            required
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-800 outline-none focus:border-teal-500"
+          />
         </label>
-        <Input
-          label="Cantidad"
-          type="number"
-          value={quantity}
-          onChange={setQuantity}
-        />
-        <button className="mt-5 w-full bg-teal-700 py-2 text-sm text-white">
-          Preparar transferencia
-        </button>
+        <div className="mt-auto pt-5">
+          <button className="h-10 w-full rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white shadow-sm hover:bg-teal-800">
+            Preparar transferencia
+          </button>
+        </div>
       </form>
     </div>
   );

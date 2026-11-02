@@ -70,6 +70,19 @@ monitor. No se aplica `zoom` ni se bloquea la ampliación del navegador.
   y Organización comparten `workspace-split`: listado flexible y formulario
   lateral de al menos 280 px desde 1024 px; en escritorio amplio el lateral
   ocupa 360 px. Por debajo se apilan sin ocultar controles.
+- En Transferencias, el código de barras, el nombre del producto y el lote de
+  origen tienen controles separados. Un código con una sola coincidencia y stock
+  selecciona el producto; cuando coincide con varios, se elige el producto antes
+  del lote. Si el producto tiene un único lote con unidades disponibles, se
+  selecciona automáticamente; si tiene varios, se elige el lote. En escritorio,
+  el listado y el formulario ocupan el alto disponible del área de trabajo.
+  El listado muestra estado, fecha, origen, destino y productos de cada operación
+  usando el catálogo compartido. El selector de sucursal activa sólo ofrece las
+  sucursales asignadas al usuario; el destino de una transferencia puede ser otra
+  sucursal activa, aunque quien prepara el envío no tenga acceso para recibir allí.
+- Si hay una venta pendiente, cambiar de sucursal o cerrar sesión pide confirmación
+  en un diálogo del sistema. Cancelar conserva el carrito y la sucursal; confirmar
+  descarta el borrador y completa la acción elegida.
 - Cuentas corrientes usa un selector de clientes proporcional al espacio
   disponible, con mínimo de 200 px, y un panel de detalle flexible.
 
