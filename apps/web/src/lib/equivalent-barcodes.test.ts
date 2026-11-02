@@ -49,6 +49,20 @@ describe("códigos equivalentes", () => {
     expect(medicinesByName([product], "a")).toEqual([]);
   });
 
+  it("encuentra códigos de uso interno por coincidencia exacta", () => {
+    const interno = {
+      id: "interno",
+      barcodes: [
+        { code: "2939979748454", primary: true, kind: "PACKAGE" as const },
+      ],
+    };
+    expect(findProductByBarcode([interno], " 2939979748454 ")?.id).toBe(
+      "interno",
+    );
+    expect(findProductByBarcode([interno], "02939979748454")).toBeUndefined();
+    expect(findProductByBarcode([actron], "SG000000000001")?.id).toBe("actron");
+  });
+
   it("no busca códigos inválidos ni inexistentes", () => {
     expect(findProductByBarcode([actron], "")).toBeUndefined();
     expect(findProductByBarcode([actron], "7795378001058")).toBeUndefined();

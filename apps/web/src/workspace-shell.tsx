@@ -1912,9 +1912,15 @@ function Products({
   };
   // Cada código nuevo del buscador empieza un formulario limpio con ese código;
   // si es de un producto del catálogo, el efecto de `barcodeOwner` lo abre.
+  // Un código de uso interno (no GTIN) sólo sirve si ya está en el catálogo.
   const startCodeSearch = (value: string) => {
     const code = value.trim();
-    if (!externalGtin(code) || code === searchCode) return;
+    if (code === searchCode) return;
+    if (
+      !externalGtin(code) &&
+      !findProductByBarcode([...products, ...knownProducts], code)
+    )
+      return;
     clearForm(true);
     setReferenceQuery(code);
     setSearchCode(code);
