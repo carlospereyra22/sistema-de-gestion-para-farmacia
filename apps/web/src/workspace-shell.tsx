@@ -32,6 +32,7 @@ import { SuppliersWorkspace } from "./suppliers-workspace";
 import { CustomersWorkspace } from "./customers-workspace";
 import { InventoryPendingPurchase } from "./inventory-pending-purchase";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -133,6 +134,30 @@ import {
 import { updateCatalogProductImage } from "./lib/api";
 import { BranchProductDialog } from "./branch-product-dialog";
 import { ProductCatalogMetrics } from "./product-catalog-header";
+import {
+  CellText,
+  DataTable,
+  DataTableCell,
+  DataTableDetailRow,
+  DataTableEmpty,
+  DataTableRow,
+  RowIconAction,
+  StatusLabel,
+} from "./data-table";
+import {
+  activeCatalogMetric,
+  catalogStockTone,
+  catalogStockTotals,
+  toggleCatalogMetric,
+} from "./lib/product-catalog-metrics";
+import {
+  leadingLot,
+  lotNumberMatches,
+  productLots,
+  productStockStatus,
+  visibleProductLots,
+} from "./lib/product-lots";
+import { ProductLotsDetail } from "./product-lots-detail";
 import { ProductCatalogToolbar } from "./product-catalog-toolbar";
 import { matchesCatalogExtras } from "./lib/product-catalog-filters";
 import {
@@ -150,7 +175,6 @@ import { ProductFormSection } from "./product-form-section";
 import { StatusToast } from "./status-toast";
 import { UserPasswordDialog } from "./user-password-dialog";
 import { OperationHistory } from "./operation-history";
-import { ProductActionsMenu } from "./product-actions-menu";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
 import { salesShortcut, type SalesShortcut } from "./lib/sales-shortcuts";
 import { cashAmountDraft } from "./lib/sale-quick-amounts";
@@ -176,7 +200,10 @@ import { prepareAccountPayment } from "./lib/account-payment";
 import { withStockAvailability } from "./lib/stock-availability";
 import type { FormEvent, ReactElement } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeftRight,
+  Pencil,
   X,
   ReceiptText,
   Boxes,
@@ -1488,8 +1515,11 @@ function Products({
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
     "",
   );
-  const [stockFilter, setStockFilter] = useState<"" | "available" | "out">("");
+  const [stockFilter, setStockFilter] = useState<
+    "" | "available" | "out" | "low"
+  >("");
   const [expiryFilter, setExpiryFilter] = useState("");
+  const [lotQuery, setLotQuery] = useState("");
   const [additionalFilters, setAdditionalFilters] = useState(
     emptyCatalogAdditionalFilters,
   );
@@ -1506,8 +1536,9 @@ function Products({
     input?.select();
     return () => dialog?.close();
   }, [formOpen]);
-  const [openActionMenu, setOpenActionMenu] = useState<string>();
-  const [actionAnchor, setActionAnchor] = useState<HTMLButtonElement>();
+  const [expandedLots, setExpandedLots] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [referenceQuery, setReferenceQuery] = useState("");
   const [referenceSearchDone, setReferenceSearchDone] = useState(false);
   // Desplegable de resultados (catálogo propio y fuente externa): se abre al
@@ -2257,7 +2288,6 @@ function Products({
     if (initialProduct) edit(initialProduct);
   }, [initialProduct]);
   const toggleProductActive = (product: CatalogProduct) => {
-    setOpenActionMenu(undefined);
     setLifecycle({ product, status: product.active ? "ARCHIVED" : "ACTIVE" });
   };
   const remove = (product: CatalogProduct) => {
@@ -2303,18 +2333,14 @@ function Products({
       setOptionCreating(false);
     }
   };
+  const stockTotals = catalogStockTotals(stock);
   const stockForProduct = (productId: string) =>
-    stock
-      .filter((lot) => lot.productId === productId)
-      .reduce((total, lot) => total + lot.quantity, 0);
-  const nextExpiryForProduct = (productId: string) =>
-    stock
-      .filter((lot) => lot.productId === productId && lot.expiresAt)
-      .sort(
-        (left, right) =>
-          new Date(left.expiresAt!).getTime() -
-          new Date(right.expiresAt!).getTime(),
-      )[0]?.expiresAt;
+    stockTotals.physical.get(productId) ?? 0;
+  const stockToneForProduct = (productId: string) =>
+    catalogStockTone(
+      stockForProduct(productId),
+      stockTotals.sellable.get(productId) ?? 0,
+    );
   const categoryIds = categoryFilter
     ? categoryBranch(options?.categories ?? [], categoryFilter)
     : null;
@@ -2335,12 +2361,20 @@ function Products({
       (!stockFilter ||
         (stockFilter === "available"
           ? stockForProduct(product.id) > 0
-          : stockForProduct(product.id) === 0))
+          : stockToneForProduct(product.id) === stockFilter)) &&
+      (!lotQuery.trim() ||
+        stock.some(
+          (lot) =>
+            lot.productId === product.id &&
+            lot.quantity > 0 &&
+            lotNumberMatches(lot.number, lotQuery),
+        ))
     );
   });
   const productFilterKey = JSON.stringify([
     organizationId,
     query,
+    lotQuery,
     categoryFilter,
     laboratoryFilter,
     statusFilter,
@@ -2389,7 +2423,23 @@ function Products({
         {!initialProduct && (
           <>
             <div className="catalog-summary-row">
-              <ProductCatalogMetrics products={products} stock={stock} />
+              <ProductCatalogMetrics
+                products={products}
+                stock={stock}
+                selected={activeCatalogMetric({
+                  stock: stockFilter,
+                  expiry: expiryFilter,
+                })}
+                onSelect={(key) => {
+                  const next = toggleCatalogMetric(key, {
+                    stock: stockFilter,
+                    expiry: expiryFilter,
+                  });
+                  setStatusFilter("");
+                  setStockFilter(next.stock);
+                  setExpiryFilter(next.expiry);
+                }}
+              />
               <button
                 type="button"
                 onClick={() => {
@@ -2413,6 +2463,7 @@ function Products({
                 stock: stockFilter,
                 expiry: expiryFilter,
                 reference: "",
+                lot: lotQuery,
               }}
               options={options}
               onChange={(filters) => {
@@ -2423,200 +2474,270 @@ function Products({
                   filters.status === "inactive" ? "inactive" : "",
                 );
                 setStockFilter(
-                  filters.stock === "available"
-                    ? "available"
-                    : filters.stock === "out"
-                      ? "out"
-                      : "",
+                  filters.stock === "available" ||
+                    filters.stock === "out" ||
+                    filters.stock === "low"
+                    ? filters.stock
+                    : "",
                 );
                 setExpiryFilter(filters.expiry);
+                if (filters.lot !== lotQuery) {
+                  setLotQuery(filters.lot);
+                  setExpandedLots(new Set());
+                }
               }}
             />
-            <section className="overflow-hidden border bg-white">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-235 text-left text-sm">
-                  <thead className="bg-[#edf3f5] text-[10px] uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="w-20 px-4 py-3">Foto</th>
-                      <th className="px-4 py-3">Producto</th>
-                      <th className="px-4 py-3">Código de barras</th>
-                      <th className="px-4 py-3">Laboratorio</th>
-                      <th className="px-4 py-3">Público</th>
-                      <th className="px-4 py-3">Stock</th>
-                      <th className="px-4 py-3">Próx. venc.</th>
-                      <th className="px-4 py-3">Estado</th>
-                      <th className="px-4 py-3 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {pageProducts.map((product) => {
-                      const productStock = stockForProduct(product.id);
-                      const expiry = nextExpiryForProduct(product.id);
-                      return (
-                        <tr key={product.id} className="hover:bg-[#f6faf9]">
-                          <td className="px-4 py-3">
-                            <ProductImageEditor
-                              token={token}
-                              organizationId={organizationId}
-                              productId={product.id}
-                              name={product.name}
-                              version={product.image?.updatedAt}
-                              value={undefined}
-                              onChange={() => undefined}
-                              onBusy={() => undefined}
-                              onSave={async (image) => {
-                                await updateCatalogProductImage(
-                                  token,
-                                  organizationId,
-                                  product.id,
-                                  image,
-                                );
-                                done();
-                              }}
-                            />
-                          </td>
-                          <td className="px-4 py-3 font-medium">
-                            {product.name}
-
-                            {(product.presentation ||
-                              product.externalReferencePresentation) && (
-                              <span className="mt-1 block text-xs font-normal text-slate-500">
-                                {product.presentation ||
-                                  product.externalReferencePresentation}
+            <DataTable
+              label="Productos"
+              minWidthClass="min-w-235"
+              columns={[
+                { label: "Foto", className: "w-20" },
+                { label: "Producto" },
+                { label: "Código de barras" },
+                { label: "Laboratorio" },
+                { label: "Público", align: "right" },
+                { label: "Stock", align: "right" },
+                { label: "Próx. venc." },
+                { label: "Estado" },
+                { label: "Acciones", align: "right" },
+              ]}
+              footer={
+                <Pagination
+                  integrated
+                  total={filteredProducts.length}
+                  currentPage={currentProductPage}
+                  totalPages={productTotalPages}
+                  noun="productos"
+                  label="Páginas de productos"
+                  onChange={(page) =>
+                    setProductPage({ key: productFilterKey, page })
+                  }
+                />
+              }
+            >
+              {pageProducts.map((product) => {
+                const productStock = stockForProduct(product.id);
+                const stockTone = stockToneForProduct(product.id);
+                const imported = equivalentBarcodes(product);
+                const lots = productLots(stock, product.id).map((lot) =>
+                  withStockAvailability(lot),
+                );
+                const shownLots = visibleProductLots(
+                  lots,
+                  product.id,
+                  expiryFilter,
+                  lotQuery,
+                );
+                const filteringLots = Boolean(expiryFilter || lotQuery.trim());
+                // Próx. venc. y Estado siguen el orden de lotes del detalle y,
+                // con Vencimiento o búsqueda por lote, sólo los lotes filtrados.
+                const statusLots = filteringLots ? shownLots : lots;
+                const leading = leadingLot(statusLots);
+                const nextLot = leading?.expiresAt ? leading : undefined;
+                const status = productStockStatus(
+                  product.active,
+                  statusLots,
+                  stockTotals.sellable.get(product.id) ?? 0,
+                  stockFilter,
+                );
+                // Lotes con unidades que Vencimiento o la búsqueda por lote dejan afuera.
+                const hiddenLots = lots.length - shownLots.length;
+                // Con un filtro de lotes alcanza uno para desplegar; sin filtro
+                // hace falta más de uno, porque un único lote ya se ve en la fila.
+                const canExpand = filteringLots
+                  ? shownLots.length > 0
+                  : shownLots.length > 1;
+                // Al buscar por lote el detalle arranca abierto: estar en
+                // expandedLots significa que el usuario lo cerró.
+                const lotsOpen =
+                  canExpand &&
+                  (lotQuery.trim()
+                    ? !expandedLots.has(product.id)
+                    : expandedLots.has(product.id));
+                const lotsId = `lotes-${product.id}`;
+                const toggleLots = () =>
+                  setExpandedLots((current) => {
+                    const next = new Set(current);
+                    if (!next.delete(product.id)) next.add(product.id);
+                    return next;
+                  });
+                return (
+                  <Fragment key={product.id}>
+                    <DataTableRow onToggle={canExpand ? toggleLots : undefined}>
+                      <DataTableCell ignoreRowClick>
+                        <ProductImageEditor
+                          token={token}
+                          organizationId={organizationId}
+                          productId={product.id}
+                          name={product.name}
+                          version={product.image?.updatedAt}
+                          value={undefined}
+                          onChange={() => undefined}
+                          onBusy={() => undefined}
+                          onSave={async (image) => {
+                            await updateCatalogProductImage(
+                              token,
+                              organizationId,
+                              product.id,
+                              image,
+                            );
+                            done();
+                          }}
+                        />
+                      </DataTableCell>
+                      <DataTableCell>
+                        <CellText
+                          primary={
+                            canExpand ? (
+                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                {product.name}
+                                <button
+                                  type="button"
+                                  aria-expanded={lotsOpen}
+                                  aria-controls={lotsId}
+                                  aria-label={`${lotsOpen ? "Ocultar" : "Ver"} ${shownLots.length} lotes de ${product.name}`}
+                                  onClick={toggleLots}
+                                  className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-colors ${lotsOpen ? "border-teal-600 bg-teal-600 text-white" : "border-teal-200 bg-teal-50 text-teal-800 hover:border-teal-400"}`}
+                                >
+                                  {shownLots.length}{" "}
+                                  {shownLots.length === 1 ? "lote" : "lotes"}
+                                  <ChevronDown
+                                    size={14}
+                                    className={`transition-transform ${lotsOpen ? "rotate-180" : ""}`}
+                                  />
+                                </button>
                               </span>
+                            ) : (
+                              product.name
+                            )
+                          }
+                          secondary={
+                            product.presentation ||
+                            product.externalReferencePresentation
+                          }
+                        />
+                      </DataTableCell>
+                      <DataTableCell numeric>
+                        {primaryBarcodeOf(product) ??
+                          product.barcodes[0]?.code ??
+                          "—"}
+                        {imported.length ? (
+                          <span
+                            className="mt-0.5 block w-fit cursor-help text-xs font-medium text-teal-700"
+                            title={`Envase importado del mismo medicamento: ${imported.join(", ")}`}
+                          >
+                            ↳ {imported.length}{" "}
+                            {imported.length === 1 ? "importado" : "importados"}
+                          </span>
+                        ) : null}
+                      </DataTableCell>
+                      <DataTableCell>
+                        {product.laboratory?.name ?? "—"}
+                      </DataTableCell>
+                      <DataTableCell align="right" numeric>
+                        {money(product.prices[0]?.amountMinor ?? 0)}
+                      </DataTableCell>
+                      <DataTableCell
+                        align="right"
+                        numeric
+                        className={
+                          stockTone === "out"
+                            ? "font-semibold text-rose-600"
+                            : stockTone === "low"
+                              ? "font-semibold text-amber-600"
+                              : ""
+                        }
+                      >
+                        {productStock}
+                      </DataTableCell>
+                      <DataTableCell
+                        numeric
+                        className={
+                          nextLot?.expiryStatus === "EXPIRED"
+                            ? "font-semibold text-rose-600"
+                            : nextLot?.expiryStatus === "EXPIRING_SOON"
+                              ? "font-semibold text-amber-600"
+                              : ""
+                        }
+                      >
+                        {nextLot?.expiresAt
+                          ? new Date(nextLot.expiresAt).toLocaleDateString(
+                              "es-AR",
+                              {
+                                month: "2-digit",
+                                year: "numeric",
+                                timeZone: "UTC",
+                              },
+                            )
+                          : "—"}
+                      </DataTableCell>
+                      <DataTableCell>
+                        <StatusLabel tone={status.tone}>
+                          {status.label}
+                        </StatusLabel>
+                        {status.expiredLots ? (
+                          <span className="mt-0.5 block whitespace-nowrap text-xs text-rose-600">
+                            {status.expiredLots === 1
+                              ? "1 lote vencido"
+                              : `${status.expiredLots} lotes vencidos`}
+                          </span>
+                        ) : null}
+                      </DataTableCell>
+                      <DataTableCell align="right">
+                        <span className="inline-flex gap-1.5">
+                          <RowIconAction
+                            tone="edit"
+                            label={`Editar ${product.name}`}
+                            title="Editar producto"
+                            onClick={() => edit(product)}
+                          >
+                            <Pencil size={16} />
+                          </RowIconAction>
+                          <RowIconAction
+                            tone="neutral"
+                            label={`${product.active ? "Archivar" : "Restaurar"} ${product.name}`}
+                            title={product.active ? "Archivar" : "Restaurar"}
+                            onClick={() => toggleProductActive(product)}
+                          >
+                            {product.active ? (
+                              <Archive size={16} />
+                            ) : (
+                              <ArchiveRestore size={16} />
                             )}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                            {primaryBarcodeOf(product) ??
-                              product.barcodes[0]?.code ??
-                              "—"}
-                            {equivalentBarcodes(product).map((code) => (
-                              <span
-                                key={code}
-                                className="mt-1 flex w-fit items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-800"
-                                title="Código equivalente: envase importado del mismo medicamento"
-                              >
-                                <span className="font-sans font-semibold">
-                                  Importado
-                                </span>
-                                {code}
-                              </span>
-                            ))}
-                          </td>
-                          <td className="px-4 py-3">
-                            {product.laboratory?.name ?? "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            {money(product.prices[0]?.amountMinor ?? 0)}
-                          </td>
-                          <td className="px-4 py-3">{productStock}</td>
-                          <td className="px-4 py-3">
-                            {expiry
-                              ? new Date(expiry).toLocaleDateString("es-AR", {
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })
-                              : "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${product.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}
-                            >
-                              {product.active
-                                ? productStock
-                                  ? "Activo"
-                                  : "Sin stock"
-                                : "Archivado"}
-                            </span>
-                          </td>
-                          <td className="relative px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              aria-label={`Acciones para ${product.name}`}
-                              aria-expanded={openActionMenu === product.id}
-                              onClick={(event) => {
-                                setActionAnchor(event.currentTarget);
-                                setOpenActionMenu((current) =>
-                                  current === product.id
-                                    ? undefined
-                                    : product.id,
-                                );
-                              }}
-                              className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800"
-                            >
-                              Gestionar
-                              <ChevronDown size={14} />
-                            </button>
-                            {openActionMenu === product.id && actionAnchor ? (
-                              <ProductActionsMenu
-                                anchor={actionAnchor}
-                                onClose={() => setOpenActionMenu(undefined)}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenActionMenu(undefined);
-                                    edit(product);
-                                  }}
-                                  className="w-full px-3 py-2 text-center text-sm text-slate-700 hover:bg-slate-50"
-                                >
-                                  Editar producto
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void toggleProductActive(product)
-                                  }
-                                  className="w-full px-3 py-2 text-center text-sm text-slate-700 hover:bg-slate-50"
-                                >
-                                  {product.active ? "Archivar" : "Restaurar"}
-                                </button>
-                                <div className="my-1 border-t border-slate-100" />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenActionMenu(undefined);
-                                    void remove(product);
-                                  }}
-                                  className="w-full px-3 py-2 text-center text-sm text-rose-700 hover:bg-rose-50"
-                                >
-                                  {product.active
-                                    ? "Eliminar definitivamente"
-                                    : "Eliminar de esta sucursal"}
-                                </button>
-                              </ProductActionsMenu>
-                            ) : null}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!filteredProducts.length ? (
-                      <tr>
-                        <td
-                          colSpan={9}
-                          className="px-4 py-10 text-center text-slate-500"
-                        >
-                          No hay productos para los filtros seleccionados.
-                        </td>
-                      </tr>
+                          </RowIconAction>
+                          <RowIconAction
+                            tone="danger"
+                            label={`${product.active ? "Eliminar definitivamente" : "Eliminar de esta sucursal"} ${product.name}`}
+                            title={
+                              product.active
+                                ? "Eliminar definitivamente"
+                                : "Eliminar de esta sucursal"
+                            }
+                            onClick={() => remove(product)}
+                          >
+                            <Trash2 size={16} />
+                          </RowIconAction>
+                        </span>
+                      </DataTableCell>
+                    </DataTableRow>
+                    {lotsOpen ? (
+                      <DataTableDetailRow id={lotsId} colSpan={9}>
+                        <ProductLotsDetail
+                          productName={product.name}
+                          lots={shownLots}
+                          hidden={hiddenLots}
+                        />
+                      </DataTableDetailRow>
                     ) : null}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination
-                integrated
-                total={filteredProducts.length}
-                currentPage={currentProductPage}
-                totalPages={productTotalPages}
-                noun="productos"
-                label="Páginas de productos"
-                onChange={(page) => {
-                  setOpenActionMenu(undefined);
-                  setActionAnchor(undefined);
-                  setProductPage({ key: productFilterKey, page });
-                }}
-              />
-            </section>
+                  </Fragment>
+                );
+              })}
+              {!filteredProducts.length ? (
+                <DataTableEmpty colSpan={9}>
+                  No hay productos para los filtros seleccionados.
+                </DataTableEmpty>
+              ) : null}
+            </DataTable>
           </>
         )}
         {productSaveError && (

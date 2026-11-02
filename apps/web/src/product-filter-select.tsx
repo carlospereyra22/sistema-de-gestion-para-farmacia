@@ -144,19 +144,19 @@ export function ProductFilterSelect({
             className={
               compact
                 ? "sr-only"
-                : "block text-[11px] font-semibold text-slate-700"
+                : "block text-[13px] font-medium leading-4 text-slate-600"
             }
           >
             {label}
           </span>
           <span
-            className={`block truncate ${compact ? "text-sm text-slate-700" : "text-[11px] leading-4 text-slate-500"}`}
+            className={`block truncate text-sm ${compact ? "text-slate-700" : "font-medium leading-5 text-slate-800"}`}
           >
             {options[selected]?.label ?? "Seleccionar"}
           </span>
         </span>
         <ChevronDown
-          size={13}
+          size={15}
           className={`shrink-0 text-teal-700 transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
@@ -180,7 +180,7 @@ export function ProductFilterSelect({
                 onPointerMove={() => setActive(index)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choose(index)}
-                className={`flex cursor-pointer items-center justify-between gap-3 break-words rounded-lg px-3 py-2.5 text-xs ${index === active ? "bg-teal-50 text-teal-800" : "text-slate-600"} ${option.value === value ? "font-semibold" : ""}`}
+                className={`flex cursor-pointer items-center justify-between gap-3 break-words rounded-lg px-3 py-2.5 text-sm ${index === active ? "bg-teal-50 text-teal-800" : "text-slate-600"} ${option.value === value ? "font-semibold" : ""}`}
               >
                 {option.label}
                 {option.value === value && (

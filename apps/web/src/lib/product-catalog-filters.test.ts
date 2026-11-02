@@ -63,3 +63,24 @@ it("combines expiry and reference filters without treating expired stock as upco
     ),
   ).toBe(true);
 });
+it("acota próximos a vencer a 30 y 60 días sin incluir vencidos", () => {
+  const hoy = new Date("2026-11-02T12:00:00Z");
+  const lote = (expiresAt: string) => [
+    {
+      productId: "a",
+      quantity: 1,
+      expiresAt,
+      expiryStatus: "EXPIRING_SOON" as const,
+    },
+  ];
+  const filtra = (expiresAt: string, expiry: string) =>
+    matchesCatalogExtras(product, lote(expiresAt), "", expiry, "", hoy);
+  expect(filtra("2026-11-20", "expiring-30")).toBe(true);
+  expect(filtra("2026-12-20", "expiring-30")).toBe(false);
+  expect(filtra("2026-12-20", "expiring-60")).toBe(true);
+  expect(filtra("2027-01-20", "expiring-60")).toBe(false);
+  expect(filtra("2027-01-20", "expiring")).toBe(true);
+  expect(
+    matchesCatalogExtras(product, lots.slice(0, 1), "", "expiring-30", "", hoy),
+  ).toBe(false);
+});
