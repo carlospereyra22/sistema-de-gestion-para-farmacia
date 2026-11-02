@@ -12,6 +12,13 @@ import type { FiscalPointDto } from "./fiscal-point.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { readTicketHeader, type TicketHeaderDto } from "./ticket-header";
 import {
+  readDocumentTemplate,
+  readPrintFormat,
+  type DocumentTemplateDto,
+  type PrintFormat,
+} from "./document-template";
+import { decodeProductImage } from "../catalog/product-image";
+import {
   readFiscalProfile,
   validateFiscalDraft,
   type FiscalProfileDto,
@@ -260,6 +267,149 @@ export class OrganizationsService {
     });
   }
 
+  // Lectura para imprimir: también la necesita quien vende (SALE_READ).
+  // Con branchId devuelve además el formato de esa sucursal y el que se usa al vender.
+  async documentTemplate(
+    actorId: string,
+    organizationId: string,
+    branchId?: string,
+  ) {
+    await this.assertPermission(actorId, organizationId, [
+      "ORGANIZATION_READ",
+      "SALE_READ",
+    ]);
+    const [organization, branch] = await Promise.all([
+      this.prisma.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: {
+          documentTemplate: true,
+          documentLogo: true,
+          documentLogoUpdatedAt: true,
+        },
+      }),
+      branchId
+        ? this.prisma.branch.findFirst({
+            where: { id: branchId, organizationId, deletedAt: null },
+            select: { printFormat: true },
+          })
+        : null,
+    ]);
+    if (branchId && !branch)
+      throw new NotFoundException("La sucursal no está disponible.");
+    const template = readDocumentTemplate(organization.documentTemplate);
+    const branchFormat = readPrintFormat(branch?.printFormat);
+    return {
+      ...template,
+      branchFormat,
+      effectiveFormat: branchFormat ?? template.defaultFormat,
+      logo: organization.documentLogo
+        ? `data:image/jpeg;base64,${Buffer.from(organization.documentLogo).toString("base64")}`
+        : null,
+      logoUpdatedAt: organization.documentLogoUpdatedAt,
+    };
+  }
+  async updateBranchPrintFormat(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    printFormat: PrintFormat | null,
+  ) {
+    await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
+    return this.prisma.$transaction(async (tx) => {
+      const branch = await tx.branch.findFirst({
+        where: { id: branchId, organizationId, deletedAt: null },
+        select: { id: true, printFormat: true },
+      });
+      if (!branch)
+        throw new NotFoundException("La sucursal no está disponible.");
+      await tx.branch.update({
+        where: { id: branchId },
+        data: { printFormat },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          branchId,
+          actorId,
+          entityType: "BRANCH",
+          entityId: branchId,
+          action: "BRANCH_PRINT_FORMAT_UPDATED",
+          before: { printFormat: branch.printFormat },
+          after: { printFormat },
+        },
+      });
+      return { branchId, printFormat };
+    });
+  }
+  async updateDocumentTemplate(
+    actorId: string,
+    organizationId: string,
+    input: DocumentTemplateDto,
+  ) {
+    await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
+    return this.prisma.$transaction(async (tx) => {
+      // Se bloquea la fila: dos pantallas guardando a la vez no se pisan los campos.
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId}::uuid FOR UPDATE`;
+      const current = await tx.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: { documentTemplate: true },
+      });
+      const provided = Object.fromEntries(
+        // null o ausente = no se cambia ese campo.
+        Object.entries(input).filter(([, value]) => value != null),
+      );
+      const data = readDocumentTemplate({
+        ...readDocumentTemplate(current.documentTemplate),
+        ...provided,
+      });
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { documentTemplate: { ...data } },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "ORGANIZATION",
+          entityId: organizationId,
+          action: "DOCUMENT_TEMPLATE_UPDATED",
+          after: { ...data },
+        },
+      });
+      return data;
+    });
+  }
+  async saveDocumentLogo(
+    actorId: string,
+    organizationId: string,
+    dataUrl: string | null,
+  ) {
+    await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
+    const content =
+      dataUrl === null ? null : new Uint8Array(decodeProductImage(dataUrl));
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.organization.update({
+        where: { id: organizationId },
+        data: {
+          documentLogo: content,
+          documentLogoUpdatedAt: content === null ? null : new Date(),
+        },
+        select: { documentLogoUpdatedAt: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "ORGANIZATION",
+          entityId: organizationId,
+          action:
+            content === null ? "DOCUMENT_LOGO_REMOVED" : "DOCUMENT_LOGO_SAVED",
+        },
+      });
+      return { logoUpdatedAt: result.documentLogoUpdatedAt };
+    });
+  }
+
   async listBranches(actorId: string, organizationId: string) {
     await this.assertPermission(actorId, organizationId, "ORGANIZATION_READ");
     return this.prisma.branch.findMany({
@@ -273,6 +423,7 @@ export class OrganizationsService {
         city: true,
         province: true,
         phone: true,
+        printFormat: true,
       },
       orderBy: { name: "asc" },
     });
@@ -475,11 +626,14 @@ export class OrganizationsService {
     });
   }
 
+  // Acepta un código o varios alternativos (alcanza con tener uno).
   private async assertPermission(
     actorId: string,
     organizationId: string,
-    permissionCode: string,
+    permissionCode: string | readonly string[],
   ): Promise<void> {
+    const codes =
+      typeof permissionCode === "string" ? [permissionCode] : permissionCode;
     const membership = await this.prisma.userOrganization.findUnique({
       where: { userId_organizationId: { userId: actorId, organizationId } },
       include: {
@@ -495,8 +649,8 @@ export class OrganizationsService {
     const allowed =
       membership?.active &&
       membership.roles.some(({ role }) =>
-        role.permissions.some(
-          ({ permission }) => permission.code === permissionCode,
+        role.permissions.some(({ permission }) =>
+          codes.includes(permission.code),
         ),
       );
     if (!allowed)
