@@ -4763,6 +4763,8 @@ function Sales({
             </button>
           </div>
           <SaleCatalogTable
+            token={token}
+            organizationId={organizationId}
             idPrefix={catalogId}
             rows={catalogRows.map((item) => ({
               product: item,
@@ -4918,7 +4920,7 @@ function Sales({
         }
         lines={
           <div className="sale-cart flex min-h-0 flex-1 flex-col">
-            <div className="sales-cart-row grid gap-2.5 border-b bg-slate-50 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            <div className="sales-cart-row grid gap-2.5 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
               <span>Producto</span>
               <span className="text-center">Cantidad</span>
               <span className="text-center">Precio unit.</span>
@@ -4928,7 +4930,7 @@ function Sales({
               <span className="text-right">Subtotal</span>
               <span aria-hidden="true" />
             </div>
-            <div className="min-h-0 flex-1 divide-y overflow-y-auto">
+            <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
               {lines.length ? (
                 sortSaleLines(lines, products).map((line) => {
                   const product = products.find(
@@ -4964,14 +4966,23 @@ function Sales({
                         </div>
                         <div className="min-w-0">
                           <p
-                            className="sales-cart-product-name text-sm font-semibold"
+                            className="sales-cart-product-name text-[15px] font-semibold"
                             title={line.description ?? product?.name}
                           >
                             {line.description ?? product?.name}
                           </p>
-                          <p className="flex items-center gap-2 text-[11px] text-slate-500">
+                          {/* La presentación distingue productos de nombre parecido. */}
+                          {!line.description && product?.presentation && (
+                            <p
+                              className="truncate text-xs text-slate-600"
+                              title={product.presentation}
+                            >
+                              {product.presentation}
+                            </p>
+                          )}
+                          <p className="flex items-center gap-2 text-xs text-slate-500">
                             {line.productId === lastAddedId && (
-                              <span className="rounded-full bg-teal-100/70 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
+                              <span className="rounded-full bg-teal-100/70 px-2 py-0.5 text-[11px] font-semibold text-teal-800">
                                 Recién agregado
                               </span>
                             )}
@@ -5124,7 +5135,7 @@ function Sales({
                           }}
                         />
                       )}
-                      <div className="text-right text-sm font-semibold">
+                      <div className="text-right text-[15px] font-semibold tabular-nums">
                         <p>
                           {money(
                             unitPrice * line.quantity - line.discountMinor,

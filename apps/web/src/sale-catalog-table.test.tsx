@@ -24,6 +24,8 @@ const product = (
 const render = (selectedId?: string) =>
   renderToStaticMarkup(
     <SaleCatalogTable
+      token="t"
+      organizationId="o"
       idPrefix="catalogo"
       selectedId={selectedId}
       onSelect={() => {}}
@@ -76,6 +78,8 @@ it("marks the selected row", () => {
 it("explains an empty search", () => {
   const html = renderToStaticMarkup(
     <SaleCatalogTable
+      token="t"
+      organizationId="o"
       idPrefix="catalogo"
       rows={[]}
       hiddenCount={0}

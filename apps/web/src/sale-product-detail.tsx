@@ -54,16 +54,17 @@ export function SaleProductDetail({
           productId={product.id}
           name={product.name}
           version={product.image?.updatedAt}
+          large
         />
       </div>
       <div className="min-w-0 flex-1">
         <p
-          className="truncate text-[15px] font-semibold text-slate-900"
+          className="truncate text-base font-semibold text-slate-900"
           title={product.name}
         >
           {product.name}
         </p>
-        <p className="truncate text-[11px] text-slate-500">
+        <p className="truncate text-xs text-slate-500">
           {[
             product.activeIngredient,
             product.pharmaceuticalForm,
@@ -74,7 +75,7 @@ export function SaleProductDetail({
             .join(" · ")}
         </p>
         <div className="mt-1.5 flex items-center gap-3">
-          <span className="whitespace-nowrap text-[17px] font-bold tabular-nums text-teal-800">
+          <span className="whitespace-nowrap text-lg font-bold tabular-nums text-teal-800">
             {price === undefined ? "—" : money(price)}
           </span>
           <div className="sale-quantity-stepper w-24">
