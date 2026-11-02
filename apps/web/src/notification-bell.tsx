@@ -20,6 +20,7 @@ import {
 import { accountAlerts, stockAlerts } from "./lib/workspace-alerts";
 import type { WorkspaceView } from "./lib/workspace-location";
 import { alertVersion, readSeenAlerts } from "./lib/seen-alerts";
+import { LOW_STOCK_UNITS } from "./lib/stock-level";
 import {
   addAlertHistory,
   readAlertHistory,
@@ -63,7 +64,7 @@ export function NotificationBell({
     }
   }, [historyKey, history]);
   const [openedVersions, setOpenedVersions] = useState<string[]>([]);
-  const [minimum, setMinimum] = useState(5);
+  const [minimum, setMinimum] = useState(LOW_STOCK_UNITS);
   const [rows, setRows] = useState<AccountDueRow[]>([]);
   const [stock, setStock] = useState<{
     products: CatalogProduct[];

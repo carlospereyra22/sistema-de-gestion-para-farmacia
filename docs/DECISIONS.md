@@ -2,6 +2,15 @@
 
 ## DECIDED
 
+- 01/11/2026 (SISTEMA-16): Rediseño de Ventas: catálogo + Venta actual
+  protagonista en dos columnas iguales y cobro en una ventana. Se elimina la
+  columna fija de cobro. El descuento general admite % o $, pero siempre se envía
+  como importe en centavos. Los cálculos de la ventana (vuelto, montos rápidos,
+  formato del importe) son vista previa y la API sigue validando. En Venta
+  confirmada, imprimir es la acción principal; la vista previa del ticket es
+  sólo visual y a pedido, y la impresión sigue por envío directo RAW. Sin cambios
+  de API, Prisma ni contratos. Ver WORKSPACE.md y `docs/ventas-rediseno/`.
+
 - 01/11/2026 (SISTEMA-10): un solo repositorio y una sola rama `main`, sin ramas
   por ambiente. Entre ambientes viaja un commit de `main` identificado con un tag
   `vX.Y.Z`; produccion se publica desde el tag ya probado en test. El ambiente hoy

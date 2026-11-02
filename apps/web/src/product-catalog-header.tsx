@@ -1,5 +1,6 @@
 import { Box, Boxes, BadgeCheck, PackageX, PackageMinus } from "lucide-react";
 import type { CatalogProduct, StockLot } from "./lib/api";
+import { stockLevel } from "./lib/stock-level";
 
 export function ProductCatalogTitle() {
   return (
@@ -57,10 +58,8 @@ export function ProductCatalogMetrics({
     },
     {
       label: "Stock bajo",
-      value: active.filter((p) => {
-        const quantity = sellable.get(p.id) ?? 0;
-        return quantity > 0 && quantity <= 5;
-      }).length,
+      value: active.filter((p) => stockLevel(sellable.get(p.id) ?? 0) === "low")
+        .length,
       icon: PackageMinus,
       tone: "catalog-metric-low",
     },

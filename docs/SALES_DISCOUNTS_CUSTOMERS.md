@@ -1,8 +1,8 @@
 # Descuentos y actualización de clientes
 
-El editor de descuento comienza vacío cuando no hay descuento, selecciona el importe al recibir foco, aplica con Enter y cancela con Escape. El campo vacío permite quitar el descuento. Admite pesos con coma decimal o punto decimal y separadores de miles argentinos; rechaza importes negativos, texto o decimales ambiguos. Se conserva el límite del subtotal y el reparto exacto en centavos.
+El descuento general está en el pie de Venta actual (01/11/2026, SISTEMA-16) con un selector % / $ (porcentaje por defecto). Comienza vacío cuando no hay descuento, selecciona el texto al recibir foco, aplica con Enter y cancela con Escape. El campo vacío permite quitar el descuento. En $ admite pesos con coma decimal o punto decimal y separadores de miles argentinos; rechaza importes negativos, texto o decimales ambiguos. En % acepta de 0 a 100 con hasta dos decimales y coma decimal; se convierte a centavos redondeando (`lib/sale-discount-percent.ts`), así que al backend le sigue llegando un importe. Se conserva el límite del subtotal y el reparto exacto en centavos entre las líneas.
 
-Los editores lateral y modal no se montan simultáneamente, evitando que el foco se ubique detrás de la ventana de cobro. La selección del texto no activa el buscador del escáner.
+La selección del texto no activa el buscador del escáner.
 
 Al aplicar un descuento, se reduce únicamente la asignación pendiente a cuenta corriente si supera el nuevo total. No se incrementa automáticamente esa financiación al quitar un descuento: se conserva el saldo pendiente para completar. Los importes cargados en efectivo, tarjeta y transferencia no se modifican silenciosamente. Un excedente cubierto por efectivo conserva el vuelto; si el excedente corresponde a tarjeta/transferencia se bloquea el descuento con un aviso para corregir ese pago. El servidor sigue validando el cobro al confirmar; este ajuste no escribe movimientos ni deudas por sí mismo.
 

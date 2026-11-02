@@ -22,14 +22,27 @@ La adaptación usa ancho disponible en píxeles CSS, no detección del equipo: u
 - Por debajo de 1800 px el menú es una columna de iconos de 72 px. Los botones conservan nombres accesibles y muestran una etiqueta flotante al pasar el cursor o enfocar con teclado. Una sola etiqueta a la vez, fuera del contenedor desplazable; desaparece al salir, hacer clic, pulsar Escape, desplazar o redimensionar. Se respeta la preferencia de movimiento reducido y no se duplica con el título nativo.
 - Entre 1024 y 1799 px el encabezado mide 56 px. La cuenta muestra avatar y flecha; el menú desplegado mantiene su ancho de 260 px con organización, sucursal y cierre de sesión. La sucursal también sigue disponible en el selector de la página.
 - En ese mismo rango, la franja compartida por todas las secciones usa título de 20 px, acciones y selector de 36 px y separaciones reducidas. Actualizar referencias conserva su fecha; la descripción de Listas de precios se compacta sin ocultarla. Las acciones pueden pasar a otra línea si no caben. Las reglas sólo afectan controles directos de la franja, no formularios o ventanas abiertas desde ellos. Ventas aprovecha los 16 px recuperados de altura.
-- Entre 1200 y 1799 px Ventas conserva tres columnas, con mínimo de 330 px para cobro, controles de cantidad sin comprimir y desplazamiento interno independiente del botón de confirmar. Se reduce espacio exterior, no se escala toda la página. El caso de 1606 px queda incluido en esta vista y ya no activa prematuramente el menú ancho.
-- Entre 1024 y 1199 px (incluido zoom elevado) se muestran búsqueda y carrito, con cobro debajo a todo el ancho para evitar campos superpuestos. En pantallas aún menores se mantiene la distribución vertical previa.
+- Desde 1024 px Ventas usa dos columnas iguales: catálogo y Venta actual (ver «Ventas» más abajo). Entre 1024 y 1799 px se reduce espacio exterior y la grilla del carrito, sin escalar la página. El caso de 1606 px queda incluido en esta vista y ya no activa prematuramente el menú ancho.
+- Entre 1024 y 1199 px (incluido zoom elevado) el catálogo oculta la columna Categoría según el ancho de la propia tabla y el carrito oculta miniaturas. En pantallas aún menores se apila.
 
 No cambia cobros, impuestos, permisos, precios ni comportamiento del escáner. Pruebas automatizadas cubren nombres accesibles y límites declarados del CSS; no sustituyen la validación visual con zoom y hardware reales.
 
-### Altura del panel de cobro
+### Altura de Venta actual
 
-Desde 1200 px de ancho y hasta 950 px de alto disponible, el panel de cobro reduce relleno y separaciones incluso en escritorio ancho. Conserva tamaños de texto, avisos, métodos e importes; la cuenta corriente y confirmación mantienen al menos 44 px de alto. No cambia el menú, encabezado, carrito ni modal de cobro. A mayor altura se conserva el espaciado original. El contenido sigue siendo desplazable cuando hay pagos/avisos extra; confirmar permanece en el pie independiente.
+Desde 1200 px de ancho y hasta 950 px de alto disponible, Venta actual reduce relleno del encabezado, contexto y pie, y el botón Cobrar baja a 48 px (nunca menos de 44 px). Conserva tamaños de texto e importes. A mayor altura se conserva el espaciado original.
+
+## Ventas (SISTEMA-16, 01/11/2026)
+
+Rediseño «Propuesta E». Plan y referencia visual en `docs/ventas-rediseno/`.
+
+- **Catálogo (izquierda):** un único buscador (lector y F2) con filtros Categoría y Con stock (apagado por defecto). Tabla con Producto, Categoría, Stock y Precio; stock bajo (≤ 5, `lib/stock-level.ts`) con punto ámbar y «Sin stock» como chip. Sin búsqueda muestra todo el catálogo, también sin stock, con un tope de 200 filas. Debajo, el detalle del producto elegido con cantidad, Agregar (Enter) y Limpiar (Esc). Los productos sin stock se pueden elegir pero no agregar.
+- **Venta actual (derecha):** cliente y lista de precios, líneas con cantidad, precio, descuento y subtotal, marca «Recién agregado» en la última línea, conceptos manuales en el menú «…». El pie en una sola fila tiene descuento general (% o $), el único total grande y Cobrar (Ctrl + Enter).
+- **Ventana de cobro:** alto fijo (580 px o el alto disponible) para que no cambie al sumar pagos o avisos; el cuerpo hace scroll. Medios 1–4 (cuenta corriente sólo con cliente habilitado), comprobante Ticket / Factura, importe con formato mientras se escribe (`1000` → `1.000,00`), botón Exacto, montos rápidos en efectivo, vuelto a entregar y, si el importe no alcanza, «Faltan $ X. ¿Con qué medio se completa?». Enter con importe parcial registra ese pago y precarga lo que falta. Los errores se muestran dentro de la ventana y el reintento conserva el mismo `clientOperationId`.
+- **Venta confirmada:** Imprimir ticket es la acción principal (Enter); después de imprimir, Nueva venta pasa a ser la principal (Enter, Enter). Esc o la X cierran. Muestra cliente, comprobante interno, vuelto y, a pedido, la vista previa del ticket de 80 mm con la misma plantilla de impresión.
+- **Encabezado:** pastilla de caja: «Caja abierta», «Sin caja · el cobro queda pendiente» o «Sin caja abierta».
+- **Atajos:** F2 buscar; escribir en cualquier lugar inicia la búsqueda; ↑ / ↓, Enter, doble clic y Esc en el catálogo; + / − suman o restan en la última línea fuera de campos; Ctrl + Enter abre el cobro o lo confirma; 1–4 eligen medio dentro del cobro fuera de campos. Se bloquean con venta inactiva, venta por retomar, envío en curso o ventana abierta.
+
+Todo cálculo de la web (vuelto, montos rápidos, porcentaje) es vista previa: el backend sigue validando precios, stock, pagos y comprobantes.
 
 ## Adaptación del escritorio
 
@@ -40,13 +53,13 @@ monitor. No se aplica `zoom` ni se bloquea la ampliación del navegador.
   vista de referencia de 1920 px.
 - Entre 1440 y 1599 px el menú ocupa 184 px; por debajo, una barra de iconos de
   72 px conserva los nombres accesibles y las ayudas al pasar el cursor.
-- Ventas mantiene búsqueda, carrito y cobro en tres columnas desde 1024 px.
-  El carrito y sus encabezados usan la misma cuadrícula compacta, sin imponer
-  un ancho mínimo de 500 px al panel central.
+- Ventas usa catálogo y Venta actual en dos columnas iguales desde 1024 px; el
+  cobro se hace en una ventana. El carrito y sus encabezados usan la misma
+  cuadrícula.
 - El área de ventas tiene un mínimo de 620 px de alto. En ventanas bajas se
-  permite desplazamiento vertical; el cobro tiene desplazamiento propio para
-  no ocultar pagos adicionales ni la confirmación.
-- Por debajo de 1024 px Ventas sigue apilada para conservar controles legibles.
+  permite desplazamiento vertical; catálogo y líneas tienen scroll propio.
+- Por debajo de 1024 px Ventas se apila (catálogo arriba, venta abajo) y el pie
+  con Cobrar queda fijo al pie de la pantalla.
 - Los cuatro filtros de Productos y el resumen lateral de Listas de precios
   se disponen en columnas desde 1024 px.
 - La adaptación es transversal: los hijos de cuadrículas pueden contraerse,
