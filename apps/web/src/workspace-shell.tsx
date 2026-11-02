@@ -69,13 +69,8 @@ import { OrganizationWorkspace } from "./organization-workspace";
 import { OrganizationLogo } from "./organization-logo";
 import { SaleDocumentChoice } from "./sale-document-choice";
 import { SaleConceptDialog } from "./sale-concept-dialog";
-import { DiscountAmountInput } from "./discount-amount-input";
 import { SaleProductPricing } from "./sale-product-pricing";
-import {
-  discountDraft,
-  parseDiscountDraft,
-  paymentsAfterDiscount,
-} from "./lib/discount-editor";
+import { paymentsAfterDiscount } from "./lib/discount-editor";
 import { subscribeSalesDataRefresh } from "./lib/sales-data-refresh";
 import { SaleConceptMenu } from "./sale-concept-menu";
 import { conceptMaximumQuantity } from "./lib/concept-amount";
@@ -134,6 +129,12 @@ import { UserPasswordDialog } from "./user-password-dialog";
 import { OperationHistory } from "./operation-history";
 import { ProductActionsMenu } from "./product-actions-menu";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
+import { salesShortcut, type SalesShortcut } from "./lib/sales-shortcuts";
+import { cashAmountDraft } from "./lib/sale-quick-amounts";
+import { SaleCurrentPanel } from "./sale-current-panel";
+import { SaleGeneralDiscount } from "./sale-general-discount";
+import { SaleCheckoutDialog } from "./sale-checkout-dialog";
+import { SaleConfirmedDialog } from "./sale-confirmed-dialog";
 import { shouldFocusSalesBackground } from "./lib/sales-background-focus";
 import { CatalogOptionsManager } from "./catalog-options-manager";
 import { CatalogOptionSelect } from "./catalog-option-select";
@@ -152,7 +153,6 @@ import {
   X,
   ReceiptText,
   Boxes,
-  Banknote,
   Check,
   LayoutDashboard,
   Shapes,
@@ -167,7 +167,6 @@ import {
   Minus,
   Package,
   ChevronDown,
-  Pencil,
   Plus,
   ScanBarcode,
   Search,
@@ -176,7 +175,6 @@ import {
   ShieldCheck,
   Tags,
   Trash2,
-  UserRound,
   Users,
   Settings,
   Truck,
@@ -631,6 +629,20 @@ export function WorkspaceShell({
           )}
           {view === "Ventas" && (
             <div className="workspace-sales-actions">
+              <span
+                role="status"
+                className={`inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${session ? "bg-emerald-50 text-emerald-700" : allowWithoutSession ? "bg-amber-50 text-amber-800" : "bg-rose-50 text-rose-700"}`}
+              >
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-current"
+                />
+                {session
+                  ? "Caja abierta"
+                  : allowWithoutSession
+                    ? "Sin caja · el cobro queda pendiente"
+                    : "Sin caja abierta"}
+              </span>
               {salesScreen === "pos" ? (
                 <button
                   type="button"
@@ -3775,9 +3787,9 @@ function Sales({
   const catalogId = useId();
   const productSearchRef = useRef<HTMLInputElement>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
-  const [discountAmount, setDiscountAmount] = useState("");
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [lastAddedId, setLastAddedId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [lines, setLines] = useState<
     {
@@ -4079,6 +4091,7 @@ function Sales({
           : line,
       );
     });
+    setLastAddedId(selectedProductId);
     return true;
   };
   const add = (event: Pick<FormEvent, "preventDefault">) => {
@@ -4119,10 +4132,9 @@ function Sales({
       ),
     );
   };
-  const applyDiscount = () => {
-    const nextDiscountMinor = parseDiscountDraft(discountAmount);
+  const applyDiscount = (nextDiscountMinor: number) => {
     if (
-      nextDiscountMinor === undefined ||
+      !Number.isSafeInteger(nextDiscountMinor) ||
       nextDiscountMinor < 0 ||
       nextDiscountMinor > subtotal
     ) {
@@ -4156,11 +4168,14 @@ function Sales({
       ),
     );
     setPayments(nextPayments);
-    setDiscountEditorOpen(false);
   };
   const paid = payments.reduce((sum, payment) => sum + payment.amountMinor, 0);
-  const changeMinor = Math.max(paid - total, 0);
   const paymentAmountMinor = parseArgentineAmountMinor(paymentAmount);
+  // Con la ventana de cobro abierta, los errores se muestran dentro de ella.
+  const reportPayment = (message: string): undefined => {
+    if (checkoutOpen) setCheckoutError(message);
+    else error(message);
+  };
   const groupedPayments = payments.reduce<
     { method: "TRANSFER" | "CARD" | "CASH" | "ACCOUNT"; amountMinor: number }[]
   >((groups, payment) => {
@@ -4172,14 +4187,16 @@ function Sales({
     }
     return groups;
   }, []);
-  const addPayment = () => {
+  // Devuelve los pagos con el importe del campo agregado, o undefined si no es válido.
+  const paymentsWithAmount = () => {
     const remaining = total - paid;
-    if (remaining <= 0) return error("La venta ya está completamente cobrada.");
+    if (remaining <= 0)
+      return reportPayment("La venta ya está completamente cobrada.");
     if (method === "ACCOUNT" && !customerId)
-      return error("Seleccioná un cliente para usar cuenta corriente.");
+      return reportPayment("Seleccioná un cliente para usar cuenta corriente.");
     const amountMinor = paymentAmount.trim() ? paymentAmountMinor : remaining;
     if (amountMinor === undefined || amountMinor <= 0)
-      return error("Indicá un importe válido para el pago.");
+      return reportPayment("Indicá un importe válido para el pago.");
     if (
       method === "ACCOUNT" &&
       (!creditAccount?.creditEnabled ||
@@ -4191,23 +4208,78 @@ function Sales({
             Number(creditAccount.creditLimitMinor) -
               Number(creditAccount.balanceMinor)))
     )
-      return error(
+      return reportPayment(
         "La cuenta no está habilitada o el importe supera el crédito disponible.",
       );
     if (method !== "CASH" && amountMinor > remaining)
-      return error(
+      return reportPayment(
         "Solo el efectivo puede superar el saldo pendiente para entregar vuelto.",
       );
-    setPayments((current) => {
-      const existingAmount = current
-        .filter((payment) => payment.method === method)
-        .reduce((sum, payment) => sum + payment.amountMinor, 0);
-      return [
-        ...current.filter((payment) => payment.method !== method),
-        { method, amountMinor: existingAmount + amountMinor },
-      ];
-    });
+    const existingAmount = payments
+      .filter((payment) => payment.method === method)
+      .reduce((sum, payment) => sum + payment.amountMinor, 0);
+    return [
+      ...payments.filter((payment) => payment.method !== method),
+      { method, amountMinor: existingAmount + amountMinor },
+    ];
+  };
+  const openCheckout = () => {
+    if (!lines.length || !pricingReady || submitting) return;
+    setCheckoutError("");
+    if (!payments.length) setPaymentAmount(cashAmountDraft(total));
+    setCheckoutOpen(true);
+  };
+  const closeCheckout = () => {
+    setCheckoutOpen(false);
+    setCheckoutError("");
+    focusProductSearch();
+  };
+  // Registra el importe actual y sigue con otro medio, precargando lo que resta.
+  const splitPayment = (nextMethod: typeof method) => {
+    const next = paymentsWithAmount();
+    if (!next) return;
+    const nextPaid = next.reduce(
+      (sum, payment) => sum + payment.amountMinor,
+      0,
+    );
+    setCheckoutError("");
+    if (nextMethod === "ACCOUNT") {
+      try {
+        setPayments(prepareAccountPayment(total, next, creditAccount));
+        setPaymentAmount("");
+      } catch (cause) {
+        setPayments(next);
+        setPaymentAmount(cashAmountDraft(Math.max(total - nextPaid, 0)));
+        return reportPayment(
+          cause instanceof Error
+            ? cause.message
+            : "No se pudo aplicar la cuenta corriente.",
+        );
+      }
+    } else {
+      setPayments(next);
+      setPaymentAmount(cashAmountDraft(Math.max(total - nextPaid, 0)));
+    }
+    setMethod(nextMethod);
+  };
+  const confirmCheckout = () => {
+    if (submitting) return;
+    setCheckoutError("");
+    if (paid >= total) return void complete(payments);
+    const next = paymentsWithAmount();
+    if (!next) return;
+    const nextPaid = next.reduce(
+      (sum, payment) => sum + payment.amountMinor,
+      0,
+    );
+    setPayments(next);
+    // Pago parcial: queda registrado y se precarga lo que falta.
+    if (nextPaid < total) {
+      setPaymentAmount(cashAmountDraft(total - nextPaid));
+      return;
+    }
     setPaymentAmount("");
+    void complete(next);
   };
   const removePayment = (
     paymentMethod: "TRANSFER" | "CARD" | "CASH" | "ACCOUNT",
@@ -4217,19 +4289,21 @@ function Sales({
     );
   };
   const selectPaymentMethod = (value: typeof method) => {
+    setCheckoutError("");
     if (value === "ACCOUNT") {
       try {
         setPayments(prepareAccountPayment(total, payments, creditAccount));
         setPaymentAmount("");
       } catch (cause) {
-        error(
+        reportPayment(
           cause instanceof Error
             ? cause.message
             : "No se pudo aplicar la cuenta corriente.",
         );
         return;
       }
-    }
+    } else if (!paymentAmount.trim())
+      setPaymentAmount(cashAmountDraft(Math.max(total - paid, 0)));
     setMethod(value);
   };
   const loadHistory = async () => {
@@ -4253,6 +4327,20 @@ function Sales({
     );
     return () => window.cancelAnimationFrame(frame);
   }, [active, resumeNeeded, salesScreen]);
+  // El listener global se registra una vez; el ref le da las acciones del render actual.
+  const runSalesShortcut = useRef<(shortcut: SalesShortcut) => void>(() => {});
+  useEffect(() => {
+    runSalesShortcut.current = (shortcut) => {
+      if (shortcut.action === "checkout") return openCheckout();
+      const line =
+        lines.find((item) => item.productId === lastAddedId) ?? lines.at(-1);
+      if (!line) return;
+      if (shortcut.action === "increment-last-line")
+        updateLineQuantity(line.productId, line.quantity + 1);
+      if (shortcut.action === "decrement-last-line")
+        updateLineQuantity(line.productId, line.quantity - 1);
+    };
+  });
   useEffect(() => {
     const focusProductSearch = (event: KeyboardEvent) => {
       const input = productSearchRef.current;
@@ -4279,6 +4367,17 @@ function Sales({
           'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="spinbutton"]',
         ),
       );
+      const shortcut = salesShortcut(event, {
+        editing,
+        blocked,
+        checkoutOpen: false,
+      });
+      if (shortcut) {
+        event.preventDefault();
+        event.stopPropagation();
+        runSalesShortcut.current(shortcut);
+        return;
+      }
       if (!shouldRouteSalesSearchKey(event, { editing, blocked })) return;
       event.preventDefault();
       setProductQuery(event.key);
@@ -4334,14 +4433,15 @@ function Sales({
         : "No se pudo registrar la devolución.";
     }
   };
-  const complete = async () => {
+  // Recibe la lista final de pagos para no depender del setState asíncrono.
+  const complete = async (finalPayments = payments) => {
     if (submitting) return;
     if (!allowWithoutSession && !session)
-      return error(
+      return reportPayment(
         "Esta sucursal requiere una caja abierta para vender. Abrí una caja y reintentá.",
       );
     if (documentType === "INVOICE" && !fiscalCapabilities?.voucherTypes.length)
-      return error(
+      return reportPayment(
         fiscalCapabilities?.reason ||
           "No se pudo verificar la configuración fiscal. Revisala antes de facturar.",
       );
@@ -4353,12 +4453,17 @@ function Sales({
           !products.find((p) => p.id === line.productId)?.prices[0],
       )
     )
-      return error(
+      return reportPayment(
         "Esperá a que se carguen los precios o actualizalos antes de cobrar.",
       );
     try {
-      if (paid < total)
-        return error("Agregá cobros hasta cubrir el total de la venta.");
+      if (
+        finalPayments.reduce((sum, payment) => sum + payment.amountMinor, 0) <
+        total
+      )
+        return reportPayment(
+          "Agregá cobros hasta cubrir el total de la venta.",
+        );
       setSubmitting(true);
       const completedSale = await createSale(token, organizationId, branchId, {
         priceListId: salePriceListId || undefined,
@@ -4391,7 +4496,7 @@ function Sales({
                 )!.prices[0]!.amountMinor,
               },
         ),
-        payments: payments.map((payment) => ({
+        payments: finalPayments.map((payment) => ({
           ...payment,
           cashSessionId: payment.method !== "ACCOUNT" ? session?.id : undefined,
         })),
@@ -4421,19 +4526,22 @@ function Sales({
           })),
           subtotalMinor: subtotal,
           discountMinor,
-          payments,
+          payments: finalPayments,
         });
       setLines([]);
+      setLastAddedId("");
       setFiscalOptions(defaultSaleFiscalOptions);
       setPayments([]);
       setMethod("CASH");
       setPaymentAmount("");
-      setPaymentModalOpen(false);
+      setCheckoutOpen(false);
+      setCheckoutError("");
       setClientOperationId(crypto.randomUUID());
       await loadHistory();
       done();
     } catch (cause) {
-      error(
+      // El mismo clientOperationId se conserva: reintentar no duplica la venta.
+      reportPayment(
         cause instanceof Error
           ? cause.message
           : "No se pudo completar la venta.",
@@ -4466,6 +4574,11 @@ function Sales({
   const printReceipt = () => {
     if (receipt) setTicketSaleId(receipt.sale.id);
   };
+  const receiptSaleId = receipt?.sale.id;
+  const loadReceiptTicket = useCallback(
+    () => getSaleTicket(token, organizationId, branchId, receiptSaleId!),
+    [token, organizationId, branchId, receiptSaleId],
+  );
   if (!active) return <></>;
   if (resumeNeeded && submitting) {
     return (
@@ -4479,7 +4592,7 @@ function Sales({
       <ResumeSaleDialog
         count={lines.length}
         onContinue={() => {
-          setPaymentModalOpen(false);
+          setCheckoutOpen(false);
           setResumeNeeded(false);
         }}
         onDiscard={() => {
@@ -4491,9 +4604,9 @@ function Sales({
           setSalePriceListId("");
           setMethod("CASH");
           setPaymentAmount("");
-          setPaymentModalOpen(false);
-          setDiscountAmount("");
-          setDiscountEditorOpen(false);
+          setCheckoutOpen(false);
+          setCheckoutError("");
+          setLastAddedId("");
           setProductId("");
           setProductQuery("");
           setClientOperationId(crypto.randomUUID());
@@ -4559,23 +4672,13 @@ function Sales({
       {resumeDialog}
       {ticketDialog}
       {invoiceDialog}
-      <section className="flex min-h-[585px] flex-col border bg-white p-4 xl:h-full xl:min-h-0">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-teal-800">
-            <ScanBarcode size={19} />
-            <h2 className="font-semibold">Buscar productos</h2>
-          </div>
-          <SaleConceptMenu
-            disabled={submitting}
-            onAdd={() => setConceptOpen(true)}
-          />
-        </div>
-        <form
-          onSubmit={add}
-          className="mt-4 flex min-h-0 flex-1 flex-col gap-2.5"
-        >
+      <section
+        aria-label="Catálogo de venta"
+        className="sale-catalog-column flex min-h-[585px] flex-col lg:h-full lg:min-h-0"
+      >
+        <form onSubmit={add} className="flex min-h-0 flex-1 flex-col gap-2.5">
           <div className="sale-catalog-filters flex flex-wrap items-center gap-2">
-            <span className="relative min-w-[220px] flex-1">
+            <span className="relative min-w-[180px] flex-1">
               <Search
                 size={17}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-teal-700"
@@ -4605,7 +4708,7 @@ function Sales({
                 }}
                 onKeyDown={(event) => {
                   // El form tiene varios campos: el navegador ya no lo envía solo con Enter.
-                  if (event.key === "Enter") {
+                  if (event.key === "Enter" && !event.ctrlKey) {
                     add(event);
                     return;
                   }
@@ -4633,7 +4736,7 @@ function Sales({
                 </kbd>
               </span>
             </span>
-            <div className="w-44 shrink-0 [&>div]:mt-0">
+            <div className="w-48 shrink-0 [&>div]:mt-0">
               <SearchableSaleSelect
                 label="Categoría"
                 floatingOptions
@@ -4693,999 +4796,508 @@ function Sales({
             onFinished={focusProductSearch}
             onInvalid={error}
           />
-          <p className="text-xs text-slate-500">
+          <p className="sale-shortcuts text-xs text-slate-500">
             Doble clic o Enter agrega · <strong>F2</strong> buscar ·{" "}
-            <strong>Esc</strong> limpia
+            <strong>+ / −</strong> última línea · <strong>Ctrl + Enter</strong>{" "}
+            cobrar
           </p>
         </form>
-        <div className="sales-customer-fields mt-auto grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
-          <div className="block text-xs font-medium text-slate-700">
-            Cliente
-            <SearchableSaleSelect
-              label="Cliente"
-              options={[
-                { value: "", label: "Público general" },
-                ...customers
-                  .filter((customer) => customer.active)
-                  .map((customer) => ({
-                    value: customer.id,
-                    label: [
-                      customer.name,
-                      customerIdentityDetail(customer) ||
-                        (matchingCustomerNames(
-                          customers,
-                          customer.name,
-                          customer.id,
-                        ).length
-                          ? `Ficha ${customer.id.slice(0, 8)}`
-                          : ""),
-                    ]
-                      .filter(Boolean)
-                      .join(" · "),
-                  })),
-              ]}
-              value={customerId}
-              onChange={(value) => {
-                setCustomerId(value);
-                setSalePriceListId("");
-                setPayments([]);
-              }}
-            />
-          </div>
-          <div className="text-xs font-medium text-slate-700">
-            Lista de precios
-            <SearchableSaleSelect
-              label="Lista de precios"
-              tinted
-              options={[
-                ...(customerId ? [{ value: "", label: "Según cliente" }] : []),
-                ...salePriceLists.map((list) => ({
-                  value: list.id,
-                  label: list.name,
-                })),
-              ]}
-              value={
-                salePriceListId ||
-                (!customerId
-                  ? (salePriceLists.find(
-                      (list) => list.name === "Precio general",
-                    )?.id ?? "")
-                  : "")
-              }
-              onChange={(value) => {
-                setSalePriceListId(value);
-                setPayments([]);
-              }}
-            />
-            {pricingError && (
-              <span role="alert" className="mt-2 block text-xs text-red-700">
-                {pricingError}{" "}
-                <button
-                  type="button"
-                  disabled={pricingLoading || submitting}
-                  className="underline disabled:opacity-40"
-                  onClick={() => setPricingVersion((version) => version + 1)}
-                >
-                  Reintentar
-                </button>
-              </span>
-            )}
-          </div>
-        </div>
       </section>
 
-      <section className="flex min-h-[585px] flex-col overflow-hidden border bg-white xl:h-full xl:min-h-0">
-        <header className="flex items-center justify-between border-b px-5 py-4">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 text-teal-700">
-              <ShoppingCart size={20} />
-            </span>
-            <div>
-              <h2 className="font-semibold">Venta actual</h2>
-              <p className="text-xs text-slate-500">
-                {lines.length
-                  ? `${lines.length} producto${lines.length === 1 ? "" : "s"} en el carrito`
-                  : "Agregá productos para comenzar"}
-              </p>
-            </div>
-          </div>
-          {lines.length ? (
-            <button
-              type="button"
-              onClick={() => {
-                setLines([]);
-                setFiscalOptions(defaultSaleFiscalOptions);
-                setFiscalSettingsOpen(false);
-                setPayments([]);
-                setMethod("CASH");
-                setPaymentAmount("");
-                window.requestAnimationFrame(() =>
-                  productSearchRef.current?.focus(),
-                );
-              }}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-4 text-xs font-medium text-slate-500 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-            >
-              <Trash2 size={16} /> Vaciar venta
-            </button>
-          ) : null}
-        </header>
-        <div className="sales-cart-row grid grid-cols-[minmax(0,1.7fr)_90px_100px_105px_84px] gap-3 border-b bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-          <span>Producto</span>
-          <span className="text-center">Cantidad</span>
-          <span className="text-center">Precio unit.</span>
-          <span className="text-center" title="Descuento por unidad">
-            Descuento
-          </span>
-          <span className="text-right">Subtotal</span>
-          <span aria-hidden="true" />
-        </div>
-        <div className="min-h-0 flex-1 divide-y overflow-y-auto">
-          {lines.length ? (
-            sortSaleLines(lines, products).map((line) => {
-              const product = products.find(
-                (item) => item.id === line.productId,
-              );
-              const unitPrice = Number(
-                line.requestedUnitPriceMinor ??
-                  line.unitPriceMinor ??
-                  product?.prices[0]?.amountMinor ??
-                  0,
-              );
-              return (
-                <article
-                  key={line.productId}
-                  className="sales-cart-row grid grid-cols-[minmax(0,1.7fr)_90px_100px_105px_84px] items-center gap-3 px-5 py-3"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <div className="shrink-0">
-                      {line.description ? (
-                        <ReceiptText size={22} className="m-2 text-teal-600" />
-                      ) : (
-                        <ProductThumbnail
-                          token={token}
-                          organizationId={organizationId}
-                          productId={line.productId}
-                          name={product?.name ?? "Producto"}
-                          version={product?.image?.updatedAt}
-                        />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p
-                        className="sales-cart-product-name text-sm font-semibold"
-                        title={line.description ?? product?.name}
-                      >
-                        {line.description ?? product?.name}
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        {line.description
-                          ? "Concepto · Sin movimiento de stock"
-                          : `${available(line.productId)} disponibles`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="sale-quantity-stepper">
-                    <button
-                      type="button"
-                      aria-label="Restar unidad"
-                      onClick={() => {
-                        updateLineQuantity(line.productId, line.quantity - 1);
-                        window.requestAnimationFrame(() =>
-                          productSearchRef.current?.focus(),
-                        );
-                      }}
-                      className="p-1.5 text-slate-600 hover:text-teal-700"
-                    >
-                      <Minus size={15} />
-                    </button>
-                    <SaleQuantityInput
-                      onInvalid={error}
-                      quantity={line.quantity}
-                      maximum={
-                        line.description
-                          ? conceptMaximumQuantity(unitPrice)
-                          : available(line.productId)
-                      }
-                      name={line.description ?? product?.name ?? "Producto"}
-                      onFinished={() =>
-                        window.requestAnimationFrame(() =>
-                          productSearchRef.current?.focus(),
-                        )
-                      }
-                      onScan={(code) => {
-                        const scanned = products.find((product) =>
-                          product.barcodes.some(
-                            (barcode) => barcode.code.trim() === code.trim(),
-                          ),
-                        );
-                        if (scanned) addProductToSale(scanned.id, 1);
-                        else
-                          error("No se encontró un producto con ese código.");
-                      }}
-                      onCommit={(quantity) =>
-                        updateLineQuantity(line.productId, quantity)
-                      }
-                    />
-                    <button
-                      type="button"
-                      aria-label="Sumar unidad"
-                      onClick={() => {
-                        updateLineQuantity(line.productId, line.quantity + 1);
-                        window.requestAnimationFrame(() =>
-                          productSearchRef.current?.focus(),
-                        );
-                      }}
-                      className="p-1.5 text-slate-600 hover:text-teal-700"
-                    >
-                      <Plus size={15} />
-                    </button>
-                  </div>
-                  {line.description ? (
-                    <>
-                      <p className="text-right text-xs font-medium text-slate-600">
-                        {money(unitPrice)}
-                      </p>
-                      <span className="text-center text-xs text-slate-400">
-                        —
-                      </span>
-                    </>
-                  ) : (
-                    <SaleProductPricing
-                      costs={stock.filter(
-                        (lot) =>
-                          lot.productId === line.productId &&
-                          lot.sellableQuantity > 0,
-                      )}
-                      price={unitPrice}
-                      maximum={Number(product?.prices[0]?.amountMinor ?? 0)}
-                      name={product?.name ?? "Producto"}
-                      disabled={submitting || !pricingReady}
-                      onInvalid={error}
-                      onFinished={() =>
-                        window.requestAnimationFrame(() =>
-                          productSearchRef.current?.focus(),
-                        )
-                      }
-                      onScan={(code) => {
-                        const scanned = products.find((product) =>
-                          product.barcodes.some(
-                            (barcode) => barcode.code.trim() === code.trim(),
-                          ),
-                        );
-                        if (scanned) addProductToSale(scanned.id, 1);
-                        else
-                          error("No se encontró un producto con ese código.");
-                      }}
-                      onCommit={(next) => {
-                        if (
-                          !Number.isSafeInteger(next * line.quantity) ||
-                          next * line.quantity < line.discountMinor
-                        ) {
-                          error(
-                            "Revisá el descuento general: supera el subtotal con ese precio.",
-                          );
-                          return false;
-                        }
-                        try {
-                          const nextTotal =
-                            total + (next - unitPrice) * line.quantity;
-                          const nextPayments = paymentsAfterDiscount(
-                            nextTotal,
-                            payments,
-                          );
-                          setLines((current) =>
-                            current.map((item) =>
-                              item.productId === line.productId
-                                ? { ...item, requestedUnitPriceMinor: next }
-                                : item,
-                            ),
-                          );
-                          setPayments(nextPayments);
-                          return true;
-                        } catch (cause) {
-                          error(
-                            cause instanceof Error
-                              ? cause.message
-                              : "Revisá los pagos antes de cambiar el precio.",
-                          );
-                          return false;
-                        }
-                      }}
-                    />
-                  )}
-                  <div className="text-right text-sm font-semibold">
-                    <p>
-                      {money(unitPrice * line.quantity - line.discountMinor)}
-                    </p>
-                    {line.discountMinor ? (
-                      <p className="text-[10px] font-medium text-teal-700">
-                        Dto. {money(line.discountMinor)}
-                      </p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    aria-label="Quitar producto"
-                    onClick={() => updateLineQuantity(line.productId, 0)}
-                    className="ml-auto rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700"
-                  >
-                    <Trash2 size={17} />
-                  </button>
-                </article>
-              );
-            })
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center px-6 text-center text-slate-400">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                <ShoppingCart size={36} strokeWidth={1.3} />
-              </div>
-              <p className="mt-4 font-semibold text-slate-600">
-                El carrito está vacío
-              </p>
-              <p className="mt-1 text-sm">
-                Buscá o escaneá un producto para agregarlo.
-              </p>
-            </div>
-          )}
-        </div>
-        <footer className="shrink-0 border-t bg-slate-50/70 px-5 py-4">
-          <div className="flex items-center justify-between gap-5">
-            <div className="border-r pr-10 text-xs text-slate-500">
-              <p className="font-semibold text-slate-700">Total de ítems</p>
-              <p className="mt-1">
-                {lines.reduce((sum, line) => sum + line.quantity, 0)} producto
-                {lines.reduce((sum, line) => sum + line.quantity, 0) === 1
-                  ? ""
-                  : "s"}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-semibold text-slate-700">
-                Total a cobrar
-              </p>
-              <strong className="mt-1 block text-2xl tracking-tight text-teal-700">
-                {money(total)}
-              </strong>
-            </div>
-          </div>
-        </footer>
-      </section>
-
-      <aside className="sales-checkout flex min-h-[585px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:h-full xl:min-h-0">
-        <div
-          className="sales-payment-body min-h-0 flex-1 overflow-y-auto"
-          tabIndex={0}
-          role="region"
-          aria-label="Detalle del cobro de la venta"
-        >
-          <div className="flex items-center gap-2 text-teal-800">
-            <CreditCard size={19} />
-            <h2 className="text-base font-semibold">Cobro de la venta</h2>
-          </div>
-          <SaleDocumentChoice
-            value={documentType}
-            onChange={setDocumentType}
+      <SaleCurrentPanel
+        lineCount={lines.length}
+        unitCount={lines.reduce((sum, line) => sum + line.quantity, 0)}
+        totalMinor={total}
+        submitting={submitting}
+        checkoutDisabled={!lines.length || submitting || !pricingReady}
+        onCheckout={openCheckout}
+        onClear={() => {
+          setLines([]);
+          setLastAddedId("");
+          setFiscalOptions(defaultSaleFiscalOptions);
+          setFiscalSettingsOpen(false);
+          setPayments([]);
+          setMethod("CASH");
+          setPaymentAmount("");
+          focusProductSearch();
+        }}
+        headerActions={
+          <SaleConceptMenu
             disabled={submitting}
-            onConfigure={() => setFiscalSettingsOpen(true)}
-            environment={fiscalCapabilities?.environment}
-            invoiceDisabled={!fiscalCapabilities?.voucherTypes.length}
-            unavailableReason={
-              fiscalCapabilities?.reason ??
-              "No se pudo verificar la configuración fiscal."
-            }
-            summary={`${fiscalOptions.recipient === "CUSTOMER" ? customers.find((customer) => customer.id === customerId)?.name || "Cliente no seleccionado" : fiscalOptions.consumerName || "Consumidor final"} · Factura C`}
+            onAdd={() => setConceptOpen(true)}
           />
-          {conceptOpen && (
-            <SaleConceptDialog
-              key={`${organizationId}:${userKey}`}
-              organizationId={organizationId}
-              userKey={userKey}
-              onClose={() => setConceptOpen(false)}
-              onAdd={(concept) => {
-                setLines((current) => [
-                  ...current,
-                  {
-                    productId: crypto.randomUUID(),
-                    ...concept,
-                    quantity: 1,
-                    discountMinor: 0,
-                  },
-                ]);
-                setConceptOpen(false);
-                window.requestAnimationFrame(() =>
-                  productSearchRef.current?.focus(),
-                );
-              }}
-            />
-          )}
-          {fiscalSettingsOpen && (
-            <SaleFiscalSettings
-              value={fiscalOptions}
-              capabilities={fiscalCapabilities}
-              customerName={
-                customers.find((customer) => customer.id === customerId)?.name
-              }
-              customerFiscalSummary={(() => {
-                const customer = customers.find(
-                  (item) => item.id === customerId,
-                );
-                return customer
-                  ? [
-                      customer.billingName || customer.name,
-                      customer.billingVatCondition || "Consumidor final",
-                      customer.billingTaxId || customer.document,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : undefined;
-              })()}
-              onClose={() => setFiscalSettingsOpen(false)}
-              onSave={(options) => {
-                setFiscalOptions(options);
-                setFiscalSettingsOpen(false);
-              }}
-            />
-          )}
-          <div className="sales-checkout-total mt-4 text-center">
-            <p className="text-xs font-semibold text-teal-700">
-              {paid > 0 ? "SALDO PENDIENTE" : "TOTAL A PAGAR"}
-            </p>
-            <p className="mt-1 text-3xl font-bold tracking-tight text-teal-700">
-              {money(Math.max(total - paid, 0))}
-            </p>
-          </div>
-          <div className="sales-checkout-methods mt-4">
-            <p className="text-sm font-semibold text-slate-700">
-              Medio de pago
-            </p>
-            <div className="sales-checkout-method-grid mt-2 grid grid-cols-3 gap-2">
-              {(
-                [
-                  ["CASH", "Efectivo"],
-                  ["CARD", "Tarjeta"],
-                  ["TRANSFER", "Transferencia"],
-                  ["ACCOUNT", "Cuenta corriente"],
-                ] as const
-              )
-                .filter(
-                  ([value]) =>
-                    value !== "ACCOUNT" ||
-                    (creditAccount?.active && creditAccount.creditEnabled),
-                )
-                .map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    disabled={
-                      !lines.length ||
-                      (value === "ACCOUNT" && !creditAccount?.creditEnabled)
-                    }
-                    onClick={() => selectPaymentMethod(value)}
-                    aria-pressed={method === value}
-                    className={`${value === "ACCOUNT" ? "col-span-3 flex min-h-14 items-center gap-3 px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:opacity-40" : "px-1"} rounded-xl border py-2.5 text-sm font-medium ${method === value ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600 hover:border-teal-200"}`}
-                  >
-                    {value === "ACCOUNT" ? (
-                      <span
-                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${method === value ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-500"}`}
-                      >
-                        <UserRound size={18} aria-hidden="true" />
-                      </span>
-                    ) : value === "CASH" ? (
-                      <Banknote className="mx-auto mb-1" size={18} />
-                    ) : value === "TRANSFER" ? (
-                      <ArrowLeftRight className="mx-auto mb-1" size={18} />
-                    ) : (
-                      <CreditCard className="mx-auto mb-1" size={18} />
-                    )}
-                    <span
-                      className={value === "ACCOUNT" ? "flex-1" : undefined}
-                    >
-                      {label}
-                    </span>
-                    {value === "ACCOUNT" && (
-                      <span
-                        aria-hidden="true"
-                        className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${method === value ? "border-teal-600 bg-teal-600" : "border-slate-300"}`}
-                      >
-                        {method === value && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                        )}
-                      </span>
-                    )}
-                  </button>
-                ))}
+        }
+        discount={
+          <SaleGeneralDiscount
+            subtotalMinor={subtotal}
+            discountMinor={discountMinor}
+            disabled={!lines.length || submitting}
+            onApply={applyDiscount}
+            onInvalid={error}
+          />
+        }
+        context={
+          <>
+            <div className="block text-xs font-medium text-slate-700">
+              Cliente
+              <SearchableSaleSelect
+                label="Cliente"
+                floatingOptions
+                options={[
+                  { value: "", label: "Público general" },
+                  ...customers
+                    .filter((customer) => customer.active)
+                    .map((customer) => ({
+                      value: customer.id,
+                      label: [
+                        customer.name,
+                        customerIdentityDetail(customer) ||
+                          (matchingCustomerNames(
+                            customers,
+                            customer.name,
+                            customer.id,
+                          ).length
+                            ? `Ficha ${customer.id.slice(0, 8)}`
+                            : ""),
+                      ]
+                        .filter(Boolean)
+                        .join(" · "),
+                    })),
+                ]}
+                value={customerId}
+                onChange={(value) => {
+                  setCustomerId(value);
+                  setSalePriceListId("");
+                  setPayments([]);
+                }}
+              />
             </div>
-            {method !== "ACCOUNT" && (
-              <label className="mt-3 block text-sm font-semibold text-slate-700">
-                Importe recibido
-                <span className="mt-2 flex gap-2">
-                  <span className="grid h-11 min-w-0 flex-1 grid-cols-[40px_1fr] overflow-hidden rounded-xl border border-teal-400 bg-white">
-                    <span className="grid place-items-center border-r bg-slate-50 text-base font-semibold text-slate-600">
-                      $
-                    </span>
-                    <input
-                      className="min-w-0 border-0 px-3 text-base"
-                      type="text"
-                      inputMode="decimal"
-                      value={paymentAmount}
-                      placeholder="Ej. 5.000 o 5.000,00"
-                      onChange={(event) => setPaymentAmount(event.target.value)}
-                    />
-                  </span>
+            <div className="text-xs font-medium text-slate-700">
+              Lista de precios
+              <SearchableSaleSelect
+                label="Lista de precios"
+                tinted
+                floatingOptions
+                options={[
+                  ...(customerId
+                    ? [{ value: "", label: "Según cliente" }]
+                    : []),
+                  ...salePriceLists.map((list) => ({
+                    value: list.id,
+                    label: list.name,
+                  })),
+                ]}
+                value={
+                  salePriceListId ||
+                  (!customerId
+                    ? (salePriceLists.find(
+                        (list) => list.name === "Precio general",
+                      )?.id ?? "")
+                    : "")
+                }
+                onChange={(value) => {
+                  setSalePriceListId(value);
+                  setPayments([]);
+                }}
+              />
+              {pricingError && (
+                <span role="alert" className="mt-2 block text-xs text-red-700">
+                  {pricingError}{" "}
                   <button
                     type="button"
-                    disabled={!lines.length || paid >= total}
-                    onClick={addPayment}
-                    className="shrink-0 rounded-xl border border-[#0f9b8e] bg-white px-5 text-sm font-semibold text-[#087f70] shadow-sm hover:bg-teal-50 disabled:border-slate-200 disabled:text-slate-400"
+                    disabled={pricingLoading || submitting}
+                    className="underline disabled:opacity-40"
+                    onClick={() => setPricingVersion((version) => version + 1)}
                   >
-                    Agregar
+                    Reintentar
                   </button>
                 </span>
-              </label>
-            )}
-          </div>
-          <div className="pr-1">
-            {method !== "ACCOUNT" && !session ? (
-              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                {allowWithoutSession
-                  ? "El cobro quedará pendiente de asignación a una caja."
-                  : "Esta sucursal requiere una caja abierta para cobrar."}
-              </p>
-            ) : null}
-            {payments.length ? (
-              <div className="mt-2">
-                <p className="mb-1.5 text-xs font-semibold text-slate-700">
-                  Pagos agregados
-                </p>
-                <div className="max-h-28 space-y-1.5 overflow-y-auto pr-1">
-                  {groupedPayments.map((payment) => (
-                    <div
-                      key={payment.method}
-                      className="relative flex min-h-10 items-center rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs"
+              )}
+            </div>
+          </>
+        }
+        lines={
+          <div className="sale-cart flex min-h-0 flex-1 flex-col">
+            <div className="sales-cart-row grid gap-2.5 border-b bg-slate-50 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <span>Producto</span>
+              <span className="text-center">Cantidad</span>
+              <span className="text-center">Precio unit.</span>
+              <span className="text-center" title="Descuento por unidad">
+                Descuento
+              </span>
+              <span className="text-right">Subtotal</span>
+              <span aria-hidden="true" />
+            </div>
+            <div className="min-h-0 flex-1 divide-y overflow-y-auto">
+              {lines.length ? (
+                sortSaleLines(lines, products).map((line) => {
+                  const product = products.find(
+                    (item) => item.id === line.productId,
+                  );
+                  const unitPrice = Number(
+                    line.requestedUnitPriceMinor ??
+                      line.unitPriceMinor ??
+                      product?.prices[0]?.amountMinor ??
+                      0,
+                  );
+                  return (
+                    <article
+                      key={line.productId}
+                      className={`sales-cart-row grid items-center gap-2.5 px-5 py-2.5 ${line.productId === lastAddedId ? "bg-teal-50" : ""}`}
                     >
-                      <div className="flex items-center gap-2 pr-4 text-sm text-slate-700">
-                        {payment.method === "CASH" ? (
-                          <Banknote size={16} className="text-teal-700" />
-                        ) : payment.method === "TRANSFER" ? (
-                          <ArrowLeftRight size={16} className="text-teal-700" />
-                        ) : (
-                          <CreditCard size={16} className="text-teal-700" />
-                        )}
-                        <span className="truncate">
-                          {payment.method === "ACCOUNT"
-                            ? "Cuenta corriente"
-                            : payment.method === "CASH"
-                              ? "Efectivo"
-                              : payment.method === "CARD"
-                                ? "Tarjeta"
-                                : "Transferencia"}
-                        </span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="shrink-0">
+                          {line.description ? (
+                            <ReceiptText
+                              size={22}
+                              className="m-2 text-teal-600"
+                            />
+                          ) : (
+                            <ProductThumbnail
+                              token={token}
+                              organizationId={organizationId}
+                              productId={line.productId}
+                              name={product?.name ?? "Producto"}
+                              version={product?.image?.updatedAt}
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p
+                            className="sales-cart-product-name text-sm font-semibold"
+                            title={line.description ?? product?.name}
+                          >
+                            {line.description ?? product?.name}
+                          </p>
+                          <p className="flex items-center gap-2 text-[11px] text-slate-500">
+                            {line.productId === lastAddedId && (
+                              <span className="rounded-full bg-teal-100/70 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
+                                Recién agregado
+                              </span>
+                            )}
+                            <span className="truncate">
+                              {line.description
+                                ? "Concepto · Sin movimiento de stock"
+                                : `${available(line.productId)} disponibles`}
+                            </span>
+                          </p>
+                        </div>
                       </div>
-                      <p className="ml-auto mr-6 shrink-0 text-sm tracking-tight text-slate-800">
-                        {money(payment.amountMinor)}
-                      </p>
-                      <button
-                        type="button"
-                        aria-label="Quitar pago"
-                        onClick={() => removePayment(payment.method)}
-                        className="absolute right-1.5 top-1.5 rounded p-0.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <div className="sales-checkout-summary mt-3 border-t pt-3 text-sm">
-              <div className="flex justify-between text-slate-600">
-                <span>Subtotal</span>
-                <span>{money(subtotal)}</span>
-              </div>
-              <div className="mt-1.5 flex justify-between text-slate-600">
-                {discountEditorOpen && !paymentModalOpen ? (
-                  <>
-                    <span className="pt-1.5">Descuento</span>
-                    <span className="flex h-8 items-center gap-1">
-                      <label className="discount-amount-field flex h-8 w-28 items-center">
-                        <span aria-hidden="true" className="pl-2 text-xs">
-                          $
-                        </span>
-                        <DiscountAmountInput
-                          className="min-w-0 flex-1 px-2 text-right text-xs"
-                          value={discountAmount}
-                          onChange={setDiscountAmount}
-                          onApply={applyDiscount}
-                          onCancel={() => setDiscountEditorOpen(false)}
+                      <div className="sale-quantity-stepper">
+                        <button
+                          type="button"
+                          aria-label="Restar unidad"
+                          onClick={() => {
+                            updateLineQuantity(
+                              line.productId,
+                              line.quantity - 1,
+                            );
+                            window.requestAnimationFrame(() =>
+                              productSearchRef.current?.focus(),
+                            );
+                          }}
+                          className="p-1.5 text-slate-600 hover:text-teal-700"
+                        >
+                          <Minus size={15} />
+                        </button>
+                        <SaleQuantityInput
+                          onInvalid={error}
+                          quantity={line.quantity}
+                          maximum={
+                            line.description
+                              ? conceptMaximumQuantity(unitPrice)
+                              : available(line.productId)
+                          }
+                          name={line.description ?? product?.name ?? "Producto"}
+                          onFinished={() =>
+                            window.requestAnimationFrame(() =>
+                              productSearchRef.current?.focus(),
+                            )
+                          }
+                          onScan={(code) => {
+                            const scanned = products.find((product) =>
+                              product.barcodes.some(
+                                (barcode) =>
+                                  barcode.code.trim() === code.trim(),
+                              ),
+                            );
+                            if (scanned) addProductToSale(scanned.id, 1);
+                            else
+                              error(
+                                "No se encontró un producto con ese código.",
+                              );
+                          }}
+                          onCommit={(quantity) =>
+                            updateLineQuantity(line.productId, quantity)
+                          }
                         />
-                      </label>
+                        <button
+                          type="button"
+                          aria-label="Sumar unidad"
+                          onClick={() => {
+                            updateLineQuantity(
+                              line.productId,
+                              line.quantity + 1,
+                            );
+                            window.requestAnimationFrame(() =>
+                              productSearchRef.current?.focus(),
+                            );
+                          }}
+                          className="p-1.5 text-slate-600 hover:text-teal-700"
+                        >
+                          <Plus size={15} />
+                        </button>
+                      </div>
+                      {line.description ? (
+                        <>
+                          <p className="text-right text-xs font-medium text-slate-600">
+                            {money(unitPrice)}
+                          </p>
+                          <span className="text-center text-xs text-slate-400">
+                            —
+                          </span>
+                        </>
+                      ) : (
+                        <SaleProductPricing
+                          costs={stock.filter(
+                            (lot) =>
+                              lot.productId === line.productId &&
+                              lot.sellableQuantity > 0,
+                          )}
+                          price={unitPrice}
+                          maximum={Number(product?.prices[0]?.amountMinor ?? 0)}
+                          name={product?.name ?? "Producto"}
+                          disabled={submitting || !pricingReady}
+                          onInvalid={error}
+                          onFinished={() =>
+                            window.requestAnimationFrame(() =>
+                              productSearchRef.current?.focus(),
+                            )
+                          }
+                          onScan={(code) => {
+                            const scanned = products.find((product) =>
+                              product.barcodes.some(
+                                (barcode) =>
+                                  barcode.code.trim() === code.trim(),
+                              ),
+                            );
+                            if (scanned) addProductToSale(scanned.id, 1);
+                            else
+                              error(
+                                "No se encontró un producto con ese código.",
+                              );
+                          }}
+                          onCommit={(next) => {
+                            if (
+                              !Number.isSafeInteger(next * line.quantity) ||
+                              next * line.quantity < line.discountMinor
+                            ) {
+                              error(
+                                "Revisá el descuento general: supera el subtotal con ese precio.",
+                              );
+                              return false;
+                            }
+                            try {
+                              const nextTotal =
+                                total + (next - unitPrice) * line.quantity;
+                              const nextPayments = paymentsAfterDiscount(
+                                nextTotal,
+                                payments,
+                              );
+                              setLines((current) =>
+                                current.map((item) =>
+                                  item.productId === line.productId
+                                    ? { ...item, requestedUnitPriceMinor: next }
+                                    : item,
+                                ),
+                              );
+                              setPayments(nextPayments);
+                              return true;
+                            } catch (cause) {
+                              error(
+                                cause instanceof Error
+                                  ? cause.message
+                                  : "Revisá los pagos antes de cambiar el precio.",
+                              );
+                              return false;
+                            }
+                          }}
+                        />
+                      )}
+                      <div className="text-right text-sm font-semibold">
+                        <p>
+                          {money(
+                            unitPrice * line.quantity - line.discountMinor,
+                          )}
+                        </p>
+                        {line.discountMinor ? (
+                          <p className="text-[10px] font-medium text-teal-700">
+                            Dto. {money(line.discountMinor)}
+                          </p>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
-                        onClick={applyDiscount}
-                        className="rounded-md bg-teal-700 px-2 py-1.5 text-[11px] font-semibold text-white"
+                        aria-label="Quitar producto"
+                        onClick={() => updateLineQuantity(line.productId, 0)}
+                        className="ml-auto rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700"
                       >
-                        Aplicar
+                        <Trash2 size={17} />
                       </button>
-                      <button
-                        type="button"
-                        aria-label="Cancelar descuento"
-                        onClick={() => setDiscountEditorOpen(false)}
-                        className="px-1 text-slate-400 hover:text-slate-700"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDiscountAmount(discountDraft(discountMinor));
-                        setDiscountEditorOpen(true);
-                      }}
-                      className="flex items-center gap-1 hover:text-teal-700"
-                    >
-                      Descuento <Pencil size={12} className="text-teal-700" />
-                    </button>
-                    <span>{money(discountMinor)}</span>
-                  </>
-                )}
-              </div>
-              <div className="my-2 border-t" />
-              <div className="flex justify-between text-lg font-semibold">
-                <span>Total</span>
-                <span className="text-teal-700">{money(total)}</span>
-              </div>
-              <div className="mt-2 flex justify-between font-semibold text-teal-700">
-                <span>Pagado</span>
-                <span>{money(paid)}</span>
-              </div>
-              {changeMinor ? (
-                <div className="mt-2 flex items-center justify-between rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sky-950">
-                  <span className="flex items-center gap-2 font-semibold">
-                    <span className="grid h-7 w-7 place-items-center rounded-md bg-sky-100 text-sky-700">
-                      <Banknote size={15} />
-                    </span>
-                    Cambio a entregar
-                  </span>
-                  <span className="text-base font-bold text-sky-700">
-                    {money(changeMinor)}
-                  </span>
-                </div>
+                    </article>
+                  );
+                })
               ) : (
-                <div className="mt-2 flex justify-between font-semibold">
-                  <span>Pendiente</span>
-                  <span
-                    className={
-                      paid >= total ? "text-teal-700" : "text-rose-600"
-                    }
-                  >
-                    {money(Math.max(total - paid, 0))}
-                  </span>
+                <div className="flex h-full flex-col items-center justify-center px-6 text-center text-slate-400">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                    <ShoppingCart size={36} strokeWidth={1.3} />
+                  </div>
+                  <p className="mt-4 font-semibold text-slate-600">
+                    El carrito está vacío
+                  </p>
+                  <p className="mt-1 text-sm">
+                    Buscá o escaneá un producto para agregarlo.
+                  </p>
                 </div>
               )}
             </div>
           </div>
-        </div>
-        <footer className="mt-3 shrink-0 border-t border-slate-100 bg-white pt-3">
-          <button
-            type="button"
-            disabled={
-              !lines.length || paid < total || submitting || !pricingReady
-            }
-            onClick={() => void complete()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 py-3 text-base font-semibold text-white shadow-sm disabled:bg-slate-400"
-          >
-            <ShieldCheck size={17} />{" "}
-            {submitting ? "Confirmando…" : "Confirmar venta"}
-          </button>
-        </footer>
-      </aside>
-      {paymentModalOpen && !resumeNeeded ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="sale-payment-title"
-            className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
-          >
-            <header className="flex items-center justify-between border-b px-6 py-4">
-              <div>
-                <h2 id="sale-payment-title" className="font-semibold">
-                  Cobro de la venta
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Confirmá los medios de pago para cerrar la operación.
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Cerrar cobro"
-                onClick={() => setPaymentModalOpen(false)}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-              >
-                ×
-              </button>
-            </header>
-            <div className="p-6">
-              <div className="text-center">
-                <p className="text-xs font-medium text-teal-700">
-                  TOTAL A COBRAR
-                </p>
-                <p className="mt-1 text-3xl font-semibold tracking-tight text-teal-700">
-                  {money(total)}
-                </p>
-              </div>
-              <div className="mt-5 grid grid-cols-3 divide-x border-y py-3 text-center text-xs">
-                <div>
-                  <p className="text-slate-500">Subtotal</p>
-                  <p className="mt-1 font-semibold">{money(subtotal)}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Descuento</p>
-                  <div className="mt-1 flex items-center justify-center gap-1.5">
-                    <p className="font-semibold">{money(discountMinor)}</p>
-                    <button
-                      type="button"
-                      aria-label="Editar descuento"
-                      title="Editar descuento"
-                      onClick={() => {
-                        setDiscountAmount(discountDraft(discountMinor));
-                        setDiscountEditorOpen((current) => !current);
-                      }}
-                      className="rounded p-1 text-teal-700 hover:bg-teal-50"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-slate-500">Saldo pendiente</p>
-                  <p className="mt-1 font-semibold text-rose-600">
-                    {money(Math.max(total - paid, 0))}
-                  </p>
-                </div>
-              </div>
-              {discountEditorOpen ? (
-                <div className="mt-4 rounded-xl border border-teal-100 bg-teal-50/70 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-teal-900">
-                        Descuento de la venta
-                      </p>
-                      <p className="mt-0.5 text-xs text-teal-800">
-                        Se distribuye entre los productos de esta venta.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setDiscountEditorOpen(false)}
-                      className="text-sm text-teal-800"
-                    >
-                      Cerrar
-                    </button>
-                  </div>
-                  <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-                    <label className="discount-amount-field grid h-10 grid-cols-[36px_1fr]">
-                      <span
-                        aria-hidden="true"
-                        className="grid place-items-center text-sm text-slate-500"
-                      >
-                        $
-                      </span>
-                      <DiscountAmountInput
-                        className="min-w-0 border-0 px-3 text-sm"
-                        value={discountAmount}
-                        onChange={setDiscountAmount}
-                        onApply={applyDiscount}
-                        onCancel={() => setDiscountEditorOpen(false)}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={applyDiscount}
-                      className="border border-teal-700 bg-white px-4 text-sm font-medium text-teal-800"
-                    >
-                      Aplicar descuento
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              <div className="mt-5 grid grid-cols-3 gap-2">
-                {(
-                  [
-                    ["CASH", "Efectivo"],
-                    ["TRANSFER", "Transferencia"],
-                    ["CARD", "Tarjeta"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setMethod(value)}
-                    className={`rounded-lg border px-2 py-2.5 text-xs font-medium ${method === value ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600 hover:border-teal-200"}`}
-                  >
-                    {value === "CASH" ? (
-                      <Banknote className="mx-auto mb-1" size={16} />
-                    ) : (
-                      <CreditCard className="mx-auto mb-1" size={16} />
-                    )}
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {method !== "ACCOUNT" && !session ? (
-                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  {allowWithoutSession
-                    ? "El cobro quedará pendiente de asignación a una caja."
-                    : "Esta sucursal requiere una caja abierta para cobrar."}
-                </p>
-              ) : null}
-              <label className="mt-5 block text-sm font-medium">
-                Importe recibido
-                <span className="mt-1 grid h-11 grid-cols-[42px_1fr] overflow-hidden rounded-lg border bg-white">
-                  <span className="grid place-items-center border-r bg-slate-50 text-sm font-semibold text-slate-600">
-                    $
-                  </span>
-                  <input
-                    className="h-full min-w-0 border-0 px-3 text-sm"
-                    type="text"
-                    inputMode="decimal"
-                    value={paymentAmount}
-                    placeholder="Ej. 5000 o 5.000,00"
-                    onChange={(event) => setPaymentAmount(event.target.value)}
-                  />
-                </span>
-              </label>
-              <button
-                type="button"
-                disabled={paid >= total}
-                onClick={addPayment}
-                className="mt-3 w-full border border-teal-700 py-2.5 text-sm font-medium text-teal-800 disabled:border-slate-200 disabled:text-slate-400"
-              >
-                {paymentAmount
-                  ? paymentAmountMinor === undefined
-                    ? "Ingresá un importe válido"
-                    : `Agregar pago de ${money(paymentAmountMinor)}`
-                  : `Agregar saldo pendiente: ${money(Math.max(total - paid, 0))}`}
-              </button>
-              <div className="mt-5">
-                <p className="text-xs font-semibold text-slate-700">
-                  Pagos agregados
-                </p>
-                <div className="mt-2 max-h-36 space-y-2 overflow-y-auto pr-1">
-                  {payments.length ? (
-                    payments.map((payment, index) => (
-                      <div
-                        key={`${payment.method}-${index}`}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <span>
-                          {payment.method === "ACCOUNT"
-                            ? "Cuenta corriente"
-                            : payment.method === "TRANSFER"
-                              ? "Transferencia"
-                              : payment.method === "CARD"
-                                ? "Tarjeta"
-                                : "Efectivo"}
-                        </span>
-                        <span className="ml-auto font-medium">
-                          {money(payment.amountMinor)}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`Quitar pago de ${money(payment.amountMinor)}`}
-                          onClick={() => removePayment(payment.method)}
-                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-700"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                      Todavía no agregaste pagos.
-                    </p>
-                  )}
-                </div>
-                {payments.length && paid < total ? (
-                  <p className="mt-3 text-xs text-slate-500">
-                    Podés elegir otro medio para completar un pago combinado.
-                  </p>
-                ) : null}
-              </div>
-              <div className="mt-5 rounded-lg border border-teal-100 bg-teal-50 px-4 py-3">
-                <div className="flex justify-between text-sm font-semibold text-teal-900">
-                  <span>{changeMinor ? "Cambio" : "Saldo pendiente"}</span>
-                  <span>
-                    {changeMinor
-                      ? money(changeMinor)
-                      : money(Math.max(total - paid, 0))}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <footer className="border-t bg-slate-50 px-6 py-4">
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPaymentModalOpen(false)}
-                  className="flex-1 border border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-700"
-                >
-                  Volver a la venta
-                </button>
-                <button
-                  type="button"
-                  disabled={paid < total || submitting || !pricingReady}
-                  onClick={() => void complete()}
-                  className="flex-1 bg-teal-700 py-2.5 text-sm font-semibold text-white disabled:bg-slate-400"
-                >
-                  {submitting ? "Confirmando…" : "Confirmar venta"}
-                </button>
-              </div>
-              <p className="mt-3 text-center text-[11px] text-slate-500">
-                La venta se confirmará y se generará el comprobante.
-              </p>
-            </footer>
-          </section>
-        </div>
+        }
+      />
+      {checkoutOpen && !resumeNeeded ? (
+        <SaleCheckoutDialog
+          summary={[
+            `${lines.length} producto${lines.length === 1 ? "" : "s"}`,
+            (() => {
+              const units = lines.reduce((sum, line) => sum + line.quantity, 0);
+              return `${units} unidad${units === 1 ? "" : "es"}`;
+            })(),
+            customers.find((customer) => customer.id === customerId)?.name ??
+              "Público general",
+            salePriceLists.find(
+              (list) =>
+                list.id ===
+                (salePriceListId ||
+                  (!customerId
+                    ? salePriceLists.find(
+                        (item) => item.name === "Precio general",
+                      )?.id
+                    : undefined)),
+            )?.name ?? "Según cliente",
+          ].join(" · ")}
+          subtotalMinor={subtotal}
+          discountMinor={discountMinor}
+          totalMinor={total}
+          paidMinor={paid}
+          payments={groupedPayments}
+          method={method}
+          accountEnabled={Boolean(
+            creditAccount?.active && creditAccount.creditEnabled,
+          )}
+          amount={paymentAmount}
+          receivedMinor={paymentAmountMinor}
+          sessionNotice={
+            method !== "ACCOUNT" && !session
+              ? allowWithoutSession
+                ? "El cobro quedará pendiente de asignación a una caja."
+                : "Esta sucursal requiere una caja abierta para cobrar."
+              : undefined
+          }
+          errorMessage={checkoutError || undefined}
+          submitting={submitting}
+          confirmDisabled={submitting || !pricingReady}
+          onMethod={selectPaymentMethod}
+          onAmount={(value) => {
+            setPaymentAmount(value);
+            setCheckoutError("");
+          }}
+          onRemovePayment={removePayment}
+          onSplit={splitPayment}
+          onConfirm={confirmCheckout}
+          onClose={closeCheckout}
+          documentChoice={
+            <SaleDocumentChoice
+              value={documentType}
+              onChange={setDocumentType}
+              disabled={submitting}
+              onConfigure={() => setFiscalSettingsOpen(true)}
+              environment={fiscalCapabilities?.environment}
+              invoiceDisabled={!fiscalCapabilities?.voucherTypes.length}
+              unavailableReason={
+                fiscalCapabilities?.reason ??
+                "No se pudo verificar la configuración fiscal."
+              }
+              summary={`${fiscalOptions.recipient === "CUSTOMER" ? customers.find((customer) => customer.id === customerId)?.name || "Cliente no seleccionado" : fiscalOptions.consumerName || "Consumidor final"} · Factura C`}
+            />
+          }
+        />
       ) : null}
+      {conceptOpen && (
+        <SaleConceptDialog
+          key={`${organizationId}:${userKey}`}
+          organizationId={organizationId}
+          userKey={userKey}
+          onClose={() => setConceptOpen(false)}
+          onAdd={(concept) => {
+            const conceptId = crypto.randomUUID();
+            setLines((current) => [
+              ...current,
+              {
+                productId: conceptId,
+                ...concept,
+                quantity: 1,
+                discountMinor: 0,
+              },
+            ]);
+            setLastAddedId(conceptId);
+            setConceptOpen(false);
+            focusProductSearch();
+          }}
+        />
+      )}
+      {fiscalSettingsOpen && (
+        <SaleFiscalSettings
+          value={fiscalOptions}
+          capabilities={fiscalCapabilities}
+          customerName={
+            customers.find((customer) => customer.id === customerId)?.name
+          }
+          customerFiscalSummary={(() => {
+            const customer = customers.find((item) => item.id === customerId);
+            return customer
+              ? [
+                  customer.billingName || customer.name,
+                  customer.billingVatCondition || "Consumidor final",
+                  customer.billingTaxId || customer.document,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : undefined;
+          })()}
+          onClose={() => setFiscalSettingsOpen(false)}
+          onSave={(options) => {
+            setFiscalOptions(options);
+            setFiscalSettingsOpen(false);
+          }}
+        />
+      )}
       {receipt ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="sale-confirmed-title"
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
-          >
-            <div className="flex size-12 items-center justify-center rounded-full bg-teal-100 text-teal-700">
-              <ShieldCheck size={25} />
-            </div>
-            <h2
-              id="sale-confirmed-title"
-              className="mt-4 text-xl font-semibold"
-            >
-              Venta confirmada
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Se registró correctamente un cobro de{" "}
-              {money(receipt.sale.totalMinor)}.
-            </p>
-            <div className="mt-5 rounded-xl bg-slate-50 p-4 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Cliente</span>
-                <span className="font-medium">{receipt.customerName}</span>
-              </div>
-              <div className="mt-2 flex justify-between">
-                <span className="text-slate-500">Comprobante interno</span>
-                <span className="font-mono text-xs">
-                  {receipt.sale.id.slice(0, 8).toUpperCase()}
-                </span>
-              </div>
-            </div>
-            <p className="mt-4 text-xs text-slate-500">
-              Podés imprimir el ticket ahora. La factura fiscal requiere
-              integración con AFIP.
-            </p>
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setReceipt(undefined)}
-                className="border border-slate-300 py-2.5 text-sm font-medium text-slate-700"
-              >
-                Cerrar
-              </button>
-              <button
-                type="button"
-                onClick={printReceipt}
-                className="bg-teal-700 py-2.5 text-sm font-semibold text-white"
-              >
-                Imprimir ticket
-              </button>
-            </div>
-          </section>
-        </div>
+        <SaleConfirmedDialog
+          saleId={receipt.sale.id}
+          totalMinor={Number(receipt.sale.totalMinor)}
+          customerName={receipt.customerName}
+          payments={receipt.payments}
+          loadTicket={loadReceiptTicket}
+          onPrint={printReceipt}
+          onViewSale={() => {
+            setReceipt(undefined);
+            onSalesScreenChange("history");
+          }}
+          onNewSale={() => {
+            setReceipt(undefined);
+            focusProductSearch();
+          }}
+        />
       ) : null}
     </div>
   );

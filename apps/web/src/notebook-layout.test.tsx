@@ -67,10 +67,16 @@ it("scopes compact header and sales layout below desktop width without zoom", ()
   expect(compact).toContain("min-height: 36px");
   expect(compact).toContain("flex-wrap: wrap");
   expect(compact).toContain("width: 208px");
-  expect(compact).toMatch(/minmax\(\s*330px,\s*1fr\s*\)/);
+  expect(compact).toMatch(
+    /\.sales-layout\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/,
+  );
   expect(compact).not.toMatch(/\bzoom\s*:/);
   expect(css).toContain("(min-width: 1024px) and (max-width: 1199px)");
-  expect(css).toContain("grid-column: 1 / -1");
+  // Ventas sin columna de cobro: debajo de 1024px se apila y Cobrar queda fijo.
+  expect(css).not.toContain(".sales-checkout");
+  expect(css).toMatch(
+    /@media \(max-width: 1023px\)[^@]*\.sale-current-footer\s*\{[^}]*position: sticky/,
+  );
 });
 
 it("defaults to compact at 1606px and expanded at 1920px, with tooltips following manual state", () => {
@@ -100,8 +106,8 @@ it("compacts only checkout by height without removing overflow or hiding payment
     css.indexOf(".notification-slide-in {"),
   );
   expect(block).toContain("(min-width: 1200px) and (max-height: 950px)");
-  expect(block).toContain(".sales-layout > .sales-checkout > footer > button");
-  expect(block).toContain("min-height: 44px");
+  expect(block).toContain(".sale-current-panel .sale-checkout-button");
+  expect(block).toContain("min-height: 48px");
   expect(block).not.toMatch(/display:\s*none|overflow:\s*hidden|font-size:/);
   expect(block).not.toContain(".workspace-header");
 });

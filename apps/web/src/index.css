@@ -810,9 +810,9 @@
   }
 }
 .sales-cart-row {
-  grid-template-columns: minmax(100px, 1fr) 76px 96px 76px 96px 30px;
-  gap: 6px;
-  padding-inline: 12px;
+  grid-template-columns: minmax(0, 1fr) 92px 104px 96px 104px 28px;
+  gap: 10px;
+  padding-inline: 20px;
 }
 .sales-cart-product-name {
   display: -webkit-box;
@@ -959,6 +959,12 @@
   box-shadow: 0 0 0 2px rgb(13 148 136 / 12%);
 }
 .discount-amount-field input,
+/* El recuadro del importe ya marca el foco: el input interno no suma otro. */
+.sale-checkout-amount input,
+.sale-checkout-amount input:focus {
+  border: 0;
+  box-shadow: none;
+}
 .discount-amount-field input:focus {
   height: 100%;
   margin: 0;
@@ -1211,37 +1217,42 @@ textarea:focus {
   min-width: 0;
 }
 
-.sales-payment-body:focus-visible {
-  outline: 2px solid #0d9488;
-  outline-offset: -2px;
-}
-
+/* Ventas: catálogo + Venta actual en mitades; el cobro es una ventana. */
 @media (min-width: 1024px) {
   .sales-layout {
-    grid-template-columns: minmax(220px, 0.82fr) minmax(0, 1.48fr) minmax(
-        260px,
-        0.86fr
-      );
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     height: max(620px, calc(100dvh - 106px));
+    gap: 12px;
   }
 
-  .sales-layout > section,
-  .sales-layout > aside {
+  .sales-layout > section {
     height: 100%;
     min-height: 0;
   }
+}
 
-  .sales-layout > aside {
-    overflow: hidden;
+/* Debajo de 1024px se apila y Cobrar queda fijo al pie de la pantalla. */
+@media (max-width: 1023px) {
+  .sale-catalog-card {
+    max-height: 420px;
   }
 
-  .sales-layout > aside > * {
-    flex-shrink: 0;
+  .sale-current-panel {
+    overflow: visible;
   }
 
-  .sales-layout > aside > .sales-payment-body {
-    flex-shrink: 1;
+  .sale-current-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    border-radius: 0 0 1rem 1rem;
+  }
+}
+
+@media (max-width: 1439px) {
+  .sales-cart-row > div:first-child > div:first-child {
+    display: none;
   }
 }
 
@@ -1255,34 +1266,17 @@ textarea:focus {
   }
 
   .sales-layout {
-    gap: 12px;
-  }
-
-  .sales-layout > aside {
-    padding: 14px;
+    gap: 10px;
   }
 
   .sales-cart-row {
-    grid-template-columns: minmax(70px, 1fr) 76px 94px 76px 90px 30px;
-    gap: 4px;
-    padding-inline: 12px;
+    grid-template-columns: minmax(0, 1fr) 84px 96px 88px 96px 28px;
+    gap: 8px;
+    padding-inline: 16px;
   }
 
   .sales-cart-row > * {
     min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .sales-cart-row > div:first-child > div:first-child {
-    display: none;
-  }
-
-  .sales-layout > aside button {
-    font-size: 12px;
-  }
-
-  .sales-customer-fields {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1498,40 +1492,12 @@ textarea:focus {
   }
 
   .sales-layout {
-    grid-template-columns: minmax(230px, 0.85fr) minmax(560px, 1.65fr) minmax(
-        330px,
-        1fr
-      );
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     height: max(480px, calc(100dvh - 72px));
     gap: 10px;
   }
-  .sales-layout > aside {
-    padding: 14px;
-  }
-  .sales-payment-body {
-    padding-right: 3px;
-  }
-  .sales-payment-body > .mt-4 {
-    margin-top: 12px;
-  }
-  .sales-layout > aside > footer {
-    margin-top: 8px;
-    padding-top: 8px;
-  }
-  .sales-layout > aside > footer button {
-    padding-block: 10px;
-  }
-  .sales-cart-row {
-    grid-template-columns: minmax(70px, 1fr) 76px 94px 76px 94px 30px;
-    gap: 4px;
-    padding-inline: 10px;
-  }
-  .sales-cart-row > * {
-    overflow-wrap: normal;
-  }
-  .sales-customer-fields {
-    gap: 8px;
-    padding-top: 10px;
+  .sale-current-panel > header {
+    padding-top: 12px;
   }
 }
 
@@ -1547,48 +1513,20 @@ textarea:focus {
 }
 
 /* Checkout density follows viewport height, including wide desktop screens.
-   Preserve typography, header/sidebar and the independent confirmation footer. */
+   Preserve typography, header/sidebar and keep Cobrar always reachable. */
 @media (min-width: 1200px) and (max-height: 950px) {
-  .sales-layout > .sales-checkout {
-    padding: 14px;
+  .sale-current-panel > header {
+    padding-bottom: 8px;
   }
-  .sales-checkout .sales-payment-body > fieldset {
-    margin-top: 8px;
+  .sale-current-context {
+    padding-bottom: 12px;
   }
-  .sales-checkout .sales-checkout-total,
-  .sales-checkout .sales-checkout-methods {
-    margin-top: 10px;
-  }
-  .sales-checkout-method-grid {
-    gap: 6px;
-    margin-top: 6px;
-  }
-  .sales-checkout-method-grid > button {
-    padding-block: 6px;
-  }
-  .sales-checkout-method-grid > button.col-span-3 {
-    min-height: 44px;
-  }
-  .sales-checkout-methods > label {
-    margin-top: 8px;
-  }
-  .sales-checkout-methods > label > span {
-    margin-top: 6px;
-  }
-  .sales-checkout-summary {
-    margin-top: 8px;
+  .sale-current-footer {
     padding-top: 8px;
+    padding-bottom: 12px;
   }
-  .sales-checkout-summary > .mt-2 {
-    margin-top: 6px;
-  }
-  .sales-layout > .sales-checkout > footer {
-    margin-top: 8px;
-    padding-top: 8px;
-  }
-  .sales-layout > .sales-checkout > footer > button {
-    min-height: 44px;
-    padding-block: 10px;
+  .sale-current-panel .sale-checkout-button {
+    min-height: 48px;
   }
 }
 
@@ -1603,20 +1541,15 @@ textarea:focus {
 }
 
 @media (min-width: 1024px) and (max-width: 1199px) {
-  /* At high zoom / very narrow laptops, preserve usable controls instead of
-     crushing three columns. Checkout follows the cart in normal reading order. */
+  /* At high zoom / very narrow laptops the catalog hides Categoría (container
+     query in the table) and the cart drops thumbnails; both columns stay. */
   .sales-layout {
-    grid-template-columns: 260px minmax(0, 1fr);
-    height: auto;
-    grid-template-rows: minmax(480px, calc(100dvh - 72px)) auto;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   }
-  .sales-layout > aside {
-    grid-column: 1 / -1;
-    min-height: 0;
-    height: auto;
-  }
-  .sales-layout > aside > .sales-payment-body {
-    overflow: visible;
+  .sales-cart-row {
+    grid-template-columns: minmax(0, 1fr) 76px 88px 80px 88px 26px;
+    gap: 6px;
+    padding-inline: 12px;
   }
 }
 /* Reuses the Clients collection form, outside its desktop page grid. */

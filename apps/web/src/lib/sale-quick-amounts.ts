@@ -15,6 +15,14 @@ export function quickCashAmounts(dueMinor: number): number[] {
   return amounts;
 }
 
+// Texto editable para el campo Recibido: "17.070" o "2.380,50".
+export function cashAmountDraft(minor: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: minor % 100 ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(minor / 100);
+}
+
 export function changeMinor(receivedMinor: number, dueMinor: number): number {
   return Math.max(receivedMinor - dueMinor, 0);
 }

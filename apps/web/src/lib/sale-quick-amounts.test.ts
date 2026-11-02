@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { changeMinor, quickCashAmounts } from "./sale-quick-amounts";
+import {
+  cashAmountDraft,
+  changeMinor,
+  quickCashAmounts,
+} from "./sale-quick-amounts";
+
+describe("cash amount draft", () => {
+  it("formats whole pesos without cents and keeps cents when present", () => {
+    expect(cashAmountDraft(1_707_000)).toBe("17.070");
+    expect(cashAmountDraft(238_050)).toBe("2.380,50");
+  });
+});
 
 describe("quick cash amounts", () => {
   it("offers the exact amount and the next useful roundings", () => {
