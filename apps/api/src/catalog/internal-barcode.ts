@@ -25,14 +25,22 @@ export async function internalBarcode(
   });
   if (!product) throw new NotFoundException("Producto no disponible.");
   const code = internalBarcodeCode(organizationId, productId);
-  const existing = await tx.productBarcode.findUnique({ where: { code } });
+  const existing = await tx.productBarcode.findUnique({
+    where: { organizationId_code: { organizationId, code } },
+  });
   if (existing && existing.productId !== productId)
     throw new ConflictException(
       "No se pudo asignar un código interno único. Contactá al administrador.",
     );
   if (!existing && create) {
     await tx.productBarcode.create({
-      data: { productId, code, primary: false },
+      data: {
+        organizationId,
+        productId,
+        code,
+        primary: false,
+        kind: "INTERNAL",
+      },
     });
     await tx.auditLog.create({
       data: {

@@ -233,7 +233,12 @@ describe("branch product lifecycle (local rollback fixtures)", () => {
         reason: "Test restore",
       });
       await tx.productBarcode.create({
-        data: { productId: unused.id, code: randomUUID(), primary: true },
+        data: {
+          organizationId: f.org.id,
+          productId: unused.id,
+          code: randomUUID(),
+          primary: true,
+        },
       });
       await transactionalCatalog(tx).removeUnusedProduct(
         f.admin.id,

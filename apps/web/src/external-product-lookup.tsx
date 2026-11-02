@@ -66,6 +66,8 @@ export function ExternalProductLookup({
   onKindDetected,
   onKindConfirmed,
   linkedCode,
+  onImported,
+  catalogOwner,
 }: {
   token: string;
   organizationId: string;
@@ -73,6 +75,12 @@ export function ExternalProductLookup({
   // Código copiado desde el medicamento ya vinculado: no se vuelve a consultar
   // mientras se escribe, porque ofrecería vincular la misma ficha otra vez.
   linkedCode?: string;
+  // Envase importado que el padrón no conoce: se asocia a un medicamento
+  // nacional como código equivalente (SISTEMA-20).
+  onImported?: (code: string) => void;
+  // Nombre del producto del catálogo que ya tiene este código: el formulario
+  // lo avisa, así que no se informa "Código no encontrado".
+  catalogOwner?: string;
   onCode: (value: string) => void;
   onApply: (
     candidate: ExternalProductCandidate,
@@ -599,9 +607,25 @@ export function ExternalProductLookup({
         {current &&
           !current.busy &&
           !count &&
+          !catalogOwner &&
           (current.messages?.length
             ? "No pudimos confirmar coincidencias. Podés reintentar o cargarlo manualmente."
             : "Código no encontrado. Completá los datos manualmente o buscá por nombre.")}
+        {current &&
+          !current.busy &&
+          !count &&
+          canonical &&
+          onImported &&
+          mode !== "other" && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onImported(trimmed)}
+              className="mt-1.5 block rounded-md border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100"
+            >
+              Es importado: asociarlo a un medicamento nacional
+            </button>
+          )}
       </div>
       {medicines.length > 0 && !current?.linked && !current?.applied && (
         <div className="mt-2 space-y-2">

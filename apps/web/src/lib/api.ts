@@ -416,9 +416,53 @@ export type CatalogProduct = {
   prescriptionRequired: boolean;
   category: { id: string; name: string; path?: string } | null;
   laboratory: { id: string; name: string } | null;
-  barcodes: { code: string; primary?: boolean }[];
+  barcodes: {
+    code: string;
+    primary?: boolean;
+    kind?: ProductBarcodeKind;
+  }[];
   prices: { amountMinor: string }[];
 };
+// PACKAGE: código del envase; INTERNAL: SG para etiquetas; EQUIVALENT: EAN de
+// un envase importado del mismo medicamento (SISTEMA-20).
+export type ProductBarcodeKind = "PACKAGE" | "INTERNAL" | "EQUIVALENT";
+export async function addEquivalentBarcode(
+  token: string,
+  organizationId: string,
+  productId: string,
+  code: string,
+): Promise<{ productId: string; productName: string; code: string }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/catalog/products/${encodeURIComponent(productId)}/equivalent-barcodes`,
+    {
+      method: "POST",
+      headers: authJson(token),
+      body: JSON.stringify({ code }),
+    },
+  );
+  if (!response.ok)
+    throw await responseError(
+      response,
+      "No se pudo asociar el código equivalente.",
+    );
+  return response.json();
+}
+export async function removeEquivalentBarcode(
+  token: string,
+  organizationId: string,
+  productId: string,
+  code: string,
+): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/catalog/products/${encodeURIComponent(productId)}/equivalent-barcodes/${encodeURIComponent(code)}`,
+    { method: "DELETE", headers: authJson(token) },
+  );
+  if (!response.ok)
+    throw await responseError(
+      response,
+      "No se pudo quitar el código equivalente.",
+    );
+}
 export async function productInternalBarcode(
   token: string,
   organizationId: string,
@@ -662,6 +706,7 @@ export async function createCatalogProduct(
     saleUnit?: SaleUnit;
     description?: string;
     prescriptionRequired?: boolean;
+    equivalentBarcodes?: string[];
   },
 ): Promise<void> {
   const response = await fetch(

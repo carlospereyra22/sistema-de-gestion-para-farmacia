@@ -118,6 +118,15 @@ La API ofrece GET `organizations/:organizationId/catalog/products/:productId/int
 
 El editor carga exclusivamente el código principal en su campo editable para no sobrescribir accidentalmente un código interno secundario. Ventas e Inventario ya buscan en todos los códigos del producto.
 
+## Códigos equivalentes (envases importados) — SISTEMA-20
+
+Las droguerías a veces entregan un medicamento importado idéntico al nacional pero con otro EAN, que el padrón nacional no conoce. Ese EAN se guarda como código equivalente (`kind = EQUIVALENT`) del producto nacional: al escanearlo en Ventas, Inventario, Transferencias o Distribución se usa el mismo producto, con su stock, lotes y precio.
+
+- Nuevo producto: si el código escaneado no se encuentra, el botón "Es importado: asociarlo a un medicamento nacional" lo reserva como equivalente, vacía el código principal y abre Vincular medicamento. Al elegir el nacional se copia su EAN como principal y, al guardar, el producto se crea con el equivalente en la misma transacción. Si el nacional ya está en el catálogo, se ofrece "Asociar el código a ese producto" y no se crea un duplicado.
+- Editar producto: la lista "Códigos equivalentes (envases importados)" agrega y quita códigos al instante, sin esperar Guardar.
+- API: `POST organizations/:organizationId/catalog/products/:productId/equivalent-barcodes` (`{ code }`) y `DELETE .../equivalent-barcodes/:code`; el alta acepta `equivalentBarcodes` (hasta 10). Requiere CATALOG_MANAGE, bloquea el producto, valida GTIN y audita PRODUCT_EQUIVALENT_BARCODE_ADDED/REMOVED. Quitar sólo afecta equivalentes, nunca el principal ni el SG.
+- Un código identifica un solo producto dentro de la organización (otra organización puede usarlo). Un GTIN cuenta igual con o sin ceros a la izquierda. Si el código ya pertenece a otro producto se rechaza indicando cuál.
+
 JsBarcode genera Code 128 localmente sin servicios externos. Vista previa e impresión HTML/SVG aislada en iframe, textos escapados, de 1 a 210 copias. A4 vertical, margen 10 mm, etiquetas recortables de 62 × 36 mm, tres columnas y siete filas (21 por hoja). No corresponde a una plantilla comercial de papel autoadhesivo. Incluye nombre, unidad guardada y código legible, sin precio. El código no es EAN/GTIN ni reemplaza identificación sanitaria.
 
 Imprimir al 100%, sin ajustar escala y sin encabezados/pies del navegador. Probar primero una etiqueta con el lector real. Las pruebas automáticas verifican generación estable, reutilización, permisos, aislamiento, colisión, escape HTML, Code 128 y paginado. La impresión física y lectura óptica requieren validación en el equipo del usuario. No se despliega producción automáticamente.
