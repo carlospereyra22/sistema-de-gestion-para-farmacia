@@ -10,7 +10,14 @@ import {
   externalGtin,
 } from "./lib/external-product";
 import { ProductFilterSelect } from "./product-filter-select";
-import { medicineReferenceBarcodeConflict } from "./lib/medicine-reference-barcode";
+import {
+  medicineReferenceBarcodeConflict,
+  medicineReferenceBarcodeToCopy,
+} from "./lib/medicine-reference-barcode";
+import {
+  findMedicationCategory,
+  isMedicationCategoryName,
+} from "./lib/medication-category";
 import {
   compatibleRetailMedicineReferences,
   retailMedicineNameQuery,
@@ -1547,6 +1554,27 @@ function Products({
   const [productSaving, setProductSaving] = useState(false);
   const backdropPress = useRef(false);
   const referenceRequest = useRef<AbortController | null>(null);
+  // Búsqueda mientras se escribe: espera una pausa para no consultar las
+  // fuentes externas en cada tecla.
+  const referenceTypingTimer = useRef<number | undefined>(undefined);
+  // Código de barras que se copió desde la referencia elegida (no del envase).
+  const referenceBarcodeCopied = useRef("");
+  const scheduleReferenceSearch = (
+    source: MedicineReference["source"],
+    query: string,
+  ) => {
+    window.clearTimeout(referenceTypingTimer.current);
+    referenceTypingTimer.current = undefined;
+    if (query.trim().length < 3) return;
+    referenceTypingTimer.current = window.setTimeout(() => {
+      referenceTypingTimer.current = undefined;
+      void searchReferences(source, undefined, query);
+    }, 600);
+  };
+  const cancelReferenceSearch = () => {
+    window.clearTimeout(referenceTypingTimer.current);
+    referenceTypingTimer.current = undefined;
+  };
   useEffect(
     () => () => referenceRequest.current?.abort(),
     [token, organizationId],
@@ -1707,6 +1735,8 @@ function Products({
     setIsMedication(false);
     setMedicationMode("auto");
     setDescription("");
+    cancelReferenceSearch();
+    referenceBarcodeCopied.current = "";
     setReferenceQuery("");
     setSelectedReference(undefined);
     setReferenceSearchDone(false);
@@ -1722,12 +1752,14 @@ function Products({
   const searchReferences = async (
     source: MedicineReference["source"],
     retailName?: string,
+    query?: string,
   ) => {
+    cancelReferenceSearch();
     referenceRequest.current?.abort();
     const controller = new AbortController();
     referenceRequest.current = controller;
     setAlfaReferenceResults([]);
-    const queryText = (retailName ?? referenceQuery).trim();
+    const queryText = (retailName ?? query ?? referenceQuery).trim();
     setReferenceSearchDone(true);
     setReferenceSource(source);
     setReferenceResults([]);
@@ -1811,36 +1843,70 @@ function Products({
   };
   const applyReference = (reference: MedicineReference, fromScan = false) => {
     if (medicationMode === "other") return;
-    if (medicineReferenceBarcodeConflict(barcode, reference.barcode)) {
-      setReferenceBarcodeWarning(
-        `La fuente informa ${reference.barcode}, distinto del código escaneado ${barcode.trim()}. No se vinculó esta ficha. Buscá la presentación en otra fuente o revisá el envase.`,
-      );
-      return;
+    cancelReferenceSearch();
+    setReferenceBarcodeWarning("");
+    // Elegir una referencia de la lista reemplaza todo el medicamento, también
+    // el código de barras. Si había otro código se avisa para cotejar el envase.
+    if (!fromScan) {
+      const nextBarcode = medicineReferenceBarcodeToCopy("", reference.barcode);
+      const copied = referenceBarcodeCopied.current;
+      if (nextBarcode) {
+        if (medicineReferenceBarcodeConflict(barcode, nextBarcode))
+          setReferenceBarcodeWarning(
+            `Se reemplazó el código ${barcode.trim()} por ${nextBarcode}, el que informa la presentación elegida. Revisá que coincida con el envase.`,
+          );
+        referenceBarcodeCopied.current = nextBarcode;
+        setBarcode(nextBarcode);
+      } else if (copied && !medicineReferenceBarcodeConflict(barcode, copied)) {
+        referenceBarcodeCopied.current = "";
+        setBarcode("");
+      }
+      scannedMedicine.current = null;
     }
-    setReferenceBarcodeWarning(
-      !fromScan && !barcode.trim() && reference.barcode
-        ? `La fuente informa ${reference.barcode}, pero no lo copiamos desde la búsqueda por nombre. Escaneá o escribí el código del envase.`
-        : "",
-    );
+    // Al cambiar de referencia, los datos que traía la anterior y la nueva no
+    // informa se limpian para no mezclar dos medicamentos.
+    const previous = selectedReference;
+    const fromPrevious = (current: string, value: string | undefined) =>
+      Boolean(previous && value && current === value);
     setIsMedication(true);
     if (!editingProduct && !saleUnitEdited.current) setSaleUnit("BOX");
     setSelectedReference(reference);
     if (!editingProduct) setName(reference.name);
     if (reference.priceMinor !== null)
       setPrice(String(reference.priceMinor / 100));
+    else
+      setPrice((current) =>
+        fromPrevious(
+          current,
+          previous?.priceMinor != null
+            ? String(previous.priceMinor / 100)
+            : undefined,
+        )
+          ? ""
+          : current,
+      );
     if (reference.activeIngredient)
       setActiveIngredient(reference.activeIngredient);
+    else
+      setActiveIngredient((current) =>
+        fromPrevious(current, previous?.activeIngredient) ? "" : current,
+      );
     setPresentation(reference.presentation);
-    if (reference.pharmaceuticalForm !== undefined)
+    if (reference.pharmaceuticalForm)
       setPharmaceuticalForm(reference.pharmaceuticalForm);
-    if (reference.concentration !== undefined)
-      setConcentration(reference.concentration);
+    else
+      setPharmaceuticalForm((current) =>
+        fromPrevious(current, previous?.pharmaceuticalForm) ? "" : current,
+      );
+    if (reference.concentration) setConcentration(reference.concentration);
+    else
+      setConcentration((current) =>
+        fromPrevious(current, previous?.concentration) ? "" : current,
+      );
     if (reference.prescriptionRequired !== undefined)
       setPrescriptionRequired(reference.prescriptionRequired);
-    const medicationCategory = options?.categories.find(
-      (category) =>
-        category.name.trim().toLocaleLowerCase("es-AR") === "medicamentos",
-    );
+    else if (previous?.prescriptionRequired) setPrescriptionRequired(false);
+    const medicationCategory = findMedicationCategory(options?.categories);
     if (medicationCategory) setCategoryId(medicationCategory.id);
     const matchedLaboratory = options?.laboratories.find(
       (laboratory) =>
@@ -1874,10 +1940,7 @@ function Products({
     void searchReferences("official", reference.name);
     externalBrand.current = reference.brand || null;
     if (!saleUnitEdited.current) setSaleUnit("BOX");
-    const medicationCategory = options?.categories.find(
-      (category) =>
-        category.name.trim().toLocaleLowerCase("es-AR") === "medicamentos",
-    );
+    const medicationCategory = findMedicationCategory(options?.categories);
     if (medicationCategory) setCategoryId(medicationCategory.id);
   };
   const clearMismatchedReference = (value: string) => {
@@ -2485,6 +2548,10 @@ function Products({
                           setReferenceResults([]);
                           setReferenceError("");
                           setRetailLinkHint("");
+                          scheduleReferenceSearch(
+                            referenceSource,
+                            event.target.value,
+                          );
                         }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
@@ -2519,6 +2586,7 @@ function Products({
                           setReferenceLoading(false);
                           setReferenceError("");
                           setRetailLinkHint("");
+                          scheduleReferenceSearch(source, referenceQuery);
                         }}
                       />
                     </div>
@@ -2670,6 +2738,7 @@ function Products({
                         token={token}
                         organizationId={organizationId}
                         code={barcode}
+                        linkedCode={selectedReference?.barcode}
                         allowAutomatic={
                           !name &&
                           !presentation &&
@@ -2762,10 +2831,11 @@ function Products({
                                 : current,
                             );
                             setCategoryId((current) =>
-                              options?.categories
-                                .find((item) => item.id === current)
-                                ?.name.toLocaleLowerCase("es-AR") ===
-                              "medicamentos"
+                              isMedicationCategoryName(
+                                options?.categories.find(
+                                  (item) => item.id === current,
+                                )?.name ?? "",
+                              )
                                 ? ""
                                 : current,
                             );

@@ -73,6 +73,8 @@ Una skill nueva va en `.agents/skills/<nombre>/SKILL.md` (frontmatter `name` y
 
 ## Working rules
 
+- Idioma: todo lo nuevo se escribe en español (comentarios, nombres de tests, commits,
+  PR, docs, tarjetas). Lo que ya esta en ingles se deja; no se traduce masivamente.
 - Leer `docs/BUSINESS_RULES.md` antes de modificar logica de negocio.
 - Leer `docs/ARCHITECTURE.md` antes de introducir infraestructura.
 - No cambiar tecnologias fundamentales sin autorizacion.
@@ -89,5 +91,7 @@ Una skill nueva va en `.agents/skills/<nombre>/SKILL.md` (frontmatter `name` y
 
 ## Before finishing a task
 
-Ejecutar, cuando corresponda: `pnpm format`, `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build`.
+Ejecutar, cuando corresponda: Prettier solo sobre los archivos modificados (ver
+`cerrar-tarea`; no usar `pnpm format`, que reescribe todo el repo), `pnpm lint`,
+`pnpm typecheck`, `pnpm test` y `pnpm build`.
 Informar siempre lo que no haya podido verificarse.
