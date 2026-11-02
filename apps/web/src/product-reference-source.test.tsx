@@ -19,7 +19,7 @@ describe("product reference source selection", () => {
     const html = renderToStaticMarkup(
       <ProductReferenceSource value={value} onChange={() => undefined} />,
     );
-    expect(html).toContain('aria-label="Fuente para vincular el medicamento"');
+    expect(html).toContain('aria-label="Fuente para buscar por nombre"');
     expect(html).toContain("<select");
     const options = html.match(/<option[^>]*>.*?<\/option>/g) ?? [];
     expect(options).toHaveLength(3);

@@ -6,6 +6,7 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/src/main.js",
+    "precios": "node dist/src/price-refresh.cli.js",
     "lint": "eslint src --ext .ts --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",

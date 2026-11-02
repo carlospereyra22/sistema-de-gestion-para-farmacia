@@ -3,6 +3,7 @@ import {
   barcodeKindOf,
   equivalentBarcodes,
   findProductByBarcode,
+  medicinesByName,
   primaryBarcodeOf,
 } from "./equivalent-barcodes";
 
@@ -30,6 +31,22 @@ describe("códigos equivalentes", () => {
     expect(barcodeKindOf(actron, "4006381333931")).toBe("EQUIVALENT");
     expect(barcodeKindOf(actron, "07793640215509")).toBe("PACKAGE");
     expect(barcodeKindOf(actron, "7795378001058")).toBeUndefined();
+  });
+
+  it("busca medicamentos del catálogo por nombre sin tildes ni repetidos", () => {
+    const product = {
+      ...actron,
+      name: "ACTRON PEDIÁTRICO",
+      presentation: "susp.oral x 100 ml",
+      isMedication: true,
+    };
+    const perfume = { ...product, id: "perfume", isMedication: false };
+    expect(
+      medicinesByName([product, product, perfume], "actron pediatrico").map(
+        (item) => item.id,
+      ),
+    ).toEqual(["actron"]);
+    expect(medicinesByName([product], "a")).toEqual([]);
   });
 
   it("no busca códigos inválidos ni inexistentes", () => {

@@ -17,7 +17,7 @@ export function ProductReferenceSource({
   return (
     <div className="relative w-[124px] shrink-0">
       <select
-        aria-label="Fuente para vincular el medicamento"
+        aria-label="Fuente para buscar por nombre"
         value={value}
         onChange={(event) => {
           const source = productReferenceSources.find(

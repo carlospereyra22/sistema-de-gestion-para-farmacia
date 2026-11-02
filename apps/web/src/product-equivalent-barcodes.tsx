@@ -3,22 +3,33 @@ import { Plus, X } from "lucide-react";
 import { addEquivalentBarcode, removeEquivalentBarcode } from "./lib/api";
 import { externalGtin } from "./lib/external-product";
 
-// Códigos de envases importados del mismo medicamento (SISTEMA-20). Se
-// guardan al instante: no dependen del botón Guardar producto.
+// Códigos de envases importados del mismo medicamento (SISTEMA-20). En un
+// producto guardado se guardan al instante. En uno nuevo (sin `productId`)
+// quedan pendientes y se envían con el alta al apretar Guardar producto.
 export function ProductEquivalentBarcodes({
   token,
   organizationId,
   productId,
   initialCodes,
+  primaryCode = "",
   disabled,
   onChanged,
+  onPendingChange,
+  pendingCodes = [],
+  onRemovePending,
 }: {
+  // Códigos que se asocian al guardar un producto ya guardado (envase
+  // importado elegido desde el buscador).
+  pendingCodes?: string[];
+  onRemovePending?: () => void;
   token: string;
   organizationId: string;
-  productId: string;
+  productId?: string;
   initialCodes: string[];
+  primaryCode?: string;
   disabled: boolean;
-  onChanged: () => void;
+  onChanged?: () => void;
+  onPendingChange?: (codes: string[]) => void;
 }) {
   const [codes, setCodes] = useState(initialCodes);
   const [draft, setDraft] = useState("");
@@ -26,13 +37,18 @@ export function ProductEquivalentBarcodes({
   const [error, setError] = useState("");
   const code = draft.trim();
   const valid = Boolean(externalGtin(code));
+  const pending = !productId;
+  const setPending = (next: string[]) => {
+    setCodes(next);
+    onPendingChange?.(next);
+  };
   const run = async (operation: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
       await operation();
-      onChanged();
+      if (!pending) onChanged?.();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -46,6 +62,17 @@ export function ProductEquivalentBarcodes({
   const add = () =>
     run(async () => {
       if (!valid) throw new Error("Ingresá un código de barras válido.");
+      const gtin = externalGtin(code);
+      if (
+        externalGtin(primaryCode.trim()) === gtin ||
+        codes.some((item) => externalGtin(item) === gtin)
+      )
+        throw new Error(`El código ${code} ya es un código de este producto.`);
+      if (!productId) {
+        setPending([...codes, code]);
+        setDraft("");
+        return;
+      }
       const saved = await addEquivalentBarcode(
         token,
         organizationId,
@@ -57,6 +84,10 @@ export function ProductEquivalentBarcodes({
     });
   const remove = (value: string) =>
     run(async () => {
+      if (!productId) {
+        setPending(codes.filter((item) => item !== value));
+        return;
+      }
       await removeEquivalentBarcode(token, organizationId, productId, value);
       setCodes((current) => current.filter((item) => item !== value));
     });
@@ -67,21 +98,52 @@ export function ProductEquivalentBarcodes({
       </p>
       <p className="mt-0.5 text-[11px] text-slate-500">
         Al escanear cualquiera de estos códigos se vende este mismo producto.
+        {pending && " Se guardan al guardar el producto."}
       </p>
-      {codes.length > 0 && (
+      {(codes.length > 0 || pendingCodes.length > 0) && (
         <ul className="mt-2 flex flex-wrap gap-2">
           {codes.map((item) => (
             <li
               key={item}
-              className="flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 py-1 pl-2.5 pr-1 text-xs text-sky-900"
+              className={`flex items-center gap-1.5 rounded-md border py-1 pl-2.5 pr-1 text-xs ${
+                pending
+                  ? "border-dashed border-teal-400 bg-white text-teal-900"
+                  : "border-teal-200 bg-teal-50 text-teal-900"
+              }`}
             >
               <span className="font-mono">{item}</span>
+              {pending && (
+                <span className="text-[10px] font-semibold text-teal-700">
+                  pendiente
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => void remove(item)}
                 disabled={disabled || busy}
                 aria-label={`Quitar código equivalente ${item}`}
-                className="grid size-5 place-items-center rounded text-sky-700 hover:bg-sky-100"
+                className="grid size-5 place-items-center rounded text-teal-700 hover:bg-teal-100"
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+          {/* Envase importado que se asocia al apretar Guardar. */}
+          {pendingCodes.map((item) => (
+            <li
+              key={`pendiente-${item}`}
+              className="flex items-center gap-1.5 rounded-md border border-dashed border-teal-400 bg-white py-1 pl-2.5 pr-1 text-xs text-teal-900"
+            >
+              <span className="font-mono">{item}</span>
+              <span className="text-[10px] font-semibold text-teal-700">
+                pendiente
+              </span>
+              <button
+                type="button"
+                onClick={onRemovePending}
+                disabled={disabled}
+                aria-label={`No asociar el código ${item}`}
+                className="grid size-5 place-items-center rounded text-teal-700 hover:bg-teal-100"
               >
                 <X size={13} aria-hidden="true" />
               </button>
@@ -107,7 +169,7 @@ export function ProductEquivalentBarcodes({
           aria-label="Código equivalente a asociar"
           placeholder="Escaneá el código del envase importado"
           disabled={disabled || busy}
-          className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm placeholder:text-slate-400"
+          className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 !text-sm placeholder:text-slate-400"
         />
         <button
           type="button"
