@@ -6,8 +6,11 @@ import { SaleProductDetail } from "./sale-product-detail";
 const omeprazol = {
   id: "p1",
   name: "Omeprazol 20 mg x 14 cáps.",
+  isMedication: true,
   activeIngredient: "Omeprazol",
+  concentration: "20 mg",
   pharmaceuticalForm: "Cápsulas",
+  presentation: "Caja x 14",
   barcodes: [{ code: "SG000000001006", primary: true }],
   prices: [{ amountMinor: "578000" }],
   image: null,
@@ -40,9 +43,7 @@ it("invites to choose a product when nothing is selected", () => {
 
 it("shows the chosen product with quantity and shortcuts", () => {
   const html = render(omeprazol, 41);
-  expect(html).toContain(
-    "Omeprazol · Cápsulas · SG000000001006 · 41 disponibles",
-  );
+  expect(html).toContain("20 mg · Caja x 14 · SG000000001006 · 41 disponibles");
   expect(html).toContain(
     'aria-label="Cantidad de Omeprazol 20 mg x 14 cáps. a agregar"',
   );

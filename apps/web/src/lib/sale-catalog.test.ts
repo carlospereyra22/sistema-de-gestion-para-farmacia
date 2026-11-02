@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   filterSaleCatalog,
   nextSaleCatalogSelection,
-  saleCatalogDetail,
   saleCategoryOptions,
+  saleProductDetail,
 } from "./sale-catalog";
 
 const product = (
   id: string,
   name: string,
-  extra: Partial<Parameters<typeof saleCatalogDetail>[0]> = {},
+  extra: Partial<Parameters<typeof saleProductDetail>[0]> = {},
 ) => ({
   id,
   name,
@@ -64,9 +64,30 @@ describe("sale catalog", () => {
       ),
     ).toEqual(["p1", "p3"]);
   });
-  it("describes pharmaceutical detail", () => {
-    expect(saleCatalogDetail(products[0]!)).toBe("Omeprazol · Cápsulas");
-    expect(saleCatalogDetail(products[2]!)).toBe("");
+  it("shows only concentration and presentation, and only for medicines", () => {
+    const medicine = product("m", "Amoxicilina", {
+      isMedication: true,
+      activeIngredient: "Amoxicilina",
+      concentration: "500 mg",
+      pharmaceuticalForm: "Cápsulas",
+      presentation: "Caja x 12",
+    });
+    expect(saleProductDetail(medicine)).toBe("500 mg · Caja x 12");
+    expect(saleProductDetail({ ...medicine, concentration: null })).toBe(
+      "Caja x 12",
+    );
+    // El resto conserva el detalle completo.
+    expect(saleProductDetail({ ...medicine, isMedication: false })).toBe(
+      "Amoxicilina · 500 mg · Cápsulas · Caja x 12",
+    );
+    expect(
+      saleProductDetail(product("a", "Algodón", { presentation: "100 g" })),
+    ).toBe("100 g");
+    // Sin marca explícita, la droga indica que es medicamento.
+    expect(saleProductDetail({ ...medicine, isMedication: undefined })).toBe(
+      "500 mg · Caja x 12",
+    );
+    expect(saleProductDetail(products[2]!)).toBe("");
   });
   it("lists each category once, sorted, after Todas", () => {
     expect(saleCategoryOptions([...products, products[0]!])).toEqual([

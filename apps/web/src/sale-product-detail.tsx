@@ -1,6 +1,7 @@
 import { Minus, Plus } from "lucide-react";
 import type { CatalogProduct } from "./lib/api";
 import { ProductThumbnail } from "./product-image";
+import { saleProductDetail } from "./lib/sale-catalog";
 import { SaleQuantityInput } from "./sale-quantity-input";
 
 const money = (minor: string | number) =>
@@ -33,7 +34,7 @@ export function SaleProductDetail({
 }) {
   if (!product)
     return (
-      <div className="sale-product-detail flex min-h-[88px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-4 text-center text-sm text-slate-500">
+      <div className="sale-product-detail flex h-[108px] shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-4 text-center text-sm text-slate-500">
         Elegí un producto de la lista o escaneá un código.
       </div>
     );
@@ -45,7 +46,8 @@ export function SaleProductDetail({
   return (
     <div
       aria-label="Producto elegido"
-      className="sale-product-detail flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
+      // Mismo alto vacío o con producto: elegir no mueve la tabla de arriba.
+      className="sale-product-detail flex h-[108px] shrink-0 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3"
     >
       <div className="shrink-0">
         <ProductThumbnail
@@ -66,8 +68,7 @@ export function SaleProductDetail({
         </p>
         <p className="truncate text-xs text-slate-500">
           {[
-            product.activeIngredient,
-            product.pharmaceuticalForm,
+            saleProductDetail(product),
             code,
             available > 0 ? `${available} disponibles` : "Sin stock vendible",
           ]
