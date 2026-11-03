@@ -1,4 +1,6 @@
-import type { CatalogProduct, PurchaseDraftLine } from "./api";
+import type { CatalogProduct } from "./api";
+import { externalGtin } from "./external-product";
+import type { PurchaseDraftLine } from "./purchases";
 
 export type ExcelColumn = "code" | "name" | "quantity" | "cost";
 export type ExcelMapping = Record<ExcelColumn, number | null>;
@@ -66,8 +68,7 @@ export function normalizePurchaseText(value: string): string {
 
 export function excelCellText(value: unknown): string {
   if (typeof value === "string") return value.trim();
-  if (typeof value === "number" && Number.isFinite(value))
-    return String(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return "";
 }
 
@@ -77,7 +78,12 @@ export function detectExcelHeader(data: unknown[][]): {
 } {
   let best = {
     headerRow: 0,
-    mapping: { code: null, name: null, quantity: null, cost: null } as ExcelMapping,
+    mapping: {
+      code: null,
+      name: null,
+      quantity: null,
+      cost: null,
+    } as ExcelMapping,
     score: -1,
   };
   for (const [rowIndex, row] of data.slice(0, 25).entries()) {
@@ -104,7 +110,20 @@ export function detectExcelHeader(data: unknown[][]): {
         }
       }
     }
+    const body = excelBodyRows(data, rowIndex);
+    refineByContent(mapping, body);
+    // Pesa más que debajo haya renglones de productos reales que la cantidad de
+    // encabezados reconocidos: las droguerías suelen poner arriba la cabecera
+    // de la factura, con títulos parecidos pero sin productos.
+    const productRows = body.filter(
+      (r) =>
+        mapping.quantity !== null &&
+        parseExcelQuantity(r[mapping.quantity]) &&
+        ((mapping.code !== null && isExcelBarcode(r[mapping.code])) ||
+          (mapping.name !== null && isExcelText(r[mapping.name]))),
+    ).length;
     const score =
+      productRows * 10 +
       Number(mapping.code !== null) +
       Number(mapping.name !== null) +
       Number(mapping.quantity !== null) * 2 +
@@ -114,6 +133,74 @@ export function detectExcelHeader(data: unknown[][]): {
   return { headerRow: best.headerRow, mapping: best.mapping };
 }
 
+/** Código de barras como texto, sin espacios ni el ",00" de una celda con formato numérico. */
+export function excelBarcode(value: unknown): string {
+  const raw = excelCellText(value).replace(/\s/g, "");
+  return /^\d+[.,]0+$/.test(raw) ? raw.replace(/[.,]0+$/, "") : raw;
+}
+
+// El estándar de ANMAT/GS1 procesa el GTIN con 14 dígitos: 7795312109383 y
+// 07795312109383 son el mismo producto. Un código interno se compara tal cual.
+const codeKey = (code: string) => externalGtin(code) ?? code;
+
+const isExcelBarcode = (value: unknown) =>
+  /^\d{8,14}$/.test(excelBarcode(value));
+const isExcelText = (value: unknown) =>
+  /[a-z]{3}/.test(normalizePurchaseText(excelCellText(value)));
+
+function excelBodyRows(data: unknown[][], headerRow: number) {
+  return data
+    .slice(headerRow + 1, headerRow + 51)
+    .filter((row) => row.some((cell) => excelCellText(cell)));
+}
+
+/**
+ * Corrige código y nombre mirando los datos: un encabezado como "Código IVA"
+ * empieza igual que "Código" pero no trae códigos de barras, y "Producto Cód."
+ * empieza como "Producto" pero no trae nombres.
+ */
+function refineByContent(mapping: ExcelMapping, body: unknown[][]) {
+  if (!body.length) return;
+  const columns = Math.max(...body.map((row) => row.length));
+  const ratio = (index: number, test: (value: unknown) => boolean) => {
+    const filled = body.filter((row) => excelCellText(row[index]));
+    return filled.length
+      ? filled.filter((row) => test(row[index])).length / body.length
+      : 0;
+  };
+  const taken = () =>
+    new Set([mapping.quantity, mapping.cost].filter((i) => i !== null));
+  if (mapping.code === null || ratio(mapping.code, isExcelBarcode) < 0.6) {
+    let bestCode: number | null = null;
+    let bestRatio = 0.6;
+    for (let index = 0; index < columns; index++) {
+      if (taken().has(index)) continue;
+      const value = ratio(index, isExcelBarcode);
+      if (value >= bestRatio) [bestCode, bestRatio] = [index, value + 1e-9];
+    }
+    // Sin columna de barras se conserva la del encabezado: puede traer códigos
+    // de uso interno cargados en el catálogo.
+    mapping.code = bestCode ?? mapping.code;
+  }
+  if (
+    mapping.name === null ||
+    mapping.name === mapping.code ||
+    ratio(mapping.name, isExcelText) < 0.6
+  ) {
+    let bestName: number | null = null;
+    let bestLength = 0;
+    for (let index = 0; index < columns; index++) {
+      if (index === mapping.code || taken().has(index)) continue;
+      if (ratio(index, isExcelText) < 0.6) continue;
+      const length =
+        body.reduce((sum, row) => sum + excelCellText(row[index]).length, 0) /
+        body.length;
+      if (length > bestLength) [bestName, bestLength] = [index, length];
+    }
+    mapping.name = bestName;
+  }
+}
+
 export function parseExcelQuantity(value: unknown): string {
   const raw = excelCellText(value).replace(/\s/g, "");
   if (!raw) return "";
@@ -121,12 +208,21 @@ export function parseExcelQuantity(value: unknown): string {
     ? raw.replace(/[.,]/g, "")
     : raw;
   const quantity = Number(normalized);
-  return /^\d+$/.test(normalized) && Number.isSafeInteger(quantity) && quantity > 0 && quantity <= 1_000_000
+  return /^\d+$/.test(normalized) &&
+    Number.isSafeInteger(quantity) &&
+    quantity > 0 &&
+    quantity <= 1_000_000
     ? String(quantity)
     : "";
 }
 
 export function parseExcelCost(value: unknown): string {
+  // Una celda numérica ya trae el punto decimal real: no hay miles que adivinar.
+  if (typeof value === "number") {
+    const cents = Math.round(value * 100);
+    if (!Number.isSafeInteger(cents) || cents < 0) return "";
+    return `${Math.trunc(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
+  }
   const raw = excelCellText(value)
     .replace(/(?:AR\$|ARS|\$|\s)/gi, "")
     .trim();
@@ -136,7 +232,10 @@ export function parseExcelCost(value: unknown): string {
   const decimalAt = Math.max(lastComma, lastDot);
   const decimalDigits = raw.length - decimalAt - 1;
   const hasDecimal = decimalAt >= 0 && decimalDigits >= 1 && decimalDigits <= 2;
-  const digits = (hasDecimal ? raw.slice(0, decimalAt) : raw).replace(/[.,]/g, "");
+  const digits = (hasDecimal ? raw.slice(0, decimalAt) : raw).replace(
+    /[.,]/g,
+    "",
+  );
   const fraction = hasDecimal ? raw.slice(decimalAt + 1) : "";
   if (!/^\d+$/.test(digits) || (hasDecimal && !/^\d{1,2}$/.test(fraction)))
     return "";
@@ -160,8 +259,9 @@ export function previewPurchaseExcel(
   const nameIndex = new Map<string, CatalogProduct[]>();
   for (const product of available) {
     for (const barcode of product.barcodes) {
-      const key = barcode.code.trim();
-      codeIndex.set(key, [...(codeIndex.get(key) ?? []), product]);
+      const key = codeKey(barcode.code.trim());
+      const owners = codeIndex.get(key) ?? [];
+      if (!owners.includes(product)) codeIndex.set(key, [...owners, product]);
     }
     const name = normalizePurchaseText(product.name);
     nameIndex.set(name, [...(nameIndex.get(name) ?? []), product]);
@@ -170,18 +270,19 @@ export function previewPurchaseExcel(
   for (const [offset, row] of data.slice(headerRow + 1).entries()) {
     const get = (column: ExcelColumn) =>
       mapping[column] === null ? null : row[mapping[column]!];
-    const code = excelCellText(get("code")).replace(/\s/g, "");
+    const code = excelBarcode(get("code"));
     const name = excelCellText(get("name"));
     const rawQuantity = get("quantity");
     const quantity = parseExcelQuantity(rawQuantity);
     const rawCost = get("cost");
     const cost = parseExcelCost(rawCost);
     if (!code && !name && !excelCellText(rawQuantity)) continue;
-    const byCode = code ? codeIndex.get(code) ?? [] : [];
+    const byCode = code ? (codeIndex.get(codeKey(code)) ?? []) : [];
     const barcodeLike = /^\d{8,14}$/.test(code);
-    const byName = !byCode.length && (!code || !barcodeLike)
-      ? nameIndex.get(normalizePurchaseText(name)) ?? []
-      : [];
+    const byName =
+      !byCode.length && (!code || !barcodeLike)
+        ? (nameIndex.get(normalizePurchaseText(name)) ?? [])
+        : [];
     const candidates = byCode.length ? byCode : byName;
     const product = candidates.length === 1 ? candidates[0] : undefined;
     rows.push({
@@ -198,7 +299,10 @@ export function previewPurchaseExcel(
           ? "Coincidencia ambigua"
           : !product
             ? "Elegí un producto"
-            : rawCost !== null && rawCost !== undefined && excelCellText(rawCost) && !cost
+            : rawCost !== null &&
+                rawCost !== undefined &&
+                excelCellText(rawCost) &&
+                !cost
               ? "Costo para revisar"
               : null,
     });

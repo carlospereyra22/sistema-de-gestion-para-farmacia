@@ -16,6 +16,7 @@ import {
 import { PurchaseReceptionProgress } from "./purchase-reception-progress";
 import { PurchaseReceiptTable } from "./purchase-receipt-table";
 import { PurchaseRowActions } from "./purchase-row-actions";
+import { PurchaseExcelImport } from "./purchase-excel-import";
 import { ProductThumbnail } from "./product-image";
 import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
@@ -103,6 +104,7 @@ export function PurchasesWorkspace({
   onChanged,
   initialPurchaseId,
   onInitialConsumed,
+  onCreateProduct,
 }: {
   token: string;
   organizationId: string;
@@ -115,6 +117,11 @@ export function PurchasesWorkspace({
   onChanged: () => void;
   initialPurchaseId?: string;
   onInitialConsumed?: () => void;
+  /** Abre Nuevo producto precargado y devuelve el id guardado. */
+  onCreateProduct?: (draft: {
+    barcode: string;
+    name: string;
+  }) => Promise<string | undefined>;
 }) {
   const storageKey = `purchase-draft-v2:${userKey}:${organizationId}:${branchId}`;
   const [showPayables, setShowPayables] = useState(false);
@@ -1002,6 +1009,29 @@ export function PurchasesWorkspace({
                 : "Nueva compra"
           }
           close={discard ? () => setDiscard(false) : close}
+          headerActions={
+            !detail &&
+            draft?.step === "edit" &&
+            !draft.locked && (
+              <PurchaseExcelImport
+                products={products}
+                existingLines={draft.lines}
+                onCreateProduct={onCreateProduct}
+                disabled={busy || draft.lines.length >= 100}
+                onError={(message) => {
+                  setNotice("");
+                  setError(message);
+                }}
+                onImport={(lines) => {
+                  patch({ lines: [...draft.lines, ...lines] });
+                  setError("");
+                  setNotice(
+                    `Se agregaron ${lines.length} productos desde el Excel. Revisá cantidades y costos antes de guardar.`,
+                  );
+                }}
+              />
+            )
+          }
           confirmation={
             discard && (
               <PurchaseExitDialog
@@ -1603,6 +1633,7 @@ export function PurchaseSurface({
   close,
   children,
   confirmation,
+  headerActions,
 }: {
   page: boolean;
   summary?: ReactNode;
@@ -1613,10 +1644,16 @@ export function PurchaseSurface({
   close: () => void;
   children: ReactNode;
   confirmation?: ReactNode;
+  headerActions?: ReactNode;
 }) {
   if (!page)
     return (
-      <PurchaseDialog title={title} close={close} confirmation={confirmation}>
+      <PurchaseDialog
+        title={title}
+        close={close}
+        confirmation={confirmation}
+        headerActions={headerActions}
+      >
         {children}
         {footer}
       </PurchaseDialog>
@@ -1670,11 +1707,13 @@ function PurchaseDialog({
   close,
   children,
   confirmation,
+  headerActions,
 }: {
   title: string;
   close: () => void;
   children: ReactNode;
   confirmation?: ReactNode;
+  headerActions?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -1706,13 +1745,16 @@ function PurchaseDialog({
             <ShoppingBag size={20} className="text-teal-700" />
             {title}
           </h2>
-          <button
-            aria-label="Cerrar compra"
-            className="p-2 text-slate-500"
-            onClick={close}
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {headerActions}
+            <button
+              aria-label="Cerrar compra"
+              className="p-2 text-slate-500"
+              onClick={close}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </header>
         {children}
       </div>

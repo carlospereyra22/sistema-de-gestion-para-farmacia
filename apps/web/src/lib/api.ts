@@ -708,7 +708,7 @@ export async function createCatalogProduct(
     prescriptionRequired?: boolean;
     equivalentBarcodes?: string[];
   },
-): Promise<void> {
+): Promise<{ id?: string }> {
   const response = await fetch(
     `${apiBaseUrl}/organizations/${organizationId}/catalog/products`,
     {
@@ -728,6 +728,9 @@ export async function createCatalogProduct(
         : (result.message ?? "No se pudo crear el producto."),
     );
   }
+  // Compras usa el id para vincular el renglón importado al producto creado.
+  const created = (await response.json().catch(() => ({}))) as { id?: unknown };
+  return typeof created.id === "string" ? { id: created.id } : {};
 }
 
 export async function setCatalogProductActive(
