@@ -11,6 +11,27 @@ import {
 } from "./data-table";
 
 describe("tabla compartida", () => {
+  it("explica una columna con un ícono y su globo", () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        label="Productos"
+        columns={[
+          {
+            label: "Stock",
+            align: "right",
+            hint: { title: "Qué incluye", text: "Unidades para vender." },
+          },
+        ]}
+      >
+        {null}
+      </DataTable>,
+    );
+    expect(html).toContain('aria-label="Qué incluye"');
+    expect(html).toContain('role="tooltip"');
+    expect(html).toContain("Unidades para vender.");
+    expect(html).toContain("normal-case");
+  });
+
   it("usa encabezado de 12 px, números alineados y una sola tipografía", () => {
     const html = renderToStaticMarkup(
       <DataTable

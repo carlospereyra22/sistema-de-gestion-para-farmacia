@@ -65,7 +65,7 @@ describe("product catalog header", () => {
     reference: "",
     lot: "",
   };
-  it("muestra todos los filtros en la barra, sin ventana aparte, y Limpiar filtros al final", () => {
+  it("muestra los cinco filtros principales y esconde el resto detrás de Más filtros", () => {
     expect(renderToStaticMarkup(<ProductCatalogTitle />)).toContain("<h1");
     const html = renderToStaticMarkup(
       <ProductCatalogToolbar
@@ -82,20 +82,31 @@ describe("product catalog header", () => {
       "Estado",
       "Stock",
       "Vencimiento",
-      "Tipo",
-      "Precio automático",
-      "Foto",
-      "Código de barras",
     ])
       expect(html).toContain(`aria-label="${label}"`);
-    expect(html.match(/role="combobox"/g)).toHaveLength(9);
+    for (const label of ["Tipo", "Precio automático", "Foto"])
+      expect(html).not.toContain(`aria-label="${label}"`);
+    expect(html.match(/role="combobox"/g)).toHaveLength(5);
+    expect(html).toMatch(/aria-expanded="false"[^>]*>.*?Más filtros/);
     expect(html).not.toContain("<select");
     expect(html).not.toContain('aria-haspopup="dialog"');
     expect(html).not.toContain("Nuevo producto");
-    expect(html.indexOf("Limpiar filtros")).toBeGreaterThan(
-      html.indexOf('aria-label="Código de barras"'),
-    );
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>.*?Limpiar filtros/);
+  });
+  it("con un filtro escondido activo arranca abierto y lo cuenta en Más filtros", () => {
+    const html = renderToStaticMarkup(
+      <ProductCatalogToolbar
+        filters={emptyFilters}
+        additional={{ reference: "", image: "without", barcode: "" }}
+        onChange={() => {}}
+        onAdditionalChange={() => {}}
+      />,
+    );
+    expect(html.match(/role="combobox"/g)).toHaveLength(9);
+    expect(html).toMatch(
+      /aria-expanded="true"[^>]*>.*?Menos filtros.*?>1<\/span>/,
+    );
+    expect(html).toContain('aria-label="Código de barras"');
   });
   it("habilita Limpiar filtros y cuenta búsqueda, filtros y adicionales", () => {
     const html = renderToStaticMarkup(
