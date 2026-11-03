@@ -389,6 +389,60 @@
   background: var(--metric-wash);
   flex-shrink: 0;
 }
+.purchase-receive-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #dce6ed;
+  border-radius: 12px;
+  background: #fff;
+}
+.purchase-receive-metric {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 20px;
+  border-top: 3px solid var(--metric-accent);
+}
+.purchase-receive-metric + .purchase-receive-metric::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 13px;
+  bottom: 13px;
+  width: 1px;
+  background: #e8edf2;
+}
+.purchase-metric-products {
+  --metric-accent: #4397b6;
+  --metric-ink: #2380a1;
+  --metric-wash: #eef8fb;
+}
+.purchase-metric-pending {
+  --metric-accent: #f6ac43;
+  --metric-ink: #d98b1a;
+  --metric-wash: #fff7eb;
+}
+.purchase-metric-received {
+  --metric-accent: #2ea89c;
+  --metric-ink: #148a7f;
+  --metric-wash: #ecf9f6;
+}
+@media (max-width: 639px) {
+  .purchase-receive-metrics {
+    grid-template-columns: 1fr;
+  }
+  .purchase-receive-metric + .purchase-receive-metric::after {
+    top: 0;
+    right: 20px;
+    bottom: auto;
+    left: 20px;
+    width: auto;
+    height: 1px;
+  }
+}
 @media (max-width: 1100px) {
   .catalog-summary-row {
     flex-wrap: wrap;
@@ -1387,13 +1441,15 @@ textarea:focus {
 /* Compact workspace is based on available CSS pixels, not device detection.
    Everything above 1799px keeps the original desktop presentation. */
 @media (min-width: 1024px) {
-  .purchases-table-panel {
+  .purchases-table-panel,
+  .purchases-receive-layout {
     height: max(480px, calc(100dvh - 106px));
   }
 }
 
 @media (min-width: 1024px) and (max-width: 1799px) {
-  .purchases-table-panel {
+  .purchases-table-panel,
+  .purchases-receive-layout {
     height: max(480px, calc(100dvh - 72px));
   }
 

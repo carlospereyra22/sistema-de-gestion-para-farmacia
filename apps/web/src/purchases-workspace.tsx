@@ -14,18 +14,20 @@ import {
   type ReceiptDebtDraft,
 } from "./supplier-payables/receipt-debt-rules";
 import { PurchaseReceptionProgress } from "./purchase-reception-progress";
+import { PurchaseReceiptTable } from "./purchase-receipt-table";
+import { PurchaseRowActions } from "./purchase-row-actions";
 import { ProductThumbnail } from "./product-image";
 import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
   Plus,
   Search,
   X,
-  Eye,
   PackageCheck,
+  Package,
+  Clock3,
   ShoppingBag,
   FileText,
   ArrowLeft,
-  Ban,
 } from "lucide-react";
 import {
   getParties,
@@ -117,6 +119,9 @@ export function PurchasesWorkspace({
   const storageKey = `purchase-draft-v2:${userKey}:${organizationId}:${branchId}`;
   const [showPayables, setShowPayables] = useState(false);
   const [cancelPurchase, setCancelPurchase] = useState<Purchase>();
+  const [pendingDraftAction, setPendingDraftAction] = useState<
+    { kind: "new" } | { kind: "receive"; purchase: Purchase }
+  >();
   const [invoicePurchaseId, setInvoicePurchaseId] = useState<string>();
   const consumeInvoicePurchase = useCallback(
     () => setInvoicePurchaseId(undefined),
@@ -157,13 +162,6 @@ export function PurchasesWorkspace({
     searchInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!initialPurchaseId) return;
-    if (draft) {
-      setNotice(
-        "Hay un borrador guardado. Terminá o descartalo antes de abrir otra compra.",
-      );
-      onInitialConsumed?.();
-      return;
-    }
     let active = true;
     void purchaseRequest<PurchaseDetail>(
       token,
@@ -189,14 +187,7 @@ export function PurchasesWorkspace({
     return () => {
       active = false;
     };
-  }, [
-    initialPurchaseId,
-    onInitialConsumed,
-    draft,
-    token,
-    organizationId,
-    branchId,
-  ]);
+  }, [initialPurchaseId, onInitialConsumed, token, organizationId, branchId]);
   useEffect(() => {
     try {
       if (draft) sessionStorage.setItem(storageKey, JSON.stringify(draft));
@@ -256,12 +247,9 @@ export function PurchasesWorkspace({
       .toLocaleLowerCase("es-AR")
       .includes(q.trim().toLocaleLowerCase("es-AR"));
   const openDetail = async (id: string) => {
-    if (draft) {
-      setNotice("Terminá o descartá el borrador antes de abrir otra compra.");
-      return;
-    }
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       setDetail(
         await purchaseRequest<PurchaseDetail>(
@@ -281,7 +269,7 @@ export function PurchasesWorkspace({
       setBusy(false);
     }
   };
-  const receive = async (purchase: Purchase) => {
+  const startReceive = async (purchase: Purchase) => {
     setBusy(true);
     try {
       const p = await purchaseRequest<PurchaseDetail>(
@@ -306,6 +294,7 @@ export function PurchasesWorkspace({
       setDetail(undefined);
       setReviewed(false);
       setError("");
+      setNotice("");
       setReceiptSearch("");
       setOpen(true);
     } catch (e) {
@@ -316,12 +305,35 @@ export function PurchasesWorkspace({
       setBusy(false);
     }
   };
+  const receive = async (purchase: Purchase) => {
+    if (draft) {
+      if (draft.purchase?.id === purchase.id && draft.step === "receive") {
+        setNotice("");
+        setDetail(undefined);
+        setOpen(true);
+        return;
+      }
+      if (draft.locked) {
+        setOpen(true);
+        return;
+      }
+      setNotice("");
+      setPendingDraftAction({ kind: "receive", purchase });
+      return;
+    }
+    await startReceive(purchase);
+  };
   const newPurchase = () => {
+    if (draft?.step === "receive" && !draft.locked) {
+      setPendingDraftAction({ kind: "new" });
+      return;
+    }
     setDetail(undefined);
     setDraft((d) => d ?? fresh());
     setDiscard(false);
     setOpen(true);
     setError("");
+    setNotice("");
   };
   const add = (p: CatalogProduct) => {
     if (!draft || draft.locked) return;
@@ -540,12 +552,24 @@ export function PurchasesWorkspace({
   };
   const close = () => {
     if (busy) return;
+    if (detail) {
+      setOpen(false);
+      setDetail(undefined);
+      return;
+    }
     if (draft) {
       setDiscard(true);
       return;
     }
     setOpen(false);
     setDetail(undefined);
+  };
+  const receivingPage = open && draft?.step === "receive" && !detail;
+  const leaveReception = () => {
+    if (busy) return;
+    setOpen(false);
+    setError("");
+    setNotice("");
   };
   const filtered = rows.filter(
     (p) =>
@@ -569,6 +593,97 @@ export function PurchasesWorkspace({
   );
   const pages = Math.max(1, Math.ceil(filtered.length / 10)),
     current = Math.min(page, pages);
+  const receiveMetrics = [
+    {
+      label: "Productos del pedido",
+      value: currentItems.length,
+      icon: Package,
+      tone: "purchase-metric-products",
+    },
+    {
+      label: "Unidades pendientes",
+      value: totalPending,
+      icon: Clock3,
+      tone: "purchase-metric-pending",
+    },
+    {
+      label: "Esta entrega",
+      value: selectedQuantity,
+      icon: PackageCheck,
+      tone: "purchase-metric-received",
+    },
+  ];
+  const receiveSummary = receivingPage ? (
+    <div
+      aria-label="Resumen de la recepción"
+      className="purchase-receive-metrics"
+    >
+      {receiveMetrics.map(({ label, value, icon: Icon, tone }) => (
+        <div key={label} className={`purchase-receive-metric ${tone}`}>
+          <span aria-hidden="true" className="catalog-summary-icon">
+            <Icon size={25} strokeWidth={1.65} />
+          </span>
+          <span className="min-w-0">
+            <strong className="block text-[26px] font-semibold leading-8 tracking-tight tabular-nums text-slate-800">
+              {value.toLocaleString("es-AR")}
+            </strong>
+            <span className="block text-[13px] text-slate-500">{label}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  ) : null;
+  const editorFooter = draft ? (
+    <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-8px_24px_rgb(15_23_42_/_0.04)] sm:px-6">
+      <p className="text-sm font-medium text-slate-700">
+        {draft.step === "receive"
+          ? `Recibo ahora: ${selectedQuantity} un. · Queda pendiente: ${Math.max(0, totalPending - selectedQuantity)} un.`
+          : `${draft.lines.length} productos · Importe estimado ${money(totalCost)}`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {receivingPage && !draft.locked && (
+          <button
+            type="button"
+            className="px-2 text-xs font-medium text-slate-500 hover:text-rose-700"
+            onClick={close}
+          >
+            Descartar borrador
+          </button>
+        )}
+        <button
+          className={button}
+          disabled={busy}
+          onClick={receivingPage ? leaveReception : close}
+        >
+          {receivingPage ? "Volver a Compras" : "Cancelar"}
+        </button>
+        {draft.mode === "direct" &&
+          draft.step === "receive" &&
+          !draft.locked && (
+            <button className={button} onClick={() => patch({ step: "edit" })}>
+              Volver a productos
+            </button>
+          )}
+        <button
+          className={`${button} bg-teal-700 text-white`}
+          disabled={
+            busy || (!draft.locked && draft.step === "receive" && !reviewed)
+          }
+          onClick={() => void submit()}
+        >
+          {busy
+            ? "Guardando…"
+            : draft.locked
+              ? "Reintentar misma solicitud"
+              : draft.step === "receive"
+                ? "Confirmar recepción"
+                : draft.mode === "direct"
+                  ? "Continuar a recepción"
+                  : "Guardar pedido"}
+        </button>
+      </div>
+    </footer>
+  ) : null;
   const actions = (
     <>
       <button
@@ -593,11 +708,36 @@ export function PurchasesWorkspace({
   );
   return (
     <>
-      {toolbarTarget ? (
-        createPortal(actions, toolbarTarget)
-      ) : (
-        <div className="mb-3 flex justify-end gap-2">{actions}</div>
+      {pendingDraftAction && (
+        <OperationConfirmDialog
+          title="Descartar borrador"
+          description={
+            pendingDraftAction.kind === "new"
+              ? "Hay una recepción sin confirmar. Si empezás una compra nueva, se perderán los datos de esa entrega que todavía no guardaste."
+              : "Hay un borrador en curso. Si recibís otra compra, se perderán los datos que todavía no guardaste."
+          }
+          onClose={() => setPendingDraftAction(undefined)}
+          onConfirm={async () => {
+            setDraft(undefined);
+            if (pendingDraftAction.kind === "receive") {
+              await startReceive(pendingDraftAction.purchase);
+            } else {
+              setDraft(fresh());
+              setDetail(undefined);
+              setDiscard(false);
+              setError("");
+              setNotice("");
+              setOpen(true);
+            }
+          }}
+        />
       )}
+      {!receivingPage &&
+        (toolbarTarget ? (
+          createPortal(actions, toolbarTarget)
+        ) : (
+          <div className="mb-3 flex justify-end gap-2">{actions}</div>
+        ))}
       {cancelPurchase && (
         <OperationConfirmDialog
           title={
@@ -638,8 +778,11 @@ export function PurchasesWorkspace({
           {error}
         </p>
       )}
-      {notice && (
-        <p role="status" className="mb-3 text-sm text-teal-700">
+      {!open && notice && (
+        <p
+          role="status"
+          className="mb-3 border-l-2 border-slate-300 pl-3 text-sm text-slate-600"
+        >
           {notice}
         </p>
       )}
@@ -658,7 +801,7 @@ export function PurchasesWorkspace({
           }}
         />
       )}
-      {!showPayables && (
+      {!showPayables && !receivingPage && (
         <section className="purchases-table-panel flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div
             className="grid shrink-0 items-end gap-2 border-b border-slate-200 p-3 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]"
@@ -728,7 +871,7 @@ export function PurchasesWorkspace({
               onClick={newPurchase}
             >
               <Plus size={16} />
-              {draft ? "Continuar borrador" : "Nueva compra"}
+              Nueva compra
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
@@ -806,38 +949,14 @@ export function PurchasesWorkspace({
                       </span>
                     </td>
                     <td className="p-3">
-                      <button
-                        disabled={busy}
-                        className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-teal-500 disabled:opacity-50 ${["ORDERED", "PARTIALLY_RECEIVED"].includes(p.status) ? "bg-slate-100 text-slate-700 hover:bg-teal-50 hover:text-teal-800" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`}
-                        onClick={() => void openDetail(p.id)}
-                      >
-                        {["ORDERED", "PARTIALLY_RECEIVED"].includes(
-                          p.status,
-                        ) ? (
-                          <>
-                            <PackageCheck size={15} />
-                            Recibir
-                          </>
-                        ) : (
-                          <>
-                            <Eye size={15} />
-                            Ver detalle
-                          </>
-                        )}
-                      </button>
-                      {["ORDERED", "PARTIALLY_RECEIVED"].includes(p.status) &&
-                        !p.closedAt && (
-                          <button
-                            disabled={busy}
-                            className="ml-2 inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-slate-400 disabled:opacity-50"
-                            onClick={() => setCancelPurchase(p)}
-                          >
-                            <Ban size={14} strokeWidth={1.6} />
-                            {p.status === "PARTIALLY_RECEIVED"
-                              ? "Cancelar pendiente"
-                              : "Cancelar compra"}
-                          </button>
-                        )}
+                      <PurchaseRowActions
+                        purchase={p}
+                        continuing={draft?.purchase?.id === p.id}
+                        busy={busy}
+                        onReceive={() => void receive(p)}
+                        onDetail={() => void openDetail(p.id)}
+                        onCancel={() => setCancelPurchase(p)}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -865,7 +984,16 @@ export function PurchasesWorkspace({
         </section>
       )}
       {open && (
-        <PurchaseDialog
+        <PurchaseSurface
+          page={receivingPage}
+          summary={receiveSummary}
+          footer={detail ? null : editorFooter}
+          onBack={leaveReception}
+          subtitle={
+            draft?.purchase
+              ? `Compra ${draft.purchase.reference || draft.purchase.id.slice(0, 8).toUpperCase()} · ${draft.purchase.supplierName} · ${branchName}`
+              : `Compra directa · ${branchName}`
+          }
           title={
             detail
               ? `Compra ${detail.reference || detail.id.slice(0, 8).toUpperCase()}`
@@ -892,10 +1020,6 @@ export function PurchasesWorkspace({
             )
           }
         >
-          <p className="mb-4 text-xs text-slate-500">
-            Sucursal destino: <strong>{branchName}</strong>. Los costos de
-            compra no modifican precios de venta.
-          </p>
           {error && (
             <p
               role="alert"
@@ -907,7 +1031,7 @@ export function PurchasesWorkspace({
           {notice && (
             <p
               role="status"
-              className="mb-3 rounded-lg bg-teal-50 p-3 text-sm text-teal-800"
+              className="mb-3 border-l-2 border-slate-300 pl-3 text-sm text-slate-600"
             >
               {notice}
             </p>
@@ -1089,7 +1213,7 @@ export function PurchasesWorkspace({
               )}
             </>
           )}
-          {draft && (
+          {draft && !detail && (
             <>
               {draft.locked && (
                 <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm">
@@ -1401,144 +1525,32 @@ export function PurchasesWorkspace({
                   </>
                 ) : (
                   <>
-                    <p className="mb-3 text-sm text-slate-600">
-                      Cargá sólo lo que llegó. Las filas en cero quedan
-                      pendientes. Escanear identifica el producto; no completa
-                      lote ni vencimiento.
-                    </p>
-                    <input
-                      className={`${field} mb-3`}
-                      aria-label="Buscar artículo de la recepción"
-                      placeholder="Buscar o escanear dentro de esta compra"
-                      value={receiptSearch}
-                      onChange={(e) => setReceiptSearch(e.target.value)}
+                    <label className="relative mb-4 block">
+                      <Search
+                        size={17}
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-teal-700"
+                      />
+                      <input
+                        className={`${field} pl-10`}
+                        aria-label="Buscar artículo de la recepción"
+                        placeholder="Buscar o escanear dentro de esta compra"
+                        value={receiptSearch}
+                        onChange={(e) => setReceiptSearch(e.target.value)}
+                      />
+                    </label>
+                    <PurchaseReceiptTable
+                      token={token}
+                      organizationId={organizationId}
+                      items={currentItems}
+                      products={products}
+                      lots={draft.lots}
+                      search={receiptSearch}
+                      onLotsChange={(lots) => patch({ lots })}
+                      onAddLot={(itemId) =>
+                        patch({ lots: [...draft.lots, lotRow(itemId)] })
+                      }
                     />
-                    <div className="max-h-[36dvh] space-y-3 overflow-auto">
-                      {currentItems
-                        .filter(
-                          (i) =>
-                            !receiptSearch ||
-                            `${productName(i.productId)} ${
-                              products
-                                .find((p) => p.id === i.productId)
-                                ?.barcodes.map((b) => b.code)
-                                .join(" ") ?? ""
-                            }`
-                              .toLowerCase()
-                              .includes(receiptSearch.toLowerCase()),
-                        )
-                        .map((i) => (
-                          <section
-                            key={i.id}
-                            className="rounded-xl border border-slate-200 p-3"
-                          >
-                            <div className="mb-2 flex flex-wrap justify-between gap-2">
-                              <strong className="text-sm">
-                                {productName(i.productId)}
-                              </strong>
-                              <span className="text-xs text-slate-500">
-                                Pedido {i.orderedQuantity} · Recibido{" "}
-                                {i.receivedQuantity} · Pendiente{" "}
-                                {purchasePending(i)}
-                              </span>
-                            </div>
-                            {draft.lots
-                              .filter((l) => l.itemId === i.id)
-                              .map((l) => (
-                                <div
-                                  key={l.key}
-                                  className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_2fr_2fr_auto]"
-                                >
-                                  <label className="text-xs text-slate-500">
-                                    Recibo ahora
-                                    <input
-                                      className={field}
-                                      type="number"
-                                      min="0"
-                                      step="1"
-                                      value={l.quantity}
-                                      onChange={(e) =>
-                                        patch({
-                                          lots: draft.lots.map((r) =>
-                                            r.key === l.key
-                                              ? {
-                                                  ...r,
-                                                  quantity: e.target.value,
-                                                }
-                                              : r,
-                                          ),
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label className="text-xs text-slate-500">
-                                    Lote
-                                    <input
-                                      className={field}
-                                      maxLength={100}
-                                      value={l.lotNumber}
-                                      onChange={(e) =>
-                                        patch({
-                                          lots: draft.lots.map((r) =>
-                                            r.key === l.key
-                                              ? {
-                                                  ...r,
-                                                  lotNumber: e.target.value,
-                                                }
-                                              : r,
-                                          ),
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label className="text-xs text-slate-500">
-                                    Vencimiento
-                                    <input
-                                      type="date"
-                                      className={field}
-                                      value={l.expiresAt}
-                                      onChange={(e) =>
-                                        patch({
-                                          lots: draft.lots.map((r) =>
-                                            r.key === l.key
-                                              ? {
-                                                  ...r,
-                                                  expiresAt: e.target.value,
-                                                }
-                                              : r,
-                                          ),
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <button
-                                    className="self-end p-2 text-rose-600"
-                                    aria-label="Quitar lote"
-                                    onClick={() =>
-                                      patch({
-                                        lots: draft.lots.filter(
-                                          (r) => r.key !== l.key,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                              ))}
-                            {purchasePending(i) > 0 && (
-                              <button
-                                className="text-xs font-medium text-teal-700"
-                                onClick={() =>
-                                  patch({ lots: [...draft.lots, lotRow(i.id)] })
-                                }
-                              >
-                                + Agregar lote
-                              </button>
-                            )}
-                          </section>
-                        ))}
-                    </div>
                   </>
                 )}
                 {draft.step === "receive" && (
@@ -1573,48 +1585,80 @@ export function PurchasesWorkspace({
                   </label>
                 )}
               </fieldset>
-              <footer className="sticky -bottom-5 z-10 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white py-4">
-                <p className="text-sm font-medium">
-                  {draft.step === "receive"
-                    ? `Recibo ahora: ${selectedQuantity} un. · Queda pendiente: ${Math.max(0, totalPending - selectedQuantity)} un.`
-                    : `${draft.lines.length} productos · Importe estimado ${money(totalCost)}`}
-                </p>
-                <div className="flex gap-2">
-                  <button className={button} disabled={busy} onClick={close}>
-                    Cancelar
-                  </button>
-                  {draft.mode === "direct" &&
-                    draft.step === "receive" &&
-                    !draft.locked && (
-                      <button
-                        className={button}
-                        onClick={() => patch({ step: "edit" })}
-                      >
-                        Volver a productos
-                      </button>
-                    )}
-                  <button
-                    className={`${button} bg-teal-700 text-white`}
-                    disabled={
-                      busy ||
-                      (!draft.locked && draft.step === "receive" && !reviewed)
-                    }
-                    onClick={() => void submit()}
-                  >
-                    {busy
-                      ? "Guardando…"
-                      : draft.locked
-                        ? "Reintentar misma solicitud"
-                        : draft.step === "receive"
-                          ? "Confirmar recepción"
-                          : draft.mode === "direct"
-                            ? "Continuar a recepción"
-                            : "Guardar pedido"}
-                  </button>
-                </div>
-              </footer>
             </>
           )}
+        </PurchaseSurface>
+      )}
+    </>
+  );
+}
+
+export function PurchaseSurface({
+  page,
+  summary,
+  footer,
+  onBack,
+  subtitle,
+  title,
+  close,
+  children,
+  confirmation,
+}: {
+  page: boolean;
+  summary?: ReactNode;
+  footer?: ReactNode;
+  onBack: () => void;
+  subtitle: string;
+  title: string;
+  close: () => void;
+  children: ReactNode;
+  confirmation?: ReactNode;
+}) {
+  if (!page)
+    return (
+      <PurchaseDialog title={title} close={close} confirmation={confirmation}>
+        {children}
+        {footer}
+      </PurchaseDialog>
+    );
+  return (
+    <>
+      <div className="purchases-receive-layout flex min-h-[calc(100dvh-140px)] flex-col gap-3 lg:min-h-0">
+        {summary}
+        <section
+          aria-label={title}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+        >
+          <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-700">
+                <PackageCheck size={20} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-slate-900">
+                  {title}
+                </h2>
+                <p className="truncate text-xs text-slate-500">{subtitle}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <ArrowLeft size={16} aria-hidden="true" />
+              Volver a Compras
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+            {children}
+          </div>
+          {footer}
+        </section>
+      </div>
+      {confirmation && (
+        <PurchaseDialog title={title} close={close} confirmation={confirmation}>
+          {null}
         </PurchaseDialog>
       )}
     </>

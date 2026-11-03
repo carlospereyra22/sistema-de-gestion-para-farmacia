@@ -23,6 +23,28 @@ Las recepciones históricas no se recrean. Sus movimientos/auditorías se consul
 
 ## Implementación y pantallas
 
+- Recibir una compra pendiente (02/11/2026): la acción principal del listado
+  abre directamente una vista amplia dentro de Compras. El botón muestra Recibir
+  o Continuar recepción según el borrador; Ver detalle y Cancelar quedan en su
+  desplegable. Las compras ya recibidas o cerradas muestran sólo Ver detalle.
+  La recepción de una compra directa usa la misma vista después de
+  cargar sus productos. Volver a Compras conserva el borrador en la pestaña,
+  que se retoma desde la misma compra. Nueva compra conserva su nombre en el
+  listado; si hay una recepción en curso, pide confirmar antes de descartarla.
+  La confirmación
+  de salida sólo aparece al elegir Descartar borrador. Se mantienen las mismas
+  validaciones, la clave de operación, el reintento y la confirmación de deuda.
+  Ver detalle puede abrirse aunque haya un borrador guardado: el detalle no
+  modifica ese borrador, y cerrarlo vuelve al listado sin descartarlo.
+  Los tres indicadores quedan sobre el panel y usan la misma escala visual que
+  los indicadores de Productos: línea superior, separadores, icono circular,
+  cifra y etiqueta. Dentro, los productos y sus lotes
+  se cargan en una tabla con encabezados visibles. La barra de confirmación está
+  fuera del área desplazable y tiene fondo opaco. Los avisos informativos usan
+  un tratamiento neutro, separado del color de las acciones.
+  Cada fila muestra cantidades pedidas, recibidas y pendientes, además del
+  avance ya confirmado. Los lotes adicionales conservan filas propias y su
+  acción de agregado se presenta como texto discreto.
 - Compras conserva el encabezado compacto con icono, Nueva compra e Historial, sin KPIs. El listado tiene filtros de producto/código/proveedor/referencia, estado y fechas, y paginación integrada.
 - El editor amplio acepta hasta 100 productos distintos. Enter sobre un código agrega el producto y devuelve el foco al buscador; repetirlo enfoca su cantidad, no duplica filas. Costos y cantidades se editan antes de guardar. Guardar pedido no acredita stock.
 - Compra directa prepara productos y después cantidades/lotes. Continuar no escribe en la base; confirmar crea compra y primera recepción juntas, atómicamente.
