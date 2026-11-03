@@ -150,6 +150,7 @@ import {
   catalogStockTotals,
   toggleCatalogMetric,
 } from "./lib/product-catalog-metrics";
+import { stockLevel } from "./lib/stock-level";
 import {
   leadingLot,
   lotNumberMatches,
@@ -158,6 +159,7 @@ import {
   visibleProductLots,
 } from "./lib/product-lots";
 import { ProductLotsDetail } from "./product-lots-detail";
+import { ProductLotCell } from "./product-lot-cell";
 import { ProductCatalogToolbar } from "./product-catalog-toolbar";
 import { matchesCatalogExtras } from "./lib/product-catalog-filters";
 import {
@@ -220,7 +222,6 @@ import {
   History,
   Minus,
   Package,
-  ChevronDown,
   Plus,
   ScanBarcode,
   Search,
@@ -2495,14 +2496,22 @@ function Products({
             />
             <DataTable
               label="Productos"
-              minWidthClass="min-w-235"
+              minWidthClass="min-w-250"
               columns={[
                 { label: "Foto", className: "w-20" },
                 { label: "Producto" },
                 { label: "Código de barras" },
                 { label: "Laboratorio" },
                 { label: "Público", align: "right" },
-                { label: "Stock", align: "right" },
+                { label: "Lote", className: "w-px" },
+                {
+                  label: "Stock vendible total",
+                  className: "w-px",
+                  hint: {
+                    title: "Qué incluye",
+                    text: "Unidades disponibles para vender, sumando todos los lotes del producto. No incluye las vencidas, que se muestran aparte.",
+                  },
+                },
                 { label: "Próx. venc." },
                 { label: "Estado" },
                 { label: "Acciones", align: "right" },
@@ -2522,12 +2531,17 @@ function Products({
               }
             >
               {pageProducts.map((product) => {
-                const productStock = stockForProduct(product.id);
-                const stockTone = stockToneForProduct(product.id);
                 const imported = equivalentBarcodes(product);
                 const lots = productLots(stock, product.id).map((lot) =>
                   withStockAvailability(lot),
                 );
+                // Stock total cuenta sólo lo vendible; lo vencido se muestra
+                // aparte, sin sumarse.
+                const sellableStock = stockTotals.sellable.get(product.id) ?? 0;
+                const expiredUnits = lots
+                  .filter((lot) => lot.expiryStatus === "EXPIRED")
+                  .reduce((total, lot) => total + lot.quantity, 0);
+                const stockTone = stockLevel(sellableStock);
                 const shownLots = visibleProductLots(
                   lots,
                   product.id,
@@ -2548,11 +2562,9 @@ function Products({
                 );
                 // Lotes con unidades que Vencimiento o la búsqueda por lote dejan afuera.
                 const hiddenLots = lots.length - shownLots.length;
-                // Con un filtro de lotes alcanza uno para desplegar; sin filtro
-                // hace falta más de uno, porque un único lote ya se ve en la fila.
-                const canExpand = filteringLots
-                  ? shownLots.length > 0
-                  : shownLots.length > 1;
+                // Un único lote ya se ve en la columna Lote: sólo se despliega
+                // cuando hay más de uno (entre los que dejan los filtros).
+                const canExpand = shownLots.length > 1;
                 // Al buscar por lote el detalle arranca abierto: estar en
                 // expandedLots significa que el usuario lo cerró.
                 const lotsOpen =
@@ -2593,30 +2605,7 @@ function Products({
                       </DataTableCell>
                       <DataTableCell>
                         <CellText
-                          primary={
-                            canExpand ? (
-                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                {product.name}
-                                <button
-                                  type="button"
-                                  aria-expanded={lotsOpen}
-                                  aria-controls={lotsId}
-                                  aria-label={`${lotsOpen ? "Ocultar" : "Ver"} ${shownLots.length} lotes de ${product.name}`}
-                                  onClick={toggleLots}
-                                  className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-colors ${lotsOpen ? "border-teal-600 bg-teal-600 text-white" : "border-teal-200 bg-teal-50 text-teal-800 hover:border-teal-400"}`}
-                                >
-                                  {shownLots.length}{" "}
-                                  {shownLots.length === 1 ? "lote" : "lotes"}
-                                  <ChevronDown
-                                    size={14}
-                                    className={`transition-transform ${lotsOpen ? "rotate-180" : ""}`}
-                                  />
-                                </button>
-                              </span>
-                            ) : (
-                              product.name
-                            )
-                          }
+                          primary={product.name}
                           secondary={
                             product.presentation ||
                             product.externalReferencePresentation
@@ -2643,8 +2632,19 @@ function Products({
                       <DataTableCell align="right" numeric>
                         {money(product.prices[0]?.amountMinor ?? 0)}
                       </DataTableCell>
+                      <DataTableCell numeric>
+                        <ProductLotCell
+                          productName={product.name}
+                          lotNumber={leading?.number}
+                          total={statusLots.length}
+                          open={lotsOpen}
+                          controlsId={lotsId}
+                          onToggle={toggleLots}
+                        />
+                      </DataTableCell>
+                      {/* A la izquierda, pegado al lote: el título largo dejaba
+                          el número lejos. */}
                       <DataTableCell
-                        align="right"
                         numeric
                         className={
                           stockTone === "out"
@@ -2654,7 +2654,13 @@ function Products({
                               : ""
                         }
                       >
-                        {productStock}
+                        {sellableStock}
+                        {expiredUnits ? (
+                          <span className="mt-0.5 block text-xs font-normal text-rose-600">
+                            {expiredUnits}{" "}
+                            {expiredUnits === 1 ? "vencida" : "vencidas"}
+                          </span>
+                        ) : null}
                       </DataTableCell>
                       <DataTableCell
                         numeric
@@ -2727,7 +2733,7 @@ function Products({
                       </DataTableCell>
                     </DataTableRow>
                     {lotsOpen ? (
-                      <DataTableDetailRow id={lotsId} colSpan={9}>
+                      <DataTableDetailRow id={lotsId} colSpan={10}>
                         <ProductLotsDetail
                           productName={product.name}
                           lots={shownLots}
@@ -2739,7 +2745,7 @@ function Products({
                 );
               })}
               {!filteredProducts.length ? (
-                <DataTableEmpty colSpan={9}>
+                <DataTableEmpty colSpan={10}>
                   No hay productos para los filtros seleccionados.
                 </DataTableEmpty>
               ) : null}

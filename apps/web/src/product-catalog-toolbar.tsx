@@ -10,8 +10,10 @@ import {
   Pill,
   ScanBarcode,
   Search,
+  SlidersHorizontal,
   Tag,
 } from "lucide-react";
+import { useState } from "react";
 import {
   emptyCatalogAdditionalFilters,
   type CatalogAdditionalFilters,
@@ -43,9 +45,11 @@ export function ProductCatalogToolbar({
   onAdditionalChange: (filters: CatalogAdditionalFilters) => void;
 }) {
   // Cuenta todo lo que se aparta de la vista inicial, incluida la búsqueda.
-  const count =
-    Object.values(filters).filter(Boolean).length +
-    Object.values(additional).filter(Boolean).length;
+  const moreCount = Object.values(additional).filter(Boolean).length;
+  const count = Object.values(filters).filter(Boolean).length + moreCount;
+  // Tipo, Precio automático, Foto y Código de barras se usan menos: quedan
+  // detrás de "Más filtros". Arranca abierto si alguno ya está activo.
+  const [moreOpen, setMoreOpen] = useState(moreCount > 0);
   const update = (key: keyof ProductCatalogFilters, value: string) =>
     onChange({ ...filters, [key]: value });
   const updateAdditional = (
@@ -75,6 +79,38 @@ export function ProductCatalogToolbar({
             className="h-12 w-full min-w-0 border-0 bg-transparent p-0 !text-sm shadow-none outline-none"
           />
         </label>
+        <button
+          type="button"
+          aria-expanded={moreOpen}
+          aria-controls="product-catalog-more-filters"
+          onClick={() => setMoreOpen((open) => !open)}
+          className={`inline-flex h-12 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-3 text-sm font-medium shadow-sm transition-colors ${moreOpen ? "border-teal-300 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50"}`}
+        >
+          <SlidersHorizontal size={16} />
+          {moreOpen ? "Menos filtros" : "Más filtros"}
+          {moreCount > 0 && (
+            <span className="rounded bg-teal-100 px-1.5 py-0.5 text-teal-800">
+              {moreCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          disabled={!count}
+          onClick={() => {
+            onChange(emptyCatalogFilters);
+            onAdditionalChange(emptyCatalogAdditionalFilters);
+          }}
+          className="inline-flex h-12 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 shadow-sm hover:border-teal-300 hover:bg-teal-50 disabled:cursor-default disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white"
+        >
+          <FilterX size={16} />
+          Limpiar filtros
+          {count > 0 && (
+            <span className="rounded bg-teal-50 px-1.5 py-0.5 text-teal-700">
+              {count}
+            </span>
+          )}
+        </button>
         <ProductFilterSelect
           label="Categoría"
           icon={<Box size={18} />}
@@ -137,68 +173,58 @@ export function ProductCatalogToolbar({
             { value: "undated", label: "Sin fecha" },
           ]}
         />
-        <ProductFilterSelect
-          label="Tipo"
-          icon={<Pill size={18} />}
-          value={additional.kind ?? ""}
-          onChange={(v) => updateAdditional("kind", v)}
-          options={[
-            { value: "", label: "Todos" },
-            { value: "medicine", label: "Medicamentos" },
-            { value: "other", label: "Otros productos" },
-          ]}
-        />
-        <ProductFilterSelect
-          label="Precio automático"
-          icon={<Link size={18} />}
-          value={additional.reference}
-          onChange={(v) => updateAdditional("reference", v)}
-          options={[
-            { value: "", label: "Todos" },
-            { value: "linked", label: "Se actualiza solo" },
-            { value: "unlinked", label: "Precio manual" },
-          ]}
-        />
-        <ProductFilterSelect
-          label="Foto"
-          icon={<Image size={18} />}
-          value={additional.image}
-          onChange={(v) => updateAdditional("image", v)}
-          options={[
-            { value: "", label: "Todos" },
-            { value: "with", label: "Con foto" },
-            { value: "without", label: "Sin foto" },
-          ]}
-        />
-        <ProductFilterSelect
-          label="Código de barras"
-          icon={<ScanBarcode size={18} />}
-          value={additional.barcode}
-          onChange={(v) => updateAdditional("barcode", v)}
-          options={[
-            { value: "", label: "Todos" },
-            { value: "with", label: "Con código" },
-            { value: "without", label: "Sin código" },
-          ]}
-        />
-        <button
-          type="button"
-          disabled={!count}
-          onClick={() => {
-            onChange(emptyCatalogFilters);
-            onAdditionalChange(emptyCatalogAdditionalFilters);
-          }}
-          className="product-catalog-clear inline-flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 shadow-sm hover:border-teal-300 hover:bg-teal-50 disabled:cursor-default disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white"
-        >
-          <FilterX size={16} />
-          Limpiar filtros
-          {count > 0 && (
-            <span className="rounded bg-teal-50 px-1.5 py-0.5 text-teal-700">
-              {count}
-            </span>
-          )}
-        </button>
       </div>
+      {moreOpen ? (
+        <div
+          id="product-catalog-more-filters"
+          className="product-catalog-more mt-3 grid grid-cols-2 gap-3"
+        >
+          <ProductFilterSelect
+            label="Tipo"
+            icon={<Pill size={18} />}
+            value={additional.kind ?? ""}
+            onChange={(v) => updateAdditional("kind", v)}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "medicine", label: "Medicamentos" },
+              { value: "other", label: "Otros productos" },
+            ]}
+          />
+          <ProductFilterSelect
+            label="Precio automático"
+            icon={<Link size={18} />}
+            value={additional.reference}
+            onChange={(v) => updateAdditional("reference", v)}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "linked", label: "Se actualiza solo" },
+              { value: "unlinked", label: "Precio manual" },
+            ]}
+          />
+          <ProductFilterSelect
+            label="Foto"
+            icon={<Image size={18} />}
+            value={additional.image}
+            onChange={(v) => updateAdditional("image", v)}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "with", label: "Con foto" },
+              { value: "without", label: "Sin foto" },
+            ]}
+          />
+          <ProductFilterSelect
+            label="Código de barras"
+            icon={<ScanBarcode size={18} />}
+            value={additional.barcode}
+            onChange={(v) => updateAdditional("barcode", v)}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "with", label: "Con código" },
+              { value: "without", label: "Sin código" },
+            ]}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

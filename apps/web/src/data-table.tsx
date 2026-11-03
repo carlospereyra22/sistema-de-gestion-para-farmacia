@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ReportHelp } from "./report-states";
 
 // Estilo único de tablas del sistema. Productos es el modelo; el resto de las
 // tablas se pasa a este componente de a poco.
@@ -16,6 +17,8 @@ export type DataTableColumn = {
   label: ReactNode;
   align?: Align;
   className?: string;
+  // Explicación de la columna con el mismo ícono y globo de ayuda de Reportes.
+  hint?: { title: string; text: string };
 };
 
 export function DataTable({
@@ -48,6 +51,12 @@ export function DataTable({
                   className={`whitespace-nowrap px-4 py-3 ${alignClass[column.align ?? "left"]} ${column.className ?? ""}`}
                 >
                   {column.label}
+                  {column.hint ? (
+                    // El encabezado va en mayúsculas; el globo, en texto normal.
+                    <span className="ml-1 inline-flex align-middle normal-case tracking-normal whitespace-normal">
+                      <ReportHelp {...column.hint} />
+                    </span>
+                  ) : null}
                 </th>
               ))}
             </tr>
