@@ -480,6 +480,23 @@ export function WorkspaceShell({
   >(null);
   const [listEditingProduct, setListEditingProduct] =
     useState<CatalogProduct>();
+  // Producto que Compras pide crear desde un renglón importado; `resolve`
+  // devuelve el id guardado (o nada si se cerró sin guardar).
+  const [purchaseNewProduct, setPurchaseNewProduct] = useState<{
+    key: number;
+    draft: { barcode: string; name: string };
+    resolve: (productId?: string) => void;
+  }>();
+  const createProductForPurchase = useCallback(
+    (draft: { barcode: string; name: string }) =>
+      new Promise<string | undefined>((resolve) =>
+        setPurchaseNewProduct((current) => {
+          current?.resolve();
+          return { key: Date.now(), draft, resolve };
+        }),
+      ),
+    [],
+  );
   useEffect(() => {
     setListEditingProduct(undefined);
   }, [view, organizationId]);
@@ -1104,6 +1121,29 @@ export function WorkspaceShell({
               onChanged={() => void refresh()}
               initialPurchaseId={initialPurchaseId}
               onInitialConsumed={consumeInitialPurchase}
+              onCreateProduct={createProductForPurchase}
+            />
+          ) : null}
+          {ready && view === "Compras" && purchaseNewProduct ? (
+            <Products
+              key={`purchase-product:${purchaseNewProduct.key}`}
+              branchId={branchId}
+              branchName={
+                branches.find((item) => item.id === branchId)?.name ??
+                "la sucursal seleccionada"
+              }
+              token={accessToken!}
+              organizationId={organizationId!}
+              products={products}
+              stock={stock}
+              initialNewProduct={purchaseNewProduct.draft}
+              onSaved={(id) => purchaseNewProduct.resolve(id)}
+              onEditorClose={() => {
+                purchaseNewProduct.resolve();
+                setPurchaseNewProduct(undefined);
+              }}
+              done={() => void refresh()}
+              error={setMessage}
             />
           ) : null}
           {ready && view === "Transferencias" ? (
@@ -1455,6 +1495,8 @@ function Products({
   done,
   error,
   initialProduct,
+  initialNewProduct,
+  onSaved,
   onEditorClose,
 }: {
   token: string;
@@ -1465,6 +1507,9 @@ function Products({
   done: () => void;
   error: (value: string) => void;
   initialProduct?: CatalogProduct;
+  /** Abre sólo el editor de un producto nuevo con código y nombre precargados. */
+  initialNewProduct?: { barcode: string; name: string };
+  onSaved?: (productId: string) => void;
   onEditorClose?: () => void;
   branchId: string;
   branchName: string;
@@ -1670,6 +1715,7 @@ function Products({
         : "";
     productSaveLock.current = true;
     setProductSaving(true);
+    let savedId: string | undefined;
     try {
       if (!initialProduct && fractionEnabled && fractionResult === null)
         throw new Error(
@@ -1695,6 +1741,7 @@ function Products({
             editingProduct.id,
             linkImported,
           );
+        savedId = editingProduct.id;
         await updateCatalogProduct(token, organizationId, editingProduct.id, {
           generateInternalBarcode,
           brand,
@@ -1730,7 +1777,7 @@ function Products({
             : {}),
         });
       } else {
-        await createCatalogProduct(token, organizationId, {
+        ({ id: savedId } = await createCatalogProduct(token, organizationId, {
           generateInternalBarcode,
           brand: brand || undefined,
           isMedication,
@@ -1773,8 +1820,9 @@ function Products({
                   selectedReference.priceMinor ?? undefined,
               }
             : {}),
-        });
+        }));
       }
+      if (savedId) onSaved?.(savedId);
       clearForm();
       done();
     } catch (cause) {
@@ -2294,6 +2342,19 @@ function Products({
   useEffect(() => {
     if (initialProduct) edit(initialProduct);
   }, [initialProduct]);
+  // Desde Compras: igual que escanear el código en Nuevo producto (busca la
+  // referencia y, si el código ya es de otro producto, abre ése), con el
+  // nombre de la factura mientras no llegue el del padrón.
+  useEffect(() => {
+    if (!initialNewProduct) return;
+    const code = initialNewProduct.barcode.trim();
+    if (externalGtin(code)) startCodeSearch(code);
+    else {
+      clearForm(true);
+      setBarcode(code);
+    }
+    setName(initialNewProduct.name);
+  }, [initialNewProduct]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleProductActive = (product: CatalogProduct) => {
     setLifecycle({ product, status: product.active ? "ARCHIVED" : "ACTIVE" });
   };
@@ -2410,7 +2471,13 @@ function Products({
   const catalogV2Enabled = Boolean(window.location.origin);
   if (catalogV2Enabled) {
     return (
-      <div className={initialProduct ? "" : "product-catalog-body space-y-4"}>
+      <div
+        className={
+          initialProduct || initialNewProduct
+            ? ""
+            : "product-catalog-body space-y-4"
+        }
+      >
         {lifecycle && (
           <BranchProductDialog
             token={token}
@@ -2427,7 +2494,7 @@ function Products({
             }}
           />
         )}
-        {!initialProduct && (
+        {!initialProduct && !initialNewProduct && (
           <>
             <div className="catalog-summary-row">
               <ProductCatalogMetrics

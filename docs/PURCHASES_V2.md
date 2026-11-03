@@ -23,7 +23,67 @@ Las recepciones históricas no se recrean. Sus movimientos/auditorías se consul
 
 ## Implementación y pantallas
 
+- Recibir una compra pendiente (02/11/2026): la acción principal del listado
+  abre directamente una vista amplia dentro de Compras. El botón muestra Recibir
+  o Continuar recepción según el borrador; Ver detalle y Cancelar quedan en su
+  desplegable. Las compras ya recibidas o cerradas muestran sólo Ver detalle.
+  La recepción de una compra directa usa la misma vista después de
+  cargar sus productos. Volver a Compras conserva el borrador en la pestaña,
+  que se retoma desde la misma compra. Nueva compra conserva su nombre en el
+  listado; si hay una recepción en curso, pide confirmar antes de descartarla.
+  La confirmación
+  de salida sólo aparece al elegir Descartar borrador. Se mantienen las mismas
+  validaciones, la clave de operación, el reintento y la confirmación de deuda.
+  Ver detalle puede abrirse aunque haya un borrador guardado: el detalle no
+  modifica ese borrador, y cerrarlo vuelve al listado sin descartarlo.
+  Los tres indicadores quedan sobre el panel y usan la misma escala visual que
+  los indicadores de Productos: línea superior, separadores, icono circular,
+  cifra y etiqueta. Dentro, los productos y sus lotes
+  se cargan en una tabla con encabezados visibles. La barra de confirmación está
+  fuera del área desplazable y tiene fondo opaco. Los avisos informativos usan
+  un tratamiento neutro, separado del color de las acciones.
+  Cada fila muestra cantidades pedidas, recibidas y pendientes, además del
+  avance ya confirmado. Los lotes adicionales conservan filas propias y su
+  acción de agregado se presenta como texto discreto.
 - Compras conserva el encabezado compacto con icono, Nueva compra e Historial, sin KPIs. El listado tiene filtros de producto/código/proveedor/referencia, estado y fechas, y paginación integrada.
+- Importar archivo de droguería (02/11/2026): en Nueva compra (pedido
+  pendiente o compra directa), el botón Importar archivo (a la izquierda de la
+  X) lee un Excel `.xlsx` de hasta 5 MB o una factura PDF de hasta 15 MB en el
+  navegador, sin subirlos al servidor. La cantidad es la pedida: lo recibido se
+  registra después, en la recepción. Detecta la hoja y las columnas de código,
+  producto, cantidad y costo por sus encabezados y por el contenido: cada
+  droguería arma su Excel distinto, así que el código de barras tiene que ser
+  una columna de 8 a 14 dígitos, el nombre una de texto y se prefiere la fila
+  de encabezados que tiene productos debajo (no la cabecera de la factura).
+  Si no acierta, se eligen a mano. Una revisión muestra cada fila: se asocia sola por código de barras o
+  por nombre exacto de un producto activo en la sucursal; si el código de barras
+  no existe en el catálogo no se adivina por nombre. Las filas ambiguas o sin
+  producto se vinculan a mano buscando en el catálogo. Sólo se agregan las filas
+  tildadas con cantidad entera válida; no se duplican productos ya cargados y se
+  respeta el máximo de 100. El costo del Excel es una sugerencia editable. Importar
+  no guarda la compra: el pedido se revisa y se guarda como siempre. Lógica en
+  `apps/web/src/lib/purchase-excel.ts`, interfaz en `purchase-excel-import.tsx`.
+- Factura PDF (02/11/2026): pensada para la compra directa, cuando la mercadería
+  llega con la factura. Cada droguería ordena distinto las columnas (Monroe:
+  código, descripción, cantidad…; Del Sud: cantidad, descripción, código…), así
+  que no se leen por posición: se arman los renglones con el texto del PDF y se
+  toman los que tienen código de barras y tres números que cumplen
+  cantidad × precio unitario = importe (con hasta un centavo por unidad de
+  redondeo). Ese precio unitario neto es el costo sugerido; precio público,
+  descuentos y márgenes se ignoran. Un renglón con código y precios que no
+  cierran la cuenta queda sin cantidad para revisarlo. Si una página no tiene
+  texto (PDF escaneado) se usa el mismo OCR local de Distribución. La revisión
+  es la misma del Excel, sin elegir columnas, y muestra el total de unidades
+  para compararlo con la factura. La factura no trae lote ni vencimiento: se
+  cargan en la recepción. Lógica en `apps/web/src/lib/purchase-invoice-pdf.ts`,
+  lectura en `read-purchase-invoice-pdf.ts`.
+- Crear producto desde la revisión (02/11/2026): un renglón del Excel o de la
+  factura sin producto en el catálogo ofrece Crear producto. Abre el mismo
+  editor de Nuevo producto encima de la revisión, como si se escaneara el
+  código: busca la referencia en el padrón y, si el código ya es de otro
+  producto, abre ése. El nombre de la factura queda precargado hasta que llegue
+  el del padrón. Al guardar, el renglón queda vinculado y tildado; si se cierra
+  sin guardar, queda como estaba.
 - El editor amplio acepta hasta 100 productos distintos. Enter sobre un código agrega el producto y devuelve el foco al buscador; repetirlo enfoca su cantidad, no duplica filas. Costos y cantidades se editan antes de guardar. Guardar pedido no acredita stock.
 - Compra directa prepara productos y después cantidades/lotes. Continuar no escribe en la base; confirmar crea compra y primera recepción juntas, atómicamente.
 - Recibir permite cantidades parciales, varios artículos y varios lotes con una confirmación global. Las filas vacías/cero quedan pendientes. Se muestran pedido, recibido, pendiente y resumen de esta entrega. El escáner identifica el producto: no inventa lote ni vencimiento.
@@ -60,15 +120,17 @@ El historial anterior puede no contener nombre humano o vencimiento original por
 ## Guía breve para el empleado
 
 1. **Pedido:** Compras → Nueva compra → proveedor → agregar productos por nombre/código → completar cantidades y costos → Guardar pedido.
+   Si la droguería mandó un Excel: Importar archivo → revisar las filas, vincular las que no encontró → Agregar al pedido → revisar y Guardar pedido.
 2. **Entrega parcial:** abrir la compra → Recibir mercadería → completar sólo lo recibido, con sus lotes y vencimientos → revisar el resumen → Confirmar recepción.
 3. **Entrega posterior:** abrir la misma compra pendiente y repetir; el saldo se actualiza por artículo.
 4. **Llegó sin pedido previo:** Nueva compra → Compra directa → cargar productos → Continuar a recepción → confirmar lo que llegó.
+   Si vino con la factura PDF: Importar archivo → elegir el PDF → controlar las unidades con la factura y vincular lo que no encontró → Agregar al pedido → Continuar a recepción → lotes y vencimientos → confirmar.
 5. **No llegará el resto:** detalle → cerrar saldo → escribir motivo → confirmar. Lo ya recibido permanece en inventario.
 6. **Se cortó la conexión:** volver a Continuar borrador y Reintentar misma solicitud; no crear otra compra para el mismo envío incierto.
 
 ## Futuro, no implementado automáticamente
 
-Importación de droguerías/Excel/PDF, envío de pedidos, trazabilidad oficial ANMAT/serialización, pagos complejos de proveedores y cuarentena sofisticada quedan fuera de esta ampliación.
+Importación de formatos distintos de `.xlsx` y PDF (por ejemplo `.xls`, CSV o fotos sueltas), envío de pedidos, trazabilidad oficial ANMAT/serialización, pagos complejos de proveedores y cuarentena sofisticada quedan fuera de esta ampliación.
 
 ## Verificación final — 20/10/2026
 
