@@ -1,3 +1,9 @@
+import {
+  getMedicinePacks,
+  saveMedicinePack,
+  searchMedicineReferences,
+} from "./lib/api";
+import type { PurchasePack } from "./lib/purchase-pack";
 import { createProductsFromBase } from "./lib/purchase-bulk-products";
 import {
   useCallback,
@@ -5,6 +11,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  useMemo,
 } from "react";
 import { createPortal } from "react-dom";
 import { PurchaseHelp, PurchaseExitDialog } from "./purchase-dialog-extras";
@@ -124,6 +131,16 @@ export function PurchasesWorkspace({
     name: string;
   }) => Promise<string | undefined>;
 }) {
+  const packActions = useMemo(
+    () => ({
+      load: (codes: string[]) => getMedicinePacks(token, organizationId, codes),
+      save: (pack: PurchasePack) =>
+        saveMedicinePack(token, organizationId, pack),
+      search: (query: string) =>
+        searchMedicineReferences(token, organizationId, query, "official"),
+    }),
+    [token, organizationId],
+  );
   const storageKey = `purchase-draft-v2:${userKey}:${organizationId}:${branchId}`;
   const [showPayables, setShowPayables] = useState(false);
   const [cancelPurchase, setCancelPurchase] = useState<Purchase>();
@@ -155,6 +172,10 @@ export function PurchasesWorkspace({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
+  // El error de la ventana de compra no sigue en la página al cerrarla.
+  useEffect(() => {
+    if (!open) setError("");
+  }, [open]);
   const [query, setQuery] = useState(""),
     [status, setStatus] = useState(""),
     [supplierFilter, setSupplierFilter] = useState(""),
@@ -883,8 +904,8 @@ export function PurchasesWorkspace({
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500">
+            <table className="w-full min-w-[1120px] table-fixed text-left text-[15px]">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[13px] text-slate-500">
                 <tr>
                   {[
                     "Nº / Fecha",
@@ -895,7 +916,10 @@ export function PurchasesWorkspace({
                     "Estado",
                     "Acciones",
                   ].map((h) => (
-                    <th className="p-3" key={h}>
+                    <th
+                      className={`px-4 py-3.5 ${h === "Acciones" ? "w-[272px] text-right" : ""}`}
+                      key={h}
+                    >
                       {h}
                     </th>
                   ))}
@@ -907,28 +931,28 @@ export function PurchasesWorkspace({
                     className="border-t border-slate-100 transition-colors hover:bg-slate-50/60"
                     key={p.id}
                   >
-                    <td className="p-3">
+                    <td className="px-4 py-4">
                       <span className="font-medium">
                         {p.reference || p.id.slice(0, 8).toUpperCase()}
                       </span>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-[13px] text-slate-500">
                         {new Date(
                           p.orderedAt ?? p.createdAt,
                         ).toLocaleDateString("es-AR")}
                       </p>
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-4">
                       {p.supplierName ??
                         suppliers.find((s) => s.id === p.supplierId)?.name}
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-4">
                       {p.items.length}{" "}
                       {p.items.length === 1 ? "artículo" : "artículos"}
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-4">
                       <PurchaseReceptionProgress purchase={p} />
                     </td>
-                    <td className="p-3 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       {money(
                         p.items.reduce(
                           (n, i) =>
@@ -937,9 +961,9 @@ export function PurchasesWorkspace({
                         ),
                       )}
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-4">
                       <span
-                        className={`inline-flex items-center gap-2 whitespace-nowrap text-xs font-medium ${
+                        className={`inline-flex items-center gap-2 whitespace-nowrap text-[13px] font-medium ${
                           p.closedAt || p.status === "CANCELLED"
                             ? "text-slate-500"
                             : p.status === "PARTIALLY_RECEIVED"
@@ -956,7 +980,7 @@ export function PurchasesWorkspace({
                         {purchaseStatus(p)}
                       </span>
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-4 text-right">
                       <PurchaseRowActions
                         purchase={p}
                         continuing={draft?.purchase?.id === p.id}
@@ -1026,6 +1050,7 @@ export function PurchasesWorkspace({
                     onProgress,
                   ).finally(onChanged)
                 }
+                packActions={packActions}
                 disabled={busy || draft.lines.length >= 100}
                 onError={(message) => {
                   setNotice("");
@@ -1742,6 +1767,8 @@ function PurchaseDialog({
         }
       }}
       onCancel={(e) => {
+        // El selector de archivos cancelado también llega acá: no cierra la compra.
+        if (e.target !== e.currentTarget) return;
         e.preventDefault();
         close();
       }}

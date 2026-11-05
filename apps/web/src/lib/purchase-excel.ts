@@ -14,6 +14,8 @@ export type ImportRow = {
   productId: string | null;
   matchedBy: "code" | "name" | null;
   issue: string | null;
+  // Exhibidor: código de la factura y unidades que trae.
+  pack?: { code: string; factor: number };
 };
 
 const aliases: Record<ExcelColumn, string[]> = {

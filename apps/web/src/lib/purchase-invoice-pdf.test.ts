@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  invoiceEmptyMessage,
   invoiceMapping,
   invoiceSheet,
   invoiceTextLines,
@@ -56,6 +57,30 @@ describe("invoiceTextLines", () => {
     expect(
       invoiceTextLines(renglon.map((item) => ({ ...item, rotated: true }))),
     ).toHaveLength(1);
+  });
+});
+
+describe("PDF sin renglones", () => {
+  const remito = [
+    "Remito",
+    "0149-00047325",
+    "7795378001072 MIGRAL COMPOSITUM COMPR. X100 1 40.784,23",
+  ];
+
+  it("un remito no se importa y lo dice", () => {
+    expect(parseInvoiceLines(remito)).toEqual([]);
+    expect(invoiceEmptyMessage(remito)).toContain("es un remito");
+  });
+
+  it("otro PDF pide una factura, sin hablar de remitos", () => {
+    expect(invoiceEmptyMessage(["Resumen de cuenta"])).toContain(
+      "no encontramos productos",
+    );
+  });
+
+  it("el mensaje llega al usuario porque empieza con Importá", () => {
+    expect(invoiceEmptyMessage([])).toMatch(/^Importá/);
+    expect(invoiceEmptyMessage(remito)).toMatch(/^Importá/);
   });
 });
 

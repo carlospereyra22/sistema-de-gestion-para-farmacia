@@ -198,6 +198,13 @@ import { ProductSaveErrorDialog } from "./product-save-error-dialog";
 import { MedicineReferenceNote } from "./medicine-reference-note";
 import { medicineSources } from "./lib/medicine-search";
 import { medicineNameIsFree } from "./lib/medicine-lookup";
+import { getMedicinePacks } from "./lib/api";
+import {
+  intactPacks,
+  packSaleProduct,
+  productPackFactor,
+  type PurchasePack,
+} from "./lib/purchase-pack";
 import { ProductReferenceSource } from "./product-reference-source";
 import { AlfaBetaMedicineCard } from "./alfabeta-medicine-card";
 import { distributeSaleDiscount } from "./lib/sale-discount";
@@ -1656,6 +1663,12 @@ function Products({
   const [productSaving, setProductSaving] = useState(false);
   const backdropPress = useRef(false);
   const referenceRequest = useRef<AbortController | null>(null);
+  const [medicinePacks, setMedicinePacks] = useState<PurchasePack[]>([]);
+  useEffect(() => {
+    getMedicinePacks(token, organizationId).then(setMedicinePacks, () =>
+      setMedicinePacks([]),
+    );
+  }, [token, organizationId]);
   // Búsqueda mientras se escribe: espera una pausa para no consultar las
   // fuentes externas en cada tecla.
   const referenceTypingTimer = useRef<number | undefined>(undefined);
@@ -2612,6 +2625,10 @@ function Products({
                   .filter((lot) => lot.expiryStatus === "EXPIRED")
                   .reduce((total, lot) => total + lot.quantity, 0);
                 const stockTone = stockLevel(sellableStock);
+                const packFactor = productPackFactor(product, medicinePacks);
+                const wholePacks = packFactor
+                  ? intactPacks(lots, packFactor)
+                  : 0;
                 const shownLots = visibleProductLots(
                   lots,
                   product.id,
@@ -2725,6 +2742,12 @@ function Products({
                         }
                       >
                         {sellableStock}
+                        {wholePacks > 0 && (
+                          <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                            {wholePacks}{" "}
+                            {wholePacks === 1 ? "exhibidor" : "exhibidores"}
+                          </span>
+                        )}
                         {expiredUnits ? (
                           <span className="mt-0.5 block text-xs font-normal text-rose-600">
                             {expiredUnits}{" "}
@@ -4555,6 +4578,12 @@ function Sales({
   const [catalogCategoryId, setCatalogCategoryId] = useState("");
   const [catalogInStockOnly, setCatalogInStockOnly] = useState(false);
   const [detailQuantity, setDetailQuantity] = useState(1);
+  const [salePacks, setSalePacks] = useState<PurchasePack[]>([]);
+  useEffect(() => {
+    getMedicinePacks(token, organizationId).then(setSalePacks, () =>
+      setSalePacks([]),
+    );
+  }, [token, organizationId]);
   const catalogId = useId();
   const productSearchRef = useRef<HTMLInputElement>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -4799,11 +4828,21 @@ function Sales({
         (barcode) => barcode.code.toLocaleLowerCase() === searchTerm,
       ),
   );
+  // Un exhibidor se vende como N unidades del producto base.
+  const packSale =
+    searchTerm && !exactBarcodeProduct
+      ? packSaleProduct(searchTerm, products, salePacks)
+      : null;
+  const packSaleFactor = packSale?.factor;
+  useEffect(() => {
+    if (packSaleFactor) setDetailQuantity(packSaleFactor);
+  }, [packSaleFactor]);
   // Mientras se escribe, el primer resultado vendible queda elegido para Enter.
   const selectedCatalogProduct =
     products.find((item) => item.id === productId) ??
     (searchTerm
       ? (exactBarcodeProduct ??
+        packSale?.product ??
         catalogRows.find((item) => available(item.id) > 0))
       : undefined);
   const focusProductSearch = () =>
@@ -4864,6 +4903,15 @@ function Sales({
     });
     setLastAddedId(selectedProductId);
     return true;
+  };
+  const scanIntoSale = (code: string) => {
+    const scanned = products.find((product) =>
+      product.barcodes.some((barcode) => barcode.code.trim() === code.trim()),
+    );
+    const pack = scanned ? null : packSaleProduct(code, products, salePacks);
+    if (scanned) addProductToSale(scanned.id, 1);
+    else if (pack) addProductToSale(pack.product.id, pack.factor);
+    else error("No se encontró un producto con ese código.");
   };
   const add = (event: Pick<FormEvent, "preventDefault">) => {
     event.preventDefault();
@@ -5833,19 +5881,7 @@ function Sales({
                               productSearchRef.current?.focus(),
                             )
                           }
-                          onScan={(code) => {
-                            const scanned = products.find((product) =>
-                              product.barcodes.some(
-                                (barcode) =>
-                                  barcode.code.trim() === code.trim(),
-                              ),
-                            );
-                            if (scanned) addProductToSale(scanned.id, 1);
-                            else
-                              error(
-                                "No se encontró un producto con ese código.",
-                              );
-                          }}
+                          onScan={scanIntoSale}
                           onCommit={(quantity) =>
                             updateLineQuantity(line.productId, quantity)
                           }
@@ -5893,19 +5929,7 @@ function Sales({
                               productSearchRef.current?.focus(),
                             )
                           }
-                          onScan={(code) => {
-                            const scanned = products.find((product) =>
-                              product.barcodes.some(
-                                (barcode) =>
-                                  barcode.code.trim() === code.trim(),
-                              ),
-                            );
-                            if (scanned) addProductToSale(scanned.id, 1);
-                            else
-                              error(
-                                "No se encontró un producto con ese código.",
-                              );
-                          }}
+                          onScan={scanIntoSale}
                           onCommit={(next) => {
                             if (
                               !Number.isSafeInteger(next * line.quantity) ||

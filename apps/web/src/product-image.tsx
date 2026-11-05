@@ -106,6 +106,7 @@ export function ImagePreview({
       ref={dialog}
       aria-label={`Foto de ${name}`}
       onCancel={(event) => {
+        if (event.target !== event.currentTarget) return;
         event.preventDefault();
         if (!busy) onClose();
       }}

@@ -1,8 +1,11 @@
 import {
   Controller,
+  BadRequestException,
+  Body,
   Get,
   Header,
   Param,
+  Put,
   Query,
   Req,
   ServiceUnavailableException,
@@ -10,8 +13,12 @@ import {
 } from "@nestjs/common";
 import {
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Matches,
+  Max,
+  Min,
   MinLength,
   MaxLength,
 } from "class-validator";
@@ -27,6 +34,18 @@ import { CatalogService } from "./catalog.service";
 import { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
+
+class MedicinePackQueryDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{8,14}(,\d{8,14}){0,99}$/)
+  codes?: string;
+}
+
+class MedicinePackDto {
+  @IsString() @Matches(/^\d{8,14}$/) baseBarcode!: string;
+  @IsInt() @Min(2) @Max(1000) factor!: number;
+}
 
 class MedicineReferenceQueryDto {
   @IsString()
@@ -105,6 +124,41 @@ export class MedicineReferenceController {
       automaticSelection: false,
       officialUnavailable,
     };
+  }
+
+  @Get("packs")
+  async packs(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Query() query: MedicinePackQueryDto,
+  ) {
+    await this.catalog.assertPermission(
+      request.auth!.sub,
+      organizationId,
+      "CATALOG_READ",
+    );
+    return this.medicineCatalog.packs(query.codes?.split(","));
+  }
+
+  @Put("packs/:barcode")
+  async savePack(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("barcode") barcode: string,
+    @Body() body: MedicinePackDto,
+  ) {
+    await this.catalog.assertPermission(
+      request.auth!.sub,
+      organizationId,
+      "CATALOG_MANAGE",
+    );
+    if (!/^\d{8,14}$/.test(barcode))
+      throw new BadRequestException("Revisá el código del exhibidor.");
+    return this.medicineCatalog.savePack(request.auth!.sub, organizationId, {
+      barcode,
+      baseBarcode: body.baseBarcode,
+      factor: body.factor,
+    });
   }
 
   @Get("alfabeta")

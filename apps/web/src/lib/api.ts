@@ -1,3 +1,4 @@
+import type { PurchasePack } from "./purchase-pack";
 import type { HealthResponse } from "@gestion/contracts";
 import { categoryPath } from "./category-tree";
 import type {
@@ -680,6 +681,39 @@ export async function searchMedicineReferences(
       "No se pudieron consultar las referencias de medicamentos.",
     );
   return (await response.json()) as MedicineReference[];
+}
+export async function getMedicinePacks(
+  token: string,
+  organizationId: string,
+  codes?: string[],
+): Promise<PurchasePack[]> {
+  const search = new URLSearchParams(codes ? { codes: codes.join(",") } : {});
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/packs?${search.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron leer los exhibidores.");
+  return (await response.json()) as PurchasePack[];
+}
+export async function saveMedicinePack(
+  token: string,
+  organizationId: string,
+  pack: PurchasePack,
+): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/packs/${encodeURIComponent(pack.barcode)}`,
+    {
+      method: "PUT",
+      headers: authJson(token),
+      body: JSON.stringify({
+        baseBarcode: pack.baseBarcode,
+        factor: pack.factor,
+      }),
+    },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo guardar el exhibidor.");
 }
 export async function lookupMedicineBarcode(
   token: string,

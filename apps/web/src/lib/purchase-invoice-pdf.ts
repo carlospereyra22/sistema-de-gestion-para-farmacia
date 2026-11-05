@@ -123,6 +123,13 @@ export function parseInvoiceLines(lines: string[]): InvoiceLine[] {
     .filter((line): line is InvoiceLine => line !== null);
 }
 
+/** Explica por qué un PDF no trajo renglones. Un remito no informa el costo unitario. */
+export function invoiceEmptyMessage(lines: string[]) {
+  return lines.some((line) => /\bremito\b/i.test(line))
+    ? "Importá la factura: este PDF es un remito y no informa el costo de cada producto."
+    : "Importá una factura de droguería: no encontramos productos con precio en este PDF.";
+}
+
 /** Tabla con la forma que espera `previewPurchaseExcel` (sin fila de encabezado). */
 export function invoiceSheet(lines: InvoiceLine[]): unknown[][] {
   return lines.map((line) => [

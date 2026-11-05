@@ -190,6 +190,51 @@ describe("base de medicamentos en esquema aislado", () => {
     expect(item.officialDelisted).toBe(true);
   });
 
+  it("guarda un exhibidor sobre un envase de la base y lo corrige", async () => {
+    await service.importRecords([product()]);
+    const organization = await db.organization.create({
+      data: { name: "Exhibidores" },
+    });
+    const actor = await db.user.create({
+      data: {
+        email: `${randomUUID()}@example.invalid`,
+        passwordHash: "fixture",
+      },
+    });
+    const pack = {
+      barcode: "7795345124247",
+      baseBarcode: "7793640215479",
+      factor: 20,
+    };
+    await service.savePack(actor.id, organization.id, pack);
+    await service.savePack(actor.id, organization.id, { ...pack, factor: 10 });
+    expect(await service.packs([pack.barcode])).toEqual([
+      { ...pack, factor: 10 },
+    ]);
+    expect(
+      await db.auditLog.count({
+        where: { action: "MEDICINE_CATALOG_PACK_SAVED" },
+      }),
+    ).toBe(2);
+    await expect(
+      service.savePack(actor.id, organization.id, {
+        ...pack,
+        baseBarcode: "7790000000002",
+      }),
+    ).rejects.toThrow("no está en la base");
+    await expect(
+      service.savePack(actor.id, organization.id, {
+        ...pack,
+        baseBarcode: pack.barcode,
+      }),
+    ).rejects.toThrow("mismo código");
+    await expect(
+      db.medicineCatalogPack.create({
+        data: { barcode: "1", baseBarcode: "2", factor: 1 },
+      }),
+    ).rejects.toThrow();
+  });
+
   it("lee un link una vez, sigue las páginas y actualiza", async () => {
     await service.importRecords([
       product({

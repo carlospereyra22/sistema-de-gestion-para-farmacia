@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -113,6 +113,53 @@ export class MedicineCatalogService {
       include: { item: true },
     });
     return rows.map((row) => referenceFromCatalog(row.item, row.barcode));
+  }
+
+  packs(codes?: string[]) {
+    return this.prisma.medicineCatalogPack.findMany({
+      where: codes ? { barcode: { in: codes } } : {},
+      select: { barcode: true, baseBarcode: true, factor: true },
+    });
+  }
+
+  // Guarda un exhibidor. El envase base tiene que estar en la base. Es un dato
+  // del envase, igual para todas las farmacias; la auditoría registra quién.
+  async savePack(
+    actorId: string,
+    organizationId: string,
+    pack: { barcode: string; baseBarcode: string; factor: number },
+  ) {
+    if (pack.barcode === pack.baseBarcode)
+      throw new BadRequestException(
+        "El exhibidor y el envase base no pueden tener el mismo código.",
+      );
+    if (!(await this.byBarcode(pack.baseBarcode)).length)
+      throw new BadRequestException(
+        "El envase base no está en la base de medicamentos.",
+      );
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.medicineCatalogPack.findUnique({
+        where: { barcode: pack.barcode },
+        select: { baseBarcode: true, factor: true },
+      });
+      const saved = await tx.medicineCatalogPack.upsert({
+        where: { barcode: pack.barcode },
+        create: pack,
+        update: { baseBarcode: pack.baseBarcode, factor: pack.factor },
+        select: { barcode: true, baseBarcode: true, factor: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "MEDICINE_CATALOG_PACK",
+          action: "MEDICINE_CATALOG_PACK_SAVED",
+          before: before ?? undefined,
+          after: saved,
+        },
+      });
+      return saved;
+    });
   }
 
   // Busca por código, nombre, presentación, laboratorio o droga, sin salir a

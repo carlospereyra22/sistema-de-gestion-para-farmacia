@@ -47,6 +47,17 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
   renglones sin producto con los datos de la base. Se crean de a uno; si todos salen
   bien se agregan al pedido, y si alguno falla se muestra cuál y por qué, sin perder los
   creados.
+- **Exhibidores de droguería:** códigos que no están en ninguna fuente y equivalen a N
+  unidades de un envase (`MedicineCatalogPack`). En Compras, 1 exhibidor suma N unidades
+  al producto base y el costo se divide por N. El stock real es el del envase base; los
+  exhibidores enteros se calculan como stock de cada lote ÷ N sin decimales: al vender una unidad de un
+  exhibidor ya no cuenta como exhibidor. La cuenta es por lote, porque un exhibidor es de un
+  solo lote: 19 de un lote y 3 de otro no arman uno. El lote y el vencimiento se cargan al
+  recibir, como en cualquier compra. Si se vende un exhibidor entero, su código carga N
+  unidades del producto base en la venta: el backend descuenta el stock y cobra como
+  siempre. Si el nombre dice
+  `EXHIB. X20`, se confirma el envase base una vez por código. Es un dato del envase, común
+  a todas las farmacias, y queda en auditoría quién lo cargó.
 - **Link del padrón:** la web oficial no busca por código ni admite link a un producto,
   así que esas referencias van sin link. El precio exacto llega por la API.
 
@@ -81,6 +92,13 @@ uv run --python 3.12 python scripts/medicine-catalog/exportar.py <carpeta> data/
 ```
 
 ## Pasar a otro ambiente
+
+Migraciones de esta funcionalidad, en orden. Solo crean tablas:
+
+1. `20261105011859_medicine_catalog`
+2. `20261105033000_medicine_catalog_pack`
+
+Los exhibidores no viajan en el archivo de carga: se confirman en Compras en cada ambiente.
 
 Son dos pasos: la migración viaja con la publicación y los datos se cargan después. Con
 la base vacía el sistema sigue funcionando como antes, así que entre uno y otro no se

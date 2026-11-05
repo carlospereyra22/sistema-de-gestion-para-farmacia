@@ -371,6 +371,16 @@ model MedicineCatalogBarcode {
   @@index([barcode])
 }
 
+// Exhibidor de droguería: un código que equivale a N unidades de otro. No es un
+// producto: en Compras suma N unidades al producto base, con el costo dividido.
+model MedicineCatalogPack {
+  barcode     String   @id @db.VarChar(32)
+  baseBarcode String   @db.VarChar(32)
+  factor      Int
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+}
+
 // Equivalencias de laboratorio entre la base y las fuentes por nombre.
 // status: igual | parecido | duda | distinto. Con duda o distinto no se aplica
 // el precio de la fuente.
