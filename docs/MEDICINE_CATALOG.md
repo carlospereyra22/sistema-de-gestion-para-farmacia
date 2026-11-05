@@ -16,7 +16,7 @@ medicamentos (`EXTERNAL_PRODUCT_CATALOG.md`), que no se modifica.
 Solo entran productos con precio y link: lo demás se revisa aparte en el Excel de
 productos sin link y se carga si aparece una solución.
 
-Carga del 04/11/2026: 17.716 productos (padrón 16.441, Precios de Remedios 1.266,
+Carga del 04/11/2026: 17.751 productos (padrón 16.441, Precios de Remedios 1.301,
 AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
 
 ## Reglas
@@ -121,7 +121,7 @@ archivo `catalogo.jsonl` no está en Git; se pasa a mano.
    ssh -i "$env:USERPROFILE\.ssh\oracle-gestion.key" ubuntu@163.176.241.51 'sed -i "s/\r$//" /tmp/import-medicine-catalog.sh; sudo -n bash /tmp/import-medicine-catalog.sh preprod /tmp/catalogo.jsonl; rm -f /tmp/catalogo.jsonl /tmp/import-medicine-catalog.sh'
    ```
 
-4. Controlar que el `estado` final informe 17.716 productos y probar Nuevo producto.
+4. Controlar que el `estado` final informe 17.751 productos y probar Nuevo producto.
 
 ### Producción
 

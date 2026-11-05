@@ -32,7 +32,14 @@ export async function readPurchaseInvoicePdf(
       const content = await page.getTextContent();
       const items = content.items.flatMap((item) =>
         "str" in item
-          ? [{ str: item.str, x: item.transform[4], y: item.transform[5] }]
+          ? [
+              {
+                str: item.str,
+                x: item.transform[4],
+                y: item.transform[5],
+                rotated: Math.abs(item.transform[1]) > 0.01,
+              },
+            ]
           : [],
       );
       let text = invoiceTextLines(items);

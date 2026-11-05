@@ -30,6 +30,35 @@ const delSud = [
   "4 TOTAL 247.015,46",
 ];
 
+describe("invoiceTextLines", () => {
+  const renglon = [
+    { str: "7791520025095", x: 40, y: 500 },
+    { str: "LAPIZ FARMACO SUN X4G", x: 120, y: 500 },
+    { str: "2", x: 300, y: 500 },
+    { str: "4.126,60", x: 400, y: 500 },
+    { str: "8.253,20", x: 500, y: 500 },
+  ];
+
+  it("ignora la leyenda girada del margen aunque comparta altura", () => {
+    const [linea] = invoiceTextLines([
+      {
+        str: "renunciando a cualquier otro fuero o jurisdicción.",
+        x: 20,
+        y: 500,
+        rotated: true,
+      },
+      ...renglon,
+    ]);
+    expect(parseInvoiceLine(linea!)?.name).toBe("LAPIZ FARMACO SUN X4G");
+  });
+
+  it("si toda la página está girada, conserva el texto", () => {
+    expect(
+      invoiceTextLines(renglon.map((item) => ({ ...item, rotated: true }))),
+    ).toHaveLength(1);
+  });
+});
+
 describe("parseInvoiceLines", () => {
   it("lee la factura de Monroe (código primero, importe al final)", () => {
     expect(
