@@ -55,4 +55,37 @@ it("muestra cantidades y varios lotes en filas de la recepción", () => {
     'aria-label="Cantidad que recibo de Producto histórico, lote 2"',
   );
   expect(html).toContain("Agregar lote a Producto histórico");
+  expect(html).toContain("Ya recibida");
+  expect(html).toContain("Cant. recibida");
+  expect(html).not.toContain("Recibir (un.)");
+  // Los dos lotes ya cubren el pendiente: no hay nada que completar.
+  expect(html).not.toContain("Recibir el máximo");
+});
+
+it("ofrece completar con el máximo mientras falte cantidad", () => {
+  const html = renderToStaticMarkup(
+    <PurchaseReceiptTable
+      token="test-token"
+      organizationId="test-organization"
+      items={items}
+      products={[]}
+      lots={[
+        {
+          key: "lote-1",
+          itemId: "linea-1",
+          quantity: "",
+          lotNumber: "",
+          expiresAt: "",
+        },
+      ]}
+      search=""
+      onLotsChange={() => undefined}
+      onAddLot={() => undefined}
+    />,
+  );
+
+  expect(html).toContain(
+    'aria-label="Recibir el máximo de Producto histórico, lote 1"',
+  );
+  expect(html).toContain('title="Completar con 15"');
 });

@@ -10,6 +10,7 @@ const pages = {
   caja: "Caja",
   clientes: "Clientes",
   cuentas: "Cuentas corrientes",
+  pagar: "Cuentas por pagar",
   proveedores: "Proveedores",
   compras: "Compras",
   transferencias: "Transferencias",

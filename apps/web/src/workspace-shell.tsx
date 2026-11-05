@@ -1,5 +1,6 @@
 import { resolveExternalCategory } from "./lib/api";
 import { PurchasesWorkspace } from "./purchases-workspace";
+import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
   ExternalProductLookup,
   type RetailMedicine,
@@ -314,6 +315,7 @@ const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Reportes", icon: ChartNoAxesCombined },
   { name: "Clientes", icon: ContactRound },
   { name: "Cuentas corrientes", icon: NotebookTabs },
+  { name: "Cuentas por pagar", icon: ReceiptText },
   { name: "Proveedores", icon: Truck },
 ];
 const permissionGroups: {
@@ -451,6 +453,12 @@ export function WorkspaceShell({
   const [initialPurchaseId, setInitialPurchaseId] = useState<string>();
   const consumeInitialPurchase = useCallback(
     () => setInitialPurchaseId(undefined),
+    [],
+  );
+  // Compra desde la que se registra una deuda en Cuentas por pagar.
+  const [payablePurchaseId, setPayablePurchaseId] = useState<string>();
+  const consumePayablePurchase = useCallback(
+    () => setPayablePurchaseId(undefined),
     [],
   );
   const [accountToolbarTarget, setAccountToolbarTarget] =
@@ -628,6 +636,7 @@ export function WorkspaceShell({
             view === "Ventas" ||
             view === "Caja" ||
             view === "Cuentas corrientes" ||
+            view === "Cuentas por pagar" ||
             view === "Categorías y laboratorios" ||
             view === "Transferencias" ||
             view === "Reportes") && (
@@ -652,6 +661,8 @@ export function WorkspaceShell({
                 <Shapes size={22} aria-hidden />
               ) : view === "Cuentas corrientes" ? (
                 <NotebookTabs size={22} aria-hidden />
+              ) : view === "Cuentas por pagar" ? (
+                <ReceiptText size={22} aria-hidden />
               ) : view === "Reportes" ? (
                 <ChartNoAxesCombined size={22} aria-hidden />
               ) : view === "Transferencias" ? (
@@ -878,6 +889,7 @@ export function WorkspaceShell({
             view !== "Listas de precios" &&
             view !== "Caja" &&
             view !== "Cuentas corrientes" &&
+            view !== "Cuentas por pagar" &&
             view !== "Categorías y laboratorios" &&
             view !== "Inicio" &&
             view !== "Productos" &&
@@ -1113,6 +1125,25 @@ export function WorkspaceShell({
               onError={setMessage}
             />
           ) : null}
+          {ready && view === "Cuentas por pagar" ? (
+            <SupplierPayablesWorkspace
+              key={`payables:${email}:${organizationId}:${branchId}`}
+              token={accessToken!}
+              organizationId={organizationId!}
+              branchId={branchId}
+              branchName={
+                branches.find((b) => b.id === branchId)?.name ??
+                "Sucursal actual"
+              }
+              userKey={email}
+              initialPurchaseId={payablePurchaseId}
+              onInitialConsumed={consumePayablePurchase}
+              onPurchase={(id) => {
+                setInitialPurchaseId(id);
+                setPage("Compras");
+              }}
+            />
+          ) : null}
           {ready && view === "Compras" ? (
             <PurchasesWorkspace
               key={`purchases:${email}:${organizationId}:${branchId}`}
@@ -1131,6 +1162,10 @@ export function WorkspaceShell({
               initialPurchaseId={initialPurchaseId}
               onInitialConsumed={consumeInitialPurchase}
               onCreateProduct={createProductForPurchase}
+              onRegisterDebt={(id) => {
+                setPayablePurchaseId(id);
+                setPage("Cuentas por pagar");
+              }}
             />
           ) : null}
           {ready && view === "Compras" && purchaseNewProduct ? (

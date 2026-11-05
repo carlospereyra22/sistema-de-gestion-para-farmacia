@@ -5,14 +5,7 @@ import {
 } from "./lib/api";
 import type { PurchasePack } from "./lib/purchase-pack";
 import { createProductsFromBase } from "./lib/purchase-bulk-products";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  useMemo,
-} from "react";
+import { useEffect, useRef, useState, type ReactNode, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { PurchaseHelp, PurchaseExitDialog } from "./purchase-dialog-extras";
 import { ReceiptDebtFields } from "./supplier-payables/receipt-debt";
@@ -26,7 +19,6 @@ import { PurchaseReceiptTable } from "./purchase-receipt-table";
 import { PurchaseRowActions } from "./purchase-row-actions";
 import { PurchaseExcelImport } from "./purchase-excel-import";
 import { ProductThumbnail } from "./product-image";
-import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
   Plus,
   Search,
@@ -113,6 +105,7 @@ export function PurchasesWorkspace({
   initialPurchaseId,
   onInitialConsumed,
   onCreateProduct,
+  onRegisterDebt,
 }: {
   token: string;
   organizationId: string;
@@ -130,6 +123,8 @@ export function PurchasesWorkspace({
     barcode: string;
     name: string;
   }) => Promise<string | undefined>;
+  /** Abre Cuentas por pagar con la deuda de esa compra. */
+  onRegisterDebt: (purchaseId: string) => void;
 }) {
   const packActions = useMemo(
     () => ({
@@ -142,16 +137,10 @@ export function PurchasesWorkspace({
     [token, organizationId],
   );
   const storageKey = `purchase-draft-v2:${userKey}:${organizationId}:${branchId}`;
-  const [showPayables, setShowPayables] = useState(false);
   const [cancelPurchase, setCancelPurchase] = useState<Purchase>();
   const [pendingDraftAction, setPendingDraftAction] = useState<
     { kind: "new" } | { kind: "receive"; purchase: Purchase }
   >();
-  const [invoicePurchaseId, setInvoicePurchaseId] = useState<string>();
-  const consumeInvoicePurchase = useCallback(
-    () => setInvoicePurchaseId(undefined),
-    [],
-  );
   const [draft, setDraft] = useState<Draft | undefined>(() => {
     try {
       const raw = sessionStorage.getItem(storageKey);
@@ -669,71 +658,76 @@ export function PurchasesWorkspace({
           ? `Recibo ahora: ${selectedQuantity} un. · Queda pendiente: ${Math.max(0, totalPending - selectedQuantity)} un.`
           : `${draft.lines.length} productos · Importe estimado ${money(totalCost)}`}
       </p>
-      <div className="flex flex-wrap gap-2">
-        {receivingPage && !draft.locked && (
-          <button
-            type="button"
-            className="px-2 text-xs font-medium text-slate-500 hover:text-rose-700"
-            onClick={close}
-          >
-            Descartar borrador
-          </button>
+      <div className="flex flex-col items-end gap-2">
+        {draft.step === "receive" && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={reviewed}
+              onChange={(e) => setReviewed(e.target.checked)}
+            />
+            Revisé las cantidades reales, lotes y vencimientos de esta entrega.
+          </label>
         )}
-        <button
-          className={button}
-          disabled={busy}
-          onClick={receivingPage ? leaveReception : close}
-        >
-          {receivingPage ? "Volver a Compras" : "Cancelar"}
-        </button>
-        {draft.mode === "direct" &&
-          draft.step === "receive" &&
-          !draft.locked && (
-            <button className={button} onClick={() => patch({ step: "edit" })}>
-              Volver a productos
+        <div className="flex flex-wrap justify-end gap-2">
+          {receivingPage && !draft.locked && (
+            <button
+              type="button"
+              className="px-2 text-xs font-medium text-slate-500 hover:text-rose-700"
+              onClick={close}
+            >
+              Descartar borrador
             </button>
           )}
-        <button
-          className={`${button} bg-teal-700 text-white`}
-          disabled={
-            busy || (!draft.locked && draft.step === "receive" && !reviewed)
-          }
-          onClick={() => void submit()}
-        >
-          {busy
-            ? "Guardando…"
-            : draft.locked
-              ? "Reintentar misma solicitud"
-              : draft.step === "receive"
-                ? "Confirmar recepción"
-                : draft.mode === "direct"
-                  ? "Continuar a recepción"
-                  : "Guardar pedido"}
-        </button>
+          <button
+            className={button}
+            disabled={busy}
+            onClick={receivingPage ? leaveReception : close}
+          >
+            {receivingPage ? "Volver a Compras" : "Cancelar"}
+          </button>
+          {draft.mode === "direct" &&
+            draft.step === "receive" &&
+            !draft.locked && (
+              <button
+                className={button}
+                onClick={() => patch({ step: "edit" })}
+              >
+                Volver a productos
+              </button>
+            )}
+          <button
+            className={`${button} bg-teal-700 text-white`}
+            disabled={
+              busy || (!draft.locked && draft.step === "receive" && !reviewed)
+            }
+            onClick={() => void submit()}
+          >
+            {busy
+              ? "Guardando…"
+              : draft.locked
+                ? "Reintentar misma solicitud"
+                : draft.step === "receive"
+                  ? "Confirmar recepción"
+                  : draft.mode === "direct"
+                    ? "Continuar a recepción"
+                    : "Guardar pedido"}
+          </button>
+        </div>
       </div>
     </footer>
   ) : null;
   const actions = (
-    <>
-      <button
-        type="button"
-        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-teal-200 hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-teal-500"
-        onClick={() => setShowPayables((value) => !value)}
-      >
-        {showPayables ? <ArrowLeft size={16} /> : <FileText size={16} />}
-        {showPayables ? "Volver a Compras" : "Cuentas por pagar"}
-      </button>
-      <OperationHistory
-        compact
-        kind="Compras"
-        token={token}
-        organizationId={organizationId}
-        branchId={branchId}
-        products={products}
-        branches={branches}
-        onPurchase={(id) => void openDetail(id)}
-      />
-    </>
+    <OperationHistory
+      compact
+      kind="Compras"
+      token={token}
+      organizationId={organizationId}
+      branchId={branchId}
+      products={products}
+      branches={branches}
+      onPurchase={(id) => void openDetail(id)}
+    />
   );
   return (
     <>
@@ -815,22 +809,7 @@ export function PurchasesWorkspace({
           {notice}
         </p>
       )}
-      {showPayables && (
-        <SupplierPayablesWorkspace
-          token={token}
-          organizationId={organizationId}
-          branchId={branchId}
-          branchName={branchName}
-          userKey={userKey}
-          initialPurchaseId={invoicePurchaseId}
-          onInitialConsumed={consumeInvoicePurchase}
-          onPurchase={(id) => {
-            setShowPayables(false);
-            void openDetail(id);
-          }}
-        />
-      )}
-      {!showPayables && !receivingPage && (
+      {!receivingPage && (
         <section className="purchases-table-panel flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div
             className="grid shrink-0 items-end gap-2 border-b border-slate-200 p-3 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]"
@@ -917,7 +896,7 @@ export function PurchasesWorkspace({
                     "Acciones",
                   ].map((h) => (
                     <th
-                      className={`px-4 py-3.5 ${h === "Acciones" ? "w-[272px] text-right" : ""}`}
+                      className={`px-4 py-3.5 ${h === "Acciones" ? "w-[272px] text-center" : ""}`}
                       key={h}
                     >
                       {h}
@@ -980,7 +959,7 @@ export function PurchasesWorkspace({
                         {purchaseStatus(p)}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-right">
+                    <td className="px-4 py-4 text-center">
                       <PurchaseRowActions
                         purchase={p}
                         continuing={draft?.purchase?.id === p.id}
@@ -1114,10 +1093,9 @@ export function PurchasesWorkspace({
                     type="button"
                     className={button}
                     onClick={() => {
-                      setInvoicePurchaseId(detail.id);
                       setDetail(undefined);
                       setOpen(false);
-                      setShowPayables(true);
+                      onRegisterDebt(detail.id);
                     }}
                   >
                     <FileText size={16} />
@@ -1496,7 +1474,7 @@ export function PurchasesWorkspace({
                             {[
                               "Producto",
                               "Cantidad",
-                              "Costo unitario ($)",
+                              "Costo unitario",
                               "Subtotal",
                               "",
                             ].map((h, i) => (
@@ -1536,23 +1514,31 @@ export function PurchasesWorkspace({
                                 />
                               </td>
                               <td className="w-40 p-2">
-                                <input
-                                  aria-label={`Costo de ${productName(l.productId)}`}
-                                  className={field}
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  value={l.cost}
-                                  onChange={(e) =>
-                                    patch({
-                                      lines: draft.lines.map((r, i) =>
-                                        i === index
-                                          ? { ...r, cost: e.target.value }
-                                          : r,
-                                      ),
-                                    })
-                                  }
-                                />
+                                <div className="relative">
+                                  <span
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500"
+                                  >
+                                    $
+                                  </span>
+                                  <input
+                                    aria-label={`Costo de ${productName(l.productId)}`}
+                                    className={`${field} pl-7 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={l.cost}
+                                    onChange={(e) =>
+                                      patch({
+                                        lines: draft.lines.map((r, i) =>
+                                          i === index
+                                            ? { ...r, cost: e.target.value }
+                                            : r,
+                                        ),
+                                      })
+                                    }
+                                  />
+                                </div>
                               </td>
                               <td className="p-2 whitespace-nowrap">
                                 {money(
@@ -1637,17 +1623,6 @@ export function PurchasesWorkspace({
                     onChange={(e) => patch({ notes: e.target.value })}
                   />
                 </label>
-                {draft.step === "receive" && (
-                  <label className="mt-4 flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={reviewed}
-                      onChange={(e) => setReviewed(e.target.checked)}
-                    />
-                    Revisé las cantidades reales, lotes y vencimientos de esta
-                    entrega.
-                  </label>
-                )}
               </fieldset>
             </>
           )}

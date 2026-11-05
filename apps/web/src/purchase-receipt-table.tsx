@@ -1,7 +1,11 @@
 import { Fragment } from "react";
 import { Check, Plus, X } from "lucide-react";
 import type { CatalogProduct, Purchase } from "./lib/api";
-import { purchasePending, type ReceiptDraft } from "./lib/purchases";
+import {
+  purchasePending,
+  receiptLotMax,
+  type ReceiptDraft,
+} from "./lib/purchases";
 import { ProductThumbnail } from "./product-image";
 
 const inputClass =
@@ -58,6 +62,10 @@ export function PurchaseReceiptTable({
         .includes(search.trim().toLocaleLowerCase("es-AR"))
     );
   });
+  const setQuantity = (key: string, quantity: string) =>
+    onLotsChange(
+      lots.map((row) => (row.key === key ? { ...row, quantity } : row)),
+    );
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
@@ -70,19 +78,19 @@ export function PurchaseReceiptTable({
               Cant. ordenada
             </th>
             <th scope="col" className="w-[8%] px-2 py-3 text-center">
-              Cant. recibida
+              Ya recibida
             </th>
             <th scope="col" className="w-[8%] px-2 py-3 text-center">
               Pendiente
             </th>
-            <th scope="col" className="w-[13%] px-2 py-3">
+            <th scope="col" className="w-[9%] px-2 py-3">
               Lote
             </th>
             <th scope="col" className="w-[15%] px-2 py-3">
               Vencimiento
             </th>
-            <th scope="col" className="w-[8%] px-2 py-3">
-              Recibir (un.)
+            <th scope="col" className="w-[12%] px-2 py-3">
+              Cant. recibida
             </th>
             <th scope="col" className="w-[10%] px-2 py-3">
               Recepción
@@ -179,82 +187,94 @@ export function PurchaseReceiptTable({
             );
             return (
               <Fragment key={item.id}>
-                {itemLots.map((lot, index) => (
-                  <tr
-                    key={lot.key}
-                    className={`border-t border-slate-200 ${index > 0 ? "bg-slate-50/60" : pending === 0 ? "bg-teal-50/30" : ""}`}
-                  >
-                    {productCells(index > 0)}
-                    <td className="px-2 py-2">
-                      <input
-                        aria-label={`Número de lote de ${name}, lote ${index + 1}`}
-                        className={inputClass}
-                        maxLength={100}
-                        value={lot.lotNumber}
-                        onChange={(event) =>
-                          onLotsChange(
-                            lots.map((row) =>
-                              row.key === lot.key
-                                ? { ...row, lotNumber: event.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        aria-label={`Vencimiento de ${name}, lote ${index + 1}`}
-                        type="date"
-                        className={inputClass}
-                        value={lot.expiresAt}
-                        onChange={(event) =>
-                          onLotsChange(
-                            lots.map((row) =>
-                              row.key === lot.key
-                                ? { ...row, expiresAt: event.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        aria-label={`Cantidad que recibo de ${name}, lote ${index + 1}`}
-                        className={`${inputClass} !w-[72px] max-w-full`}
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={lot.quantity}
-                        onChange={(event) =>
-                          onLotsChange(
-                            lots.map((row) =>
-                              row.key === lot.key
-                                ? { ...row, quantity: event.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="px-2 py-2">{index === 0 && progress}</td>
-                    <td className="px-1 py-2 text-center">
-                      <button
-                        type="button"
-                        aria-label={`Quitar lote ${index + 1} de ${name}`}
-                        className="grid size-8 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                        onClick={() =>
-                          onLotsChange(
-                            lots.filter((row) => row.key !== lot.key),
-                          )
-                        }
-                      >
-                        <X size={15} aria-hidden="true" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {itemLots.map((lot, index) => {
+                  const lotMax = receiptLotMax(item, lots, lot.key);
+                  return (
+                    <tr
+                      key={lot.key}
+                      className={`border-t border-slate-200 ${index > 0 ? "bg-slate-50/60" : pending === 0 ? "bg-teal-50/30" : ""}`}
+                    >
+                      {productCells(index > 0)}
+                      <td className="px-2 py-2">
+                        <input
+                          aria-label={`Número de lote de ${name}, lote ${index + 1}`}
+                          className={`${inputClass} !w-32 max-w-full`}
+                          maxLength={100}
+                          value={lot.lotNumber}
+                          onChange={(event) =>
+                            onLotsChange(
+                              lots.map((row) =>
+                                row.key === lot.key
+                                  ? { ...row, lotNumber: event.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          aria-label={`Vencimiento de ${name}, lote ${index + 1}`}
+                          type="date"
+                          className={inputClass}
+                          value={lot.expiresAt}
+                          onChange={(event) =>
+                            onLotsChange(
+                              lots.map((row) =>
+                                row.key === lot.key
+                                  ? { ...row, expiresAt: event.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="relative w-[88px] max-w-full">
+                          <input
+                            aria-label={`Cantidad que recibo de ${name}, lote ${index + 1}`}
+                            className={`${inputClass} pr-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={lot.quantity}
+                            onChange={(event) =>
+                              setQuantity(lot.key, event.target.value)
+                            }
+                          />
+                          {lotMax > 0 && Number(lot.quantity) !== lotMax && (
+                            <button
+                              type="button"
+                              aria-label={`Recibir el máximo de ${name}, lote ${index + 1}`}
+                              title={`Completar con ${lotMax}`}
+                              className="absolute inset-y-0 right-2 text-[11px] font-medium text-slate-400 hover:text-teal-700"
+                              onClick={() =>
+                                setQuantity(lot.key, String(lotMax))
+                              }
+                            >
+                              máx
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">{index === 0 && progress}</td>
+                      <td className="px-1 py-2 text-center">
+                        <button
+                          type="button"
+                          aria-label={`Quitar lote ${index + 1} de ${name}`}
+                          className="grid size-8 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          onClick={() =>
+                            onLotsChange(
+                              lots.filter((row) => row.key !== lot.key),
+                            )
+                          }
+                        >
+                          <X size={15} aria-hidden="true" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {itemLots.length === 0 && (
                   <tr className="border-t border-slate-200">
                     {productCells()}
