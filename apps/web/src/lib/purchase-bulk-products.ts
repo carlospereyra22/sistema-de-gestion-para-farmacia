@@ -1,4 +1,4 @@
-import type { ImportRow } from "./purchase-excel";
+import { purchaseCodeKey, type ImportRow } from "./purchase-excel";
 import {
   createCatalogProduct,
   getCatalogOptions,
@@ -25,6 +25,17 @@ export function pendingProductRows(
   return rows.filter(
     (row) => row.quantity && !assigned[row.rowNumber] && !row.productId,
   );
+}
+
+// Los renglones con el mismo código son un solo producto a crear.
+export function productRowGroups<T extends BulkProductRow>(rows: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const code = row.code.trim();
+    const key = code ? purchaseCodeKey(code) : `renglon-${row.rowNumber}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return [...groups.values()];
 }
 
 // Solo se crea sin preguntar cuando el código identifica un único medicamento.
@@ -77,22 +88,20 @@ export async function createRows(
   onProgress: (done: number) => void,
 ): Promise<BulkProductResult> {
   const result: BulkProductResult = { created: [], failed: [] };
-  for (const [index, row] of rows.entries()) {
+  for (const [index, group] of productRowGroups(rows).entries()) {
+    const [row] = group as [BulkProductRow];
     try {
       if (!row.code.trim()) throw new Error("No tiene código para buscarlo.");
-      result.created.push({
-        rowNumber: row.rowNumber,
-        productId: await create(row),
-      });
+      const productId = await create(row);
+      for (const { rowNumber } of group)
+        result.created.push({ rowNumber, productId });
     } catch (cause) {
-      result.failed.push({
-        rowNumber: row.rowNumber,
-        name: row.name || row.code,
-        reason:
-          cause instanceof Error
-            ? cause.message
-            : "No se pudo crear el producto.",
-      });
+      const reason =
+        cause instanceof Error
+          ? cause.message
+          : "No se pudo crear el producto.";
+      for (const { rowNumber, name, code } of group)
+        result.failed.push({ rowNumber, name: name || code, reason });
     }
     onProgress(index + 1);
   }

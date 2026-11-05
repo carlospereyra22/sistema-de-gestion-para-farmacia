@@ -6,6 +6,7 @@ import {
   parseExcelQuantity,
   previewPurchaseExcel,
   purchaseExcelLines,
+  sameCodeRowNumbers,
 } from "./purchase-excel";
 
 const product = (
@@ -316,5 +317,85 @@ describe("purchaseExcelLines", () => {
       { productId: "uvasal", quantity: "1", cost: "" },
     ]);
     expect(lines.map((l) => l.productId)).toEqual(["uvasal-limon"]);
+  });
+
+  describe("con el mismo producto en dos renglones de la factura", () => {
+    const repetidos = previewPurchaseExcel(
+      [
+        ["7790001000011", "Uvasal", 3, 5361.46],
+        ["7790001000011", "Uvasal", 32, 5361.46],
+      ],
+      -1,
+      { code: 0, name: 1, quantity: 2, cost: 3 },
+      catalogo,
+    );
+
+    it("suma las cantidades en una sola línea", () => {
+      expect(purchaseExcelLines(repetidos, new Set([1, 2]), {}, [])).toEqual([
+        { productId: "uvasal", quantity: "35", cost: "5361.46" },
+      ]);
+    });
+
+    it("suma también si uno está vinculado a mano y el otro por código", () => {
+      const sinVincular = [{ ...repetidos[0], productId: null }, repetidos[1]];
+      const lines = purchaseExcelLines(
+        sinVincular,
+        new Set([1, 2]),
+        { 1: "uvasal" },
+        [],
+      );
+      expect(lines.map((l) => l.quantity)).toEqual(["35"]);
+    });
+
+    it("no suma el renglón destildado", () => {
+      const lines = purchaseExcelLines(repetidos, new Set([2]), {}, []);
+      expect(lines.map((l) => l.quantity)).toEqual(["32"]);
+    });
+
+    it("toma el costo del renglón que lo informa", () => {
+      const lines = purchaseExcelLines(
+        [{ ...repetidos[0], cost: "" }, repetidos[1]],
+        new Set([1, 2]),
+        {},
+        [],
+      );
+      expect(lines[0].cost).toBe("5361.46");
+    });
+
+    it("un producto repetido no cuenta dos veces para el máximo de 100", () => {
+      const pedido = Array.from({ length: 99 }, (_, index) => ({
+        productId: `p-${index}`,
+        quantity: "1",
+        cost: "",
+      }));
+      const lines = purchaseExcelLines(repetidos, new Set([1, 2]), {}, pedido);
+      expect(lines.map((l) => l.quantity)).toEqual(["35"]);
+    });
+  });
+});
+
+describe("sameCodeRowNumbers", () => {
+  const fila = (rowNumber: number, code: string) => ({
+    rowNumber,
+    name: "",
+    code,
+    quantity: "1",
+    cost: "",
+    productId: null,
+    matchedBy: null,
+    issue: null,
+  });
+
+  it("encuentra los renglones del mismo código, con o sin ceros adelante", () => {
+    const rows = [
+      fila(1, "7798140257691"),
+      fila(2, "07798140257691"),
+      fila(3, "7790001000028"),
+    ];
+    expect(sameCodeRowNumbers(rows, 1)).toEqual([1, 2]);
+  });
+
+  it("sin código solo devuelve ese renglón", () => {
+    expect(sameCodeRowNumbers([fila(1, ""), fila(2, "")], 1)).toEqual([1]);
   });
 });

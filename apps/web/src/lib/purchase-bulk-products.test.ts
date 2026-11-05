@@ -110,8 +110,8 @@ describe("creación de a uno", () => {
     const result = await createRows(
       [
         row({ rowNumber: 1 }),
-        row({ rowNumber: 2, name: "REFENAX" }),
-        row({ rowNumber: 3 }),
+        row({ rowNumber: 2, name: "REFENAX", code: "7790001000011" }),
+        row({ rowNumber: 3, code: "7790001000028" }),
       ],
       create,
       onProgress,
@@ -124,6 +124,37 @@ describe("creación de a uno", () => {
       { rowNumber: 2, name: "REFENAX", reason: "El código ya existe." },
     ]);
     expect(onProgress).toHaveBeenLastCalledWith(3);
+  });
+
+  it("crea una sola vez los renglones con el mismo código", async () => {
+    const onProgress = vi.fn();
+    const create = vi.fn().mockResolvedValue("tafirol");
+    const result = await createRows(
+      [
+        row({ rowNumber: 8, code: "7798140257691" }),
+        row({ rowNumber: 9, code: "07798140257691" }),
+      ],
+      create,
+      onProgress,
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(result.created).toEqual([
+      { rowNumber: 8, productId: "tafirol" },
+      { rowNumber: 9, productId: "tafirol" },
+    ]);
+    expect(result.failed).toEqual([]);
+    expect(onProgress).toHaveBeenLastCalledWith(1);
+  });
+
+  it("si no se puede crear, avisa en cada renglón de ese código", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("No está en la base."));
+    const result = await createRows(
+      [row({ rowNumber: 8 }), row({ rowNumber: 9 })],
+      create,
+      vi.fn(),
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(result.failed.map((item) => item.rowNumber)).toEqual([8, 9]);
   });
 
   it("un renglón sin código falla sin consultar", async () => {
