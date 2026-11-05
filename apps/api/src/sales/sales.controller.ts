@@ -45,6 +45,8 @@ class SaleLineDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) unitPriceMinor?: number;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) discountMinor?: number;
+  // Unidades de la línea vendidas como exhibidor cerrado.
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) packQuantity?: number;
 }
 class PaymentDto {
   @IsEnum(PaymentMethod) method!: PaymentMethod;

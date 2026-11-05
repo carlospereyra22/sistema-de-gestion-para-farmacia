@@ -23,20 +23,6 @@ export function packSearchText(name: string) {
 
 const codeKey = (code: string) => externalGtin(code) ?? code;
 
-// Unidades por exhibidor de un producto, si alguno de sus códigos es envase base.
-export function productPackFactor(
-  product: Pick<CatalogProduct, "barcodes">,
-  packs: PurchasePack[],
-): number | null {
-  const codes = new Set(
-    product.barcodes.map((item) => codeKey(item.code.trim())),
-  );
-  const factors = packs
-    .filter((pack) => codes.has(codeKey(pack.baseBarcode)))
-    .map((pack) => pack.factor);
-  return factors.length ? Math.max(...factors) : null;
-}
-
 // Vender un exhibidor es vender N unidades del producto base.
 export function packSaleProduct<T extends Pick<CatalogProduct, "barcodes">>(
   code: string,
@@ -53,14 +39,24 @@ export function packSaleProduct<T extends Pick<CatalogProduct, "barcodes">>(
   return product ? { product, factor: pack.factor } : null;
 }
 
-// Exhibidores enteros, lote por lote: un exhibidor es de un solo lote, así que
-// 19 de uno y 3 de otro no arman uno aunque sumen más de 20.
+// Exhibidores enteros: solo los que entraron como tales en cada lote. Las cajas
+// sueltas no arman uno, y vender una unidad lo abre.
 export function intactPacks(
-  lots: { sellableQuantity: number }[],
-  factor: number,
+  lots: {
+    sellableQuantity: number;
+    packFactor?: number | null;
+    packCount?: number;
+  }[],
 ) {
   return lots.reduce(
-    (total, lot) => total + Math.floor(lot.sellableQuantity / factor),
+    (total, lot) =>
+      total +
+      (lot.packFactor
+        ? Math.min(
+            lot.packCount ?? 0,
+            Math.floor(lot.sellableQuantity / lot.packFactor),
+          )
+        : 0),
     0,
   );
 }

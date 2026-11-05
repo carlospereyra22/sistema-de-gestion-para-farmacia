@@ -50,12 +50,14 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
 - **Exhibidores de droguería:** códigos que no están en ninguna fuente y equivalen a N
   unidades de un envase (`MedicineCatalogPack`). En Compras, 1 exhibidor suma N unidades
   al producto base y el costo se divide por N. El stock real es el del envase base; los
-  exhibidores enteros se calculan como stock de cada lote ÷ N sin decimales: al vender una unidad de un
-  exhibidor ya no cuenta como exhibidor. La cuenta es por lote, porque un exhibidor es de un
-  solo lote: 19 de un lote y 3 de otro no arman uno. El lote y el vencimiento se cargan al
+  exhibidores enteros son los que entraron como tales en cada lote
+  (`ProductLot.packFactor` y `packCount`), limitados por stock del lote ÷ N sin decimales: al vender una unidad de un
+  exhibidor ya no cuenta como exhibidor. Las cajas sueltas no arman exhibidores, aunque sumen N. Los lotes
+  anteriores a esta marca no cuentan como exhibidores. El lote y el vencimiento se cargan al
   recibir, como en cualquier compra. Si se vende un exhibidor entero, su código carga N
-  unidades del producto base en la venta: el backend descuenta el stock y cobra como
-  siempre. Si el nombre dice
+  unidades del producto base en la venta. Esas unidades salen de un exhibidor cerrado
+  aunque otro lote venza antes, porque es lo que deja el estante; las cajas sueltas siguen
+  saliendo de lo que vence antes. Si el nombre dice
   `EXHIB. X20`, se confirma el envase base una vez por código. Es un dato del envase, común
   a todas las farmacias, y queda en auditoría quién lo cargó.
 - **Link del padrón:** la web oficial no busca por código ni admite link a un producto,
@@ -93,10 +95,12 @@ uv run --python 3.12 python scripts/medicine-catalog/exportar.py <carpeta> data/
 
 ## Pasar a otro ambiente
 
-Migraciones de esta funcionalidad, en orden. Solo crean tablas:
+Migraciones de esta funcionalidad, en orden. Son aditivas: no modifican datos existentes.
 
 1. `20261105011859_medicine_catalog`
 2. `20261105033000_medicine_catalog_pack`
+3. `20261105120000_purchase_pack_lots` (agrega columnas nullable o con valor por defecto a
+   `PurchaseItem` y `ProductLot`)
 
 Los exhibidores no viajan en el archivo de carga: se confirman en Compras en cada ambiente.
 

@@ -202,7 +202,6 @@ import { getMedicinePacks } from "./lib/api";
 import {
   intactPacks,
   packSaleProduct,
-  productPackFactor,
   type PurchasePack,
 } from "./lib/purchase-pack";
 import { ProductReferenceSource } from "./product-reference-source";
@@ -1663,12 +1662,6 @@ function Products({
   const [productSaving, setProductSaving] = useState(false);
   const backdropPress = useRef(false);
   const referenceRequest = useRef<AbortController | null>(null);
-  const [medicinePacks, setMedicinePacks] = useState<PurchasePack[]>([]);
-  useEffect(() => {
-    getMedicinePacks(token, organizationId).then(setMedicinePacks, () =>
-      setMedicinePacks([]),
-    );
-  }, [token, organizationId]);
   // Búsqueda mientras se escribe: espera una pausa para no consultar las
   // fuentes externas en cada tecla.
   const referenceTypingTimer = useRef<number | undefined>(undefined);
@@ -2625,10 +2618,7 @@ function Products({
                   .filter((lot) => lot.expiryStatus === "EXPIRED")
                   .reduce((total, lot) => total + lot.quantity, 0);
                 const stockTone = stockLevel(sellableStock);
-                const packFactor = productPackFactor(product, medicinePacks);
-                const wholePacks = packFactor
-                  ? intactPacks(lots, packFactor)
-                  : 0;
+                const wholePacks = intactPacks(lots);
                 const shownLots = visibleProductLots(
                   lots,
                   product.id,
@@ -4599,6 +4589,8 @@ function Sales({
       requestedUnitPriceMinor?: number;
       quantity: number;
       discountMinor: number;
+      // Unidades de la línea vendidas como exhibidor cerrado.
+      packQuantity?: number;
     }[]
   >([]);
   const [resumeNeeded, setResumeNeeded] = useState(false);
@@ -4815,12 +4807,6 @@ function Sales({
   );
   const total = subtotal - discountMinor;
   const searchTerm = productQuery.trim().toLocaleLowerCase();
-  const catalogMatches = filterSaleCatalog(products, productStock, {
-    query: productQuery,
-    categoryId: catalogCategoryId,
-    inStockOnly: catalogInStockOnly,
-  });
-  const catalogRows = catalogMatches.slice(0, SALE_CATALOG_ROW_LIMIT);
   const exactBarcodeProduct = products.find(
     (item) =>
       available(item.id) > 0 &&
@@ -4833,10 +4819,15 @@ function Sales({
     searchTerm && !exactBarcodeProduct
       ? packSaleProduct(searchTerm, products, salePacks)
       : null;
-  const packSaleFactor = packSale?.factor;
-  useEffect(() => {
-    if (packSaleFactor) setDetailQuantity(packSaleFactor);
-  }, [packSaleFactor]);
+  const catalogMatches = filterSaleCatalog(products, productStock, {
+    query: productQuery,
+    categoryId: catalogCategoryId,
+    inStockOnly: catalogInStockOnly,
+  });
+  // El código del exhibidor no es de ningún producto: se muestra su envase base.
+  const catalogRows = (
+    packSale && !catalogMatches.length ? [packSale.product] : catalogMatches
+  ).slice(0, SALE_CATALOG_ROW_LIMIT);
   // Mientras se escribe, el primer resultado vendible queda elegido para Enter.
   const selectedCatalogProduct =
     products.find((item) => item.id === productId) ??
@@ -4845,6 +4836,12 @@ function Sales({
         packSale?.product ??
         catalogRows.find((item) => available(item.id) > 0))
       : undefined);
+  // Con el código de un exhibidor la cantidad es su factor: no depende de la
+  // selección de la fila, que vuelve la cantidad a 1.
+  const saleDetailQuantity =
+    packSale && selectedCatalogProduct?.id === packSale.product.id
+      ? packSale.factor
+      : detailQuantity;
   const focusProductSearch = () =>
     window.requestAnimationFrame(() => productSearchRef.current?.focus());
   const selectCatalogProduct = (id: string | undefined) => {
@@ -4859,12 +4856,14 @@ function Sales({
     focusProductSearch();
   };
   const addCatalogProduct = (id: string, quantity: number) => {
-    if (!addProductToSale(id, quantity)) return;
+    const packQuantity = packSale?.product.id === id ? quantity : 0;
+    if (!addProductToSale(id, quantity, packQuantity)) return;
     clearCatalogSelection();
   };
   const addProductToSale = (
     selectedProductId: string,
     requestedQuantity: number,
+    packQuantity = 0,
   ) => {
     if (
       !Number.isInteger(requestedQuantity) ||
@@ -4892,12 +4891,17 @@ function Sales({
             productId: selectedProductId,
             quantity: requestedQuantity,
             discountMinor: 0,
+            packQuantity,
           },
         ];
       }
       return current.map((line) =>
         line.productId === selectedProductId
-          ? { ...line, quantity: line.quantity + requestedQuantity }
+          ? {
+              ...line,
+              quantity: line.quantity + requestedQuantity,
+              packQuantity: (line.packQuantity ?? 0) + packQuantity,
+            }
           : line,
       );
     });
@@ -4910,13 +4914,13 @@ function Sales({
     );
     const pack = scanned ? null : packSaleProduct(code, products, salePacks);
     if (scanned) addProductToSale(scanned.id, 1);
-    else if (pack) addProductToSale(pack.product.id, pack.factor);
+    else if (pack) addProductToSale(pack.product.id, pack.factor, pack.factor);
     else error("No se encontró un producto con ese código.");
   };
   const add = (event: Pick<FormEvent, "preventDefault">) => {
     event.preventDefault();
     if (!selectedCatalogProduct) return;
-    addCatalogProduct(selectedCatalogProduct.id, detailQuantity);
+    addCatalogProduct(selectedCatalogProduct.id, saleDetailQuantity);
   };
   const updateLineQuantity = (
     productIdToUpdate: string,
@@ -5310,6 +5314,8 @@ function Sales({
               }
             : {
                 ...line,
+                // Si después bajaron la cantidad, no puede quedar de más.
+                packQuantity: Math.min(line.packQuantity ?? 0, line.quantity),
                 expectedUnitPriceMinor: products.find(
                   (p) => p.id === line.productId,
                 )!.prices[0]!.amountMinor,
@@ -5622,14 +5628,17 @@ function Sales({
             available={
               selectedCatalogProduct ? available(selectedCatalogProduct.id) : 0
             }
-            quantity={detailQuantity}
+            quantity={saleDetailQuantity}
             onQuantityChange={(quantity) => {
               setDetailQuantity(quantity);
               focusProductSearch();
             }}
             onAdd={() => {
               if (selectedCatalogProduct)
-                addCatalogProduct(selectedCatalogProduct.id, detailQuantity);
+                addCatalogProduct(
+                  selectedCatalogProduct.id,
+                  saleDetailQuantity,
+                );
             }}
             onClear={clearCatalogSelection}
             onFinished={focusProductSearch}

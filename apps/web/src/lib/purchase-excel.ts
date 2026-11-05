@@ -326,7 +326,12 @@ export function purchaseExcelLines(
     const productId = assigned[row.rowNumber] || row.productId;
     if (!productId || used.has(productId)) continue;
     used.add(productId);
-    result.push({ productId, quantity: row.quantity, cost: row.cost });
+    result.push({
+      productId,
+      quantity: row.quantity,
+      cost: row.cost,
+      ...(row.pack ? { packFactor: row.pack.factor } : {}),
+    });
   }
   return result;
 }

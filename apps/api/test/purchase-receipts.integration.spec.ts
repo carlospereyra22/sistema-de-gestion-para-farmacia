@@ -133,6 +133,40 @@ describe("purchase receipts on an isolated synthetic schema", () => {
       create,
     };
   }
+  it("marca en el lote solo los exhibidores completos que llegaron", async () => {
+    const f = await fixture(1);
+    const p = await f.services[0]!.create(...f.args, {
+      ...f.input,
+      clientOperationId: randomUUID(),
+      items: [{ ...f.input.items[0]!, quantity: 30, packFactor: 10 }],
+    });
+    const item = await first.purchaseItem.findFirstOrThrow({
+      where: { purchaseId: p.id },
+    });
+    expect(item.packFactor).toBe(10);
+    const receive = (quantity: number, lotNumber: string) =>
+      f.services[0]!.receive(...f.args, p.id, {
+        operationId: randomUUID(),
+        items: [{ itemId: item.id, quantity, lotNumber }],
+      });
+    const lot = (number: string) =>
+      first.productLot.findFirstOrThrow({
+        where: { branchId: f.branch.id, productId: item.productId, number },
+      });
+    await receive(15, "exhibidor");
+    expect(await lot("exhibidor")).toEqual(
+      expect.objectContaining({ quantity: 15, packFactor: 10, packCount: 1 }),
+    );
+    await receive(5, "exhibidor");
+    expect(await lot("exhibidor")).toEqual(
+      expect.objectContaining({ quantity: 20, packCount: 1 }),
+    );
+    await receive(5, "incompleto");
+    expect(await lot("incompleto")).toEqual(
+      expect.objectContaining({ packFactor: null, packCount: 0 }),
+    );
+  });
+
   it("records partial receipt and reviewed debt atomically, retries once, then receives without debt", async () => {
     const f = await fixture(1);
     const p = await f.create();

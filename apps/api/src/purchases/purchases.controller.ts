@@ -18,6 +18,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Max,
   Min,
   Matches,
   ValidateNested,
@@ -31,6 +32,12 @@ class LineDto {
   @IsString() productId!: string;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @Type(() => Number) @IsInt() @Min(0) unitCostMinor!: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(1000)
+  packFactor?: number;
 }
 class CreateDto {
   @IsOptional() @IsUUID() clientOperationId?: string;

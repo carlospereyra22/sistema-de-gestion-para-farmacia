@@ -14,6 +14,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261102144443_product_barcode_per_organization` (SISTEMA-20): `ProductBarcode` suma `organizationId` (completado desde su producto, FK compuesta `(productId, organizationId)` hacia `Product(id, organizationId)`) y `kind` (`PACKAGE`, `INTERNAL`, `EQUIVALENT`; los SG existentes pasan a `INTERNAL`). El unico global de `code` se reemplaza por `(organizationId, code)`. Restricciones CHECK: el principal es siempre `PACKAGE`, `INTERNAL` respeta `SG` + 12 digitos y `EQUIVALENT` es un GTIN numerico de 8 a 14 digitos, nunca principal.
 
+`20261105120000_purchase_pack_lots` (SISTEMA-26): `PurchaseItem.packFactor` recuerda que el renglón vino en exhibidor; `ProductLot.packFactor` y `packCount` guardan cuántos entraron en el lote. Columnas aditivas con CHECK, sin rellenar lotes existentes.
+
 `20261105033000_medicine_catalog_pack` (SISTEMA-26): `MedicineCatalogPack` guarda el código de un exhibidor de droguería, el código base y el factor (2 a 1000), con CHECK de que no sean el mismo código. Solo crea la tabla.
 
 `20261105011859_medicine_catalog` (SISTEMA-26): base propia de medicamentos, compartida por todas las organizaciones (sin `organizationId`). `MedicineCatalogItem` guarda producto, fuente, precio en centavos, link y marcas, con CHECK de precio positivo, fuente conocida y link obligatorio fuera del padrón; `MedicineCatalogBarcode` guarda sus códigos, con `gtin` vacío si el dígito de control es inválido; `MedicineLaboratoryAlias` guarda las equivalencias de laboratorio. La migración solo crea tablas. Ver MEDICINE_CATALOG.md.
