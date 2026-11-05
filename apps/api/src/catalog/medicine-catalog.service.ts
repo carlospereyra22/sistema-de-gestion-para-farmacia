@@ -26,6 +26,7 @@ const REMEDIES_URL = "https://preciosderemedios.com.ar/result/";
 const REQUEST_PAUSE_MS = 1500;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_PAGES = 40;
+const SOURCE_CONCURRENCY = 4;
 // Tantos links seguidos sin respuesta: la fuente está caída, no se insiste.
 const MAX_CONSECUTIVE_FAILURES = 5;
 const WRITE_CHUNK = 2000;
@@ -99,6 +100,16 @@ export class MedicineCatalogService {
   // Pausa entre pedidos a una misma fuente. Los tests la reemplazan.
   pause = (ms = REQUEST_PAUSE_MS) =>
     new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  private nextSourceRequestAt = 0;
+
+  // Espacia el inicio de las solicitudes, aunque varias páginas se lean en paralelo.
+  private async waitForSourceRequest(): Promise<void> {
+    const now = Date.now();
+    const startAt = Math.max(now, this.nextSourceRequestAt);
+    this.nextSourceRequestAt = startAt + REQUEST_PAUSE_MS;
+    if (startAt > now) await this.pause(startAt - now);
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -260,27 +271,51 @@ export class MedicineCatalogService {
           item,
         ]);
     let failures = 0;
-    for (const [url, group] of links) {
-      result.links += 1;
-      let rows: SourceRow[];
-      try {
-        rows = await read(url, new Set(group.map((item) => item.sourceRowKey)));
-        failures = 0;
-      } catch (cause) {
-        result.failedLinks += 1;
-        failures += 1;
-        this.logger.warn(
-          `No se pudo leer ${url}: ${cause instanceof Error ? cause.message : "error desconocido"}`,
-        );
-        if (failures >= MAX_CONSECUTIVE_FAILURES) {
-          result.stopped = true;
-          break;
+    const entries = [...links];
+    for (let start = 0; start < entries.length && !result.stopped;) {
+      const batchSize = Math.min(
+        SOURCE_CONCURRENCY,
+        MAX_CONSECUTIVE_FAILURES - failures,
+      );
+      const batch = await Promise.all(
+        entries.slice(start, start + batchSize).map(async ([url, group]) => {
+          try {
+            return {
+              url,
+              group,
+              rows: await read(
+                url,
+                new Set(group.map((item) => item.sourceRowKey)),
+              ),
+              error: null,
+            };
+          } catch (cause) {
+            return { url, group, rows: null, error: cause };
+          }
+        }),
+      );
+      start += batchSize;
+      for (const { url, group, rows, error } of batch) {
+        result.links += 1;
+        if (error !== null || rows === null) {
+          result.failedLinks += 1;
+          failures += 1;
+          this.logger.warn(
+            `No se pudo leer ${url}: ${error instanceof Error ? error.message : "error desconocido"}`,
+          );
+          if (failures >= MAX_CONSECUTIVE_FAILURES) {
+            result.stopped = true;
+            break;
+          }
+        } else {
+          failures = 0;
+          await this.applyRows(group, rows, aliases, result);
         }
-        await this.pause();
-        continue;
+        if (result.links % 50 === 0)
+          this.logger.log(
+            `Base de medicamentos: ${result.links}/${entries.length} enlaces revisados, ${result.failedLinks} fallidos.`,
+          );
       }
-      await this.applyRows(group, rows, aliases, result);
-      await this.pause();
     }
     return result;
   }
@@ -325,6 +360,7 @@ export class MedicineCatalogService {
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const target = new URL(url);
       if (page > 1) target.searchParams.set("pagina", String(page));
+      await this.waitForSourceRequest();
       const response = await fetch(target, {
         headers: { Accept: "text/html,application/xhtml+xml" },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -336,12 +372,12 @@ export class MedicineCatalogService {
         (key) => !rows.some((row) => row.rowKey === key),
       );
       if (!pending || !remediesHasMorePages(html)) break;
-      await this.pause();
     }
     return rows;
   }
 
   private async alfaBetaRows(url: string): Promise<SourceRow[]> {
+    await this.waitForSourceRequest();
     const page = await this.alfabeta.page(url);
     return page.presentations.map((row) => ({
       rowKey: alfaBetaRowKey(row.presentation),
