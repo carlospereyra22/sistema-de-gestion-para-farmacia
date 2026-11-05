@@ -40,7 +40,7 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
   `SALES_*.md`.
 - Caja: `CASH_SIMPLE_IMPLEMENTATION.md`, `CASH_WORKSPACE.md`.
 - Cuentas corrientes: `ACCOUNT_*.md`, `CUSTOMERS.md`, `CUSTOMER_BILLING.md`.
-- Catalogo: `PRODUCTS.md`, `BRANCH_PRODUCT_LIFECYCLE.md`, `INVENTORY_SEARCH.md`,
+- Catalogo: `PRODUCTS.md`, `MEDICINE_CATALOG.md`, `BRANCH_PRODUCT_LIFECYCLE.md`, `INVENTORY_SEARCH.md`,
   `EXTERNAL_PRODUCT_CATALOG.md`, `DASHBOARD_MEDICINE_SEARCH.md`.
 - Compras y proveedores: `PURCHASES_V2.md`, `SUPPLIERS.md`, `SUPPLIER_PAYABLES.md`,
   `DISTRIBUTION.md`.

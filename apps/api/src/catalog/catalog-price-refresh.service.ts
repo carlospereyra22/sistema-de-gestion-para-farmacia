@@ -11,6 +11,7 @@ import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AlfaBetaService } from "./alfabeta.service";
 import { fractionalPrice } from "./fractional-price";
+import { MedicineCatalogService } from "./medicine-catalog.service";
 import {
   isPartialSnapshot,
   officialCandidates,
@@ -98,6 +99,7 @@ export class CatalogPriceRefreshService
     private readonly references: MedicineReferenceService,
     private readonly audit: AuditService,
     private readonly alfabeta: AlfaBetaService,
+    private readonly catalog: MedicineCatalogService,
   ) {}
 
   onModuleInit() {
@@ -217,6 +219,8 @@ export class CatalogPriceRefreshService
     let message: string | undefined;
     if (!organizationId) {
       const download = await this.downloadOfficial(runId);
+      // Una fuente que falla no frena a las demás: la base conserva sus precios.
+      const catalogMessage = await this.refreshCatalog(download.payload);
       if (download.status === "ABORTED")
         return {
           checked: 0,
@@ -224,11 +228,11 @@ export class CatalogPriceRefreshService
           run: {
             status: "ABORTED",
             snapshotRows: download.rows,
-            message: download.message,
+            message: [download.message, catalogMessage].join(" "),
           },
         };
       snapshotRows = download.rows;
-      message = download.message;
+      message = [download.message, catalogMessage].filter(Boolean).join(" ");
     }
     if (await this.isPaused())
       return {
@@ -247,6 +251,7 @@ export class CatalogPriceRefreshService
         })
       ).map(referenceFromSnapshot),
     );
+    const catalogIndex = officialIndex(await this.catalog.references());
     const products = await this.linkedProducts(organizationId);
     const lookups = new Map<string, Promise<MedicineReference[]>>();
     const pending: (() => Promise<void>)[] = [];
@@ -258,6 +263,7 @@ export class CatalogPriceRefreshService
         const references = await this.candidates(
           product,
           index,
+          catalogIndex,
           lookups,
           runId,
           Boolean(organizationId),
@@ -299,10 +305,12 @@ export class CatalogPriceRefreshService
     status: "SUCCEEDED" | "ABORTED" | "KEPT";
     rows?: number;
     message?: string;
+    payload?: unknown[];
   }> {
     let references: MedicineReference[];
+    let payload: unknown[];
     try {
-      references = await this.references.downloadOfficial();
+      ({ references, payload } = await this.references.downloadOfficialData());
     } catch (cause) {
       const message =
         `No se pudo descargar el padrón; se usa la copia anterior. ${
@@ -323,7 +331,33 @@ export class CatalogPriceRefreshService
       (tx) => replaceOfficialSnapshot(tx, runId, references),
       { timeout: 120000 },
     );
-    return { status: "SUCCEEDED", rows: references.length };
+    return { status: "SUCCEEDED", rows: references.length, payload };
+  }
+
+  // Actualiza la base de medicamentos. `payload` solo llega si el padrón se
+  // descargó completo; Precios de Remedios y AlfaBeta se leen siempre.
+  private async refreshCatalog(payload?: unknown[]): Promise<string> {
+    const parts: string[] = [];
+    try {
+      if (payload) {
+        const official = await this.catalog.refreshOfficial(payload);
+        parts.push(`padrón ${official.updated}, bajas ${official.delisted}`);
+      }
+      const { remedies, alfabeta } = await this.catalog.refreshLinkedSources();
+      for (const [label, result] of [
+        ["Remedios", remedies],
+        ["AlfaBeta", alfabeta],
+      ] as const)
+        parts.push(
+          `${label} ${result.updated} cambiados, ${result.missing} sin fila, ${result.review} a revisar, ${result.failedLinks} links caídos${result.stopped ? " (fuente caída, se dejó de consultar)" : ""}`,
+        );
+    } catch (cause) {
+      const detail =
+        cause instanceof Error ? cause.message : "error desconocido";
+      this.logger.warn(`No se pudo actualizar la base: ${detail}`);
+      parts.push(`error: ${detail}`);
+    }
+    return `Base de medicamentos: ${parts.join("; ")}.`;
   }
 
   async isPaused() {
@@ -374,6 +408,7 @@ export class CatalogPriceRefreshService
   private async candidates(
     product: LinkedProduct,
     index: OfficialIndex,
+    catalogIndex: OfficialIndex,
     lookups: Map<string, Promise<MedicineReference[]>>,
     runId: string,
     preferSnapshot: boolean,
@@ -381,6 +416,13 @@ export class CatalogPriceRefreshService
     const source = product.externalReferenceSource;
     const name = product.externalReferenceName;
     if (!name || !isReferenceSource(source)) return [];
+    // La base propia manda. Lo que no está ahí sigue con su fuente de siempre.
+    const fromCatalog = officialCandidates(
+      catalogIndex,
+      name,
+      product.externalReferenceBarcode,
+    );
+    if (this.findReference(product, fromCatalog)) return fromCatalog;
     if (source === "official")
       return officialCandidates(index, name, product.externalReferenceBarcode);
     // Un mismo medicamento se busca una sola vez en toda la corrida, aunque lo

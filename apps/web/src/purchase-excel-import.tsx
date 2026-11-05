@@ -1,5 +1,18 @@
+import { PurchasePackPicker } from "./purchase-pack-picker";
+import type { MedicineReference } from "./lib/api";
+import {
+  applyPacks,
+  invoicePackFactor,
+  packSearchText,
+  type PurchasePack,
+} from "./lib/purchase-pack";
+import {
+  pendingProductRows,
+  type BulkProductResult,
+  type BulkProductRow,
+} from "./lib/purchase-bulk-products";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileSpreadsheet, FileUp, Link2, Plus, X } from "lucide-react";
+import { Boxes, FileSpreadsheet, FileUp, Link2, Plus, X } from "lucide-react";
 import type { CatalogProduct } from "./lib/api";
 import type { PurchaseDraftLine } from "./lib/purchases";
 import { invoiceMapping, invoiceSheet } from "./lib/purchase-invoice-pdf";
@@ -59,6 +72,17 @@ const autoSelected = (rows: ImportRow[]) =>
     rows.filter((r) => r.productId && r.quantity).map((r) => r.rowNumber),
   );
 
+type PackActions = {
+  load: (codes: string[]) => Promise<PurchasePack[]>;
+  save: (pack: PurchasePack) => Promise<void>;
+  search: (query: string) => Promise<MedicineReference[]>;
+};
+
+type CreateProducts = (
+  rows: BulkProductRow[],
+  onProgress: (done: number) => void,
+) => Promise<BulkProductResult>;
+
 export function PurchaseExcelImport({
   products,
   existingLines,
@@ -66,6 +90,8 @@ export function PurchaseExcelImport({
   onImport,
   onError,
   onCreateProduct,
+  onCreateProducts,
+  packActions,
 }: {
   products: CatalogProduct[];
   existingLines: PurchaseDraftLine[];
@@ -76,25 +102,48 @@ export function PurchaseExcelImport({
     barcode: string;
     name: string;
   }) => Promise<string | undefined>;
+  onCreateProducts?: CreateProducts;
+  packActions?: PackActions;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState("");
   const [loaded, setLoaded] = useState<Loaded>();
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [assigned, setAssigned] = useState<Record<number, string>>({});
+  const [packs, setPacks] = useState<PurchasePack[]>([]);
   const sheet = loaded?.sheets[loaded.sheetIndex];
   const rows = useMemo(
     () =>
       loaded && sheet
-        ? previewPurchaseExcel(
-            sheet.data,
-            loaded.headerRow,
-            loaded.mapping,
+        ? applyPacks(
+            previewPurchaseExcel(
+              sheet.data,
+              loaded.headerRow,
+              loaded.mapping,
+              products,
+            ),
+            packs,
             products,
           )
         : [],
-    [loaded, sheet, products],
+    [loaded, sheet, products, packs],
   );
+
+  // Los exhibidores ya conocidos pasan a su producto base apenas se leen.
+  const loadPacks = (next: Loaded, found: PurchasePack[]) => {
+    setPacks(found);
+    const applied = applyPacks(
+      previewPurchaseExcel(
+        next.sheets[next.sheetIndex].data,
+        next.headerRow,
+        next.mapping,
+        products,
+      ),
+      found,
+      products,
+    );
+    setSelected((current) => new Set([...current, ...autoSelected(applied)]));
+  };
 
   const assign = (rowNumber: number, productId: string) => {
     setAssigned((current) => ({ ...current, [rowNumber]: productId }));
@@ -104,6 +153,21 @@ export function PurchaseExcelImport({
   const show = (next: Loaded) => {
     setLoaded(next);
     setAssigned({});
+    setPacks([]);
+    const codes = previewPurchaseExcel(
+      next.sheets[next.sheetIndex].data,
+      next.headerRow,
+      next.mapping,
+      products,
+    )
+      .map((row) => row.code)
+      .filter((code) => /^\d{8,14}$/.test(code))
+      .slice(0, 100);
+    if (packActions && codes.length)
+      void packActions
+        .load(codes)
+        .then((found) => loadPacks(next, found))
+        .catch(() => undefined);
     setSelected(
       autoSelected(
         previewPurchaseExcel(
@@ -126,10 +190,6 @@ export function PurchaseExcelImport({
       const { readPurchaseInvoicePdf } =
         await import("./lib/read-purchase-invoice-pdf");
       const lines = await readPurchaseInvoicePdf(file, setReading);
-      if (!lines.length)
-        return onError(
-          "No encontramos renglones con código de barras en la factura.",
-        );
       show({
         source: "pdf",
         fileName: file.name,
@@ -245,6 +305,32 @@ export function PurchaseExcelImport({
               if (productId) assign(row.rowNumber, productId);
             })
           }
+          onCreateProducts={
+            onCreateProducts &&
+            (async (rows, onProgress) => {
+              const result = await onCreateProducts(rows, onProgress);
+              for (const { rowNumber, productId } of result.created)
+                assign(rowNumber, productId);
+              return result;
+            })
+          }
+          searchPackBase={packActions?.search}
+          onSavePack={
+            packActions &&
+            (async (row, baseBarcode, factor) => {
+              const pack = { barcode: row.code, baseBarcode, factor };
+              await packActions.save(pack);
+              setAssigned((current) => {
+                const next = { ...current };
+                delete next[row.rowNumber];
+                return next;
+              });
+              loadPacks(loaded, [
+                ...packs.filter((item) => item.barcode !== pack.barcode),
+                pack,
+              ]);
+            })
+          }
           onCancel={() => setLoaded(undefined)}
           onConfirm={(lines) => {
             setLoaded(undefined);
@@ -274,6 +360,9 @@ export function PurchaseExcelReview({
   onToggle,
   onAssign,
   onCreateProduct,
+  onCreateProducts,
+  searchPackBase,
+  onSavePack,
   onCancel,
   onConfirm,
 }: {
@@ -295,12 +384,29 @@ export function PurchaseExcelReview({
   onAssign: (rowNumber: number, productId: string) => void;
   /** Abre Nuevo producto con el código y el nombre del renglón; al guardar queda vinculado. */
   onCreateProduct?: (row: ImportRow) => Promise<void>;
+  /** Crea los renglones sin producto con los datos de la base de medicamentos. */
+  onCreateProducts?: CreateProducts;
+  searchPackBase?: PackActions["search"];
+  /** Guarda que el código del renglón equivale a N unidades del envase base. */
+  onSavePack?: (
+    row: ImportRow,
+    baseBarcode: string,
+    factor: number,
+  ) => Promise<void>;
   onCancel: () => void;
   onConfirm: (lines: PurchaseDraftLine[]) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [linking, setLinking] = useState<number>();
   const [creating, setCreating] = useState<number>();
+  const [packing, setPacking] = useState<number>();
+  const [bulkDone, setBulkDone] = useState<number>();
+  const [failures, setFailures] = useState<BulkProductResult["failed"]>([]);
+  const bulkBusy = bulkDone !== undefined;
+  // Con la creación en curso no se cierra: quedarían productos sin agregar.
+  const cancel = () => {
+    if (!bulkBusy) onCancel();
+  };
   useEffect(() => {
     const dialog = ref.current;
     dialog?.showModal();
@@ -324,8 +430,49 @@ export function PurchaseExcelReview({
     (r) => !(assigned[r.rowNumber] || r.productId) || !r.quantity,
   ).length;
   const pdf = source === "pdf";
+  const pending = pendingProductRows(rows, assigned);
+  const createAll = async () => {
+    if (!onCreateProducts || bulkBusy) return;
+    setFailures([]);
+    setBulkDone(0);
+    const result = await onCreateProducts(pending, setBulkDone).catch(
+      (cause: unknown): BulkProductResult => ({
+        created: [],
+        failed: pending.map((row) => ({
+          rowNumber: row.rowNumber,
+          name: row.name || row.code,
+          reason:
+            cause instanceof Error
+              ? cause.message
+              : "No se pudo crear el producto.",
+        })),
+      }),
+    );
+    setBulkDone(undefined);
+    if (result.failed.length) {
+      setFailures(result.failed);
+      return;
+    }
+    const created = result.created;
+    onConfirm(
+      purchaseExcelLines(
+        rows,
+        new Set([...selected, ...created.map((item) => item.rowNumber)]),
+        {
+          ...assigned,
+          ...Object.fromEntries(
+            created.map((item) => [item.rowNumber, item.productId]),
+          ),
+        },
+        existingLines,
+      ),
+    );
+  };
   // Las facturas informan el total de unidades: sirve para controlar la lectura.
-  const units = rows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+  const units = rows.reduce(
+    (sum, r) => sum + (Number(r.quantity) || 0) / (r.pack?.factor ?? 1),
+    0,
+  );
 
   return (
     <dialog
@@ -338,12 +485,12 @@ export function PurchaseExcelReview({
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
-          onCancel();
+          cancel();
         }
       }}
       onCancel={(event) => {
         event.preventDefault();
-        onCancel();
+        cancel();
       }}
       className="m-auto flex max-h-[90dvh] w-[min(1180px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/40"
     >
@@ -362,7 +509,7 @@ export function PurchaseExcelReview({
           type="button"
           aria-label="Cerrar revisión del archivo"
           className="p-2 text-slate-500"
-          onClick={onCancel}
+          onClick={cancel}
         >
           <X size={18} />
         </button>
@@ -429,6 +576,26 @@ export function PurchaseExcelReview({
             No encontramos la columna de cantidad. Elegila arriba para seguir.
           </p>
         )}
+        {failures.length > 0 && (
+          <div
+            role="alert"
+            className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            <p className="font-semibold">
+              {failures.length === 1
+                ? "No se pudo crear 1 producto:"
+                : `No se pudieron crear ${failures.length} productos:`}
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {failures.map((failure) => (
+                <li key={failure.rowNumber}>
+                  {pdf ? "Renglón" : "Fila"} {failure.rowNumber} ·{" "}
+                  {failure.name}: {failure.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-slate-50 text-left text-slate-600">
@@ -450,7 +617,15 @@ export function PurchaseExcelReview({
                     ? "Vinculado a mano"
                     : row.issue
                   : (row.issue ??
-                    (row.matchedBy === "code" ? "Por código" : "Por nombre"));
+                    (row.pack
+                      ? `Exhibidor ×${row.pack.factor}`
+                      : row.matchedBy === "code"
+                        ? "Por código"
+                        : "Por nombre"));
+                const packFactor =
+                  !row.pack && onSavePack && searchPackBase
+                    ? invoicePackFactor(row.name)
+                    : null;
                 const warn =
                   !productId ||
                   !row.quantity ||
@@ -478,11 +653,29 @@ export function PurchaseExcelReview({
                     <td className="p-2">
                       <div>{row.name || "—"}</div>
                       {row.code && (
-                        <div className="text-xs text-slate-500">{row.code}</div>
+                        <div className="text-xs text-slate-500">
+                          {row.pack
+                            ? `Exhibidor ${row.pack.code} · ${row.pack.factor} unidades de ${row.code}`
+                            : row.code}
+                        </div>
                       )}
                     </td>
                     <td className="p-2">
-                      {linking === row.rowNumber ? (
+                      {packing === row.rowNumber &&
+                      packFactor &&
+                      searchPackBase &&
+                      onSavePack ? (
+                        <PurchasePackPicker
+                          initialQuery={packSearchText(row.name)}
+                          initialFactor={packFactor}
+                          search={searchPackBase}
+                          onPick={async (reference, factor) => {
+                            await onSavePack(row, reference.barcode, factor);
+                            setPacking(undefined);
+                          }}
+                          onCancel={() => setPacking(undefined)}
+                        />
+                      ) : linking === row.rowNumber ? (
                         <ExcelProductPicker
                           products={products}
                           initialQuery={row.name}
@@ -507,6 +700,16 @@ export function PurchaseExcelReview({
                             <Link2 size={14} aria-hidden="true" />
                             {productId ? "Cambiar" : "Vincular"}
                           </button>
+                          {packFactor && (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-teal-700"
+                              onClick={() => setPacking(row.rowNumber)}
+                            >
+                              <Boxes size={14} aria-hidden="true" />
+                              Exhibidor ×{packFactor}
+                            </button>
+                          )}
                           {!productId && onCreateProduct && (
                             <button
                               type="button"
@@ -561,14 +764,27 @@ export function PurchaseExcelReview({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={onCancel}
-            className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600"
+            onClick={cancel}
+            disabled={bulkBusy}
+            className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600 disabled:opacity-50"
           >
             Cancelar
           </button>
+          {onCreateProducts && pending.length > 0 && (
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => void createAll()}
+              className="h-10 rounded-lg border border-teal-600 bg-white px-4 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-60"
+            >
+              {bulkBusy
+                ? `Creando ${Math.min(bulkDone + 1, pending.length)} de ${pending.length}…`
+                : `Crear ${pending.length} y agregar todo`}
+            </button>
+          )}
           <button
             type="button"
-            disabled={!lines.length}
+            disabled={!lines.length || bulkBusy}
             onClick={() => onConfirm(lines)}
             className="h-10 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
           >

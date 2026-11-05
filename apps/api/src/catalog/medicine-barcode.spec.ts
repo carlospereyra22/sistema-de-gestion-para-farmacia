@@ -2,6 +2,7 @@ import {
   MedicineReferenceService,
   parsePriceMinor,
 } from "./medicine-reference.service";
+import type { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceController } from "./medicine-reference.controller";
 import type { CatalogService } from "./catalog.service";
 import type { AlfaBetaService } from "./alfabeta.service";
@@ -21,6 +22,11 @@ const row = {
   BAJA: "0",
   VIGENCIA: 1,
 };
+
+// Sin coincidencias en la base propia: sigue con padrón y farmacias.
+const noCatalog = {
+  byBarcode: jest.fn().mockResolvedValue([]),
+} as unknown as MedicineCatalogService;
 
 describe("medicine barcode lookup", () => {
   afterEach(() => jest.restoreAllMocks());
@@ -86,6 +92,35 @@ describe("medicine barcode lookup", () => {
     expect(parsePriceMinor("")).toBeNull();
     expect(parsePriceMinor(0)).toBe(0);
   });
+  it("prioriza la base propia y vincula sola una coincidencia única de cualquier fuente", async () => {
+    const byBarcode = jest.fn();
+    const controller = new MedicineReferenceController(
+      {
+        assertPermission: jest.fn().mockResolvedValue(undefined),
+      } as unknown as CatalogService,
+      { byBarcode } as unknown as MedicineReferenceService,
+      {} as AlfaBetaService,
+      {} as ExternalCatalogService,
+      {
+        byBarcode: jest
+          .fn()
+          .mockResolvedValueOnce([{ source: "preciosderemedios" }])
+          .mockResolvedValueOnce([
+            { source: "official" },
+            { source: "alfabeta" },
+          ]),
+      } as unknown as MedicineCatalogService,
+    );
+    const request = { auth: { sub: "actor" } } as AuthenticatedRequest;
+    const code = "7793640215479";
+    expect(
+      (await controller.barcode(request, "org", code)).automaticSelection,
+    ).toBe(true);
+    expect(
+      (await controller.barcode(request, "org", code)).automaticSelection,
+    ).toBe(false);
+    expect(byBarcode).not.toHaveBeenCalled();
+  });
   it("requires permission before querying and only offers automatic selection for one match", async () => {
     const assertPermission = jest.fn().mockResolvedValue(undefined);
     const byBarcode = jest.fn().mockResolvedValue([row, row]);
@@ -96,6 +131,7 @@ describe("medicine barcode lookup", () => {
       {
         medicineFallback: jest.fn().mockResolvedValue([]),
       } as unknown as ExternalCatalogService,
+      noCatalog,
     );
     const request = { auth: { sub: "actor" } } as AuthenticatedRequest;
     expect(
@@ -132,6 +168,7 @@ describe("medicine barcode lookup", () => {
       {
         medicineFallback: jest.fn().mockResolvedValue([fallback]),
       } as unknown as ExternalCatalogService,
+      noCatalog,
     );
     expect(
       await controller.barcode(

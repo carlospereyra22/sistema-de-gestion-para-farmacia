@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  invoiceEmptyMessage,
   invoiceMapping,
   invoiceSheet,
   invoiceTextLines,
@@ -29,6 +30,59 @@ const delSud = [
   "2 MENACOR OMEGA 3 CON 30 CAPS SUP DIE G* 7798008191792 69.500,00 41,40 % 33.672,51 67.345,02",
   "4 TOTAL 247.015,46",
 ];
+
+describe("invoiceTextLines", () => {
+  const renglon = [
+    { str: "7791520025095", x: 40, y: 500 },
+    { str: "LAPIZ FARMACO SUN X4G", x: 120, y: 500 },
+    { str: "2", x: 300, y: 500 },
+    { str: "4.126,60", x: 400, y: 500 },
+    { str: "8.253,20", x: 500, y: 500 },
+  ];
+
+  it("ignora la leyenda girada del margen aunque comparta altura", () => {
+    const [linea] = invoiceTextLines([
+      {
+        str: "renunciando a cualquier otro fuero o jurisdicción.",
+        x: 20,
+        y: 500,
+        rotated: true,
+      },
+      ...renglon,
+    ]);
+    expect(parseInvoiceLine(linea!)?.name).toBe("LAPIZ FARMACO SUN X4G");
+  });
+
+  it("si toda la página está girada, conserva el texto", () => {
+    expect(
+      invoiceTextLines(renglon.map((item) => ({ ...item, rotated: true }))),
+    ).toHaveLength(1);
+  });
+});
+
+describe("PDF sin renglones", () => {
+  const remito = [
+    "Remito",
+    "0149-00047325",
+    "7795378001072 MIGRAL COMPOSITUM COMPR. X100 1 40.784,23",
+  ];
+
+  it("un remito no se importa y lo dice", () => {
+    expect(parseInvoiceLines(remito)).toEqual([]);
+    expect(invoiceEmptyMessage(remito)).toContain("es un remito");
+  });
+
+  it("otro PDF pide una factura, sin hablar de remitos", () => {
+    expect(invoiceEmptyMessage(["Resumen de cuenta"])).toContain(
+      "no encontramos productos",
+    );
+  });
+
+  it("el mensaje llega al usuario porque empieza con Importá", () => {
+    expect(invoiceEmptyMessage([])).toMatch(/^Importá/);
+    expect(invoiceEmptyMessage(remito)).toMatch(/^Importá/);
+  });
+});
 
 describe("parseInvoiceLines", () => {
   it("lee la factura de Monroe (código primero, importe al final)", () => {

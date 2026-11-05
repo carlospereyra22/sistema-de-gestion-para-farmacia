@@ -1,6 +1,11 @@
 import type { ExcelMapping } from "./purchase-excel";
 
-export type PdfTextItem = { str: string; x: number; y: number };
+export type PdfTextItem = {
+  str: string;
+  x: number;
+  y: number;
+  rotated?: boolean;
+};
 export type InvoiceLine = {
   code: string;
   name: string;
@@ -19,8 +24,11 @@ export const invoiceMapping: ExcelMapping = {
 
 /** Arma renglones con los textos que comparten altura, ordenados de izquierda a derecha. */
 export function invoiceTextLines(items: PdfTextItem[], tolerance = 2.5) {
+  // Las leyendas legales van giradas en el margen y comparten altura con los
+  // renglones. Si toda la página está girada, se conserva.
+  const upright = items.filter((item) => !item.rotated && item.str.trim());
   const rows: { y: number; items: PdfTextItem[] }[] = [];
-  for (const item of items) {
+  for (const item of upright.length ? upright : items) {
     if (!item.str.trim()) continue;
     const row = rows.find((r) => Math.abs(r.y - item.y) <= tolerance);
     if (row) row.items.push(item);
@@ -113,6 +121,13 @@ export function parseInvoiceLines(lines: string[]): InvoiceLine[] {
   return lines
     .map(parseInvoiceLine)
     .filter((line): line is InvoiceLine => line !== null);
+}
+
+/** Explica por qué un PDF no trajo renglones. Un remito no informa el costo unitario. */
+export function invoiceEmptyMessage(lines: string[]) {
+  return lines.some((line) => /\bremito\b/i.test(line))
+    ? "Importá la factura: este PDF es un remito y no informa el costo de cada producto."
+    : "Importá una factura de droguería: no encontramos productos con precio en este PDF.";
 }
 
 /** Tabla con la forma que espera `previewPurchaseExcel` (sin fila de encabezado). */

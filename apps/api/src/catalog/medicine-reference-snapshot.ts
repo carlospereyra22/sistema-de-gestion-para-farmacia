@@ -30,7 +30,7 @@ export function snapshotKey(value: string): string {
     .trim();
 }
 
-function gtinOf(barcode: string): string | null {
+export function gtinOf(barcode: string): string | null {
   try {
     return barcode.trim() ? canonicalGtin(barcode.trim()) : null;
   } catch {

@@ -195,6 +195,16 @@ import { createOrSelectCatalogOption } from "./lib/catalog-option";
 import { StockAdjustmentQuantity } from "./stock-adjustment-quantity";
 import { stockAdjustmentDelta } from "./lib/stock-adjustment";
 import { ProductSaveErrorDialog } from "./product-save-error-dialog";
+import { MedicineReferenceNote } from "./medicine-reference-note";
+import { medicineSources } from "./lib/medicine-search";
+import { medicineNameIsFree } from "./lib/medicine-lookup";
+import { getMedicinePacks } from "./lib/api";
+import {
+  intactPacks,
+  packSaleProduct,
+  productPackFactor,
+  type PurchasePack,
+} from "./lib/purchase-pack";
 import { ProductReferenceSource } from "./product-reference-source";
 import { AlfaBetaMedicineCard } from "./alfabeta-medicine-card";
 import { distributeSaleDiscount } from "./lib/sale-discount";
@@ -1653,6 +1663,12 @@ function Products({
   const [productSaving, setProductSaving] = useState(false);
   const backdropPress = useRef(false);
   const referenceRequest = useRef<AbortController | null>(null);
+  const [medicinePacks, setMedicinePacks] = useState<PurchasePack[]>([]);
+  useEffect(() => {
+    getMedicinePacks(token, organizationId).then(setMedicinePacks, () =>
+      setMedicinePacks([]),
+    );
+  }, [token, organizationId]);
   // Búsqueda mientras se escribe: espera una pausa para no consultar las
   // fuentes externas en cada tecla.
   const referenceTypingTimer = useRef<number | undefined>(undefined);
@@ -2609,6 +2625,10 @@ function Products({
                   .filter((lot) => lot.expiryStatus === "EXPIRED")
                   .reduce((total, lot) => total + lot.quantity, 0);
                 const stockTone = stockLevel(sellableStock);
+                const packFactor = productPackFactor(product, medicinePacks);
+                const wholePacks = packFactor
+                  ? intactPacks(lots, packFactor)
+                  : 0;
                 const shownLots = visibleProductLots(
                   lots,
                   product.id,
@@ -2722,6 +2742,12 @@ function Products({
                         }
                       >
                         {sellableStock}
+                        {wholePacks > 0 && (
+                          <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                            {wholePacks}{" "}
+                            {wholePacks === 1 ? "exhibidor" : "exhibidores"}
+                          </span>
+                        )}
                         {expiredUnits ? (
                           <span className="mt-0.5 block text-xs font-normal text-rose-600">
                             {expiredUnits}{" "}
@@ -3130,7 +3156,7 @@ function Products({
                             ? "Buscá el medicamento nacional por nombre…"
                             : referenceSource === "alfabeta"
                               ? "Ej. Actron 400…"
-                              : "Nombre o código de barras (podés escanear)…"
+                              : "Nombre, laboratorio, droga o código de barras…"
                         }
                         className="col-span-2 h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 !text-sm placeholder:text-slate-400"
                       />
@@ -3169,13 +3195,13 @@ function Products({
                       <strong className="font-semibold text-slate-600">
                         Por código:
                       </strong>{" "}
-                      tu catálogo, el padrón oficial (vademécum nacional) y el
-                      catálogo de perfumería.{" "}
+                      tu catálogo, la base de medicamentos y el catálogo de
+                      perfumería.{" "}
                       <strong className="font-semibold text-slate-600">
-                        Por nombre:
+                        Por nombre, laboratorio o droga:
                       </strong>{" "}
                       {referenceSource === "official"
-                        ? "padrón oficial (vademécum nacional)"
+                        ? "base de medicamentos"
                         : referenceSource === "alfabeta"
                           ? "AlfaBeta"
                           : "Precios de Remedios"}
@@ -3224,7 +3250,7 @@ function Products({
                       onImported={searchedOwner ? undefined : startImportedLink}
                       catalogOwner={searchedOwner?.name}
                       allowAutomatic={
-                        !name &&
+                        medicineNameIsFree(name, initialNewProduct?.name) &&
                         !presentation &&
                         !selectedReference &&
                         !activeIngredient &&
@@ -3394,42 +3420,46 @@ function Products({
                         ) : referenceResults.length ? (
                           <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                             {referenceResults.map((reference) => (
-                              <button
-                                key={`${reference.source}-${reference.name}-${reference.presentation}-${reference.laboratory}`}
-                                type="button"
-                                onClick={() => pickReference(reference)}
-                                className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left hover:border-teal-300 hover:bg-teal-50/40"
+                              <div
+                                key={`${reference.source}-${reference.name}-${reference.presentation}-${reference.laboratory}-${reference.barcode}`}
                               >
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold text-slate-800">
-                                    {reference.name}
+                                <button
+                                  type="button"
+                                  onClick={() => pickReference(reference)}
+                                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left hover:border-teal-300 hover:bg-teal-50/40"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-sm font-semibold text-slate-800">
+                                      {reference.name}
+                                    </span>
+                                    <span className="block truncate text-xs text-slate-500">
+                                      {[
+                                        reference.presentation,
+                                        reference.laboratory,
+                                        reference.activeIngredient,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ") || "Sin detalle adicional"}
+                                    </span>
                                   </span>
-                                  <span className="block truncate text-xs text-slate-500">
-                                    {[
-                                      reference.presentation,
-                                      reference.laboratory,
-                                      reference.activeIngredient,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" · ") || "Sin detalle adicional"}
+                                  <span className="shrink-0 text-right text-xs text-teal-800">
+                                    <span className="block font-semibold">
+                                      {reference.priceMinor !== null
+                                        ? money(reference.priceMinor)
+                                        : "Sin precio"}
+                                    </span>
+                                    <span className="block text-[10px] text-slate-500">
+                                      {reference.source === "official"
+                                        ? "Padrón oficial"
+                                        : medicineSources[reference.source]}
+                                    </span>
+                                    <span className="hidden text-[10px] text-slate-500">
+                                      Catálogo interno
+                                    </span>
                                   </span>
-                                </span>
-                                <span className="shrink-0 text-right text-xs text-teal-800">
-                                  <span className="block font-semibold">
-                                    {reference.priceMinor !== null
-                                      ? money(reference.priceMinor)
-                                      : "Sin precio"}
-                                  </span>
-                                  <span className="block text-[10px] text-slate-500">
-                                    {reference.source === "official"
-                                      ? "Padrón oficial"
-                                      : "Precios de Remedios"}
-                                  </span>
-                                  <span className="hidden text-[10px] text-slate-500">
-                                    Catálogo interno
-                                  </span>
-                                </span>
-                              </button>
+                                </button>
+                                <MedicineReferenceNote reference={reference} />
+                              </div>
                             ))}
                           </div>
                         ) : (
@@ -4548,6 +4578,12 @@ function Sales({
   const [catalogCategoryId, setCatalogCategoryId] = useState("");
   const [catalogInStockOnly, setCatalogInStockOnly] = useState(false);
   const [detailQuantity, setDetailQuantity] = useState(1);
+  const [salePacks, setSalePacks] = useState<PurchasePack[]>([]);
+  useEffect(() => {
+    getMedicinePacks(token, organizationId).then(setSalePacks, () =>
+      setSalePacks([]),
+    );
+  }, [token, organizationId]);
   const catalogId = useId();
   const productSearchRef = useRef<HTMLInputElement>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -4792,11 +4828,21 @@ function Sales({
         (barcode) => barcode.code.toLocaleLowerCase() === searchTerm,
       ),
   );
+  // Un exhibidor se vende como N unidades del producto base.
+  const packSale =
+    searchTerm && !exactBarcodeProduct
+      ? packSaleProduct(searchTerm, products, salePacks)
+      : null;
+  const packSaleFactor = packSale?.factor;
+  useEffect(() => {
+    if (packSaleFactor) setDetailQuantity(packSaleFactor);
+  }, [packSaleFactor]);
   // Mientras se escribe, el primer resultado vendible queda elegido para Enter.
   const selectedCatalogProduct =
     products.find((item) => item.id === productId) ??
     (searchTerm
       ? (exactBarcodeProduct ??
+        packSale?.product ??
         catalogRows.find((item) => available(item.id) > 0))
       : undefined);
   const focusProductSearch = () =>
@@ -4857,6 +4903,15 @@ function Sales({
     });
     setLastAddedId(selectedProductId);
     return true;
+  };
+  const scanIntoSale = (code: string) => {
+    const scanned = products.find((product) =>
+      product.barcodes.some((barcode) => barcode.code.trim() === code.trim()),
+    );
+    const pack = scanned ? null : packSaleProduct(code, products, salePacks);
+    if (scanned) addProductToSale(scanned.id, 1);
+    else if (pack) addProductToSale(pack.product.id, pack.factor);
+    else error("No se encontró un producto con ese código.");
   };
   const add = (event: Pick<FormEvent, "preventDefault">) => {
     event.preventDefault();
@@ -5826,19 +5881,7 @@ function Sales({
                               productSearchRef.current?.focus(),
                             )
                           }
-                          onScan={(code) => {
-                            const scanned = products.find((product) =>
-                              product.barcodes.some(
-                                (barcode) =>
-                                  barcode.code.trim() === code.trim(),
-                              ),
-                            );
-                            if (scanned) addProductToSale(scanned.id, 1);
-                            else
-                              error(
-                                "No se encontró un producto con ese código.",
-                              );
-                          }}
+                          onScan={scanIntoSale}
                           onCommit={(quantity) =>
                             updateLineQuantity(line.productId, quantity)
                           }
@@ -5886,19 +5929,7 @@ function Sales({
                               productSearchRef.current?.focus(),
                             )
                           }
-                          onScan={(code) => {
-                            const scanned = products.find((product) =>
-                              product.barcodes.some(
-                                (barcode) =>
-                                  barcode.code.trim() === code.trim(),
-                              ),
-                            );
-                            if (scanned) addProductToSale(scanned.id, 1);
-                            else
-                              error(
-                                "No se encontró un producto con ese código.",
-                              );
-                          }}
+                          onScan={scanIntoSale}
                           onCommit={(next) => {
                             if (
                               !Number.isSafeInteger(next * line.quantity) ||

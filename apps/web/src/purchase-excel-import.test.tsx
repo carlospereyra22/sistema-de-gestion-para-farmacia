@@ -144,3 +144,39 @@ describe("PurchaseExcelReview", () => {
     expect(html).toContain("Agregar 1 producto al pedido");
   });
 });
+
+describe("crear y agregar todo", () => {
+  const review = (onCreateProducts?: () => Promise<never>) =>
+    renderToStaticMarkup(
+      <PurchaseExcelReview
+        fileName="pedido.xlsx"
+        sheetNames={["Hoja"]}
+        sheetIndex={0}
+        sheetData={data}
+        headerRow={0}
+        mapping={mapping}
+        rows={previewPurchaseExcel(data, 0, mapping, products)}
+        products={products}
+        existingLines={[]}
+        selected={new Set()}
+        assigned={{}}
+        onSheet={noop}
+        onMapping={noop}
+        onToggle={noop}
+        onAssign={noop}
+        onCreateProducts={onCreateProducts}
+        onCancel={noop}
+        onConfirm={noop}
+      />,
+    );
+
+  it("ofrece crear los renglones sin producto", () => {
+    expect(review(() => Promise.reject(new Error("x")))).toContain(
+      "agregar todo",
+    );
+  });
+
+  it("sin la acción no aparece", () => {
+    expect(review()).not.toContain("agregar todo");
+  });
+});

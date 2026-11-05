@@ -89,12 +89,12 @@ export function PurchaseRowActions({
 
   return (
     <div
-      className={`inline-flex h-9 w-52 items-stretch overflow-hidden whitespace-nowrap rounded-lg border shadow-sm ${actionStyle}`}
+      className={`inline-flex h-10 w-56 items-stretch overflow-hidden whitespace-nowrap rounded-lg border shadow-sm ${actionStyle}`}
     >
       <button
         type="button"
         disabled={busy}
-        className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 px-2 text-xs font-medium text-inherit transition-colors hover:bg-black/5 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-teal-500 disabled:opacity-50"
+        className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 px-2 text-sm font-medium text-inherit transition-colors hover:bg-black/5 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-teal-500 disabled:opacity-50"
         onClick={canReceive ? onReceive : onDetail}
       >
         {canReceive ? (

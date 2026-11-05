@@ -7,6 +7,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AlfaBetaService } from "./alfabeta.service";
+import { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { snapshotRow } from "./medicine-reference-snapshot";
 
@@ -109,9 +110,30 @@ function setup() {
       ],
     }),
   };
+  const downloadOfficial = jest.fn().mockResolvedValue([official()]);
   const references = {
     search: jest.fn(),
-    downloadOfficial: jest.fn().mockResolvedValue([official()]),
+    downloadOfficial,
+    downloadOfficialData: jest.fn(async () => ({
+      references: (await downloadOfficial()) as unknown[],
+      payload: [{ CLAVE: 1 }],
+    })),
+  };
+  const emptySource = {
+    links: 0,
+    failedLinks: 0,
+    updated: 0,
+    unchanged: 0,
+    missing: 0,
+    review: 0,
+    stopped: false,
+  };
+  const catalog = {
+    refreshOfficial: jest.fn().mockResolvedValue({ updated: 0, delisted: 0 }),
+    refreshLinkedSources: jest
+      .fn()
+      .mockResolvedValue({ remedies: emptySource, alfabeta: emptySource }),
+    references: jest.fn().mockResolvedValue([]),
   };
   const audit = { recordInTransaction: jest.fn().mockResolvedValue(undefined) };
   const service = new CatalogPriceRefreshService(
@@ -119,6 +141,7 @@ function setup() {
     references as unknown as MedicineReferenceService,
     audit as unknown as AuditService,
     alfabeta as unknown as AlfaBetaService,
+    catalog as unknown as MedicineCatalogService,
   );
   // La copia local devuelve lo que la descarga acaba de guardar.
   tx.medicineReferenceSnapshot.createMany.mockImplementation(
@@ -141,10 +164,96 @@ function setup() {
     prisma,
     alfabeta,
     references,
+    catalog,
     audit,
     snapshot,
   };
 }
+
+describe("corrida con la base de medicamentos", () => {
+  const fromCatalog = (overrides: Record<string, unknown> = {}) =>
+    official({
+      source: "preciosderemedios",
+      priceMinor: 880000,
+      ...overrides,
+    });
+
+  it("toma el precio de la base sin salir a buscar por nombre", async () => {
+    const { service, prisma, catalog, alfabeta, references } = setup();
+    catalog.references.mockResolvedValue([fromCatalog()]);
+    const result = await service.refreshAll();
+    expect(result.updated).toBe(1);
+    expect(alfabeta.search).not.toHaveBeenCalled();
+    expect(references.search).not.toHaveBeenCalled();
+    expect(prisma.product.findMany).toHaveBeenCalled();
+  });
+
+  it("un vinculado al padrón dado de baja sigue con su otra fuente", async () => {
+    const { service, product, catalog, tx } = setup();
+    product.externalReferenceSource = "official";
+    product.externalReferenceBarcode = "7793640215479";
+    catalog.references.mockResolvedValue([fromCatalog()]);
+    await service.refreshAll();
+    expect(tx.product.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ externalReferencePriceMinor: 880000n }),
+      }),
+    );
+  });
+
+  it("lo que no está en la base sigue con su fuente de siempre", async () => {
+    const { service, alfabeta } = setup();
+    await service.refreshAll();
+    expect(alfabeta.search).toHaveBeenCalledWith("ACTRON 400");
+  });
+
+  it("actualiza la base con el padrón completo y registra el resultado", async () => {
+    const { service, catalog, prisma } = setup();
+    await service.refreshAll();
+    expect(catalog.refreshOfficial).toHaveBeenCalledWith([{ CLAVE: 1 }]);
+    expect(catalog.refreshLinkedSources).toHaveBeenCalledTimes(1);
+    expect(prisma.priceRefreshRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          message: expect.stringContaining("Base de medicamentos"),
+        }),
+      }),
+    );
+  });
+
+  it("si el padrón cae, Remedios y AlfaBeta se leen igual", async () => {
+    const { service, catalog, references } = setup();
+    references.downloadOfficial.mockRejectedValue(new Error("caído"));
+    await service.refreshAll();
+    expect(catalog.refreshOfficial).not.toHaveBeenCalled();
+    expect(catalog.refreshLinkedSources).toHaveBeenCalledTimes(1);
+  });
+
+  it("una respuesta parcial del padrón no toca la base", async () => {
+    const { service, catalog, prisma, references } = setup();
+    prisma.medicineReferenceSnapshot.count.mockResolvedValue(1000);
+    references.downloadOfficial.mockResolvedValue([official()]);
+    await service.refreshAll();
+    expect(catalog.refreshOfficial).not.toHaveBeenCalled();
+    expect(catalog.refreshLinkedSources).toHaveBeenCalledTimes(1);
+  });
+
+  it("un error de la base no frena la actualización de productos", async () => {
+    const { service, catalog, alfabeta } = setup();
+    catalog.refreshLinkedSources.mockRejectedValue(new Error("sin base"));
+    const result = await service.refreshAll();
+    expect(result.skipped).toBe(false);
+    expect(alfabeta.search).toHaveBeenCalled();
+  });
+
+  it("la corrida de una farmacia no descarga ni lee fuentes", async () => {
+    const { service, catalog } = setup();
+    await service.refreshAll("org");
+    expect(catalog.refreshOfficial).not.toHaveBeenCalled();
+    expect(catalog.refreshLinkedSources).not.toHaveBeenCalled();
+    expect(catalog.references).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("linked product sale price refresh", () => {
   it("automatically updates fractional blisters with the current divisor and markup", async () => {

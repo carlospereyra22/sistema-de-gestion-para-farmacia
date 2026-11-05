@@ -13,6 +13,8 @@ Adaptación automática de categorías (29/10/2026): automaticCategory se ejecut
 
 Aplicación instalable (29/10/2026): el manifiesto web usa identidad estable `/`, inicio y alcance en `/`, ventana `standalone` e iconos derivados del logo existente (192/512 y maskable). Chrome/Edge ofrecen instalación nativa bajo HTTPS o localhost; el menú de cuenta muestra Instalar sistema sólo cuando el navegador entrega `beforeinstallprompt`. El evento se consume una sola vez, sin recargar formularios. No se agrega service worker, caché de API, credenciales, cola de ventas ni operación comercial sin conexión. La app instalada usa las mismas rutas, sesión y permisos que el navegador; las versiones siguen el despliegue web habitual y no fuerzan recargas durante una venta. La validación local no equivale a publicar en producción.
 
+Base de medicamentos (04/11/2026): tablas globales `MedicineCatalog*` en la base principal, dentro de CatalogModule. `MedicineCatalogService` busca sin salir a internet y la corrida global la actualiza antes de aplicar precios a los productos vinculados. No agrega servicios ni bases nuevas. Ver MEDICINE_CATALOG.md.
+
 El catálogo de referencia mantiene su infraestructura PostgreSQL independiente.
 Sus capturas vigentes, caché de imágenes y preparación se administran en
 `data/external-catalog/` (fuera de Git); las herramientas permanecen en

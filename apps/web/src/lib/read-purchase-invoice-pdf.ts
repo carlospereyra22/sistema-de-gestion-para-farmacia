@@ -1,6 +1,7 @@
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import ocrWorkerUrl from "tesseract.js/dist/worker.min.js?url";
 import {
+  invoiceEmptyMessage,
   invoiceTextLines,
   parseInvoiceLines,
   type InvoiceLine,
@@ -26,13 +27,21 @@ export async function readPurchaseInvoicePdf(
     if (pdf.numPages > 10)
       throw new Error("Importá facturas de hasta 10 páginas.");
     const lines: InvoiceLine[] = [];
+    const pages: string[] = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
       progress(`Leyendo página ${pageNumber} de ${pdf.numPages}…`);
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
       const items = content.items.flatMap((item) =>
         "str" in item
-          ? [{ str: item.str, x: item.transform[4], y: item.transform[5] }]
+          ? [
+              {
+                str: item.str,
+                x: item.transform[4],
+                y: item.transform[5],
+                rotated: Math.abs(item.transform[1]) > 0.01,
+              },
+            ]
           : [],
       );
       let text = invoiceTextLines(items);
@@ -55,9 +64,11 @@ export async function readPurchaseInvoicePdf(
         canvas.width = 0;
         canvas.height = 0;
       }
+      pages.push(...text);
       lines.push(...parseInvoiceLines(text));
       page.cleanup();
     }
+    if (!lines.length) throw new Error(invoiceEmptyMessage(pages));
     return lines;
   } finally {
     if (ocr) await ocr.terminate();
