@@ -18,6 +18,8 @@ export type PurchaseDraftLine = {
   productId: string;
   quantity: string;
   cost: string;
+  // Vino en exhibidor de N unidades.
+  packFactor?: number;
 };
 export type ReceiptDraft = {
   key: string;
@@ -109,7 +111,12 @@ export function preparePurchaseLines(lines: PurchaseDraftLine[]) {
       !Number.isSafeInteger(quantity * unitCostMinor)
     )
       throw new Error("Revisá cantidades y costos de los artículos.");
-    return { productId: i.productId, quantity, unitCostMinor };
+    return {
+      productId: i.productId,
+      quantity,
+      unitCostMinor,
+      ...(i.packFactor ? { packFactor: i.packFactor } : {}),
+    };
   });
 }
 export function prepareReceiptLines(

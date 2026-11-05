@@ -1584,6 +1584,8 @@ export type StockLot = {
   quantity: number;
   expiresAt: string | null;
   unitCostMinor: string;
+  packFactor?: number | null;
+  packCount?: number;
 };
 
 export async function getStock(
@@ -2321,6 +2323,7 @@ export async function createSale(
       description?: string;
       unitPriceMinor?: number;
       quantity: number;
+      packQuantity?: number;
       discountMinor?: number;
       expectedUnitPriceMinor?: string;
       requestedUnitPriceMinor?: number;

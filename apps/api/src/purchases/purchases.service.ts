@@ -264,6 +264,7 @@ export class PurchasesService {
             productId: i.productId,
             orderedQuantity: i.quantity,
             unitCostMinor: BigInt(i.unitCostMinor),
+            packFactor: i.packFactor,
           })),
         },
       },
@@ -447,6 +448,10 @@ export class PurchasesService {
             `El lote ${number} ya tiene otro vencimiento. Revisalo sin sobrescribirlo.`,
           );
       }
+      // Solo cuentan los exhibidores completos que llegaron en esta entrega.
+      const packCount = item.packFactor
+        ? Math.floor(line.quantity / item.packFactor)
+        : 0;
       const lot = await tx.productLot.upsert({
         where: {
           branchId_productId_number: {
@@ -463,8 +468,17 @@ export class PurchasesService {
           quantity: line.quantity,
           unitCostMinor: item.unitCostMinor,
           expiresAt: line.expiresAt,
+          ...(packCount ? { packFactor: item.packFactor, packCount } : {}),
         },
-        update: { quantity: { increment: line.quantity } },
+        update: {
+          quantity: { increment: line.quantity },
+          ...(packCount
+            ? {
+                packFactor: item.packFactor,
+                packCount: { increment: packCount },
+              }
+            : {}),
+        },
       });
       if (
         (lot.expiresAt?.toISOString().slice(0, 10) ?? null) !==

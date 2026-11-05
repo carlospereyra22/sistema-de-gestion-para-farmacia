@@ -7,7 +7,6 @@ import {
   invoicePackFactor,
   packSaleProduct,
   packSearchText,
-  productPackFactor,
 } from "./purchase-pack";
 
 const pack = {
@@ -34,27 +33,37 @@ const base = {
 } as unknown as CatalogProduct;
 
 describe("exhibidores enteros", () => {
-  const lot = (sellableQuantity: number) => ({ sellableQuantity });
-
-  it("20 unidades son 1 exhibidor y 19 ya no", () => {
-    expect(intactPacks([lot(20)], 20)).toBe(1);
-    expect(intactPacks([lot(19)], 20)).toBe(0);
+  const exhibidor = (sellableQuantity: number, packCount = 1) => ({
+    sellableQuantity,
+    packFactor: 20,
+    packCount,
   });
 
-  it("3 sueltas de otro lote no cambian el exhibidor", () => {
-    expect(intactPacks([lot(3), lot(20)], 20)).toBe(1);
+  it("20 unidades del exhibidor son 1 y 19 ya no", () => {
+    expect(intactPacks([exhibidor(20)])).toBe(1);
+    expect(intactPacks([exhibidor(19)])).toBe(0);
   });
 
-  it("no arma un exhibidor sumando lotes distintos", () => {
-    expect(intactPacks([lot(19), lot(3)], 20)).toBe(0);
+  it("las cajas sueltas no arman exhibidores", () => {
+    expect(intactPacks([{ sellableQuantity: 26 }, exhibidor(10, 1)])).toBe(0);
+    expect(
+      intactPacks([
+        { sellableQuantity: 26, packFactor: null, packCount: 0 },
+        { sellableQuantity: 10, packFactor: 10, packCount: 1 },
+      ]),
+    ).toBe(1);
   });
 
-  it("cuenta varios exhibidores", () => {
-    expect(intactPacks([lot(40), lot(20)], 20)).toBe(3);
+  it("sumar sueltas al mismo lote no inventa exhibidores", () => {
+    expect(intactPacks([exhibidor(45, 1)])).toBe(1);
+  });
+
+  it("cuenta varios exhibidores y lotes", () => {
+    expect(intactPacks([exhibidor(40, 2), exhibidor(20, 1)])).toBe(3);
   });
 
   it("lo vencido no cuenta", () => {
-    expect(intactPacks([lot(0)], 20)).toBe(0);
+    expect(intactPacks([exhibidor(0)])).toBe(0);
   });
 });
 
@@ -72,25 +81,6 @@ describe("venta de un exhibidor", () => {
 
   it("sin el producto base en la farmacia no se puede vender", () => {
     expect(packSaleProduct("7795345124247", [], [pack])).toBeNull();
-  });
-});
-
-describe("factor de un producto", () => {
-  it("lo encuentra por el código base, con o sin ceros", () => {
-    expect(productPackFactor(base, [pack])).toBe(20);
-    expect(
-      productPackFactor({ barcodes: [{ code: "07795345124230" }] } as never, [
-        pack,
-      ]),
-    ).toBe(20);
-  });
-
-  it("un producto sin exhibidor no tiene factor", () => {
-    expect(
-      productPackFactor({ barcodes: [{ code: "7795378001072" }] } as never, [
-        pack,
-      ]),
-    ).toBeNull();
   });
 });
 

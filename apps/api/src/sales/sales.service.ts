@@ -15,6 +15,7 @@ import { CashMovementType, PaymentMethod, Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { stockAvailability } from "../inventory/stock-availability";
+import { allocateSaleLots } from "./sale-lot-allocation";
 import type { ThermalTicket } from "@gestion/contracts";
 import { groupTicketItems } from "./group-ticket-items";
 import { manualConcept } from "./manual-concept";
@@ -49,6 +50,7 @@ type SaleInput = {
     discountMinor?: number;
     expectedUnitPriceMinor?: string;
     requestedUnitPriceMinor?: number;
+    packQuantity?: number;
   }[];
   payments: {
     method: PaymentMethod;
@@ -612,9 +614,11 @@ export class SalesService {
               throw new BadRequestException(
                 `${product.name}: stock vendible insuficiente. Disponibles: ${lots.reduce((sum, lot) => sum + lot.quantity, 0)}; solicitadas: ${remaining}.${expiredQuantity ? ` Hay ${expiredQuantity} unidades vencidas que no se pueden vender.` : " Actualizá el stock e intentá nuevamente."}`,
               );
-            for (const lot of lots) {
-              const quantity = Math.min(remaining, lot.quantity);
-              if (!quantity) continue;
+            for (const { lot, quantity } of allocateSaleLots(
+              lots,
+              remaining,
+              line.packQuantity,
+            )) {
               const lotDiscountMinor =
                 quantity === remaining
                   ? lineDiscountMinor - assignedDiscountMinor

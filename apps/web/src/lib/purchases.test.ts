@@ -64,3 +64,13 @@ describe("purchase editor validation", () => {
     );
   });
 });
+
+describe("exhibidor en la compra", () => {
+  it("manda el factor solo si la línea vino en exhibidor", () => {
+    const line = { productId: "p", quantity: "20", cost: "6036.27" };
+    expect(preparePurchaseLines([line])[0]).not.toHaveProperty("packFactor");
+    expect(
+      preparePurchaseLines([{ ...line, packFactor: 20 }])[0]?.packFactor,
+    ).toBe(20);
+  });
+});

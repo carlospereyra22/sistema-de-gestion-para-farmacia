@@ -2,6 +2,7 @@ export type PurchaseLineInput = {
   productId: string;
   quantity: number;
   unitCostMinor: number;
+  packFactor?: number;
 };
 export type PurchaseInput = {
   supplierId: string;

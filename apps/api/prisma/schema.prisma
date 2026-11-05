@@ -810,6 +810,8 @@ model PurchaseItem {
   receivedQuantity Int @default(0)
   cancelledQuantity Int @default(0)
   unitCostMinor BigInt
+  // Vino en exhibidor de N unidades (SISTEMA-26).
+  packFactor Int?
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
   @@index([purchaseId])
 }
@@ -909,6 +911,9 @@ model ProductLot {
   expiresAt DateTime? @db.Date
   quantity Int
   unitCostMinor BigInt
+  // Exhibidores que entraron en este lote y unidades de cada uno (SISTEMA-26).
+  packFactor Int?
+  packCount Int @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   @@unique([branchId, productId, number])
   @@index([organizationId, expiresAt])
