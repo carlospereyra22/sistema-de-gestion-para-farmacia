@@ -60,7 +60,10 @@ Las recepciones históricas no se recrean. Sus movimientos/auditorías se consul
   no existe en el catálogo no se adivina por nombre. Las filas ambiguas o sin
   producto se vinculan a mano buscando en el catálogo. Sólo se agregan las filas
   tildadas con cantidad entera válida; no se duplican productos ya cargados y se
-  respeta el máximo de 100. El costo del Excel es una sugerencia editable. Importar
+  respeta el máximo de 100. Si un producto viene en varios renglones (la droguería
+  puede partirlo, con el mismo código), las cantidades se suman en una sola línea
+  del pedido; vincularlo o crearlo una vez alcanza a todos sus renglones (05/11/2026).
+  Se conserva el costo del primer renglón que lo informa. El costo del Excel es una sugerencia editable. Importar
   no guarda la compra: el pedido se revisa y se guarda como siempre. Lógica en
   `apps/web/src/lib/purchase-excel.ts`, interfaz en `purchase-excel-import.tsx`.
 - Factura PDF (02/11/2026): pensada para la compra directa, cuando la mercadería

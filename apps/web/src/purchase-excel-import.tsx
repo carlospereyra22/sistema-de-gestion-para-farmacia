@@ -8,6 +8,7 @@ import {
 } from "./lib/purchase-pack";
 import {
   pendingProductRows,
+  productRowGroups,
   type BulkProductResult,
   type BulkProductRow,
 } from "./lib/purchase-bulk-products";
@@ -22,6 +23,7 @@ import {
   normalizePurchaseText,
   previewPurchaseExcel,
   purchaseExcelLines,
+  sameCodeRowNumbers,
   type ExcelColumn,
   type ExcelMapping,
   type ExcelSheet,
@@ -145,9 +147,14 @@ export function PurchaseExcelImport({
     setSelected((current) => new Set([...current, ...autoSelected(applied)]));
   };
 
+  // Vincular un renglón alcanza a los que traen el mismo código.
   const assign = (rowNumber: number, productId: string) => {
-    setAssigned((current) => ({ ...current, [rowNumber]: productId }));
-    setSelected((current) => new Set(current).add(rowNumber));
+    const numbers = sameCodeRowNumbers(rows, rowNumber);
+    setAssigned((current) => ({
+      ...current,
+      ...Object.fromEntries(numbers.map((number) => [number, productId])),
+    }));
+    setSelected((current) => new Set([...current, ...numbers]));
   };
 
   const show = (next: Loaded) => {
@@ -425,12 +432,16 @@ export function PurchaseExcelReview({
       selected.has(r.rowNumber) &&
       r.quantity &&
       (assigned[r.rowNumber] || r.productId),
-  ).length;
+  );
+  const chosenProducts = new Set(
+    chosen.map((r) => assigned[r.rowNumber] || r.productId),
+  ).size;
   const pendingReview = rows.filter(
     (r) => !(assigned[r.rowNumber] || r.productId) || !r.quantity,
   ).length;
   const pdf = source === "pdf";
   const pending = pendingProductRows(rows, assigned);
+  const pendingProducts = productRowGroups(pending).length;
   const createAll = async () => {
     if (!onCreateProducts || bulkBusy) return;
     setFailures([]);
@@ -757,9 +768,11 @@ export function PurchaseExcelReview({
       </div>
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
         <p className="text-sm text-slate-600">
-          {chosen > lines.length
-            ? `${chosen - lines.length} filas no se agregan: el producto ya está en el pedido, se repite o se superan los 100 productos.`
-            : "Las filas se suman al pedido; la compra no se guarda hasta que la confirmes."}
+          {chosenProducts > lines.length
+            ? `${chosenProducts - lines.length} productos no se agregan: ya están en el pedido o se superan los 100 productos.`
+            : chosen.length > chosenProducts
+              ? "Los renglones del mismo producto se suman en una sola línea del pedido."
+              : "Las filas se suman al pedido; la compra no se guarda hasta que la confirmes."}
         </p>
         <div className="flex gap-2">
           <button
@@ -778,8 +791,8 @@ export function PurchaseExcelReview({
               className="h-10 rounded-lg border border-teal-600 bg-white px-4 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-60"
             >
               {bulkBusy
-                ? `Creando ${Math.min(bulkDone + 1, pending.length)} de ${pending.length}…`
-                : `Crear ${pending.length} y agregar todo`}
+                ? `Creando ${Math.min(bulkDone + 1, pendingProducts)} de ${pendingProducts}…`
+                : `Crear ${pendingProducts} y agregar todo`}
             </button>
           )}
           <button

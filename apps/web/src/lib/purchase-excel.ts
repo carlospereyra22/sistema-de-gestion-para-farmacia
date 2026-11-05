@@ -144,6 +144,7 @@ export function excelBarcode(value: unknown): string {
 // El estándar de ANMAT/GS1 procesa el GTIN con 14 dígitos: 7795312109383 y
 // 07795312109383 son el mismo producto. Un código interno se compara tal cual.
 const codeKey = (code: string) => externalGtin(code) ?? code;
+export const purchaseCodeKey = codeKey;
 
 const isExcelBarcode = (value: unknown) =>
   /^\d{8,14}$/.test(excelBarcode(value));
@@ -312,6 +313,18 @@ export function previewPurchaseExcel(
   return rows;
 }
 
+// Renglones con el mismo código de barras: son el mismo producto.
+export function sameCodeRowNumbers(rows: ImportRow[], rowNumber: number) {
+  const code = rows.find((row) => row.rowNumber === rowNumber)?.code.trim();
+  if (!code) return [rowNumber];
+  const key = codeKey(code);
+  return rows
+    .filter((row) => row.code.trim() && codeKey(row.code.trim()) === key)
+    .map((row) => row.rowNumber);
+}
+
+// La droguería puede facturar un producto en varios renglones: van a una sola
+// línea con la cantidad sumada, porque el pedido no repite productos.
 export function purchaseExcelLines(
   rows: ImportRow[],
   selected: Set<number>,
@@ -319,19 +332,25 @@ export function purchaseExcelLines(
   existing: PurchaseDraftLine[],
 ): PurchaseDraftLine[] {
   const used = new Set(existing.map((line) => line.productId));
-  const result: PurchaseDraftLine[] = [];
+  const lines = new Map<string, PurchaseDraftLine>();
   for (const row of rows) {
-    if (!selected.has(row.rowNumber) || !row.quantity || used.size >= 100)
-      continue;
+    if (!selected.has(row.rowNumber) || !row.quantity) continue;
     const productId = assigned[row.rowNumber] || row.productId;
     if (!productId || used.has(productId)) continue;
-    used.add(productId);
-    result.push({
+    const line = lines.get(productId);
+    if (line) {
+      line.quantity = String(Number(line.quantity) + Number(row.quantity));
+      line.cost ||= row.cost;
+      if (row.pack) line.packFactor ??= row.pack.factor;
+      continue;
+    }
+    if (used.size + lines.size >= 100) continue;
+    lines.set(productId, {
       productId,
       quantity: row.quantity,
       cost: row.cost,
       ...(row.pack ? { packFactor: row.pack.factor } : {}),
     });
   }
-  return result;
+  return [...lines.values()];
 }
