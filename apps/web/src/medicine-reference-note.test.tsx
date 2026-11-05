@@ -18,31 +18,20 @@ const reference: MedicineReference = {
 };
 
 describe("nota de referencia del medicamento", () => {
-  it("lleva al link exacto de la fuente", () => {
+  it("no muestra el enlace de la fuente debajo de la presentación", () => {
     const html = renderToStaticMarkup(
       <MedicineReferenceNote
         reference={{
           ...reference,
           referenceUrl:
             "https://preciosderemedios.com.ar/result/?busqueda=acalix",
+          laboratoryMismatch: "Beta / MEGALABS ARG.",
         }}
       />,
     );
-    expect(html).toContain(
-      'href="https://preciosderemedios.com.ar/result/?busqueda=acalix"',
-    );
-    expect(html).toContain("Precios de Remedios");
-    expect(html).toContain('rel="noopener noreferrer"');
-  });
-
-  it("el padrón va sin link porque su web no abre un producto", () => {
-    expect(
-      renderToStaticMarkup(
-        <MedicineReferenceNote
-          reference={{ ...reference, source: "official", referenceUrl: null }}
-        />,
-      ),
-    ).not.toContain("<a ");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("Precios de Remedios");
+    expect(html).toContain("Laboratorio distinto");
   });
 
   it("avisa la baja del padrón y el laboratorio distinto", () => {
@@ -59,9 +48,9 @@ describe("nota de referencia del medicamento", () => {
     expect(html).toContain("Beta / MEGALABS ARG.");
   });
 
-  it("sin link ni avisos no muestra texto", () => {
+  it("sin avisos no ocupa espacio entre resultados", () => {
     expect(
       renderToStaticMarkup(<MedicineReferenceNote reference={reference} />),
-    ).not.toContain("<a ");
+    ).toBe("");
   });
 });

@@ -31,6 +31,8 @@ export function AlfaBetaMedicineCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const request = useRef<AbortController | null>(null);
+  const card = useRef<HTMLDivElement | null>(null);
+  const showPresentations = compact && !!onSelect;
   useEffect(
     () => () => {
       request.current?.abort();
@@ -71,11 +73,23 @@ export function AlfaBetaMedicineCard({
     const timer = setTimeout(() => void load(), 150);
     return () => clearTimeout(timer);
   }, [prefetch, load]);
+  useEffect(() => {
+    if (!showPresentations || !card.current) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        observer.disconnect();
+        void load();
+      }
+    });
+    observer.observe(card.current);
+    return () => observer.disconnect();
+  }, [showPresentations, load]);
   return (
-    <div>
+    <div ref={card}>
       <details
+        open={showPresentations ? true : undefined}
         onToggle={(event) => {
-          if (event.currentTarget.open) void load();
+          if (!showPresentations && event.currentTarget.open) void load();
         }}
         className={
           compact
@@ -84,13 +98,16 @@ export function AlfaBetaMedicineCard({
         }
       >
         <summary
+          onClick={(event) => {
+            if (showPresentations) event.preventDefault();
+          }}
           onPointerEnter={() => {
             if (!error) void load();
           }}
           onFocus={() => {
             if (!error) void load();
           }}
-          className={`flex cursor-pointer list-none items-center gap-3 p-4 focus-visible:outline-2 focus-visible:outline-emerald-700 ${compact ? "transition hover:bg-slate-50" : "rounded-xl"}`}
+          className={`${showPresentations && detail ? "hidden" : "flex"} cursor-pointer list-none items-center gap-3 focus-visible:outline-2 focus-visible:outline-emerald-700 ${compact ? `transition hover:bg-slate-50 ${onSelect ? "px-3 py-2.5" : "p-4"}` : "rounded-xl p-4"}`}
         >
           {!compact && (
             <span className="rounded-xl bg-emerald-50 p-3 text-emerald-700">
@@ -98,15 +115,27 @@ export function AlfaBetaMedicineCard({
             </span>
           )}
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold text-slate-900">
+            <span
+              className={
+                onSelect && compact
+                  ? "block truncate text-sm font-semibold text-slate-800"
+                  : "block font-semibold text-slate-900"
+              }
+            >
               {item.name}
             </span>
-            <span className="mt-1 block text-xs text-slate-500">
+            <span
+              className={
+                onSelect && compact
+                  ? "block truncate text-xs text-slate-500"
+                  : "mt-1 block text-xs text-slate-500"
+              }
+            >
               {item.laboratory || "Laboratorio no informado"}
               {!compact && " · Ver presentaciones"}
             </span>
           </span>
-          {compact && (
+          {compact && !onSelect && (
             <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
               {detail
                 ? `${detail.presentations.length} ${detail.presentations.length === 1 ? "presentación" : "presentaciones"}`
@@ -122,7 +151,9 @@ export function AlfaBetaMedicineCard({
         <div
           className={
             compact
-              ? "border-t border-slate-100 px-4"
+              ? onSelect
+                ? "border-t border-slate-100"
+                : "border-t border-slate-100 px-4"
               : "border-t border-slate-100 px-4 pb-4"
           }
           aria-busy={loading}
@@ -146,7 +177,52 @@ export function AlfaBetaMedicineCard({
               </button>
             </div>
           )}
-          {compact && detail && !onSelect ? (
+          {compact && detail && onSelect ? (
+            <div className="divide-y divide-slate-100">
+              {detail.presentations.map((presentation, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  disabled={presentation.priceMinor === null}
+                  onClick={() =>
+                    onSelect({
+                      source: "alfabeta",
+                      name: detail.name,
+                      presentation: presentation.presentation,
+                      laboratory: item.laboratory,
+                      priceMinor: presentation.priceMinor,
+                      updatedAt: presentation.updatedAt,
+                      barcode: "",
+                      activeIngredient: "",
+                      troquel: "",
+                      pamiPriceMinor: null,
+                      saleType: "",
+                    })
+                  }
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-teal-50/40 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-slate-800">
+                      {detail.name}
+                    </span>
+                    <span className="block truncate text-xs text-slate-500">
+                      {[presentation.presentation, item.laboratory]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right text-xs text-teal-800">
+                    <span className="block font-semibold">
+                      {referenceMoney(presentation.priceMinor)}
+                    </span>
+                    <span className="block text-[10px] text-slate-500">
+                      AlfaBeta
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : compact && detail && !onSelect ? (
             <div className="w-full py-3">
               <MedicinePresentationHeader />
               {detail.presentations.map((presentation, index) => (

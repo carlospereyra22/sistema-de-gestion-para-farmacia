@@ -581,7 +581,7 @@ export function ExternalProductLookup({
       </div>
       <div
         aria-live="polite"
-        className="mt-1 min-h-4 text-[11px] leading-4 text-slate-500"
+        className="mt-1 min-h-4 text-[11px] leading-4 text-slate-500 empty:hidden"
       >
         {trimmed &&
           !canonical &&

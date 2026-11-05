@@ -2,7 +2,7 @@
 
 ## Alcance y almacenamiento
 
-Las excepciones de fotografías con un GTIN diferente en el nombre del archivo se conservan en `reviewed_images.py`: requieren asociación exacta fuente/SKU/código/URL/etiqueta y revisión visual de presentación. Se conserva el motivo original y no se equiparan códigos ni se concede verificación física. Una imagen nueva o una asociación distinta vuelve a requerir revisión. La revisión de Nivea 4005808516674 recupera la foto publicada para ese SKU (FPS 60, 150 ml).
+Las excepciones de fotografías con un GTIN diferente en el nombre del archivo se conservan en `reviewed_images.py`: requieren asociación exacta fuente/SKU/código/URL/etiqueta y revisión visual de presentación. Se conserva el motivo original y no se equiparan códigos ni se concede verificación física. Una imagen nueva o una asociación distinta vuelve a requerir revisión. La revisión de Nivea 4005808516674 recupera la foto publicada para ese SKU (FPS 60, 150 ml). La revisión del 05/11/2026 asocia la foto del cofre Adolfo Dominguez Bambú (EDP 120 ml, desodorante 150 ml y EDP 10 ml) al SKU Farmalife 19502 / EAN 8410190629523: la etiqueta de la imagen contiene otro número, pero la ficha del SKU y el envase visible coinciden. No se considera equivalente ese otro GTIN.
 
 La adaptación de categorías no suma especificidad por nombres de raíces generales: una ruta concreta de protección solar prevalece sobre “Cuidado personal”, manteniendo la revisión manual entre alternativas específicas ambiguas.
 

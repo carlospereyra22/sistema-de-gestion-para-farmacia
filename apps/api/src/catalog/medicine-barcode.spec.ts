@@ -183,4 +183,38 @@ describe("medicine barcode lookup", () => {
       officialUnavailable: false,
     });
   });
+  it("responde desde la base propia antes de consultar Precios de Remedios", async () => {
+    const local = [{ source: "preciosderemedios", name: "BUSCAPINA DUO" }];
+    const search = jest.fn().mockResolvedValue(local);
+    const externalSearch = jest.fn();
+    const controller = new MedicineReferenceController(
+      {
+        assertPermission: jest.fn().mockResolvedValue(undefined),
+      } as unknown as CatalogService,
+      { search: externalSearch } as unknown as MedicineReferenceService,
+      {} as AlfaBetaService,
+      {} as ExternalCatalogService,
+      { search } as unknown as MedicineCatalogService,
+    );
+    const request = { auth: { sub: "actor" } } as AuthenticatedRequest;
+    expect(
+      await controller.search(request, "org", {
+        q: "buscapina duo",
+        source: "preciosderemedios",
+      }),
+    ).toEqual(local);
+    expect(externalSearch).not.toHaveBeenCalled();
+    search.mockResolvedValueOnce([]);
+    externalSearch.mockResolvedValueOnce([{ source: "preciosderemedios" }]);
+    expect(
+      await controller.search(request, "org", {
+        q: "otro medicamento",
+        source: "preciosderemedios",
+      }),
+    ).toEqual([{ source: "preciosderemedios" }]);
+    expect(externalSearch).toHaveBeenCalledWith(
+      "otro medicamento",
+      "preciosderemedios",
+    );
+  });
 });

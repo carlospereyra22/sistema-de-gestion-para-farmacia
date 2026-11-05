@@ -201,9 +201,9 @@ export class MedicineReferenceController {
       "CATALOG_MANAGE",
     );
     const source = query.source ?? "official";
-    // La opción general busca en la base propia; el padrón queda de respaldo
-    // para lo que todavía no está cargado.
-    if (source === "official") {
+    // La base propia incluye fichas de ambas fuentes y se actualiza con el cron.
+    // La consulta externa queda para nombres que todavía no ingresaron.
+    if (source === "official" || source === "preciosderemedios") {
       const found = await this.medicineCatalog.search(query.q);
       if (found.length) return found;
     }

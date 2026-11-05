@@ -31,6 +31,12 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
 - **Precios de Remedios y AlfaBeta:** se leen por el link guardado, una vez por link, y
   el precio sale de la fila guardada en `sourceRowKey`. Se recorren las páginas hasta
   encontrar todas las filas buscadas.
+- La búsqueda manual de Precios de Remedios sigue las combinaciones de sustancias
+  que muestra el sitio antes de leer las presentaciones. Si hay más de diez
+  combinaciones, pide precisar el nombre para evitar consultas excesivas.
+- Nuevo producto consulta primero la base propia para las opciones Medicamentos y
+  Remedios. Si un nombre aún no está cargado, Remedios consulta el sitio externo;
+  las respuestas externas repetidas se conservan cinco minutos en memoria.
 - **Laboratorio:** una fila con alias en `duda` o `distinto` no se usa.
 - **Control de precio:** un valor menor a la mitad o mayor al doble del anterior no se
   aplica; queda en `reviewReason`.
