@@ -19,6 +19,7 @@ describe("workspace navigation", () => {
     "Reportes",
     "Clientes",
     "Cuentas corrientes",
+    "Cuentas por pagar",
     "Proveedores",
     "Administración",
     "Organización",

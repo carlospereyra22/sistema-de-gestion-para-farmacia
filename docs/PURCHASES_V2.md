@@ -42,7 +42,7 @@ Las recepciones históricas no se recrean. Sus movimientos/auditorías se consul
   se cargan en una tabla con encabezados visibles. La barra de confirmación está
   fuera del área desplazable y tiene fondo opaco. Los avisos informativos usan
   un tratamiento neutro, separado del color de las acciones.
-  Cada fila muestra cantidades pedidas, recibidas y pendientes, además del
+  Cada fila muestra cantidades pedidas, ya recibidas y pendientes, además del
   avance ya confirmado. Los lotes adicionales conservan filas propias y su
   acción de agregado se presenta como texto discreto.
 - Compras conserva el encabezado compacto con icono, Nueva compra e Historial, sin KPIs. El listado tiene filtros de producto/código/proveedor/referencia, estado y fechas, y paginación integrada.
@@ -89,7 +89,7 @@ Las recepciones históricas no se recrean. Sus movimientos/auditorías se consul
   sin guardar, queda como estaba.
 - El editor amplio acepta hasta 100 productos distintos. Enter sobre un código agrega el producto y devuelve el foco al buscador; repetirlo enfoca su cantidad, no duplica filas. Costos y cantidades se editan antes de guardar. Guardar pedido no acredita stock.
 - Compra directa prepara productos y después cantidades/lotes. Continuar no escribe en la base; confirmar crea compra y primera recepción juntas, atómicamente.
-- Recibir permite cantidades parciales, varios artículos y varios lotes con una confirmación global. Las filas vacías/cero quedan pendientes. Se muestran pedido, recibido, pendiente y resumen de esta entrega. El escáner identifica el producto: no inventa lote ni vencimiento.
+- Recibir permite cantidades parciales, varios artículos y varios lotes con una confirmación global. La opción "máx" dentro del campo completa la cantidad del lote con lo pendiente, descontando lo cargado en los otros lotes del producto (05/11/2026). Las filas vacías/cero quedan pendientes. Se muestran pedido, recibido, pendiente y resumen de esta entrega. El escáner identifica el producto: no inventa lote ni vencimiento.
 - El detalle muestra cantidades originales, recibidas, pendientes, no entregadas y costos; cada nueva recepción conserva fecha, usuario, observaciones y lotes. El saldo puede cerrarse con motivo sin revertir stock recibido. No hay eliminación de documentos confirmados.
 - Inventario conserva Recibir, Ajustar y Devolver. Al elegir un producto con compras pendientes ofrece abrir la compra correspondiente; no acredita nuevamente lo recibido ni convierte entradas manuales en compras.
 - El borrador se conserva por usuario/organización/sucursal en sessionStorage de la pestaña. Se pide confirmación antes de descartarlo. No es un borrador compartido en servidor: cerrar la pestaña o borrar datos del navegador puede perder datos todavía no enviados.

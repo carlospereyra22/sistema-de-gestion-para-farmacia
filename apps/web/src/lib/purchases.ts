@@ -14,6 +14,17 @@ export const purchasePending = (i: Purchase["items"][number]) =>
     0,
     i.orderedQuantity - i.receivedQuantity - (i.cancelledQuantity ?? 0),
   );
+// Lo que todavía entra en este lote: el pendiente menos lo cargado en los demás.
+export function receiptLotMax(
+  item: Purchase["items"][number],
+  lots: ReceiptDraft[],
+  lotKey: string,
+) {
+  const others = lots
+    .filter((lot) => lot.itemId === item.id && lot.key !== lotKey)
+    .reduce((sum, lot) => sum + (Number(lot.quantity) || 0), 0);
+  return Math.max(0, purchasePending(item) - others);
+}
 export type PurchaseDraftLine = {
   productId: string;
   quantity: string;

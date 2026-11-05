@@ -42,6 +42,8 @@ export const productionPermissions = [
   ["CASH_MANAGE", "Manage cash registers and sessions"],
   ["PURCHASE_READ", "Read purchases"],
   ["PURCHASE_MANAGE", "Manage purchases and receipts"],
+  ["PAYABLE_READ", "Consultar facturas y vencimientos de proveedores"],
+  ["PAYABLE_MANAGE", "Registrar facturas de proveedores"],
   ["REPORT_READ", "Read operational reports"],
   ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
   ["REPORT_EXPORT", "Exportar reportes"],

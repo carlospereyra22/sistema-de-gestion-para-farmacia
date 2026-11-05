@@ -76,7 +76,7 @@ Esta decisión posterior reemplaza la exigencia original de registrar siempre la
 
 La información de auditoría anterior describe la etapa 0. La primera implementación agrega:
 
-- Acceso **Cuentas por pagar** en el encabezado de Compras, sin otro apartado lateral. Conserva Historial, pedidos y recepción. **Volver a Compras** recupera el contexto del listado.
+- Acceso **Cuentas por pagar** como ítem propio del menú lateral, debajo de Cuentas corrientes (05/11/2026; antes era un botón en el encabezado de Compras). Desde el detalle de una compra, **Registrar deuda** abre esta pantalla, y desde una factura se vuelve a su compra.
 - Listado con búsqueda, proveedor, vencidas/hoy/próximos 7 o 30 días/sin vencimiento. Orden por vencimiento, importe total del listado y sólo el saldo de cuotas realmente vencidas. Paginación al pie y scroll de tabla independiente.
 - Formulario de 760 px, proveedor buscable, tipo, punto/número, emisión, importe real, vínculo opcional y observaciones plegadas. Una fecha, Sin vencimiento definido o varios vencimientos (hasta 36), con suma exacta validada en servidor.
 - Desde el detalle de la compra, **Registrar factura** precarga proveedor y vínculo, pero no confirma número ni importe estimado. Si hay otro borrador, se recupera y se avisa; no se pisa. Los importes diferentes se muestran como diferencia, no corrigen la compra.
@@ -113,7 +113,7 @@ La migración se probó primero en esquema aleatorio y luego se aplicó sólo a 
 
 ### Guía breve
 
-1. Compras → **Cuentas por pagar** → **Nueva factura**.
+1. Menú **Cuentas por pagar** → **Nueva factura**.
 2. Elegir proveedor, tipo y número; cargar emisión e importe real.
 3. Elegir una fecha, sin fecha explícita o **Dividir en vencimientos**; la suma debe coincidir con el total.
 4. Revisar y pulsar **Registrar factura**. No se recibe mercadería ni se paga nada.
