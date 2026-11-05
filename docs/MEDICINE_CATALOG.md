@@ -51,6 +51,12 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
 - **Fuente caída:** se conservan los precios. Con cinco links seguidos sin respuesta se
   deja de consultar esa fuente en la corrida; las demás siguen. El resultado queda en
   `PriceRefreshRun.message`.
+- **Recorrido de enlaces (05/11/2026):** hasta cuatro enlaces se leen en paralelo,
+  manteniendo 1,5 segundos entre inicios de solicitudes a las fuentes. El log informa
+  el avance cada 50 enlaces. Un timeout o error transitorio se reintenta una vez,
+  sin reintentar enlaces inválidos. Una fuente con enlaces fallidos, una descarga del padrón
+  fallida o un error de la base deja la corrida en `PARTIAL`, con el detalle en
+  `PriceRefreshRun.message`; no se informa como exitosa una actualización incompleta.
 - **Productos vinculados:** toman el precio de la base por código o por nombre y
   presentación exactos, con las reglas de siempre (divisor, recargo, unidad de venta,
   pausa e historial). Lo que no está en la base sigue con su fuente anterior.

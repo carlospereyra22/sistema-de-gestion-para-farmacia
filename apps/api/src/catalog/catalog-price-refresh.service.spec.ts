@@ -239,11 +239,46 @@ describe("corrida con la base de medicamentos", () => {
   });
 
   it("un error de la base no frena la actualización de productos", async () => {
-    const { service, catalog, alfabeta } = setup();
+    const { service, catalog, alfabeta, prisma } = setup();
     catalog.refreshLinkedSources.mockRejectedValue(new Error("sin base"));
     const result = await service.refreshAll();
     expect(result.skipped).toBe(false);
     expect(alfabeta.search).toHaveBeenCalled();
+    expect(prisma.priceRefreshRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "PARTIAL" }),
+      }),
+    );
+  });
+
+  it("no informa éxito si una fuente dejó enlaces sin consultar", async () => {
+    const { service, catalog, prisma } = setup();
+    catalog.refreshLinkedSources.mockResolvedValue({
+      remedies: {
+        links: 5,
+        failedLinks: 1,
+        updated: 0,
+        unchanged: 4,
+        missing: 0,
+        review: 0,
+        stopped: false,
+      },
+      alfabeta: {
+        links: 0,
+        failedLinks: 0,
+        updated: 0,
+        unchanged: 0,
+        missing: 0,
+        review: 0,
+        stopped: false,
+      },
+    });
+    await service.refreshAll();
+    expect(prisma.priceRefreshRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "PARTIAL" }),
+      }),
+    );
   });
 
   it("la corrida de una farmacia no descarga ni lee fuentes", async () => {
@@ -394,7 +429,7 @@ describe("linked product sale price refresh", () => {
     expect(tx.product.update).not.toHaveBeenCalled();
     expect(prisma.priceRefreshRun.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: "SUCCEEDED", failed: 1 }),
+        data: expect.objectContaining({ status: "PARTIAL", failed: 1 }),
       }),
     );
   });

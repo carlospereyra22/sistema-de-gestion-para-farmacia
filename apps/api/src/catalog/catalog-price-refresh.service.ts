@@ -217,10 +217,12 @@ export class CatalogPriceRefreshService
   private async execute(runId: string, organizationId?: string) {
     let snapshotRows: number | undefined;
     let message: string | undefined;
+    let catalogComplete = true;
     if (!organizationId) {
       const download = await this.downloadOfficial(runId);
       // Una fuente que falla no frena a las demás: la base conserva sus precios.
-      const catalogMessage = await this.refreshCatalog(download.payload);
+      const catalog = await this.refreshCatalog(download.payload);
+      catalogComplete = catalog.complete && download.status === "SUCCEEDED";
       if (download.status === "ABORTED")
         return {
           checked: 0,
@@ -228,11 +230,11 @@ export class CatalogPriceRefreshService
           run: {
             status: "ABORTED",
             snapshotRows: download.rows,
-            message: [download.message, catalogMessage].join(" "),
+            message: [download.message, catalog.message].join(" "),
           },
         };
       snapshotRows = download.rows;
-      message = [download.message, catalogMessage].filter(Boolean).join(" ");
+      message = [download.message, catalog.message].filter(Boolean).join(" ");
     }
     if (await this.isPaused())
       return {
@@ -289,7 +291,7 @@ export class CatalogPriceRefreshService
       checked: products.length,
       updated,
       run: {
-        status: "SUCCEEDED",
+        status: catalogComplete && failed === 0 ? "SUCCEEDED" : "PARTIAL",
         snapshotRows,
         checked: products.length,
         updated,
@@ -336,28 +338,44 @@ export class CatalogPriceRefreshService
 
   // Actualiza la base de medicamentos. `payload` solo llega si el padrón se
   // descargó completo; Precios de Remedios y AlfaBeta se leen siempre.
-  private async refreshCatalog(payload?: unknown[]): Promise<string> {
+  private async refreshCatalog(
+    payload?: unknown[],
+  ): Promise<{ message: string; complete: boolean }> {
     const parts: string[] = [];
-    try {
-      if (payload) {
+    let complete = true;
+    if (payload) {
+      try {
         const official = await this.catalog.refreshOfficial(payload);
         parts.push(`padrón ${official.updated}, bajas ${official.delisted}`);
+      } catch (cause) {
+        complete = false;
+        const detail =
+          cause instanceof Error ? cause.message : "error desconocido";
+        this.logger.warn(
+          `No se pudo actualizar el padrón de la base: ${detail}`,
+        );
+        parts.push(`padrón: error ${detail}`);
       }
+    }
+    try {
       const { remedies, alfabeta } = await this.catalog.refreshLinkedSources();
       for (const [label, result] of [
         ["Remedios", remedies],
         ["AlfaBeta", alfabeta],
-      ] as const)
+      ] as const) {
+        if (result.failedLinks > 0 || result.stopped) complete = false;
         parts.push(
           `${label} ${result.updated} cambiados, ${result.missing} sin fila, ${result.review} a revisar, ${result.failedLinks} links caídos${result.stopped ? " (fuente caída, se dejó de consultar)" : ""}`,
         );
+      }
     } catch (cause) {
+      complete = false;
       const detail =
         cause instanceof Error ? cause.message : "error desconocido";
       this.logger.warn(`No se pudo actualizar la base: ${detail}`);
       parts.push(`error: ${detail}`);
     }
-    return `Base de medicamentos: ${parts.join("; ")}.`;
+    return { message: `Base de medicamentos: ${parts.join("; ")}.`, complete };
   }
 
   medicineCatalogStatus() {
