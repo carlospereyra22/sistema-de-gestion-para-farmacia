@@ -45,7 +45,8 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
   `PriceRefreshRun.message`.
 - **Recorrido de enlaces (05/11/2026):** hasta cuatro enlaces se leen en paralelo,
   manteniendo 1,5 segundos entre inicios de solicitudes a las fuentes. El log informa
-  el avance cada 50 enlaces. Una fuente con enlaces fallidos, una descarga del padrón
+  el avance cada 50 enlaces. Un timeout o error transitorio se reintenta una vez,
+  sin reintentar enlaces inválidos. Una fuente con enlaces fallidos, una descarga del padrón
   fallida o un error de la base deja la corrida en `PARTIAL`, con el detalle en
   `PriceRefreshRun.message`; no se informa como exitosa una actualización incompleta.
 - **Productos vinculados:** toman el precio de la base por código o por nombre y

@@ -4,6 +4,47 @@ import type { CatalogItemForRefresh } from "./medicine-catalog";
 import { MedicineCatalogService } from "./medicine-catalog.service";
 
 describe("actualización de fuentes de medicamentos", () => {
+  it("reintenta una vez cuando una solicitud agota el tiempo de espera", async () => {
+    const service = new MedicineCatalogService(
+      {} as PrismaService,
+      {} as AlfaBetaService,
+    );
+    const item = {
+      id: "producto",
+      referenceUrl: "https://preciosderemedios.com.ar/result/?busqueda=prueba",
+      sourceRowKey: "prueba",
+    } as CatalogItemForRefresh;
+    const read = jest
+      .fn<Promise<[]>, []>()
+      .mockRejectedValueOnce(
+        new Error("The operation was aborted due to timeout"),
+      )
+      .mockResolvedValue([]);
+
+    const result = await service["refreshSource"]([item], new Map(), read);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(result).toEqual(
+      expect.objectContaining({ links: 1, failedLinks: 0, stopped: false }),
+    );
+  });
+
+  it("no reintenta un enlace inválido", async () => {
+    const service = new MedicineCatalogService(
+      {} as PrismaService,
+      {} as AlfaBetaService,
+    );
+    const item = {
+      id: "producto",
+      referenceUrl: "https://preciosderemedios.com.ar/result/?busqueda=prueba",
+      sourceRowKey: "prueba",
+    } as CatalogItemForRefresh;
+    const read = jest.fn().mockRejectedValue(new Error("Link inválido"));
+
+    const result = await service["refreshSource"]([item], new Map(), read);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(result.failedLinks).toBe(1);
+  });
+
   it("espacia las solicitudes aunque se inicien simultáneamente", async () => {
     const service = new MedicineCatalogService(
       {} as PrismaService,

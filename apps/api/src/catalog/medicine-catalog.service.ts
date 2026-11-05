@@ -33,6 +33,16 @@ const WRITE_CHUNK = 2000;
 const SEARCH_CANDIDATES = 300;
 const SEARCH_RESULTS = 30;
 
+function transientSourceError(cause: unknown): boolean {
+  if (!(cause instanceof Error)) return false;
+  return (
+    cause.name === "TimeoutError" ||
+    /timeout|fetch failed|respondi[oó] (?:429|5\d\d)|no est[aá] disponible/i.test(
+      cause.message,
+    )
+  );
+}
+
 export type CatalogImportRecord =
   | {
       kind: "laboratory";
@@ -280,13 +290,19 @@ export class MedicineCatalogService {
       const batch = await Promise.all(
         entries.slice(start, start + batchSize).map(async ([url, group]) => {
           try {
+            const wanted = new Set(group.map((item) => item.sourceRowKey));
+            let rows: SourceRow[];
+            try {
+              rows = await read(url, wanted);
+            } catch (cause) {
+              if (!transientSourceError(cause)) throw cause;
+              this.logger.warn(`Reintentando enlace de medicamentos: ${url}`);
+              rows = await read(url, wanted);
+            }
             return {
               url,
               group,
-              rows: await read(
-                url,
-                new Set(group.map((item) => item.sourceRowKey)),
-              ),
+              rows,
               error: null,
             };
           } catch (cause) {
