@@ -448,6 +448,19 @@ export class MedicineCatalogService {
     );
   }
 
+  // Cada ambiente tiene su base: la fecha es la de la última lectura de precios
+  // en esta base, haya cambiado o no algún precio.
+  async status() {
+    const result = await this.prisma.medicineCatalogItem.aggregate({
+      _count: { _all: true },
+      _max: { priceCheckedAt: true },
+    });
+    return {
+      items: result._count._all,
+      lastCheckedAt: result._max.priceCheckedAt?.toISOString() ?? null,
+    };
+  }
+
   async summary() {
     const groups = await this.prisma.medicineCatalogItem.groupBy({
       by: ["priceSource"],

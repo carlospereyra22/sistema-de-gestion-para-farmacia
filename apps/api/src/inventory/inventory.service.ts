@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { stockAvailability } from "./stock-availability";
+import { inventoryCosts } from "./lot-costs";
 
 @Injectable()
 export class InventoryService {
@@ -98,6 +99,24 @@ export class InventoryService {
             metadataVersion: { increment: 1 },
           },
         });
+        // Corregir el costo corrige la última recepción del lote, que es lo que
+        // muestra Productos. El valor anterior queda en la auditoría y la compra
+        // conserva lo que se facturó.
+        if (
+          unitCostMinor !== undefined &&
+          unitCostMinor !== before.unitCostMinor
+        ) {
+          const receipt = await tx.inventoryMovement.findFirst({
+            where: { lotId: id, type: "PURCHASE_RECEIPT" },
+            orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+            select: { id: true },
+          });
+          if (receipt)
+            await tx.inventoryMovement.update({
+              where: { id: receipt.id },
+              data: { unitCostMinor },
+            });
+        }
         await this.audit.recordInTransaction(tx, {
           organizationId,
           branchId,
@@ -159,6 +178,60 @@ export class InventoryService {
       productName: names.get(lot.productId) ?? "Producto eliminado",
       unitCostMinor: lot.unitCostMinor.toString(),
     }));
+  }
+
+  // Sólo lectura de costos: lo que se pagó en cada recepción y el último costo
+  // de cada producto en la sucursal.
+  async costs(actorId: string, organizationId: string, branchId: string) {
+    await this.assert(actorId, organizationId, "INVENTORY_READ");
+    await this.branch(organizationId, branchId);
+    const [movements, lots] = await Promise.all([
+      this.prisma.inventoryMovement.findMany({
+        where: {
+          organizationId,
+          branchId,
+          type: "PURCHASE_RECEIPT",
+          lotId: { not: null },
+        },
+        orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          productId: true,
+          lotId: true,
+          quantity: true,
+          occurredAt: true,
+          unitCostMinor: true,
+          referenceType: true,
+        },
+      }),
+      this.prisma.productLot.findMany({
+        where: { organizationId, branchId },
+        select: {
+          id: true,
+          productId: true,
+          quantity: true,
+          unitCostMinor: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+    const purchaseItems = await this.prisma.purchaseReceiptItem.findMany({
+      where: {
+        movementId: {
+          in: movements
+            .filter((movement) => movement.unitCostMinor === null)
+            .map((movement) => movement.id),
+        },
+      },
+      select: { movementId: true, unitCostMinor: true },
+    });
+    return inventoryCosts(
+      movements,
+      new Map(
+        purchaseItems.map((item) => [item.movementId, item.unitCostMinor]),
+      ),
+      lots,
+    );
   }
 
   async expiring(actorId: string, organizationId: string, branchId: string) {
@@ -278,6 +351,7 @@ export class InventoryService {
           lotId: lot.id,
           type: "PURCHASE_RECEIPT",
           quantity: input.quantity,
+          unitCostMinor: BigInt(input.unitCostMinor),
           actorId,
         },
       });

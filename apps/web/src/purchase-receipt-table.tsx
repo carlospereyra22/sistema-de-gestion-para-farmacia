@@ -1,8 +1,16 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
-import type { CatalogProduct, Purchase } from "./lib/api";
+import { InventoryLotInput } from "./inventory-lot-input";
+import {
+  getReceiptLots,
+  type CatalogProduct,
+  type Purchase,
+  type ReceiptLot,
+} from "./lib/api";
+import { byLotOrder } from "./lib/product-lots";
 import {
   purchasePending,
+  receiptLotChange,
   receiptLotMax,
   type ReceiptDraft,
 } from "./lib/purchases";
@@ -37,22 +45,46 @@ function productDetail(product: CatalogProduct | undefined) {
 export function PurchaseReceiptTable({
   token,
   organizationId,
+  branchId,
   items,
   products,
   lots,
   search,
   onLotsChange,
   onAddLot,
+  initialExistingLots = [],
 }: {
   token: string;
   organizationId: string;
+  branchId?: string;
   items: Purchase["items"];
   products: CatalogProduct[];
   lots: ReceiptDraft[];
   search: string;
   onLotsChange: (lots: ReceiptDraft[]) => void;
   onAddLot: (itemId: string) => void;
+  initialExistingLots?: ReceiptLot[];
 }) {
+  const [existingLots, setExistingLots] = useState(initialExistingLots);
+  useEffect(() => {
+    if (!branchId) return;
+    let current = true;
+    void getReceiptLots(token, organizationId, branchId)
+      .then((next) => {
+        if (current) setExistingLots(next);
+      })
+      // Sin sugerencias se escribe a mano: la API sigue validando el lote.
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [token, organizationId, branchId]);
+  const lotsByProduct = useMemo(() => {
+    const groups = new Map<string, ReceiptLot[]>();
+    for (const lot of [...existingLots].sort(byLotOrder))
+      groups.set(lot.productId, [...(groups.get(lot.productId) ?? []), lot]);
+    return groups;
+  }, [existingLots]);
   const visible = items.filter((item) => {
     const product = products.find((entry) => entry.id === item.productId);
     return (
@@ -71,7 +103,7 @@ export function PurchaseReceiptTable({
       <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
         <thead className="bg-slate-50 text-[11px] font-semibold text-slate-600">
           <tr>
-            <th scope="col" className="w-[30%] px-3 py-3">
+            <th scope="col" className="w-[22%] px-3 py-3">
               Producto
             </th>
             <th scope="col" className="w-[8%] px-2 py-3 text-center">
@@ -83,7 +115,7 @@ export function PurchaseReceiptTable({
             <th scope="col" className="w-[8%] px-2 py-3 text-center">
               Pendiente
             </th>
-            <th scope="col" className="w-[9%] px-2 py-3">
+            <th scope="col" className="w-[17%] px-2 py-3">
               Lote
             </th>
             <th scope="col" className="w-[15%] px-2 py-3">
@@ -189,6 +221,18 @@ export function PurchaseReceiptTable({
               <Fragment key={item.id}>
                 {itemLots.map((lot, index) => {
                   const lotMax = receiptLotMax(item, lots, lot.key);
+                  const productLots = lotsByProduct.get(item.productId) ?? [];
+                  const existing = productLots.find(
+                    (entry) => entry.number === lot.lotNumber.trim(),
+                  );
+                  const changeLot = (lotNumber: string) =>
+                    onLotsChange(
+                      lots.map((row) =>
+                        row.key === lot.key
+                          ? receiptLotChange(row, lotNumber, productLots)
+                          : row,
+                      ),
+                    );
                   return (
                     <tr
                       key={lot.key}
@@ -196,27 +240,28 @@ export function PurchaseReceiptTable({
                     >
                       {productCells(index > 0)}
                       <td className="px-2 py-2">
-                        <input
-                          aria-label={`Número de lote de ${name}, lote ${index + 1}`}
-                          className={`${inputClass} !w-32 max-w-full`}
-                          maxLength={100}
+                        <InventoryLotInput
+                          compact={{
+                            label: `Número de lote de ${name}, lote ${index + 1}`,
+                          }}
                           value={lot.lotNumber}
-                          onChange={(event) =>
-                            onLotsChange(
-                              lots.map((row) =>
-                                row.key === lot.key
-                                  ? { ...row, lotNumber: event.target.value }
-                                  : row,
-                              ),
-                            )
-                          }
+                          lots={productLots}
+                          productSelected
+                          onChange={changeLot}
+                          onPick={(entry) => changeLot(entry.number)}
                         />
                       </td>
                       <td className="px-2 py-2">
                         <input
                           aria-label={`Vencimiento de ${name}, lote ${index + 1}`}
                           type="date"
-                          className={inputClass}
+                          className={`${inputClass} ${existing ? "bg-slate-50 text-slate-500" : ""}`}
+                          readOnly={Boolean(existing)}
+                          title={
+                            existing
+                              ? "Es el vencimiento del lote. Para cambiarlo, corregí el lote en Inventario."
+                              : undefined
+                          }
                           value={lot.expiresAt}
                           onChange={(event) =>
                             onLotsChange(

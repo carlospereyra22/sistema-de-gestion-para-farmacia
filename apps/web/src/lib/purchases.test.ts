@@ -3,6 +3,7 @@ import {
   preparePurchaseLines,
   prepareReceiptLines,
   purchasePending,
+  receiptLotChange,
   receiptLotMax,
   purchaseStatus,
 } from "./purchases";
@@ -109,5 +110,39 @@ describe("exhibidor en la compra", () => {
     expect(
       preparePurchaseLines([{ ...line, packFactor: 20 }])[0]?.packFactor,
     ).toBe(20);
+  });
+});
+
+describe("receiptLotChange", () => {
+  const row = {
+    key: "fila",
+    itemId: "linea",
+    quantity: "1",
+    lotNumber: "",
+    expiresAt: "",
+  };
+  const lots = [
+    { number: "A1", expiresAt: "2027-05-18T00:00:00.000Z" },
+    { number: "SIN", expiresAt: null },
+  ];
+
+  it("trae el vencimiento de un lote existente, aunque ya hubiera otra fecha", () => {
+    expect(
+      receiptLotChange({ ...row, expiresAt: "2030-01-01" }, " A1 ", lots)
+        .expiresAt,
+    ).toBe("2027-05-18");
+    expect(receiptLotChange(row, "SIN", lots).expiresAt).toBe("");
+  });
+
+  it("conserva la fecha escrita para un lote nuevo", () => {
+    expect(
+      receiptLotChange({ ...row, expiresAt: "2030-01-01" }, "NUEVO", lots)
+        .expiresAt,
+    ).toBe("2030-01-01");
+  });
+
+  it("limpia la fecha traída al pasar de un lote existente a uno nuevo", () => {
+    const picked = receiptLotChange(row, "A1", lots);
+    expect(receiptLotChange(picked, "A12", lots).expiresAt).toBe("");
   });
 });

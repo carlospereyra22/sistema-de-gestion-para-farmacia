@@ -57,3 +57,38 @@ it("muestra 5 lotes de entrada, ofrece ver el resto y avisa los ocultos por filt
   expect(html).toContain("Ver 2 lotes más");
   expect(html).toContain("2 lotes más no se muestran por los filtros.");
 });
+
+it("con receipts suma Recibido y Costo, con un renglón por recepción", () => {
+  const lots = [
+    {
+      id: "1",
+      number: "L-100",
+      quantity: 4,
+      expiresAt: null,
+      expiryStatus: "AVAILABLE" as const,
+      sellableQuantity: 4,
+    },
+  ];
+  const html = renderToStaticMarkup(
+    <ProductLotsDetail
+      productName="ACTRON"
+      lots={lots}
+      receipts={() => [
+        { received: "5/11/2026 · 1 un.", cost: "$ 700,00" },
+        { received: "1/11/2026 · 10 un.", cost: "$ 0,00" },
+      ]}
+    />,
+  );
+  expect(html).toContain("Costo por unidad");
+  expect(html).toContain("En stock");
+  expect(html).toContain("Recibido");
+  expect(html.indexOf("Recibido")).toBeLessThan(html.indexOf("Vence"));
+  expect(html).toContain("5/11/2026 · 1 un.");
+  expect(html).toContain("1/11/2026 · 10 un.");
+  expect(html).toContain('rowSpan="2"');
+  expect(
+    renderToStaticMarkup(
+      <ProductLotsDetail productName="ACTRON" lots={lots} />,
+    ),
+  ).not.toContain("Recibido");
+});

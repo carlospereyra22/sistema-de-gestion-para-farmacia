@@ -5,6 +5,14 @@ organizaciones porque es información pública. Se usa al crear productos y en l
 actualización de precios de las 09:00 y 17:00. Es distinta del catálogo externo de no
 medicamentos (`EXTERNAL_PRODUCT_CATALOG.md`), que no se modifica.
 
+## Última actualización en Productos
+
+El encabezado de Productos muestra la última lectura de un precio de esta base
+(`MAX(priceCheckedAt)`, `GET catalog/medicine-status`), no los productos vinculados de
+cada farmacia. Cada ambiente muestra su propia base. La fecha cambia aunque ningún precio
+haya cambiado, y no garantiza que todos los productos se hayan leído en esa corrida.
+Productos ya no tiene botón para actualizar; la revisión es la de las 09:00 y 17:00.
+
 ## Qué contiene
 
 | Tabla                     | Contenido                                                       |
@@ -107,6 +115,9 @@ Migraciones de esta funcionalidad, en orden. Son aditivas: no modifican datos ex
 2. `20261105033000_medicine_catalog_pack`
 3. `20261105120000_purchase_pack_lots` (agrega columnas nullable o con valor por defecto a
    `PurchaseItem` y `ProductLot`)
+
+SISTEMA-31 agrega `20261105190000_movement_unit_cost`, también aditiva: la columna
+nullable `InventoryMovement.unitCostMinor`.
 
 Los exhibidores no viajan en el archivo de carga: se confirman en Compras en cada ambiente.
 

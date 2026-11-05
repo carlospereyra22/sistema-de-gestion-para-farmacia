@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { CatalogReferenceRefresh } from "./catalog-reference-refresh";
+import { CatalogUpdateStatusView } from "./catalog-update-status";
 
-it("keeps refresh in the header and places metrics above the catalog toolbar", () => {
+it("deja sólo el aviso de actualización en el encabezado y las métricas sobre la barra", () => {
   const source = readFileSync(
     new URL("./workspace-shell.tsx", import.meta.url),
     "utf8",
@@ -16,24 +16,16 @@ it("keeps refresh in the header and places metrics above the catalog toolbar", (
   expect(source.indexOf("<ProductCatalogMetrics")).toBeLessThan(
     source.indexOf("<ProductCatalogToolbar"),
   );
-  expect(header).toMatch(/<CatalogReferenceRefresh\s+compact/);
+  expect(header).toContain("<CatalogUpdateStatus");
+  expect(source).not.toContain("CatalogReferenceRefresh");
   expect(header).toContain("<Package");
   expect(source).not.toContain("<ProductCatalogTitle");
 });
 
-it("keeps price reference details available on hover and keyboard focus", () => {
-  const html = renderToStaticMarkup(
-    <CatalogReferenceRefresh
-      compact
-      token="test"
-      organizationId="test"
-      products={[]}
-      done={() => {}}
-      error={() => {}}
-    />,
-  );
-  expect(html).toContain('aria-label="Actualizar precios de referencia"');
+it("mantiene el detalle de la base disponible con el mouse y con el teclado", () => {
+  const html = renderToStaticMarkup(<CatalogUpdateStatusView />);
   expect(html).toContain('role="tooltip"');
+  expect(html).toContain('tabindex="0"');
   expect(html).toContain("group-focus-within:visible");
   expect(html).toContain("group-hover:visible");
   expect(html).toContain("Sin registro");

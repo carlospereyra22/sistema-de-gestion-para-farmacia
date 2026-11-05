@@ -360,6 +360,10 @@ export class CatalogPriceRefreshService
     return `Base de medicamentos: ${parts.join("; ")}.`;
   }
 
+  medicineCatalogStatus() {
+    return this.catalog.status();
+  }
+
   async isPaused() {
     const setting = await this.prisma.platformSetting.findUnique({
       where: { key: PRICE_REFRESH_PAUSED_KEY },
