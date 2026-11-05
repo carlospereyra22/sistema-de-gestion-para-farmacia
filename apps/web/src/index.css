@@ -591,6 +591,7 @@
   line-height: 30px;
 }
 .product-catalog-controls input,
+.inventory-filters input,
 .product-catalog-controls select,
 .product-catalog-toolbar select {
   border: 0;
@@ -599,27 +600,50 @@
   box-shadow: none;
   min-height: 0;
 }
-.product-catalog-controls input {
+.product-catalog-controls input,
+.inventory-filters input {
   height: 48px;
+}
+/* Inventario comparte la pantalla con el formulario: los filtros entran en una
+   sola fila recién en pantallas anchas. */
+.inventory-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.inventory-filters-search,
+.inventory-filters-lot {
+  grid-column: span 2;
+}
+.inventory-summary {
+  padding-right: 0;
+}
+@media (min-width: 1500px) {
+  .inventory-filters {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .inventory-filters-lot {
+    grid-column: span 1;
+  }
 }
 .product-catalog-toolbar select {
   height: 18px;
   padding: 0;
   font-size: 11px;
 }
-/* Arriba buscador (2/5), lote, Más filtros y Limpiar (1/5 cada uno), alineados
-   con los cinco filtros principales de abajo; al abrir Más filtros, los otros
-   cuatro. */
+/* Arriba buscador y lote (2/6 cada uno), Más filtros y Limpiar (1/6 cada uno),
+   alineados con los seis filtros principales de abajo; al abrir Más filtros,
+   los otros cuatro. */
 @media (min-width: 1100px) {
   .product-catalog-controls,
   .product-catalog-more {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
   .product-catalog-search {
     grid-column: span 2;
   }
   .product-catalog-lot-search {
-    grid-column: span 1;
+    grid-column: span 2;
   }
 }
 @media (max-width: 639px) {

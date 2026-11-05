@@ -12,12 +12,16 @@ export function InventorySearchSelect({
   options,
   onChange,
   inputRef,
+  placeholder = "Nombre, laboratorio o código…",
+  disabled = false,
 }: {
   label: string;
   value: string;
   options: InventoryOption[];
   onChange: (value: string) => void;
   inputRef?: RefObject<HTMLInputElement | null>;
+  placeholder?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   const ownInput = useRef<HTMLInputElement>(null);
@@ -97,7 +101,8 @@ export function InventorySearchSelect({
           }
           autoComplete="off"
           value={open ? query : (selected?.label ?? "")}
-          placeholder="Nombre, laboratorio o código…"
+          placeholder={placeholder}
+          disabled={disabled}
           onFocus={() => {
             setOpen(true);
             setQuery("");
@@ -145,7 +150,7 @@ export function InventorySearchSelect({
               }
             }
           }}
-          className="h-10 w-full rounded-lg border bg-white pl-3 pr-8 text-sm"
+          className="h-10 w-full rounded-lg border bg-white pl-3 pr-8 text-sm disabled:cursor-not-allowed disabled:bg-slate-50"
         />
         <ChevronDown
           size={14}

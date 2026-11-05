@@ -64,8 +64,9 @@ describe("product catalog header", () => {
     expiry: "",
     reference: "",
     lot: "",
+    priceList: "",
   };
-  it("muestra los cinco filtros principales y esconde el resto detrás de Más filtros", () => {
+  it("muestra los seis filtros principales y esconde el resto detrás de Más filtros", () => {
     expect(renderToStaticMarkup(<ProductCatalogTitle />)).toContain("<h1");
     const html = renderToStaticMarkup(
       <ProductCatalogToolbar
@@ -82,11 +83,12 @@ describe("product catalog header", () => {
       "Estado",
       "Stock",
       "Vencimiento",
+      "Lista de precios",
     ])
       expect(html).toContain(`aria-label="${label}"`);
     for (const label of ["Tipo", "Precio automático", "Foto"])
       expect(html).not.toContain(`aria-label="${label}"`);
-    expect(html.match(/role="combobox"/g)).toHaveLength(5);
+    expect(html.match(/role="combobox"/g)).toHaveLength(6);
     expect(html).toMatch(/aria-expanded="false"[^>]*>.*?Más filtros/);
     expect(html).not.toContain("<select");
     expect(html).not.toContain('aria-haspopup="dialog"');
@@ -102,11 +104,32 @@ describe("product catalog header", () => {
         onAdditionalChange={() => {}}
       />,
     );
-    expect(html.match(/role="combobox"/g)).toHaveLength(9);
+    expect(html.match(/role="combobox"/g)).toHaveLength(10);
     expect(html).toMatch(
       /aria-expanded="true"[^>]*>.*?Menos filtros.*?>1<\/span>/,
     );
     expect(html).toContain('aria-label="Código de barras"');
+  });
+  it("ofrece Público y las listas, y la lista elegida cuenta como filtro", () => {
+    const html = renderToStaticMarkup(
+      <ProductCatalogToolbar
+        filters={{ ...emptyFilters, priceList: "mayorista" }}
+        priceLists={[{ id: "mayorista", name: "Mayorista" }]}
+        onChange={() => {}}
+        onAdditionalChange={() => {}}
+      />,
+    );
+    expect(html).toContain("Mayorista");
+    expect(html).toMatch(/Limpiar filtros.*?>1<\/span>/);
+    expect(
+      renderToStaticMarkup(
+        <ProductCatalogToolbar
+          filters={emptyFilters}
+          onChange={() => {}}
+          onAdditionalChange={() => {}}
+        />,
+      ),
+    ).toContain("Público");
   });
   it("habilita Limpiar filtros y cuenta búsqueda, filtros y adicionales", () => {
     const html = renderToStaticMarkup(

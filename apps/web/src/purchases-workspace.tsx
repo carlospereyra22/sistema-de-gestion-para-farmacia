@@ -1592,6 +1592,7 @@ export function PurchasesWorkspace({
                     <PurchaseReceiptTable
                       token={token}
                       organizationId={organizationId}
+                      branchId={branchId}
                       items={currentItems}
                       products={products}
                       lots={draft.lots}

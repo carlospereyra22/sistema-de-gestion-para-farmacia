@@ -31,3 +31,5 @@ La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.bra
 Proveedores y clientes ya cuentan con alta y listado. Inventario permite recepcionar lotes por sucursal y conserva un movimiento por cada ingreso. Las ventas completadas descomponen sus renglones en `SaleItem` y sus cobros en `SalePayment`; la salida descuenta lotes por FEFO y registra movimientos negativos de inventario. Los pagos en efectivo requieren una `CashSession` abierta para una caja de la sucursal.
 
 Transferencias, devoluciones, ajustes explícitos, balances materializados, auditoría y reportes siguen pendientes de implementación funcional.
+
+`InventoryMovement.unitCostMinor` (SISTEMA-31, nullable): costo de esa recepción en centavos, para conservar los distintos costos de un mismo lote. Null en filas anteriores.

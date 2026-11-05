@@ -591,24 +591,25 @@ export async function ensureDefaultCatalogCategories(
     );
 }
 
-export async function refreshCatalogPriceReferences(
+export type MedicineCatalogStatus = {
+  items: number;
+  lastCheckedAt: string | null;
+};
+
+export async function getMedicineCatalogStatus(
   token: string,
   organizationId: string,
-): Promise<{ checked: number; updated: number; skipped: boolean }> {
+): Promise<MedicineCatalogStatus> {
   const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/catalog/price-references/refresh`,
-    { method: "POST", headers: authJson(token) },
+    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-status`,
+    { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!response.ok)
     throw await responseError(
       response,
-      "No se pudieron actualizar las referencias de precios.",
+      "No se pudo consultar la base de medicamentos.",
     );
-  return (await response.json()) as {
-    checked: number;
-    updated: number;
-    skipped: boolean;
-  };
+  return (await response.json()) as MedicineCatalogStatus;
 }
 export type AlfaBetaMatch = { id: string; name: string; laboratory: string };
 export type AlfaBetaDetail = {
@@ -1603,6 +1604,31 @@ export async function getStock(
   );
 }
 
+export type LotCostReceipt = {
+  quantity: number;
+  // null: recepción vieja cuyo costo ya no se conoce.
+  unitCostMinor: string | null;
+  receivedAt: string;
+};
+export type InventoryCosts = {
+  products: { productId: string; unitCostMinor: string; receivedAt: string }[];
+  lots: { lotId: string; receipts: LotCostReceipt[] }[];
+};
+
+export async function getInventoryCosts(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<InventoryCosts> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/costs`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron cargar los costos.");
+  return (await response.json()) as InventoryCosts;
+}
+
 export async function receiveStock(
   token: string,
   organizationId: string,
@@ -2515,6 +2541,25 @@ export async function getInventoryHistory(
     );
   return response.json() as Promise<InventoryHistoryEntry[]>;
 }
+export type ReceiptLot = Pick<
+  StockLot,
+  "id" | "productId" | "number" | "quantity" | "expiresAt" | "expiryStatus"
+>;
+
+export async function getReceiptLots(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<ReceiptLot[]> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/purchases/lots`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron cargar los lotes.");
+  return (await response.json()) as ReceiptLot[];
+}
+
 export async function getPurchases(
   token: string,
   organizationId: string,

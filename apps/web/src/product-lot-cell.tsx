@@ -9,6 +9,7 @@ export function ProductLotCell({
   open,
   controlsId,
   onToggle,
+  expandable = false,
 }: {
   productName: string;
   lotNumber?: string;
@@ -16,6 +17,8 @@ export function ProductLotCell({
   open: boolean;
   controlsId: string;
   onToggle: () => void;
+  // Un único lote también se despliega si entró con varios costos.
+  expandable?: boolean;
 }) {
   if (!lotNumber) return <span className="text-slate-400">—</span>;
   const others = total - 1;
@@ -25,16 +28,16 @@ export function ProductLotCell({
       <span className="max-w-36 truncate" title={lotNumber}>
         {lotNumber}
       </span>
-      {others > 0 ? (
+      {others > 0 || expandable ? (
         <button
           type="button"
           aria-expanded={open}
           aria-controls={controlsId}
-          aria-label={`${open ? "Ocultar" : "Ver"} ${total} lotes de ${productName}`}
+          aria-label={`${open ? "Ocultar" : "Ver"} ${others > 0 ? `${total} lotes` : "costos del lote"} de ${productName}`}
           onClick={onToggle}
           className={`inline-flex h-6 items-center gap-0.5 rounded-full border px-2 text-xs font-medium transition-colors ${open ? "border-teal-600 bg-teal-600 text-white" : "border-teal-200 bg-teal-50 text-teal-800 hover:border-teal-400"}`}
         >
-          +{others}
+          {others > 0 ? `+${others}` : null}
           <ChevronDown
             size={14}
             className={`transition-transform ${open ? "rotate-180" : ""}`}

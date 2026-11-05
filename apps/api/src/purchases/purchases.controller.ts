@@ -113,6 +113,14 @@ class CloseDto {
 @UseGuards(JwtAccessGuard, BranchAccessGuard)
 export class PurchasesController {
   constructor(private readonly purchases: PurchasesService) {}
+  // Antes de :purchaseId para que "lots" no se tome como una compra.
+  @Get("lots") lots(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+  ) {
+    return this.purchases.lots(request.auth!.sub, organizationId, branchId);
+  }
   @Get(":purchaseId") detail(
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,

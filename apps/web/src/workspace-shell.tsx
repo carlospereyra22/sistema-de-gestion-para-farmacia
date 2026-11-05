@@ -125,7 +125,8 @@ import { DashboardWelcome, DashboardDate } from "./dashboard-welcome";
 import { ReportsWorkspace } from "./reports-workspace";
 import { DashboardRecentSales } from "./dashboard-recent-sales";
 import { ProductSyncStatus } from "./product-sync-status";
-import { CatalogReferenceRefresh } from "./catalog-reference-refresh";
+import { CatalogUpdateStatus } from "./catalog-update-status";
+import { lotHasManyCosts, lotReceiptRows } from "./lib/lot-costs";
 import { DistributionWorkspace } from "./distribution-workspace";
 import {
   ProductFormImage,
@@ -151,6 +152,7 @@ import {
   catalogStockTotals,
   toggleCatalogMetric,
 } from "./lib/product-catalog-metrics";
+import { lotCostInput } from "./lib/lot-cost";
 import { stockLevel } from "./lib/stock-level";
 import {
   leadingLot,
@@ -169,10 +171,21 @@ import {
 } from "./lib/catalog-additional-filters";
 import { InventorySearchSelect } from "./inventory-search-select";
 import { InventoryStockTable } from "./inventory-stock-table";
-import { inventoryStockPage } from "./lib/inventory-stock-page";
+import { InventoryLotInput } from "./inventory-lot-input";
+import { InventoryLotPicker } from "./inventory-lot-picker";
+import { InventoryToolbar } from "./inventory-toolbar";
+import {
+  emptyInventoryFilters,
+  inventoryMetricProducts,
+  inventoryPage,
+  inventoryRows,
+  inventoryStockProductOptions,
+  type InventoryFilters,
+} from "./lib/inventory-products";
 import {
   inventoryProductOption,
-  inventoryLotOption,
+  findScannedProduct,
+  scanAutoDelay,
 } from "./lib/inventory-search";
 import { ProductFormSection } from "./product-form-section";
 import { StatusToast } from "./status-toast";
@@ -263,6 +276,8 @@ import {
   getCustomerAccounts,
   type CustomerAccount,
   getCatalogProducts,
+  getInventoryCosts,
+  type InventoryCosts,
   getCatalogOptions,
   ensureDefaultCatalogCategories,
   searchMedicineReferences,
@@ -716,14 +731,9 @@ export function WorkspaceShell({
             />
           )}
           {ready && view === "Productos" && (
-            <CatalogReferenceRefresh
-              compact
-              key={organizationId}
+            <CatalogUpdateStatus
               token={accessToken!}
               organizationId={organizationId!}
-              products={products}
-              done={() => void refresh()}
-              error={setMessage}
             />
           )}
           {view === "Cuentas corrientes" && (
@@ -1610,6 +1620,79 @@ function Products({
   >("");
   const [expiryFilter, setExpiryFilter] = useState("");
   const [lotQuery, setLotQuery] = useState("");
+  const [priceListFilter, setPriceListFilter] = useState("");
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  const [listPrices, setListPrices] = useState<{
+    id: string;
+    prices: Map<string, string | null>;
+  }>();
+  const [costs, setCosts] = useState<InventoryCosts>();
+  const lastCosts = useMemo(
+    () =>
+      new Map(
+        costs?.products.map((item) => [item.productId, item.unitCostMinor]),
+      ),
+    [costs],
+  );
+  const lotCosts = useMemo(
+    () => new Map(costs?.lots.map((item) => [item.lotId, item.receipts])),
+    [costs],
+  );
+  // "Precio general" es lo que la tabla ya muestra como Público.
+  const selectablePriceLists = priceLists.filter(
+    (list) => list.name !== "Precio general",
+  );
+  const selectedPriceList = priceLists.find(
+    (list) => list.id === priceListFilter,
+  );
+  useEffect(() => {
+    let current = true;
+    void getPriceLists(token, organizationId)
+      .then((next) => {
+        if (current) setPriceLists(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [token, organizationId]);
+  useEffect(() => {
+    if (!priceListFilter) return;
+    let current = true;
+    void getEffectivePrices(token, organizationId, "", priceListFilter)
+      .then((next) => {
+        if (current)
+          setListPrices({
+            id: priceListFilter,
+            prices: new Map(
+              next.prices.map((item) => [item.productId, item.amountMinor]),
+            ),
+          });
+      })
+      .catch((cause: unknown) => {
+        if (current)
+          error(
+            cause instanceof Error
+              ? cause.message
+              : "No se pudieron cargar los precios de la lista.",
+          );
+      });
+    return () => {
+      current = false;
+    };
+  }, [token, organizationId, priceListFilter, products]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let current = true;
+    void getInventoryCosts(token, organizationId, branchId)
+      .then((next) => {
+        if (current) setCosts(next);
+      })
+      // Sin permiso de inventario la columna queda sin dato.
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [token, organizationId, branchId, stock]);
   const [additionalFilters, setAdditionalFilters] = useState(
     emptyCatalogAdditionalFilters,
   );
@@ -2571,6 +2654,7 @@ function Products({
               </button>
             </div>
             <ProductCatalogToolbar
+              priceLists={selectablePriceLists}
               additional={additionalFilters}
               onAdditionalChange={setAdditionalFilters}
               filters={{
@@ -2582,6 +2666,7 @@ function Products({
                 expiry: expiryFilter,
                 reference: "",
                 lot: lotQuery,
+                priceList: priceListFilter,
               }}
               options={options}
               onChange={(filters) => {
@@ -2599,6 +2684,7 @@ function Products({
                     : "",
                 );
                 setExpiryFilter(filters.expiry);
+                setPriceListFilter(filters.priceList);
                 if (filters.lot !== lotQuery) {
                   setLotQuery(filters.lot);
                   setExpandedLots(new Set());
@@ -2607,13 +2693,24 @@ function Products({
             />
             <DataTable
               label="Productos"
-              minWidthClass="min-w-250"
+              minWidthClass="min-w-265"
               columns={[
                 { label: "Foto", className: "w-20" },
                 { label: "Producto" },
                 { label: "Código de barras" },
                 { label: "Laboratorio" },
-                { label: "Público", align: "right" },
+                {
+                  label: "Costo",
+                  align: "right",
+                  hint: {
+                    title: "Costo",
+                    text: "Lo que se pagó en la última recepción del producto, sea del lote que sea.",
+                  },
+                },
+                {
+                  label: `VNT (${selectedPriceList?.name ?? "Público"})`,
+                  align: "right",
+                },
                 { label: "Lote", className: "w-px" },
                 {
                   label: "Stock vendible total",
@@ -2676,7 +2773,15 @@ function Products({
                 const hiddenLots = lots.length - shownLots.length;
                 // Un único lote ya se ve en la columna Lote: sólo se despliega
                 // cuando hay más de uno (entre los que dejan los filtros).
-                const canExpand = shownLots.length > 1;
+                const canExpand =
+                  shownLots.length > 1 ||
+                  shownLots.some((lot) =>
+                    lotHasManyCosts(lotCosts.get(lot.id)),
+                  );
+                const listPrice =
+                  listPrices?.id === priceListFilter
+                    ? listPrices.prices.get(product.id)
+                    : undefined;
                 // Al buscar por lote el detalle arranca abierto: estar en
                 // expandedLots significa que el usuario lo cerró.
                 const lotsOpen =
@@ -2742,7 +2847,16 @@ function Products({
                         {product.laboratory?.name ?? "—"}
                       </DataTableCell>
                       <DataTableCell align="right" numeric>
-                        {money(product.prices[0]?.amountMinor ?? 0)}
+                        {lastCosts.has(product.id)
+                          ? money(lastCosts.get(product.id)!)
+                          : "—"}
+                      </DataTableCell>
+                      <DataTableCell align="right" numeric>
+                        {!priceListFilter
+                          ? money(product.prices[0]?.amountMinor ?? 0)
+                          : listPrice
+                            ? money(listPrice)
+                            : "—"}
                       </DataTableCell>
                       <DataTableCell numeric>
                         <ProductLotCell
@@ -2752,6 +2866,7 @@ function Products({
                           open={lotsOpen}
                           controlsId={lotsId}
                           onToggle={toggleLots}
+                          expandable={canExpand}
                         />
                       </DataTableCell>
                       {/* A la izquierda, pegado al lote: el título largo dejaba
@@ -2851,11 +2966,17 @@ function Products({
                       </DataTableCell>
                     </DataTableRow>
                     {lotsOpen ? (
-                      <DataTableDetailRow id={lotsId} colSpan={10}>
+                      <DataTableDetailRow id={lotsId} colSpan={11}>
                         <ProductLotsDetail
                           productName={product.name}
                           lots={shownLots}
                           hidden={hiddenLots}
+                          receipts={(lot) =>
+                            lotReceiptRows(
+                              lotCosts.get(lot.id),
+                              lot.unitCostMinor,
+                            )
+                          }
                         />
                       </DataTableDetailRow>
                     ) : null}
@@ -2863,7 +2984,7 @@ function Products({
                 );
               })}
               {!filteredProducts.length ? (
-                <DataTableEmpty colSpan={10}>
+                <DataTableEmpty colSpan={11}>
                   No hay productos para los filtros seleccionados.
                 </DataTableEmpty>
               ) : null}
@@ -4015,29 +4136,31 @@ function Inventory({
   error: (value: string) => void;
   onPurchase: (id: string) => void;
 }): ReactElement {
-  const [inventoryQuery, setInventoryQuery] = useState("");
-  const [inventoryPage, setInventoryPage] = useState(1);
-  const productMap = useMemo(
-    () => new Map(products.map((product) => [product.id, product])),
-    [products],
+  const [inventoryFilters, setInventoryFilters] = useState(
+    emptyInventoryFilters,
   );
+  const [stockPageNumber, setStockPageNumber] = useState(1);
   const productOptions = useMemo(
     () => products.map(inventoryProductOption),
     [products],
   );
-  const lotOptions = useMemo(
-    () =>
-      stock.map((lot) =>
-        inventoryLotOption(lot, productMap.get(lot.productId)),
-      ),
-    [stock, productMap],
+  const stockProductOptions = useMemo(
+    () => inventoryStockProductOptions(products, stock),
+    [products, stock],
   );
-  const stockPage = inventoryStockPage(
-    stock,
-    lotOptions,
-    inventoryQuery,
-    inventoryPage,
+  const stockRows = useMemo(
+    () => inventoryRows(products, stock, inventoryFilters),
+    [products, stock, inventoryFilters],
   );
+  const metricProducts = useMemo(
+    () => inventoryMetricProducts(products, stock),
+    [products, stock],
+  );
+  const stockPage = inventoryPage(stockRows, stockPageNumber);
+  const filterInventory = (filters: InventoryFilters) => {
+    setInventoryFilters(filters);
+    setStockPageNumber(1);
+  };
   const [productId, setProductId] = useState("");
   const [inventoryMode, setInventoryMode] = useState<
     "receive" | "adjust" | "return"
@@ -4049,6 +4172,7 @@ function Inventory({
   const [quantity, setQuantity] = useState("");
   const [cost, setCost] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  const [adjustmentProductId, setAdjustmentProductId] = useState("");
   const [adjustmentLotId, setAdjustmentLotId] = useState("");
   const [adjustmentQuantity, setAdjustmentQuantity] = useState("");
   const [adjustmentDirection, setAdjustmentDirection] = useState<
@@ -4057,6 +4181,7 @@ function Inventory({
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [suppliers, setSuppliers] = useState<Party[]>([]);
   const [returnSupplierId, setReturnSupplierId] = useState("");
+  const [returnProductId, setReturnProductId] = useState("");
   const [returnLotId, setReturnLotId] = useState("");
   const [returnQuantity, setReturnQuantity] = useState("");
   const [returnReason, setReturnReason] = useState("");
@@ -4065,7 +4190,7 @@ function Inventory({
   const adjustmentLotSelectRef = useRef<HTMLInputElement>(null);
   const adjustmentQuantityInputRef = useRef<HTMLInputElement>(null);
   const [adjustmentError, setAdjustmentError] = useState("");
-  const returnSupplierSelectRef = useRef<HTMLSelectElement>(null);
+  const returnQuantityInputRef = useRef<HTMLInputElement>(null);
   const returnLotSelectRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     void getParties(token, organizationId, "suppliers")
@@ -4082,18 +4207,8 @@ function Inventory({
     window.requestAnimationFrame(() => scannerInputRef.current?.focus());
   };
   const selectScannedProduct = () => {
-    const rawCode = scannedCode.trim();
-    if (!rawCode) return;
-    const candidates = new Set(
-      [rawCode, ...(rawCode.match(/\d{8,14}/g) ?? [])].flatMap((code) =>
-        code.length === 14 && code.startsWith("0")
-          ? [code, code.slice(1)]
-          : [code],
-      ),
-    );
-    const product = products.find((item) =>
-      item.barcodes.some((barcode) => candidates.has(barcode.code.trim())),
-    );
+    if (!scannedCode.trim()) return;
+    const product = findScannedProduct(products, scannedCode);
     if (!product) {
       setScanStatus("No encontramos un producto con ese código.");
       setScanError(true);
@@ -4122,6 +4237,7 @@ function Inventory({
       : "Elegí el lote para continuar.";
     setScanStatus(`${product.name}. ${detail}`);
     if (inventoryMode === "adjust") {
+      setAdjustmentProductId(product.id);
       setAdjustmentLotId(selectedLot?.id ?? "");
       window.requestAnimationFrame(() =>
         (selectedLot
@@ -4131,13 +4247,54 @@ function Inventory({
       );
       return;
     }
+    setReturnProductId(product.id);
     setReturnLotId(selectedLot?.id ?? "");
     window.requestAnimationFrame(() =>
       (selectedLot
-        ? returnSupplierSelectRef.current
+        ? returnQuantityInputRef.current
         : returnLotSelectRef.current
       )?.focus(),
     );
+  };
+  // El lector no necesita Enter: al terminar de escribir se procesa solo.
+  useEffect(() => {
+    const delay = scanAutoDelay(
+      Boolean(findScannedProduct(products, scannedCode)),
+      scannedCode,
+    );
+    if (delay === null) return;
+    const timer = window.setTimeout(selectScannedProduct, delay);
+    return () => window.clearTimeout(timer);
+  }, [scannedCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const receiveLots = useMemo(
+    () => visibleProductLots(stock, productId, ""),
+    [stock, productId],
+  );
+  // La API reemplaza costo y vencimiento del lote con lo que se envía: se
+  // precargan los actuales para no cambiarlos sin querer.
+  const pickReceiveLot = (lot: StockLot) => {
+    setLotNumber(lot.number);
+    setCost(lotCostInput(lot.unitCostMinor));
+    setExpiresAt(lot.expiresAt?.slice(0, 10) ?? "");
+  };
+  // Atajos desde un lote de la tabla: abren el formulario con el lote elegido.
+  const adjustLot = (lot: StockLot) => {
+    setInventoryMode("adjust");
+    setAdjustmentProductId(lot.productId);
+    setAdjustmentLotId(lot.id);
+    setScanStatus("");
+    setScanError(false);
+    window.requestAnimationFrame(() =>
+      adjustmentQuantityInputRef.current?.focus(),
+    );
+  };
+  const returnLot = (lot: StockLot) => {
+    setInventoryMode("return");
+    setReturnProductId(lot.productId);
+    setReturnLotId(lot.id);
+    setScanStatus("");
+    setScanError(false);
+    window.requestAnimationFrame(() => returnQuantityInputRef.current?.focus());
   };
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -4217,60 +4374,64 @@ function Inventory({
   return (
     <div className="workspace-split grid gap-6">
       <div className="min-w-0 self-start space-y-3">
-        <div className="overflow-hidden rounded-xl border bg-white">
-          {adjustmentError && (
-            <ProductSaveErrorDialog
-              title="No pudimos registrar el ajuste"
-              message={adjustmentError}
-              onClose={() => setAdjustmentError("")}
-            />
-          )}
-          <div className="flex items-center gap-3 border-b border-slate-100 p-3">
-            <input
-              type="search"
-              aria-label="Buscar en inventario"
-              placeholder="Buscar producto, laboratorio, código o lote…"
-              value={inventoryQuery}
-              onChange={(event) => {
-                setInventoryQuery(event.target.value);
-                setInventoryPage(1);
-              }}
-              className="h-10 min-w-0 flex-1 rounded-lg border bg-white px-3 text-sm"
-            />
-            <p aria-live="polite" className="shrink-0 text-xs text-slate-500">
-              {stockPage.total} de {stock.length} lotes
-            </p>
-          </div>
-          {!stockPage.total && (
-            <p
-              role="status"
-              className="px-5 py-10 text-center text-sm text-slate-500"
-            >
-              {stock.length
-                ? "No hay lotes que coincidan con la búsqueda."
-                : "No hay existencias en esta sucursal."}
-            </p>
-          )}
-          {stockPage.total > 0 && (
-            <InventoryStockTable
-              lots={stockPage.lots}
-              products={productMap}
-              token={token}
-              organizationId={organizationId}
-              branchId={branchId}
-              done={done}
-            />
-          )}
-          <Pagination
-            integrated
-            total={stockPage.total}
-            currentPage={stockPage.currentPage}
-            totalPages={stockPage.totalPages}
-            noun="lotes"
-            label="Páginas de inventario"
-            onChange={setInventoryPage}
+        {adjustmentError && (
+          <ProductSaveErrorDialog
+            title="No pudimos registrar el ajuste"
+            message={adjustmentError}
+            onClose={() => setAdjustmentError("")}
+          />
+        )}
+        <div className="catalog-summary-row inventory-summary">
+          <ProductCatalogMetrics
+            products={metricProducts}
+            stock={stock}
+            selected={activeCatalogMetric(inventoryFilters)}
+            onSelect={(key) =>
+              filterInventory({
+                ...inventoryFilters,
+                ...toggleCatalogMetric(key, inventoryFilters),
+              })
+            }
           />
         </div>
+        <InventoryToolbar
+          filters={inventoryFilters}
+          products={stockPage.total}
+          lots={stockPage.lots}
+          onChange={filterInventory}
+        />
+        {stockPage.total > 0 ? (
+          <InventoryStockTable
+            rows={stockPage.rows}
+            lotQuery={inventoryFilters.lot}
+            token={token}
+            organizationId={organizationId}
+            branchId={branchId}
+            done={done}
+            onAdjust={adjustLot}
+            onReturn={returnLot}
+            footer={
+              <Pagination
+                integrated
+                total={stockPage.total}
+                currentPage={stockPage.currentPage}
+                totalPages={stockPage.totalPages}
+                noun="productos"
+                label="Páginas de inventario"
+                onChange={setStockPageNumber}
+              />
+            }
+          />
+        ) : (
+          <p
+            role="status"
+            className="rounded-xl border bg-white px-5 py-10 text-center text-sm text-slate-500"
+          >
+            {Object.values(inventoryFilters).some(Boolean)
+              ? "No hay productos que coincidan con los filtros."
+              : "No hay productos en esta sucursal."}
+          </p>
+        )}
       </div>
       <div>
         <div className="mb-3 grid grid-cols-3 rounded-lg border border-slate-200 bg-white p-1">
@@ -4320,7 +4481,7 @@ function Inventory({
                       selectScannedProduct();
                     }
                   }}
-                  placeholder="Escaneá y presioná Enter"
+                  placeholder="Escaneá el código"
                   className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
                 />
               </div>
@@ -4356,10 +4517,12 @@ function Inventory({
                   );
               }}
             />
-            <Input
-              label="Número de lote"
+            <InventoryLotInput
               value={lotNumber}
+              lots={receiveLots}
+              productSelected={Boolean(productId)}
               onChange={setLotNumber}
+              onPick={pickReceiveLot}
               inputRef={lotInputRef}
             />
             <Input
@@ -4411,7 +4574,7 @@ function Inventory({
                       selectScannedProduct();
                     }
                   }}
-                  placeholder="Escaneá y presioná Enter"
+                  placeholder="Escaneá el código"
                   className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
                 />
               </div>
@@ -4423,12 +4586,17 @@ function Inventory({
                 {scanStatus}
               </p>
             ) : null}
-            <InventorySearchSelect
-              label="Producto y lote"
-              value={adjustmentLotId}
-              options={lotOptions}
-              inputRef={adjustmentLotSelectRef}
-              onChange={(id) => {
+            <InventoryLotPicker
+              stock={stock}
+              productOptions={stockProductOptions}
+              productId={adjustmentProductId}
+              lotId={adjustmentLotId}
+              lotInputRef={adjustmentLotSelectRef}
+              onProductChange={(id) => {
+                setAdjustmentProductId(id);
+                setAdjustmentLotId("");
+              }}
+              onLotChange={(id) => {
                 setAdjustmentLotId(id);
                 if (id)
                   window.requestAnimationFrame(() =>
@@ -4478,7 +4646,7 @@ function Inventory({
                       selectScannedProduct();
                     }
                   }}
-                  placeholder="Escaneá y presioná Enter"
+                  placeholder="Escaneá el código"
                   className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
                 />
               </div>
@@ -4494,6 +4662,31 @@ function Inventory({
               Da salida al lote; usalo para vencidos, daños o reclamos al
               proveedor.
             </p>
+            <InventoryLotPicker
+              stock={stock}
+              productOptions={stockProductOptions}
+              productId={returnProductId}
+              lotId={returnLotId}
+              lotInputRef={returnLotSelectRef}
+              onProductChange={(id) => {
+                setReturnProductId(id);
+                setReturnLotId("");
+              }}
+              onLotChange={(id) => {
+                setReturnLotId(id);
+                if (id)
+                  window.requestAnimationFrame(() =>
+                    returnQuantityInputRef.current?.focus(),
+                  );
+              }}
+            />
+            <Input
+              label="Cantidad"
+              type="number"
+              value={returnQuantity}
+              onChange={setReturnQuantity}
+              inputRef={returnQuantityInputRef}
+            />
             <label className="mt-4 block text-sm">
               Proveedor
               <select
@@ -4501,7 +4694,6 @@ function Inventory({
                 className="mt-1 h-10 w-full border px-3"
                 value={returnSupplierId}
                 onChange={(event) => setReturnSupplierId(event.target.value)}
-                ref={returnSupplierSelectRef}
               >
                 <option value="">Seleccionar…</option>
                 {suppliers.map((supplier) => (
@@ -4511,19 +4703,6 @@ function Inventory({
                 ))}
               </select>
             </label>
-            <InventorySearchSelect
-              label="Producto y lote"
-              value={returnLotId}
-              options={lotOptions}
-              inputRef={returnLotSelectRef}
-              onChange={setReturnLotId}
-            />
-            <Input
-              label="Cantidad"
-              type="number"
-              value={returnQuantity}
-              onChange={setReturnQuantity}
-            />
             <Input
               label="Motivo"
               value={returnReason}
@@ -6804,7 +6983,7 @@ function Transfers({
               onKeyDown={(event) => {
                 if (event.key === "Enter") event.preventDefault();
               }}
-              placeholder="Escaneá y presioná Enter"
+              placeholder="Escaneá el código"
               autoComplete="off"
               className="h-full min-w-0 flex-1 bg-transparent text-sm font-normal text-slate-700 outline-none placeholder:text-slate-400"
             />

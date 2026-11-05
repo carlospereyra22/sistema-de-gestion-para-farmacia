@@ -89,3 +89,47 @@ it("ofrece completar con el máximo mientras falte cantidad", () => {
   );
   expect(html).toContain('title="Completar con 15"');
 });
+
+it("con un lote existente lo identifica y deja fijo su vencimiento", () => {
+  const render = (lotNumber: string) =>
+    renderToStaticMarkup(
+      <PurchaseReceiptTable
+        token="test-token"
+        organizationId="test-organization"
+        items={items}
+        products={[]}
+        lots={[
+          {
+            key: "lote-1",
+            itemId: "linea-1",
+            quantity: "1",
+            lotNumber,
+            expiresAt: "2027-05-18",
+          },
+        ]}
+        search=""
+        onLotsChange={() => undefined}
+        onAddLot={() => undefined}
+        initialExistingLots={[
+          {
+            id: "existente",
+            productId: "producto-1",
+            number: "A1",
+            quantity: 0,
+            expiresAt: "2027-05-18T00:00:00.000Z",
+            expiryStatus: "AVAILABLE",
+          },
+        ]}
+      />,
+    );
+  const existing = render("A1");
+  expect(existing).toContain("Existente");
+  expect(existing).toContain("Lote existente (0 un.)");
+  // El aviso va dentro del campo para no desalinear la fila.
+  expect(existing).not.toContain("<p class");
+  expect(existing).toContain("readOnly");
+  const fresh = render("NUEVO");
+  expect(fresh).toContain("Nuevo");
+  expect(fresh).not.toContain("readOnly");
+  expect(fresh).toContain('role="combobox"');
+});

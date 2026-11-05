@@ -4,6 +4,7 @@ import {
   FilterX,
   FlaskConical,
   Image,
+  ListOrdered,
   Layers,
   Link,
   Package,
@@ -30,6 +31,7 @@ export type ProductCatalogFilters = {
   expiry: string;
   reference: string;
   lot: string;
+  priceList: string;
 };
 export function ProductCatalogToolbar({
   filters,
@@ -37,12 +39,14 @@ export function ProductCatalogToolbar({
   options,
   additional = emptyCatalogAdditionalFilters,
   onAdditionalChange,
+  priceLists = [],
 }: {
   filters: ProductCatalogFilters;
   onChange: (filters: ProductCatalogFilters) => void;
   options?: CatalogOptions;
   additional?: CatalogAdditionalFilters;
   onAdditionalChange: (filters: CatalogAdditionalFilters) => void;
+  priceLists?: { id: string; name: string }[];
 }) {
   // Cuenta todo lo que se aparta de la vista inicial, incluida la búsqueda.
   const moreCount = Object.values(additional).filter(Boolean).length;
@@ -173,6 +177,19 @@ export function ProductCatalogToolbar({
             { value: "undated", label: "Sin fecha" },
           ]}
         />
+        <ProductFilterSelect
+          label="Lista de precios"
+          icon={<ListOrdered size={18} />}
+          value={filters.priceList}
+          onChange={(v) => update("priceList", v)}
+          options={[
+            { value: "", label: "Público" },
+            ...priceLists.map((list) => ({
+              value: list.id,
+              label: list.name,
+            })),
+          ]}
+        />
       </div>
       {moreOpen ? (
         <div
@@ -238,4 +255,5 @@ const emptyCatalogFilters: ProductCatalogFilters = {
   expiry: "",
   reference: "",
   lot: "",
+  priceList: "",
 };

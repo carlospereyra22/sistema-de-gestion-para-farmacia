@@ -91,6 +91,15 @@ export class InventoryController {
     return this.inventory.stock(request.auth!.sub, organizationId, branchId);
   }
 
+  @Get("costs")
+  costs(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+  ) {
+    return this.inventory.costs(request.auth!.sub, organizationId, branchId);
+  }
+
   @Get("expiring")
   expiring(
     @Req() request: AuthenticatedRequest,

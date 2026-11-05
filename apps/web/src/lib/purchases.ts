@@ -130,6 +130,24 @@ export function preparePurchaseLines(lines: PurchaseDraftLine[]) {
     };
   });
 }
+// Un lote existente manda su vencimiento: la API rechaza cualquier otro. Al
+// pasar a un número nuevo se limpia la fecha que había traído el anterior.
+export function receiptLotChange(
+  row: ReceiptDraft,
+  lotNumber: string,
+  lots: { number: string; expiresAt: string | null }[],
+): ReceiptDraft {
+  const existing = lots.find((lot) => lot.number === lotNumber.trim());
+  if (existing)
+    return {
+      ...row,
+      lotNumber,
+      expiresAt: existing.expiresAt?.slice(0, 10) ?? "",
+    };
+  const wasExisting = lots.some((lot) => lot.number === row.lotNumber.trim());
+  return { ...row, lotNumber, expiresAt: wasExisting ? "" : row.expiresAt };
+}
+
 export function prepareReceiptLines(
   rows: ReceiptDraft[],
   items: Purchase["items"],

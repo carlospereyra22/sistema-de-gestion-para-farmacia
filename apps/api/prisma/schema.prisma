@@ -931,6 +931,9 @@ model InventoryMovement {
   actorId String? @db.Uuid
   referenceType String?
   referenceId String? @db.Uuid
+  // Costo de esta recepción (SISTEMA-31): un mismo lote puede entrar varias
+  // veces con costos distintos. Null en las recepciones anteriores.
+  unitCostMinor BigInt?
   @@index([organizationId, branchId, productId, occurredAt])
 }
 

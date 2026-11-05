@@ -17,6 +17,7 @@ import type {
   ReceiptLineInput,
   DirectPurchaseInput,
 } from "./purchase-input";
+import { stockAvailability } from "../inventory/stock-availability";
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const serializable = <T>(value: T): T =>
@@ -59,6 +60,27 @@ export class PurchasesService {
       })),
     );
   }
+  // Lotes de la sucursal para recibir sobre ellos. Incluye los agotados: su
+  // número sigue ocupado y conserva su vencimiento.
+  async lots(actorId: string, organizationId: string, branchId: string) {
+    await this.assert(actorId, organizationId, branchId, "PURCHASE_READ");
+    const lots = await this.prisma.productLot.findMany({
+      where: { organizationId, branchId },
+      orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        productId: true,
+        number: true,
+        quantity: true,
+        expiresAt: true,
+      },
+    });
+    return lots.map((lot) => ({
+      ...lot,
+      expiryStatus: stockAvailability(lot).expiryStatus,
+    }));
+  }
+
   async detail(
     actorId: string,
     organizationId: string,
@@ -495,6 +517,7 @@ export class PurchasesService {
           lotId: lot.id,
           type: "PURCHASE_RECEIPT",
           quantity: line.quantity,
+          unitCostMinor: item.unitCostMinor,
           actorId,
           referenceType: "PURCHASE",
           referenceId: purchaseId,

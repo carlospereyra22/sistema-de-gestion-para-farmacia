@@ -32,3 +32,19 @@ it("sin lotes muestra un guion", () => {
   expect(html).toContain("—");
   expect(html).not.toContain("<button");
 });
+
+it("un único lote con varios costos se puede desplegar", () => {
+  const html = renderToStaticMarkup(
+    <ProductLotCell
+      productName="ACTRON"
+      lotNumber="L-1"
+      total={1}
+      open={false}
+      controlsId="lotes"
+      onToggle={() => {}}
+      expandable
+    />,
+  );
+  expect(html).toContain('aria-label="Ver costos del lote de ACTRON"');
+  expect(html).not.toContain("+0");
+});

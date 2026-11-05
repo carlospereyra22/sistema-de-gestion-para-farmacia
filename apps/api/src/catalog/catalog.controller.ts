@@ -248,6 +248,13 @@ export class CatalogController {
   ) {
     return this.catalog.ensureDefaultCategories(request.auth!.sub, id);
   }
+  @Get("medicine-status") async medicineStatus(
+    @Param("organizationId") id: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    await this.catalog.assertPermission(request.auth!.sub, id, "CATALOG_READ");
+    return this.priceRefresh.medicineCatalogStatus();
+  }
   @Post("price-references/refresh") async refreshPriceReferences(
     @Param("organizationId") id: string,
     @Req() request: AuthenticatedRequest,

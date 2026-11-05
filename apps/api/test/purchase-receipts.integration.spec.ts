@@ -6,6 +6,7 @@ import { PrismaService } from "../src/prisma/prisma.service";
 import type { EnvironmentService } from "../src/config/environment.service";
 import { PurchasesService } from "../src/purchases/purchases.service";
 import { AuditService } from "../src/audit/audit.service";
+import { InventoryService } from "../src/inventory/inventory.service";
 import { stockAvailability } from "../src/inventory/stock-availability";
 import { PartiesService } from "../src/parties/parties.service";
 import { SupplierPayablesService } from "../src/supplier-payables/supplier-payables.service";
@@ -68,6 +69,8 @@ describe("purchase receipts on an isolated synthetic schema", () => {
         "PURCHASE_MANAGE",
         "PAYABLE_MANAGE",
         "PARTY_MANAGE",
+        "INVENTORY_READ",
+        "INVENTORY_MANAGE",
       ].map((code) =>
         first.permission.upsert({
           where: { code },
@@ -376,6 +379,89 @@ describe("purchase receipts on an isolated synthetic schema", () => {
     expect(
       (await f.services[0]!.detail(...f.args, p.id)).receipts[0]!.actorName,
     ).toBe("Test receiver");
+  });
+  it("conserva cada costo de un mismo lote recibido por Compras e Inventario", async () => {
+    const f = await fixture(1);
+    const productId = f.products[0]!.id;
+    const expiresAt = new Date("2027-12-31");
+    const purchaseLot = async (unitCostMinor: number, quantity: number) => {
+      const purchase = await f.services[0]!.create(...f.args, {
+        ...f.input,
+        clientOperationId: randomUUID(),
+        items: [{ productId, quantity, unitCostMinor }],
+      });
+      const item = await first.purchaseItem.findFirstOrThrow({
+        where: { purchaseId: purchase.id },
+      });
+      await f.services[0]!.receive(...f.args, purchase.id, {
+        operationId: randomUUID(),
+        items: [{ itemId: item.id, quantity, lotNumber: "VAR", expiresAt }],
+      });
+    };
+    await purchaseLot(70000, 20);
+    await purchaseLot(90000, 5);
+    const inventory = new InventoryService(first, new AuditService(first));
+    await inventory.receive(f.user.id, {
+      organizationId: f.org.id,
+      branchId: f.branch.id,
+      productId,
+      lotNumber: "VAR",
+      quantity: 3,
+      unitCostMinor: 120000,
+      expiresAt,
+    });
+    const costs = () => inventory.costs(f.user.id, f.org.id, f.branch.id);
+    const receipts = async () =>
+      (await costs()).lots[0]!.receipts.map((receipt) => [
+        receipt.quantity,
+        receipt.unitCostMinor,
+      ]);
+    expect(await receipts()).toEqual([
+      [3, "120000"],
+      [5, "90000"],
+      [20, "70000"],
+    ]);
+    expect((await costs()).products[0]!.unitCostMinor).toBe("120000");
+    // Corregir el costo del lote corrige sólo su última recepción.
+    const lot = await first.productLot.findFirstOrThrow({
+      where: { productId },
+    });
+    await inventory.editLot(f.user.id, f.org.id, f.branch.id, lot.id, {
+      number: "VAR",
+      expiresAt: "2027-12-31",
+      expectedVersion: lot.metadataVersion,
+      reason: "Costo mal cargado",
+      unitCostMinor: "125000",
+    });
+    expect(await receipts()).toEqual([
+      [3, "125000"],
+      [5, "90000"],
+      [20, "70000"],
+    ]);
+    expect((await costs()).products[0]!.unitCostMinor).toBe("125000");
+    // Un lote agotado sigue ofreciéndose: su número y vencimiento siguen vigentes.
+    await first.productLot.updateMany({
+      where: { productId },
+      data: { quantity: 0 },
+    });
+    expect(await f.services[0]!.lots(...f.args)).toEqual([
+      expect.objectContaining({
+        productId,
+        number: "VAR",
+        quantity: 0,
+        expiresAt,
+      }),
+    ]);
+    await first.productLot.updateMany({
+      where: { productId },
+      data: { quantity: 28 },
+    });
+    // Una recepción de Compras anterior a la columna se lee de su renglón.
+    await first.inventoryMovement.updateMany({
+      where: { productId, quantity: 20 },
+      data: { unitCostMinor: null },
+    });
+    expect((await receipts()).at(-1)).toEqual([20, "70000"]);
   });
   it("receives 100, 60 and 40, rejects excess, and completes the same order", async () => {
     const f = await fixture(1);

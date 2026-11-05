@@ -1,15 +1,19 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import type { CatalogProduct, StockLot } from "./lib/api";
 import { InventoryStockTable } from "./inventory-stock-table";
+import { InventoryToolbar } from "./inventory-toolbar";
+import type { CatalogProduct, StockLot } from "./lib/api";
+import { emptyInventoryFilters, inventoryRows } from "./lib/inventory-products";
 
 const product = {
   id: "product",
   name: "Loratadina",
+  active: true,
+  barcodes: [],
   laboratory: { id: "lab", name: "Laboratorio Beta" },
   presentation: "10 comprimidos",
   saleUnit: "BOX",
-} as CatalogProduct;
+} as unknown as CatalogProduct;
 const lot: StockLot = {
   id: "lot",
   productId: product.id,
@@ -23,59 +27,107 @@ const lot: StockLot = {
   unitCostMinor: "100",
   metadataVersion: 1,
 };
-function render(lots: StockLot[], products = new Map([[product.id, product]])) {
+const expired: StockLot = {
+  ...lot,
+  id: "expired",
+  number: "VIEJO",
+  quantity: 4,
+  sellableQuantity: 0,
+  expiredQuantity: 4,
+  expiryStatus: "EXPIRED",
+  expiresAt: "2026-01-10T00:00:00.000Z",
+};
+
+function render(
+  lots: StockLot[],
+  lotQuery = "",
+  products: CatalogProduct[] = [product],
+) {
   return renderToStaticMarkup(
     <InventoryStockTable
-      lots={lots}
-      products={products}
+      rows={inventoryRows(products, lots, {
+        ...emptyInventoryFilters,
+        lot: lotQuery,
+      })}
+      lotQuery={lotQuery}
       token="fixture"
       organizationId="org"
       branchId="branch"
       done={() => {}}
+      onAdjust={() => {}}
+      onReturn={() => {}}
     />,
   );
 }
-it("groups lot information in accessible columns without repeating fully sellable stock", () => {
-  const html = render([lot]);
-  expect(html).toContain('aria-label="Existencias por lote"');
+
+it("muestra una fila por producto con lotes, stock, vendibles y próximo vencimiento", () => {
+  const html = render([lot, expired]);
+  expect(html).toContain('aria-label="Existencias por producto"');
   for (const heading of [
     "Producto",
-    "Lote",
-    "Vencimiento",
+    "Lotes",
     "Stock",
-    "Acciones",
+    "Vendibles",
+    "Próx. venc.",
+    "Estado",
   ])
     expect(html).toContain(heading);
-  expect(html).toContain("Loratadina");
+  expect(html.match(/Loratadina<\/span>/g)).toHaveLength(1);
   expect(html).toContain("Laboratorio Beta · 10 comprimidos · Caja");
+  expect(html).toContain(">16<");
+  expect(html).toContain(">12<");
   expect(html).toContain("30/5/2027");
-  expect(html).toContain("12 ");
-  expect(html).not.toContain("vendibles");
+  expect(html).toContain("1 lote vencido");
+});
+
+it("arranca con los lotes cerrados y un botón accesible para verlos", () => {
+  const html = render([lot]);
+  expect(html).toContain('aria-label="Ver lotes de Loratadina"');
+  expect(html).toContain('aria-expanded="false"');
+  expect(html).not.toContain('aria-label="Lotes de Loratadina"');
+});
+
+it("al buscar por lote abre el producto con ese lote y sus acciones", () => {
+  const html = render([lot, expired], "abc");
+  expect(html).toContain('aria-label="Ocultar lotes de Loratadina"');
+  expect(html).toContain('aria-label="Lotes de Loratadina"');
+  expect(html).toContain("ABC");
+  expect(html).not.toContain("VIEJO");
+  expect(html).toContain("1 lote más no se muestra por los filtros.");
   expect(html).toContain('aria-label="Editar lote ABC de Loratadina"');
-  expect(html).toContain('title="Editar lote, vencimiento y costo"');
-  expect(html).not.toContain("Editar</button>");
+  expect(html).toContain('aria-label="Ajustar lote ABC de Loratadina"');
+  expect(html).toContain('aria-label="Devolver lote ABC de Loratadina"');
 });
-it("keeps expiry warnings and physical versus sellable quantities visible", () => {
-  const expired = {
-    ...lot,
-    expiryStatus: "EXPIRED" as const,
-    sellableQuantity: 0,
-    expiredQuantity: 12,
-  };
-  const html = render([
-    expired,
-    { ...lot, id: "soon", number: "DEF", expiryStatus: "EXPIRING_SOON" },
-  ]);
-  expect(html).toContain("Vencido · No vendible");
-  expect(html).toContain("Próximo · Hasta 90 días");
-  expect(html).toContain("0 vendibles");
-  expect(html).toContain('aria-label="Editar lote DEF de Loratadina"');
-  expect(expired.quantity).toBe(12);
-  expect(expired.sellableQuantity).toBe(0);
+
+it("un producto sin stock no ofrece desplegar lotes", () => {
+  const html = render([]);
+  expect(html).toContain("Sin stock");
+  expect(html).toContain("—");
+  expect(html).not.toContain("lotes de Loratadina");
 });
-it("retains historic product names and missing expiry without inventing catalog details", () => {
-  const html = render([{ ...lot, expiresAt: null }], new Map());
+
+it("conserva el nombre de lotes sin ficha en el catálogo sin inventar datos", () => {
+  const html = render([{ ...lot, expiresAt: null }], "", []);
   expect(html).toContain("Loratadina");
   expect(html).toContain("Sin fecha");
   expect(html).not.toContain("Laboratorio Beta");
+});
+
+it("la barra tiene buscador general, buscador por lote, filtros y contador", () => {
+  const html = renderToStaticMarkup(
+    <InventoryToolbar
+      filters={emptyInventoryFilters}
+      products={1}
+      lots={3}
+      onChange={() => {}}
+    />,
+  );
+  expect(html).toContain('aria-label="Buscar en inventario"');
+  expect(html).toContain("código de barras");
+  expect(html).toContain('aria-label="Buscar por lote"');
+  expect(html).toContain('aria-label="Stock"');
+  expect(html).toContain('aria-label="Vencimiento"');
+  expect(html).toContain("1 producto");
+  expect(html).toContain("3 lotes");
+  expect(html).toContain("disabled");
 });

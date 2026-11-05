@@ -1,11 +1,13 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { CatalogProduct, StockLot } from "./api";
 import {
   filterInventoryOptions,
+  findScannedProduct,
   inventoryEnterOption,
-  inventoryLotOption,
+  inventoryLotChoice,
   inventoryProductDetail,
   inventoryProductOption,
+  scanAutoDelay,
 } from "./inventory-search";
 function product(id: string, laboratory: string, code: string): CatalogProduct {
   return {
@@ -46,7 +48,7 @@ it("searches all barcodes and pharmaceutical details, ignoring accents and word 
   expect(filterInventoryOptions(options, "nada")).toEqual([]);
   expect(filterInventoryOptions(options, "   ")).toEqual(options);
 });
-it("keeps distinct lots and supports product/laboratory/lot search with physical stock unchanged", () => {
+it("distingue los lotes de un producto por número, unidades y vencimiento", () => {
   const lot = {
     id: "lot-a",
     productId: a.id,
@@ -60,15 +62,15 @@ it("keeps distinct lots and supports product/laboratory/lot search with physical
     expiredQuantity: 4,
     expiryStatus: "EXPIRED",
   } satisfies StockLot;
-  const result = inventoryLotOption(lot, a);
-  const other = inventoryLotOption({ ...lot, id: "lot-b", number: "XYZ" }, a);
-  expect(filterInventoryOptions([result, other], "alvarez abc123")).toEqual([
-    result,
-  ]);
-  expect(result.detail).toContain("4 un.");
-  expect(lot.quantity).toBe(4);
-  expect(inventoryLotOption(lot).label).toContain("Loratadina");
-  expect(inventoryLotOption(lot).searchText).toContain("ABC123");
+  const result = inventoryLotChoice(lot);
+  const other = inventoryLotChoice({ ...lot, id: "lot-b", number: "XYZ" });
+  expect(filterInventoryOptions([result, other], "abc123")).toEqual([result]);
+  expect(result.label).toBe("Lote ABC123");
+  expect(result.detail).toBe("4 un. · Vence 1/1/2026 · Vencido");
+  expect(
+    inventoryLotChoice({ ...lot, expiresAt: null, expiryStatus: "AVAILABLE" })
+      .detail,
+  ).toBe("4 un. · Sin vencimiento");
 });
 it("does not guess a laboratory or lot on Enter when matches are ambiguous", () => {
   expect(inventoryEnterOption(options, -1)).toBeUndefined();
@@ -81,4 +83,30 @@ it("shows missing laboratory explicitly without inventing product data", () => {
     "Sin laboratorio",
   );
   expect(inventoryProductDetail()).toBe("");
+});
+
+describe("escáner sin Enter", () => {
+  const products = [
+    { id: "corto", barcodes: [{ code: "12345678" }] },
+    { id: "largo", barcodes: [{ code: "7896902211124" }] },
+  ];
+
+  it("encuentra el código exacto, dentro de un QR y como GTIN de 14 dígitos", () => {
+    expect(findScannedProduct(products, " 7896902211124 ")?.id).toBe("largo");
+    expect(
+      findScannedProduct(products, "https://x.ar/01/7896902211124")?.id,
+    ).toBe("largo");
+    expect(findScannedProduct(products, "07896902211124")?.id).toBe("largo");
+    expect(findScannedProduct(products, "789690")).toBeUndefined();
+  });
+
+  it("procesa rápido lo encontrado y espera más para avisar que no existe", () => {
+    expect(scanAutoDelay(true, "12345678")).toBe(250);
+    expect(scanAutoDelay(false, "99999999")).toBe(1000);
+  });
+
+  it("no hace nada mientras el texto es corto o está vacío", () => {
+    expect(scanAutoDelay(false, "1234567")).toBeNull();
+    expect(scanAutoDelay(false, "   ")).toBeNull();
+  });
 });
