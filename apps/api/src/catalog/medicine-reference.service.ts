@@ -5,6 +5,7 @@ import {
   Optional,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { ConsultationCache } from "./consultation-cache";
 import { canonicalGtin } from "./external-gtin";
 import {
   referenceFromSnapshot,
@@ -65,6 +66,7 @@ const OFFICIAL_MEDICINE_URL = "https://cnpm.msal.gov.ar/api/vademecum";
 const PRICE_REMEDIES_URL = "https://preciosderemedios.com.ar/result/";
 const REQUEST_TIMEOUT_MS = 7_000;
 const MAX_RESULTS = 8;
+const MAX_REMEDIES_COMBOS = 10;
 
 function normalized(value: unknown): string {
   return String(value ?? "")
@@ -240,12 +242,12 @@ function decodeHtml(value: string): string {
     .trim();
 }
 
-function extractCell(row: string, className: string): string {
+function extractClassContent(row: string, className: string): string {
   const pattern = new RegExp(
-    `<td\\b[^>]*class=["'][^"']*${className}[^"']*["'][^>]*>([\\s\\S]*?)<\\/td>`,
+    `<(td|div)\\b[^>]*class=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/\\1>`,
     "i",
   );
-  return (pattern.exec(row)?.[1] ?? "").trim();
+  return (pattern.exec(row)?.[2] ?? "").trim();
 }
 
 export function parsePriceRemedies(
@@ -258,13 +260,13 @@ export function parsePriceRemedies(
 
   for (const row of rows) {
     const priceMatch = /data-price=["']([^"']+)["']/i.exec(row);
-    const productHtml = extractCell(row, "product-text");
+    const productHtml = extractClassContent(row, "product-text");
     const spans = [...productHtml.matchAll(/<span\b[^>]*>([\s\S]*?)<\/span>/gi)]
       .map((match) => decodeHtml(match[1] ?? ""))
       .filter(Boolean);
     const name = spans[0] ?? decodeHtml(productHtml);
     const presentation = spans.slice(1).join(" ");
-    const laboratory = decodeHtml(extractCell(row, "laboratorio-text"));
+    const laboratory = decodeHtml(extractClassContent(row, "laboratorio-text"));
     const priceMinor = parsePriceMinor(priceMatch?.[1]);
     const score = scoreCandidate(
       [name, presentation, laboratory].filter(Boolean).join(" "),
@@ -306,8 +308,37 @@ export function parsePriceRemedies(
     }));
 }
 
+export function parsePriceRemediesCombos(
+  html: string,
+  query: string,
+): string[] {
+  const combos = new Set<string>();
+  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["']/gi)) {
+    try {
+      const url = new URL(
+        (match[1] ?? "").replace(/&amp;/gi, "&"),
+        PRICE_REMEDIES_URL,
+      );
+      const combo = url.searchParams.get("combo")?.trim();
+      if (
+        url.origin === new URL(PRICE_REMEDIES_URL).origin &&
+        url.pathname === new URL(PRICE_REMEDIES_URL).pathname &&
+        normalized(url.searchParams.get("busqueda")) === normalized(query) &&
+        combo
+      )
+        combos.add(combo);
+    } catch {
+      // Ignoramos enlaces ajenos o mal formados del HTML externo.
+    }
+  }
+  return [...combos];
+}
+
 @Injectable()
 export class MedicineReferenceService {
+  private readonly remediesSearches = new ConsultationCache<
+    MedicineReference[]
+  >(5 * 60_000, 200);
   private barcodeIndex?: {
     expires: number;
     rows: Map<string, MedicineReference[]>;
@@ -484,7 +515,9 @@ export class MedicineReferenceService {
     }
 
     if (source === "preciosderemedios") {
-      return this.searchPriceRemedies(searchText);
+      return this.remediesSearches.get(normalized(searchText), () =>
+        this.searchPriceRemedies(searchText),
+      );
     }
     // Con copia local reciente no se consulta el padrón por internet.
     if (await this.localSnapshotFresh()) return this.searchSnapshot(searchText);
@@ -562,7 +595,30 @@ export class MedicineReferenceService {
     const html = await this.requestText(url.toString(), {
       headers: { Accept: "text/html,application/xhtml+xml" },
     });
-    return parsePriceRemedies(html, query);
+    const direct = parsePriceRemedies(html, query);
+    if (direct.length) return direct;
+
+    const combos = parsePriceRemediesCombos(html, query);
+    if (combos.length > MAX_REMEDIES_COMBOS)
+      throw new BadRequestException(
+        "Hay demasiadas combinaciones. Escribí un nombre más específico.",
+      );
+    const pages: string[] = [];
+    for (let start = 0; start < combos.length; start += 5) {
+      const batch = combos.slice(start, start + 5);
+      pages.push(
+        ...(await Promise.all(
+          batch.map((combo) => {
+            const detailUrl = new URL(url);
+            detailUrl.searchParams.set("combo", combo);
+            return this.requestText(detailUrl.toString(), {
+              headers: { Accept: "text/html,application/xhtml+xml" },
+            });
+          }),
+        )),
+      );
+    }
+    return parsePriceRemedies(pages.join("\n"), query);
   }
 
   private async requestJson<T>(url: string, init: RequestInit): Promise<T> {

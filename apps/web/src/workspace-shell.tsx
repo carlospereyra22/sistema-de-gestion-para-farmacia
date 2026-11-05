@@ -1687,7 +1687,7 @@ function Products({
     referenceTypingTimer.current = window.setTimeout(() => {
       referenceTypingTimer.current = undefined;
       void searchReferences(source, undefined, query);
-    }, 600);
+    }, 350);
   };
   const cancelReferenceSearch = () => {
     window.clearTimeout(referenceTypingTimer.current);
@@ -3181,22 +3181,6 @@ function Products({
                         }}
                       />
                     </div>
-                    <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
-                      <strong className="font-semibold text-slate-600">
-                        Por código:
-                      </strong>{" "}
-                      tu catálogo, la base de medicamentos y el catálogo de
-                      perfumería.{" "}
-                      <strong className="font-semibold text-slate-600">
-                        Por nombre, laboratorio o droga:
-                      </strong>{" "}
-                      {referenceSource === "official"
-                        ? "base de medicamentos"
-                        : referenceSource === "alfabeta"
-                          ? "AlfaBeta"
-                          : "Precios de Remedios"}
-                      ; cambiá la fuente en el selector.
-                    </p>
                     {openedFromScan && (
                       <p
                         className="mt-1 flex items-start gap-1 text-[11px] leading-4 text-teal-700"
@@ -3334,7 +3318,7 @@ function Products({
                     />
                     {searchOpen &&
                     (referenceSearchDone || importCatalogMatches.length) ? (
-                      <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                      <div className="absolute inset-x-0 top-full z-30 mt-0.5 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
                         {importCatalogMatches.length > 0 && (
                           <div className="mb-2">
                             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -3396,15 +3380,20 @@ function Products({
                             Consultando referencias de medicamentos...
                           </p>
                         ) : alfaReferenceResults.length ? (
-                          <div className="max-h-80 space-y-2 overflow-y-auto">
+                          <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
                             {alfaReferenceResults.map((item) => (
-                              <AlfaBetaMedicineCard
+                              <div
                                 key={item.id}
-                                item={item}
-                                token={token}
-                                organizationId={organizationId}
-                                onSelect={pickReference}
-                              />
+                                className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+                              >
+                                <AlfaBetaMedicineCard
+                                  compact
+                                  item={item}
+                                  token={token}
+                                  organizationId={organizationId}
+                                  onSelect={pickReference}
+                                />
+                              </div>
                             ))}
                           </div>
                         ) : referenceResults.length ? (
@@ -3454,7 +3443,7 @@ function Products({
                           </div>
                         ) : (
                           <>
-                            <p className="rounded-lg border border-dashed border-teal-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600">
+                            <p className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600">
                               No encontramos coincidencias en la fuente
                               consultada.
                             </p>

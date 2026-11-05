@@ -60,6 +60,20 @@ describe("dashboard medicine search", () => {
       expect(html).not.toMatch(/<details[^>]*\sopen=/);
     }
   });
+  it("muestra las presentaciones de AlfaBeta abiertas al elegir un producto", () => {
+    const html = renderToStaticMarkup(
+      <AlfaBetaMedicineCard
+        compact
+        item={{ id: "buscapina.html", name: "BUSCAPINA", laboratory: "Opella" }}
+        token="test"
+        organizationId="org"
+        onSelect={() => undefined}
+      />,
+    );
+    expect(html).toMatch(/<details[^>]*\sopen=""/);
+    expect(html).not.toContain("Ver presentaciones");
+    expect(html).not.toContain("lucide-pill");
+  });
   it("shares one price heading per medicine and keeps presentation data intact", () => {
     const html = renderToStaticMarkup(
       <MedicineSearchResults

@@ -3,6 +3,8 @@ import {
   concentrationFromText,
   parsePriceMinor,
   parsePriceRemedies,
+  parsePriceRemediesCombos,
+  MedicineReferenceService,
 } from "./medicine-reference.service";
 
 describe("medicine reference parsing", () => {
@@ -60,5 +62,46 @@ describe("medicine reference parsing", () => {
         priceMinor: 3745100,
       }),
     ]);
+  });
+  it("busca las presentaciones dentro de la combinación de Precios de Remedios", async () => {
+    const groups = `
+      <a href="?busqueda=buscapina+duo&amp;combo=Hioscina+butilbromuro+%2B+Paracetamol">Ver productos</a>
+      <a href="https://ejemplo.com/?busqueda=buscapina+duo&amp;combo=Otro">Ajeno</a>
+    `;
+    expect(parsePriceRemediesCombos(groups, "buscapina duo")).toEqual([
+      "Hioscina butilbromuro + Paracetamol",
+    ]);
+    const products = `
+      <tr class="border-b" data-price="11278">
+        <td class="product-column"><div class="product-text responsive-text"><span class="font-bold">BUSCAPINA DUO</span><span class="font-normal">Bls. Comp. Rec. x 10</span></div></td>
+        <td class="laboratorio-column"><div class="laboratorio-text responsive-text">OPELLA</div></td>
+      </tr>
+    `;
+    const fetchMock = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(groups))
+      .mockResolvedValueOnce(new Response(products));
+    try {
+      const service = new MedicineReferenceService();
+      const result = await service.search("buscapina duo", "preciosderemedios");
+      expect(result).toEqual([
+        expect.objectContaining({
+          name: "BUSCAPINA DUO",
+          presentation: "Bls. Comp. Rec. x 10",
+          laboratory: "OPELLA",
+          priceMinor: 1127800,
+        }),
+      ]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]?.[0]).toContain(
+        "combo=Hioscina+butilbromuro+%2B+Paracetamol",
+      );
+      expect(
+        await service.search("BUSCAPINA DUO", "preciosderemedios"),
+      ).toEqual(result);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 });
