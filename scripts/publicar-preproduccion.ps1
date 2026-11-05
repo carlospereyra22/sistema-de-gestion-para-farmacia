@@ -133,6 +133,11 @@ tar -xzf "`$release/backend.tar.gz" -C "`$release"
 test -f "`$release/deploy/oracle/provision-preproduction.sh"
 test -f "`$release/deploy/oracle/update-preproduction-release.sh"
 sed -i 's/\r$//' "`$release/deploy/oracle/provision-preproduction.sh" "`$release/deploy/oracle/update-preproduction-release.sh"
+# Estas migraciones se aplicaron con LF. Windows las empaqueta con CRLF
+# (core.autocrlf), lo que cambia su checksum aunque el SQL sea identico.
+for migration in 20261105011859_medicine_catalog 20261105033000_medicine_catalog_pack 20261105120000_purchase_pack_lots 20261105232500_price_refresh_partial_status; do
+  sed -i 's/\r$//' "`$release/apps/api/prisma/migrations/`$migration/migration.sql"
+done
 printf '%s' '$revision' > "`$release/SOURCE_REVISION"
 "@
 Run 'ssh.exe' ($sshArgs + @($remote, (New-RemoteCommand $extract)))

@@ -77,6 +77,11 @@ artefacto completo pero acotado (código, migraciones y scripts; nunca
 es autocontenida, verificable y recuperable. En el VPS pnpm reutiliza su caché,
 por lo que no se vuelve a transferir el proyecto de trabajo entero.
 
+El paquete de Windows puede convertir a CRLF migraciones del catálogo de
+medicamentos, compras y precios que ya se aplicaron con LF. El publicador restaura sólo
+los finales LF de esas copias en la release antes de verificar sus checksums;
+no modifica las migraciones del repositorio ni las filas de la base.
+
 Luego respalda
 `gestion_preprod` a `/var/backups/gestion-preprod/releases/<release>.dump` y prueba
 que puede leerse con `pg_restore --list`. Sólo entonces detiene y actualiza

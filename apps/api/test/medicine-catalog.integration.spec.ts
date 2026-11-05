@@ -86,6 +86,18 @@ describe("base de medicamentos en esquema aislado", () => {
     await db.$disconnect();
   });
 
+  it("admite una corrida parcial y rechaza estados desconocidos", async () => {
+    const run = await db.priceRefreshRun.create({
+      data: { trigger: "COMMAND", status: "PARTIAL" },
+    });
+    expect(run.status).toBe("PARTIAL");
+    await expect(
+      db.priceRefreshRun.create({
+        data: { trigger: "COMMAND", status: "DESCONOCIDO" },
+      }),
+    ).rejects.toThrow();
+  });
+
   it("importa, y repetir la carga no pisa un precio actualizado", async () => {
     const records: CatalogImportRecord[] = [
       product(),
