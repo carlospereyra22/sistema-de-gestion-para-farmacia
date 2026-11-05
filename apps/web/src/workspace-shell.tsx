@@ -195,6 +195,9 @@ import { createOrSelectCatalogOption } from "./lib/catalog-option";
 import { StockAdjustmentQuantity } from "./stock-adjustment-quantity";
 import { stockAdjustmentDelta } from "./lib/stock-adjustment";
 import { ProductSaveErrorDialog } from "./product-save-error-dialog";
+import { MedicineReferenceNote } from "./medicine-reference-note";
+import { medicineSources } from "./lib/medicine-search";
+import { medicineNameIsFree } from "./lib/medicine-lookup";
 import { ProductReferenceSource } from "./product-reference-source";
 import { AlfaBetaMedicineCard } from "./alfabeta-medicine-card";
 import { distributeSaleDiscount } from "./lib/sale-discount";
@@ -3130,7 +3133,7 @@ function Products({
                             ? "Buscá el medicamento nacional por nombre…"
                             : referenceSource === "alfabeta"
                               ? "Ej. Actron 400…"
-                              : "Nombre o código de barras (podés escanear)…"
+                              : "Nombre, laboratorio, droga o código de barras…"
                         }
                         className="col-span-2 h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 !text-sm placeholder:text-slate-400"
                       />
@@ -3169,13 +3172,13 @@ function Products({
                       <strong className="font-semibold text-slate-600">
                         Por código:
                       </strong>{" "}
-                      tu catálogo, el padrón oficial (vademécum nacional) y el
-                      catálogo de perfumería.{" "}
+                      tu catálogo, la base de medicamentos y el catálogo de
+                      perfumería.{" "}
                       <strong className="font-semibold text-slate-600">
-                        Por nombre:
+                        Por nombre, laboratorio o droga:
                       </strong>{" "}
                       {referenceSource === "official"
-                        ? "padrón oficial (vademécum nacional)"
+                        ? "base de medicamentos"
                         : referenceSource === "alfabeta"
                           ? "AlfaBeta"
                           : "Precios de Remedios"}
@@ -3224,7 +3227,7 @@ function Products({
                       onImported={searchedOwner ? undefined : startImportedLink}
                       catalogOwner={searchedOwner?.name}
                       allowAutomatic={
-                        !name &&
+                        medicineNameIsFree(name, initialNewProduct?.name) &&
                         !presentation &&
                         !selectedReference &&
                         !activeIngredient &&
@@ -3394,42 +3397,46 @@ function Products({
                         ) : referenceResults.length ? (
                           <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                             {referenceResults.map((reference) => (
-                              <button
-                                key={`${reference.source}-${reference.name}-${reference.presentation}-${reference.laboratory}`}
-                                type="button"
-                                onClick={() => pickReference(reference)}
-                                className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left hover:border-teal-300 hover:bg-teal-50/40"
+                              <div
+                                key={`${reference.source}-${reference.name}-${reference.presentation}-${reference.laboratory}-${reference.barcode}`}
                               >
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold text-slate-800">
-                                    {reference.name}
+                                <button
+                                  type="button"
+                                  onClick={() => pickReference(reference)}
+                                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left hover:border-teal-300 hover:bg-teal-50/40"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-sm font-semibold text-slate-800">
+                                      {reference.name}
+                                    </span>
+                                    <span className="block truncate text-xs text-slate-500">
+                                      {[
+                                        reference.presentation,
+                                        reference.laboratory,
+                                        reference.activeIngredient,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ") || "Sin detalle adicional"}
+                                    </span>
                                   </span>
-                                  <span className="block truncate text-xs text-slate-500">
-                                    {[
-                                      reference.presentation,
-                                      reference.laboratory,
-                                      reference.activeIngredient,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" · ") || "Sin detalle adicional"}
+                                  <span className="shrink-0 text-right text-xs text-teal-800">
+                                    <span className="block font-semibold">
+                                      {reference.priceMinor !== null
+                                        ? money(reference.priceMinor)
+                                        : "Sin precio"}
+                                    </span>
+                                    <span className="block text-[10px] text-slate-500">
+                                      {reference.source === "official"
+                                        ? "Padrón oficial"
+                                        : medicineSources[reference.source]}
+                                    </span>
+                                    <span className="hidden text-[10px] text-slate-500">
+                                      Catálogo interno
+                                    </span>
                                   </span>
-                                </span>
-                                <span className="shrink-0 text-right text-xs text-teal-800">
-                                  <span className="block font-semibold">
-                                    {reference.priceMinor !== null
-                                      ? money(reference.priceMinor)
-                                      : "Sin precio"}
-                                  </span>
-                                  <span className="block text-[10px] text-slate-500">
-                                    {reference.source === "official"
-                                      ? "Padrón oficial"
-                                      : "Precios de Remedios"}
-                                  </span>
-                                  <span className="hidden text-[10px] text-slate-500">
-                                    Catálogo interno
-                                  </span>
-                                </span>
-                              </button>
+                                </button>
+                                <MedicineReferenceNote reference={reference} />
+                              </div>
                             ))}
                           </div>
                         ) : (

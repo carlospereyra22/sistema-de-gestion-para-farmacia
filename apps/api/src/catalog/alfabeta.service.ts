@@ -8,6 +8,9 @@ import { ConsultationCache } from "./consultation-cache";
 export type AlfaBetaMatch = { id: string; name: string; laboratory: string };
 const base = "https://www.alfabeta.net/precio/";
 const safeId = /^[a-z0-9][a-z0-9-]{0,180}\.html$/;
+// Página guardada en la base de medicamentos; `idL` elige el laboratorio cuando
+// dos comparten el nombre.
+const safePage = /^[a-z0-9][a-z0-9-]{0,180}\.html(?:\?idL=\d{1,8})?$/;
 
 function searchTokens(value: string): string[] {
   return (
@@ -175,6 +178,14 @@ export class AlfaBetaService {
     return this.details.get(id, async () =>
       parseAlfaBetaDetail(await this.request(id)),
     );
+  }
+
+  // Lee una página por su link guardado. Sin caché: es para actualizar precios.
+  async page(url: string) {
+    const path = url.startsWith(base) ? url.slice(base.length) : "";
+    if (!safePage.test(path))
+      throw new BadRequestException("Link de AlfaBeta inválido.");
+    return parseAlfaBetaDetail(await this.request(path));
   }
 
   private async request(path: string, init: RequestInit = {}): Promise<string> {

@@ -1,3 +1,8 @@
+import {
+  pendingProductRows,
+  type BulkProductResult,
+  type BulkProductRow,
+} from "./lib/purchase-bulk-products";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileSpreadsheet, FileUp, Link2, Plus, X } from "lucide-react";
 import type { CatalogProduct } from "./lib/api";
@@ -59,6 +64,11 @@ const autoSelected = (rows: ImportRow[]) =>
     rows.filter((r) => r.productId && r.quantity).map((r) => r.rowNumber),
   );
 
+type CreateProducts = (
+  rows: BulkProductRow[],
+  onProgress: (done: number) => void,
+) => Promise<BulkProductResult>;
+
 export function PurchaseExcelImport({
   products,
   existingLines,
@@ -66,6 +76,7 @@ export function PurchaseExcelImport({
   onImport,
   onError,
   onCreateProduct,
+  onCreateProducts,
 }: {
   products: CatalogProduct[];
   existingLines: PurchaseDraftLine[];
@@ -76,6 +87,7 @@ export function PurchaseExcelImport({
     barcode: string;
     name: string;
   }) => Promise<string | undefined>;
+  onCreateProducts?: CreateProducts;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState("");
@@ -245,6 +257,15 @@ export function PurchaseExcelImport({
               if (productId) assign(row.rowNumber, productId);
             })
           }
+          onCreateProducts={
+            onCreateProducts &&
+            (async (rows, onProgress) => {
+              const result = await onCreateProducts(rows, onProgress);
+              for (const { rowNumber, productId } of result.created)
+                assign(rowNumber, productId);
+              return result;
+            })
+          }
           onCancel={() => setLoaded(undefined)}
           onConfirm={(lines) => {
             setLoaded(undefined);
@@ -274,6 +295,7 @@ export function PurchaseExcelReview({
   onToggle,
   onAssign,
   onCreateProduct,
+  onCreateProducts,
   onCancel,
   onConfirm,
 }: {
@@ -295,12 +317,21 @@ export function PurchaseExcelReview({
   onAssign: (rowNumber: number, productId: string) => void;
   /** Abre Nuevo producto con el código y el nombre del renglón; al guardar queda vinculado. */
   onCreateProduct?: (row: ImportRow) => Promise<void>;
+  /** Crea los renglones sin producto con los datos de la base de medicamentos. */
+  onCreateProducts?: CreateProducts;
   onCancel: () => void;
   onConfirm: (lines: PurchaseDraftLine[]) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [linking, setLinking] = useState<number>();
   const [creating, setCreating] = useState<number>();
+  const [bulkDone, setBulkDone] = useState<number>();
+  const [failures, setFailures] = useState<BulkProductResult["failed"]>([]);
+  const bulkBusy = bulkDone !== undefined;
+  // Con la creación en curso no se cierra: quedarían productos sin agregar.
+  const cancel = () => {
+    if (!bulkBusy) onCancel();
+  };
   useEffect(() => {
     const dialog = ref.current;
     dialog?.showModal();
@@ -324,6 +355,44 @@ export function PurchaseExcelReview({
     (r) => !(assigned[r.rowNumber] || r.productId) || !r.quantity,
   ).length;
   const pdf = source === "pdf";
+  const pending = pendingProductRows(rows, assigned);
+  const createAll = async () => {
+    if (!onCreateProducts || bulkBusy) return;
+    setFailures([]);
+    setBulkDone(0);
+    const result = await onCreateProducts(pending, setBulkDone).catch(
+      (cause: unknown): BulkProductResult => ({
+        created: [],
+        failed: pending.map((row) => ({
+          rowNumber: row.rowNumber,
+          name: row.name || row.code,
+          reason:
+            cause instanceof Error
+              ? cause.message
+              : "No se pudo crear el producto.",
+        })),
+      }),
+    );
+    setBulkDone(undefined);
+    if (result.failed.length) {
+      setFailures(result.failed);
+      return;
+    }
+    const created = result.created;
+    onConfirm(
+      purchaseExcelLines(
+        rows,
+        new Set([...selected, ...created.map((item) => item.rowNumber)]),
+        {
+          ...assigned,
+          ...Object.fromEntries(
+            created.map((item) => [item.rowNumber, item.productId]),
+          ),
+        },
+        existingLines,
+      ),
+    );
+  };
   // Las facturas informan el total de unidades: sirve para controlar la lectura.
   const units = rows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
@@ -338,12 +407,12 @@ export function PurchaseExcelReview({
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
-          onCancel();
+          cancel();
         }
       }}
       onCancel={(event) => {
         event.preventDefault();
-        onCancel();
+        cancel();
       }}
       className="m-auto flex max-h-[90dvh] w-[min(1180px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/40"
     >
@@ -362,7 +431,7 @@ export function PurchaseExcelReview({
           type="button"
           aria-label="Cerrar revisión del archivo"
           className="p-2 text-slate-500"
-          onClick={onCancel}
+          onClick={cancel}
         >
           <X size={18} />
         </button>
@@ -428,6 +497,26 @@ export function PurchaseExcelReview({
           >
             No encontramos la columna de cantidad. Elegila arriba para seguir.
           </p>
+        )}
+        {failures.length > 0 && (
+          <div
+            role="alert"
+            className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            <p className="font-semibold">
+              {failures.length === 1
+                ? "No se pudo crear 1 producto:"
+                : `No se pudieron crear ${failures.length} productos:`}
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {failures.map((failure) => (
+                <li key={failure.rowNumber}>
+                  {pdf ? "Renglón" : "Fila"} {failure.rowNumber} ·{" "}
+                  {failure.name}: {failure.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-[820px] text-sm">
@@ -561,14 +650,27 @@ export function PurchaseExcelReview({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={onCancel}
-            className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600"
+            onClick={cancel}
+            disabled={bulkBusy}
+            className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600 disabled:opacity-50"
           >
             Cancelar
           </button>
+          {onCreateProducts && pending.length > 0 && (
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => void createAll()}
+              className="h-10 rounded-lg border border-teal-600 bg-white px-4 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-60"
+            >
+              {bulkBusy
+                ? `Creando ${Math.min(bulkDone + 1, pending.length)} de ${pending.length}…`
+                : `Crear ${pending.length} y agregar todo`}
+            </button>
+          )}
           <button
             type="button"
-            disabled={!lines.length}
+            disabled={!lines.length || bulkBusy}
             onClick={() => onConfirm(lines)}
             className="h-10 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
           >

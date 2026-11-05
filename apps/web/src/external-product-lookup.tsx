@@ -6,6 +6,8 @@ import {
   ArrowUpRight,
   Check,
 } from "lucide-react";
+import { MedicineReferenceNote } from "./medicine-reference-note";
+import { medicineLookupLinked } from "./lib/medicine-lookup";
 import { useProductScanner } from "./use-product-scanner";
 import { resolveProductKind } from "./lib/product-kind";
 import { apiBaseUrl, type MedicineReference } from "./lib/api";
@@ -105,6 +107,8 @@ export function ExternalProductLookup({
   const root = useRef<HTMLDivElement>(null);
   const optionList = useRef<HTMLDivElement>(null);
   const chosenRequest = useRef("");
+  // Código del medicamento ya cargado, elegido de la lista o automáticamente.
+  const pickedCode = useRef("");
   const nextLookupTrigger = useRef<BarcodeLookupTrigger>("typing");
   const [dismissed, setDismissed] = useState("");
   const [above, setAbove] = useState(false);
@@ -116,6 +120,7 @@ export function ExternalProductLookup({
   const ownInput = useRef<HTMLInputElement>(null);
   const barcodeInput = searchInput ?? ownInput;
   const requestLookup = (trigger: BarcodeLookupTrigger) => {
+    pickedCode.current = "";
     nextLookupTrigger.current = trigger;
     setAttempt((current) => current + 1);
   };
@@ -238,10 +243,17 @@ export function ExternalProductLookup({
                 chosenRequest.current !== requestKey,
               );
               if (single) callbacks.current.onKindDetected?.(true);
-              if (single && linked) callbacks.current.onMedication(single);
+              if (single && linked) {
+                pickedCode.current = canonical;
+                callbacks.current.onMedication(single);
+              }
               update({
                 medicines: { ...medicines, matches: exact },
-                linked,
+                linked: medicineLookupLinked(
+                  linked,
+                  pickedCode.current,
+                  canonical,
+                ),
                 medicineBusy: false,
               });
             },
@@ -655,22 +667,25 @@ export function ExternalProductLookup({
       {medicines.length > 0 && !current?.linked && !current?.applied && (
         <div className="mt-2 space-y-2">
           {medicines.map((reference, index) => (
-            <button
-              type="button"
-              key={index}
-              disabled={disabled}
-              onClick={() => {
-                onMedication(reference);
-                setState((value) => ({ ...value, linked: true }));
-              }}
-              className="w-full rounded-md border border-teal-100 bg-teal-50/30 p-2 text-left text-xs"
-            >
-              <strong className="block">{reference.name}</strong>
-              <span className="block text-slate-500">
-                {reference.presentation} · {reference.laboratory}
-              </span>
-              <span className="text-teal-700">Usar y vincular</span>
-            </button>
+            <div key={index}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  pickedCode.current = canonical ?? "";
+                  onMedication(reference);
+                  setState((value) => ({ ...value, linked: true }));
+                }}
+                className="w-full rounded-md border border-teal-100 bg-teal-50/30 p-2 text-left text-xs"
+              >
+                <strong className="block">{reference.name}</strong>
+                <span className="block text-slate-500">
+                  {reference.presentation} · {reference.laboratory}
+                </span>
+                <span className="text-teal-700">Usar y vincular</span>
+              </button>
+              <MedicineReferenceNote reference={reference} />
+            </div>
           ))}
         </div>
       )}

@@ -6,6 +6,15 @@ export const medicineSources = {
   preciosderemedios: "Precios de Remedios",
 } satisfies Record<MedicineReference["source"], string>;
 
+// La web del padrón no abre un producto puntual: esas referencias van sin link.
+export function medicineReferenceLink(
+  reference: Pick<MedicineReference, "source" | "referenceUrl">,
+) {
+  return reference.source !== "official" && reference.referenceUrl
+    ? { href: reference.referenceUrl, label: medicineSources[reference.source] }
+    : null;
+}
+
 export function groupMedicines(references: MedicineReference[]) {
   const groups = new Map<
     string,

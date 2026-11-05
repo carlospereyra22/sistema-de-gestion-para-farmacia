@@ -24,6 +24,7 @@ class AlfaBetaQueryDto {
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { CatalogService } from "./catalog.service";
+import { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
 
@@ -45,6 +46,7 @@ export class MedicineReferenceController {
     private readonly references: MedicineReferenceService,
     private readonly alfabeta: AlfaBetaService,
     private readonly externalCatalog: ExternalCatalogService,
+    private readonly medicineCatalog: MedicineCatalogService,
   ) {}
 
   @Get("barcode/:code")
@@ -59,6 +61,15 @@ export class MedicineReferenceController {
       organizationId,
       "CATALOG_MANAGE",
     );
+    // Primero la base propia. Una coincidencia única se vincula sola.
+    const catalogMatches = await this.medicineCatalog.byBarcode(code);
+    if (catalogMatches.length)
+      return {
+        matches: catalogMatches,
+        retailMatches: [],
+        automaticSelection: catalogMatches.length === 1,
+        officialUnavailable: false,
+      };
     let matches: Awaited<ReturnType<MedicineReferenceService["byBarcode"]>> =
       [];
     let officialUnavailable = false;
@@ -135,6 +146,13 @@ export class MedicineReferenceController {
       organizationId,
       "CATALOG_MANAGE",
     );
-    return this.references.search(query.q, query.source ?? "official");
+    const source = query.source ?? "official";
+    // La opción general busca en la base propia; el padrón queda de respaldo
+    // para lo que todavía no está cargado.
+    if (source === "official") {
+      const found = await this.medicineCatalog.search(query.q);
+      if (found.length) return found;
+    }
+    return this.references.search(query.q, source);
   }
 }

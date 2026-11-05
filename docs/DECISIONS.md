@@ -2,6 +2,15 @@
 
 ## DECIDED
 
+- 04/11/2026 (SISTEMA-26): Los medicamentos pasan a una base propia dentro de la
+  base principal, no en `catalogo_juncos_external`, porque la actualiza la corrida
+  de las 09:00 y 17:00 y el rol de esa base es de sólo lectura. La corrida toma de
+  ahí los precios y lee Remedios y AlfaBeta por link guardado, sin buscar por
+  nombre. Solo entran productos con precio y link; el resto se revisa en un Excel.
+  Los dados de baja del padrón siguen publicados con precio en la web oficial:
+  toman ese precio y quedan marcados.
+  Ver MEDICINE_CATALOG.md.
+
 - 02/11/2026 (SISTEMA-22): Las tablas del sistema pasan a un estilo único
   (`apps/web/src/data-table.tsx`): 14 px dato principal, 12 px encabezados y
   secundarios, números alineados a la derecha, estado con punto y texto y

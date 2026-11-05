@@ -1,3 +1,4 @@
+import { createProductsFromBase } from "./lib/purchase-bulk-products";
 import {
   useCallback,
   useEffect,
@@ -1017,6 +1018,14 @@ export function PurchasesWorkspace({
                 products={products}
                 existingLines={draft.lines}
                 onCreateProduct={onCreateProduct}
+                onCreateProducts={(rows, onProgress) =>
+                  createProductsFromBase(
+                    token,
+                    organizationId,
+                    rows,
+                    onProgress,
+                  ).finally(onChanged)
+                }
                 disabled={busy || draft.lines.length >= 100}
                 onError={(message) => {
                   setNotice("");

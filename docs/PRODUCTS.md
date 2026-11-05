@@ -89,6 +89,8 @@ La tarea de la API corre a las 09:00 y 17:00 de Argentina (12:00 y 20:00 UTC). R
 
 ## Copia local del padrón y actualización para todas las farmacias — SISTEMA-21
 
+Desde SISTEMA-26 la corrida toma los precios de la base de medicamentos y Remedios y AlfaBeta se leen por link guardado; lo de abajo sigue vigente para lo que no está en esa base. Ver `MEDICINE_CATALOG.md`.
+
 Antes cada producto vinculado de cada farmacia buscaba su precio por nombre en el padrón, en serie y sin caché (hasta ~588 consultas por corrida con 155 productos). Ahora:
 
 - **Una sola descarga por corrida para todo el sistema.** La corrida de las 09:00 y 17:00 baja el padrón completo (`%%%`, ~16.000 presentaciones vigentes, ~16 MB) y reemplaza la copia local `MedicineReferenceSnapshot`, compartida por todas las organizaciones porque es información pública. Medido en local: 155 productos en ~10 s, de los cuales ~8 s son la descarga.

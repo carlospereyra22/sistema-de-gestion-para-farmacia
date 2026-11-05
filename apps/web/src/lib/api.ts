@@ -557,6 +557,10 @@ export type MedicineReference = {
   pamiPriceMinor: number | null;
   updatedAt: string | null;
   saleType: string;
+  // Solo en la base de medicamentos.
+  referenceUrl?: string | null;
+  officialDelisted?: boolean;
+  laboratoryMismatch?: string | null;
 };
 export async function getCatalogProducts(
   token: string,
@@ -676,6 +680,19 @@ export async function searchMedicineReferences(
       "No se pudieron consultar las referencias de medicamentos.",
     );
   return (await response.json()) as MedicineReference[];
+}
+export async function lookupMedicineBarcode(
+  token: string,
+  organizationId: string,
+  code: string,
+): Promise<{ matches: MedicineReference[] }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/barcode/${encodeURIComponent(code)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo consultar el código.");
+  return (await response.json()) as { matches: MedicineReference[] };
 }
 export async function createCatalogProduct(
   token: string,

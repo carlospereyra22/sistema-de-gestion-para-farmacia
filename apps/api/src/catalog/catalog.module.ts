@@ -6,6 +6,7 @@ import { CatalogPriceRefreshService } from "./catalog-price-refresh.service";
 import { CatalogController } from "./catalog.controller";
 import { CatalogService } from "./catalog.service";
 import { PriceListUpdates } from "./price-list-updates";
+import { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceController } from "./medicine-reference.controller";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
@@ -24,6 +25,7 @@ import { ExternalCatalogController } from "./external-catalog.controller";
     CatalogService,
     PriceListUpdates,
     MedicineReferenceService,
+    MedicineCatalogService,
     CatalogPriceRefreshService,
   ],
 })

@@ -21,4 +21,5 @@ SUBIR A PRODUCCION LANDING/
 __pycache__/
 *.pyc
 data/external-catalog/
+data/medicine-catalog/
 SUBIR-A-NETLIFY-PREPROD/

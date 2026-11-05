@@ -53,6 +53,10 @@ export type MedicineReference = {
   pharmaceuticalForm?: string;
   concentration?: string;
   prescriptionRequired?: boolean;
+  // Solo en la base de medicamentos (SISTEMA-26).
+  referenceUrl?: string | null;
+  officialDelisted?: boolean;
+  laboratoryMismatch?: string | null;
 };
 
 type PriceRemediesCandidate = MedicineReference & { score: number };
@@ -409,6 +413,20 @@ export class MedicineReferenceService {
   // Padrón oficial completo y vigente: una sola consulta pública (`%%%`).
   // Lo usan el índice de escaneo y la actualización de precios (SISTEMA-21).
   async downloadOfficial(): Promise<MedicineReference[]> {
+    return officialReferences(await this.downloadOfficialPayload());
+  }
+
+  // La misma descarga con las filas originales: la base de medicamentos
+  // necesita también las dadas de baja y las de código inválido (SISTEMA-26).
+  async downloadOfficialData(): Promise<{
+    references: MedicineReference[];
+    payload: unknown[];
+  }> {
+    const payload = await this.downloadOfficialPayload();
+    return { references: officialReferences(payload), payload };
+  }
+
+  private async downloadOfficialPayload(): Promise<unknown[]> {
     const response = await fetch(OFFICIAL_MEDICINE_URL, {
       method: "POST",
       headers: {
@@ -426,7 +444,7 @@ export class MedicineReferenceService {
       throw new BadGatewayException(
         "La fuente devolvió un formato no reconocido.",
       );
-    return officialReferences(payload);
+    return payload as unknown[];
   }
 
   private async loadBarcodeIndex(): Promise<Map<string, MedicineReference[]>> {

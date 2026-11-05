@@ -318,6 +318,70 @@ model MedicineReferenceSnapshot {
   @@index([source, lookupKey])
 }
 
+// Base propia de medicamentos (SISTEMA-26), compartida por todas las
+// organizaciones: información pública, igual para todas. Solo entran productos
+// con precio y link de referencia; la corrida de las 09:00 y 17:00 los actualiza.
+model MedicineCatalogItem {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  // Identificador de origen: `ab-<CLAVE>`, la CLAVE del padrón oficial.
+  externalKey        String                   @unique @db.VarChar(40)
+  name               String
+  presentation       String                   @default("")
+  activeIngredient   String                   @default("")
+  laboratory         String                   @default("")
+  pharmaceuticalForm String                   @default("")
+  saleCondition      String                   @default("")
+  troquel            String                   @default("")
+  // official | preciosderemedios | alfabeta
+  priceSource        String                   @db.VarChar(20)
+  priceMinor         BigInt
+  // Link exacto de Remedios o AlfaBeta. El padrón no admite link directo.
+  referenceUrl       String?
+  // Fila de la fuente que da el precio, normalizada.
+  sourceRowKey       String                   @default("")
+  // El padrón oficial lo dio de baja: sigue funcionando con su otra fuente.
+  officialDelisted   Boolean                  @default(false)
+  // Laboratorio de la base / laboratorio de la fuente, cuando difieren.
+  laboratoryMismatch String?
+  // Precio leído y no aplicado: queda para revisar a mano.
+  reviewReason       String?
+  // Nombre, presentación, laboratorio y droga normalizados para buscar.
+  searchText         String                   @default("")
+  priceUpdatedAt     DateTime                 @default(now()) @db.Timestamptz(6)
+  priceCheckedAt     DateTime?                @db.Timestamptz(6)
+  createdAt          DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime                 @updatedAt @db.Timestamptz(6)
+  barcodes           MedicineCatalogBarcode[]
+
+  @@index([priceSource])
+  @@index([name])
+}
+
+// Un producto puede tener varios códigos. `gtin` queda vacío si el dígito de
+// control es inválido: esos códigos se conservan porque el padrón los informa.
+model MedicineCatalogBarcode {
+  id      String              @id @default(uuid()) @db.Uuid
+  itemId  String              @db.Uuid
+  barcode String              @db.VarChar(32)
+  gtin    String?             @db.VarChar(14)
+  item    MedicineCatalogItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, barcode])
+  @@index([gtin])
+  @@index([barcode])
+}
+
+// Equivalencias de laboratorio entre la base y las fuentes por nombre.
+// status: igual | parecido | duda | distinto. Con duda o distinto no se aplica
+// el precio de la fuente.
+model MedicineLaboratoryAlias {
+  catalogName String
+  sourceName  String
+  status      String @db.VarChar(20)
+
+  @@id([catalogName, sourceName])
+}
+
 // Corrida de actualización de precios externos (SISTEMA-21). Una corrida
 // global (sin organizationId) a la vez; las de una farmacia aplican la copia
 // local sin descargar.
