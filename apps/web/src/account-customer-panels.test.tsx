@@ -36,67 +36,122 @@ const account: CustomerAccount = {
     },
   ],
 };
-it("paginates the customer sidebar in groups of five with compact controls", () => {
-  const accounts = Array.from({ length: 7 }, (_, index) => ({
+const listProps = {
+  disabled: false,
+  loading: false,
+  query: "",
+  onQuery: () => {},
+  onSelect: () => {},
+  onCreate: () => {},
+};
+it("pagina la lista de clientes de a diez, con columnas y alta", () => {
+  const accounts = Array.from({ length: 12 }, (_, index) => ({
     ...account,
     id: `customer-${index}`,
-    name: `Cliente ${index + 1}`,
+    name: `Cliente ${String.fromCharCode(65 + index)}`,
   }));
   const html = renderToStaticMarkup(
-    <AccountCustomerList
-      accounts={accounts}
-      selectedId={accounts[0].id}
-      disabled={false}
-      loading={false}
-      query=""
-      onQuery={() => {}}
-      onSelect={() => {}}
-    />,
+    <AccountCustomerList {...listProps} accounts={accounts} />,
   );
-  expect(html).toContain("Cliente 5");
-  expect(html).not.toContain("Cliente 6");
-  expect(html).toContain("1–5 de 7");
-  expect(html).toContain('aria-label="Página 2 de clientes"');
+  expect(html).toContain("Cliente J");
+  expect(html).not.toContain("Cliente K");
+  expect(html).toContain("12 clientes · 10 por página");
+  expect(html).toContain('aria-label="Página 2"');
+  expect(html).toContain('aria-label="Páginas de clientes"');
+  expect(html).toContain("pagination-footer");
   expect(html).toContain('aria-current="page"');
-  expect(html).toContain("lg:[contain:size]");
-});
-it("filters before pagination and keeps empty results accessible", () => {
-  const html = renderToStaticMarkup(
-    <AccountCustomerList
-      accounts={[account]}
-      selectedId={account.id}
-      disabled={false}
-      loading={false}
-      query="inexistente"
-      onQuery={() => {}}
-      onSelect={() => {}}
-    />,
-  );
-  expect(html).toContain("No hay clientes para esta búsqueda.");
-  expect(html).toContain("0 clientes");
-  expect(html).not.toContain('aria-label="Página 2 de clientes"');
-});
-it("keeps dropdown filters compact without a repeated title or counters", () => {
-  const html = renderToStaticMarkup(
-    <AccountCustomerList
-      dropdown
-      accounts={[account]}
-      selectedId={account.id}
-      disabled={false}
-      loading={false}
-      query=""
-      onQuery={() => {}}
-      onSelect={() => {}}
-    />,
-  );
-  expect(html).not.toContain("<h2");
-  expect(html).not.toContain("opacity-75");
+  expect(html).toContain("md:grid-cols-");
+  expect(html).toContain("Nuevo cliente");
+  expect(html).toContain("<h2");
   expect(html).toContain('aria-label="Filtrar clientes por saldo"');
-  expect(html).toContain("grid-cols-3");
-  expect(html).toContain('aria-pressed="true"');
+  expect(html).toContain("Saldo: todos");
+  expect(html).toContain("Cuenta corriente: todos");
+  expect(html.match(/aria-haspopup="listbox"/g)).toHaveLength(4);
+  expect(html).not.toContain("aria-pressed");
+});
+it("ofrece crear el cliente cuando la búsqueda no encuentra a nadie", () => {
+  const html = renderToStaticMarkup(
+    <AccountCustomerList
+      {...listProps}
+      accounts={[account]}
+      query=" María Pérez "
+    />,
+  );
+  expect(html).toContain("No encontramos «María Pérez».");
+  expect(html).toContain("Crear «María Pérez»");
+  expect(html).toContain("0 clientes");
+  expect(html).not.toContain('aria-label="Página 2"');
+});
+it("no propone un CUIT o teléfono como nombre del cliente nuevo", () => {
+  const html = renderToStaticMarkup(
+    <AccountCustomerList
+      {...listProps}
+      accounts={[account]}
+      query="20-12345678-9"
+    />,
+  );
+  expect(html).toContain("No encontramos «20-12345678-9».");
+  expect(html).not.toContain("Crear «");
+});
+it("no ofrece el alta mientras las cuentas siguen cargando", () => {
+  const html = renderToStaticMarkup(
+    <AccountCustomerList {...listProps} loading accounts={[]} />,
+  );
+  expect(html).toContain("Cargando cuentas…");
+  expect(html).not.toContain("Crear el primer cliente");
+});
+it("distingue a los clientes eliminados, que pueden tener deuda por cobrar", () => {
+  const html = renderToStaticMarkup(
+    <AccountCustomerList
+      {...listProps}
+      accounts={[{ ...account, active: false }]}
+    />,
+  );
+  expect(html).toContain("Eliminado");
   expect(html).toContain("Con deuda");
-  expect(html).toContain("Al día");
-  expect(html).toContain("Páginas de clientes");
+});
+it("muestra por separado quién creó el cliente y quién habilitó la cuenta", () => {
+  const props = {
+    ...account,
+    createdBy: { id: "ana", name: "Ana Caja" },
+    creditEnabledBy: { id: "luz", name: "Luz Admin" },
+  };
+  const list = renderToStaticMarkup(
+    <AccountCustomerList {...listProps} accounts={[props]} />,
+  );
+  expect(list).toContain("Creado por");
+  expect(list).toContain("Ana Caja");
+  expect(list).toContain("Por: Luz Admin");
+  expect(list).toContain('aria-label="Filtrar clientes por quién los creó"');
+  expect(list).toContain("Creado por: todos");
+  expect(list).toContain("Habilitada por: todos");
+  const profile = renderToStaticMarkup(
+    <AccountCustomerProfile account={props} />,
+  );
+  expect(profile).toContain("Creado por: Ana Caja");
+  expect(profile).toContain("Cuenta habilitada por: Luz Admin");
+});
+it("no inventa usuarios ni muestra quién habilitó una cuenta sin crédito", () => {
+  const profile = renderToStaticMarkup(
+    <AccountCustomerProfile
+      account={{ ...account, creditEnabled: false, creditEnabledBy: null }}
+    />,
+  );
+  expect(profile).toContain("Creado por: Sin datos");
+  expect(profile).not.toContain("Cuenta habilitada por");
+});
+it("muestra el contacto debajo del nombre en la ficha", () => {
+  const html = renderToStaticMarkup(
+    <AccountCustomerProfile
+      account={{ ...account, document: "27-34567890-1" }}
+    />,
+  );
+  expect(html).toContain('aria-label="Datos del cliente"');
+  expect(html).toContain("27-34567890-1");
+  expect(html.indexOf("April Gómez")).toBeLessThan(
+    html.indexOf("27-34567890-1"),
+  );
+  expect(html.match(/Crédito habilitado/g)).toHaveLength(1);
 });
 it("shows actual credit and last receipt, excluding cancellation credits", () => {
   const html = renderToStaticMarkup(
@@ -146,7 +201,9 @@ it("shows the last payment amount before its date inline and moves explanations 
   expect(html).toContain("Deuda actual del cliente");
   expect(html).toContain("Límite:");
   expect(html).toContain("Para nuevas ventas");
-  expect(html).not.toContain("title=");
+  expect(html.slice(html.indexOf("account-profile-metrics"))).not.toContain(
+    "title=",
+  );
   expect(html.match(/role="tooltip" hidden=""/g)).toHaveLength(4);
   expect(html.match(/bottom-full z-50 pb-2/g)).toHaveLength(4);
   expect(html).not.toContain("top-full");
@@ -156,21 +213,12 @@ it("shows the last payment amount before its date inline and moves explanations 
   for (const [, id] of hintIds) expect(html).toContain(`id="${id}"`);
   expect(html).not.toContain("mt-[3px]");
 });
-it("supports accent-insensitive customer search and meaningful empty state", () => {
-  const props = {
-    accounts: [account],
-    selectedId: "one",
-    disabled: false,
-    loading: false,
-    onQuery: () => {},
-    onSelect: () => {},
-  };
+it("supports accent-insensitive customer search", () => {
   expect(
-    renderToStaticMarkup(<AccountCustomerList {...props} query="gomez" />),
+    renderToStaticMarkup(
+      <AccountCustomerList {...listProps} accounts={[account]} query="gomez" />,
+    ),
   ).toContain("April Gómez");
-  expect(
-    renderToStaticMarkup(<AccountCustomerList {...props} query="missing" />),
-  ).toContain("No hay clientes");
 });
 it("counts review rows separately and does not invent overdue amounts", () => {
   const row: AccountDueRow = {

@@ -132,6 +132,11 @@ describe("Current account lifecycle (rolled-back fixtures)", () => {
             15000,
           );
           expect(JSON.stringify(configuration)).toContain("15000");
+          // Cliente sin alta auditada: quien habilitó se conoce, quien creó no.
+          expect((await accounts.list(user.id, org.id))[0]).toMatchObject({
+            createdBy: null,
+            creditEnabledBy: { id: user.id },
+          });
           const input = {
             customerId: customer.id,
             items: [{ productId: product.id, quantity: 1 }],

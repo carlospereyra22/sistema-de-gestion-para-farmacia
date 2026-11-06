@@ -1,15 +1,28 @@
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
   CalendarClock,
   ChevronRight,
+  CircleDollarSign,
   History,
+  Plus,
   Search,
   ShieldCheck,
+  UserRound,
   Wallet,
 } from "lucide-react";
+import { AccountCustomerContact } from "./account-customer-contact";
+import { Pagination } from "./pagination";
+import { ProductFilterSelect } from "./product-filter-select";
+import {
+  actorFilterOptions,
+  actorName,
+  matchesActorFilter,
+  matchesCreditFilter,
+  validActorFilter,
+  type AccountCreditFilter,
+} from "./lib/account-customer-selection";
 import type { CustomerAccount } from "./lib/api";
 import { accountInitials } from "./lib/account-initials";
-import { historyPages } from "./lib/history-pagination";
 import {
   customerIdentityDetail,
   matchingCustomerNames,
@@ -20,250 +33,305 @@ const money = (value: number | string) =>
     style: "currency",
     currency: "ARS",
   });
+const rowColumns =
+  "md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_16px] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.9fr)_minmax(0,0.7fr)_16px]";
+const pageSize = 10;
+type AccountBalanceFilter = "all" | "debt" | "clear";
 export function AccountCustomerList({
   accounts,
-  selectedId,
   disabled,
   loading,
   query,
   onQuery,
   onSelect,
-  dropdown = false,
+  onCreate,
+  summary,
 }: {
   accounts: CustomerAccount[];
-  selectedId: string;
   disabled: boolean;
   loading: boolean;
   query: string;
   onQuery: (value: string) => void;
   onSelect: (id: string) => void;
-  dropdown?: boolean;
+  onCreate: (name?: string) => void;
+  summary?: ReactNode;
 }) {
-  const [filter, setFilter] = useState<"all" | "debt" | "clear">("all");
+  const [filter, setFilter] = useState<AccountBalanceFilter>("all");
+  const [creditFilter, setCreditFilter] = useState<AccountCreditFilter>("all");
+  const [creatorChoice, setCreatorChoice] = useState("all");
+  const [enablerChoice, setEnablerChoice] = useState("all");
   const [pagination, setPagination] = useState({ scope: "", page: 1 });
-  const options = [
-    { id: "all", label: "Todos", count: accounts.length },
-    {
-      id: "debt",
-      label: "Con deuda",
-      count: accounts.filter((account) => Number(account.balanceMinor) > 0)
-        .length,
-    },
-    {
-      id: "clear",
-      label: "Al día",
-      count: accounts.filter((account) => Number(account.balanceMinor) <= 0)
-        .length,
-    },
-  ] as const;
+  const creatorOptions = actorFilterOptions(
+    accounts.map((account) => account.createdBy),
+    "Creado por",
+  );
+  // Sin cuenta corriente no hay quién la haya habilitado: no es un dato faltante.
+  const enablerOptions = actorFilterOptions(
+    accounts
+      .filter((account) => account.creditEnabled)
+      .map((account) => account.creditEnabledBy),
+    "Habilitada por",
+  );
+  const creatorFilter = validActorFilter(creatorOptions, creatorChoice);
+  const enablerFilter = validActorFilter(enablerOptions, enablerChoice);
+  const passesSelectors = (account: CustomerAccount) =>
+    matchesCreditFilter(account, creditFilter) &&
+    matchesActorFilter(account.createdBy, creatorFilter) &&
+    (enablerFilter === "all" ||
+      (account.creditEnabled &&
+        matchesActorFilter(account.creditEnabledBy, enablerFilter)));
   const normalize = (text: string) =>
     text
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLocaleLowerCase();
-  const visible = accounts.filter(
+  const search = query.trim();
+  const matches = accounts.filter((account) =>
+    normalize(`${account.name} ${customerIdentityDetail(account)}`).includes(
+      normalize(search),
+    ),
+  );
+  const visible = matches.filter(
     (account) =>
-      normalize(`${account.name} ${customerIdentityDetail(account)}`).includes(
-        normalize(query.trim()),
-      ) &&
+      passesSelectors(account) &&
       (filter === "all" ||
         (filter === "debt"
           ? Number(account.balanceMinor) > 0
           : Number(account.balanceMinor) <= 0)),
   );
-  const scope = `${filter}:${query.trim()}`;
-  const totalPages = Math.max(1, Math.ceil(visible.length / 5));
+  // Un CUIT o teléfono sin resultados no sirve como nombre del cliente nuevo.
+  const suggestedName =
+    !matches.length && /\p{L}/u.test(search) ? search : undefined;
+  const scope = `${filter}:${creditFilter}:${creatorFilter}:${enablerFilter}:${search}`;
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const page = Math.min(
     pagination.scope === scope ? pagination.page : 1,
     totalPages,
   );
-  const pageItems = visible.slice((page - 1) * 5, page * 5);
+  const pageItems = visible.slice((page - 1) * pageSize, page * pageSize);
   const changePage = (next: number) => setPagination({ scope, page: next });
   return (
-    <section
-      aria-label="Lista de clientes con cuenta corriente"
-      className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${dropdown ? "max-h-[min(65dvh,560px)]" : "lg:min-h-80 lg:[contain:size]"}`}
-    >
-      <div
-        className={`shrink-0 space-y-3 border-b border-slate-100 ${dropdown ? "p-2.5" : "p-4"}`}
-      >
-        {!dropdown && (
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800">Clientes</h2>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+    <>
+      <div className="grid shrink-0 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,640px)]">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-slate-800">Clientes</h2>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-sm text-slate-500">
               {accounts.length}
             </span>
           </div>
-        )}
-        {!dropdown && (
-          <label className="relative block">
+          <label className="relative block min-w-44 grow basis-full sm:basis-44">
             <Search
-              size={15}
+              size={16}
               aria-hidden="true"
               className="absolute left-3 top-3 text-slate-400"
             />
             <input
               aria-label="Buscar cliente"
-              placeholder="Buscar cliente…"
+              placeholder="Buscar por nombre, CUIT o teléfono…"
+              autoComplete="off"
               value={query}
               onChange={(event) => onQuery(event.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-base focus:border-teal-500 focus:outline-none"
             />
           </label>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onCreate()}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            <Plus size={16} aria-hidden="true" />
+            Nuevo cliente
+          </button>
+        </div>
+        {summary}
+      </div>
+      <section
+        aria-label="Lista de clientes con cuenta corriente"
+        className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+      >
+        <div className="grid shrink-0 gap-2 border-b border-slate-100 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ProductFilterSelect
+            compact
+            label="Filtrar clientes por saldo"
+            icon={<CircleDollarSign size={15} aria-hidden />}
+            value={filter}
+            options={[
+              { value: "all", label: "Saldo: todos" },
+              { value: "debt", label: "Con deuda" },
+              { value: "clear", label: "Al día" },
+            ]}
+            onChange={(value) => setFilter(value as AccountBalanceFilter)}
+          />
+          <ProductFilterSelect
+            compact
+            label="Filtrar clientes por quién los creó"
+            icon={<UserRound size={15} aria-hidden />}
+            value={creatorFilter}
+            options={creatorOptions}
+            onChange={setCreatorChoice}
+          />
+          <ProductFilterSelect
+            compact
+            label="Filtrar clientes por quién habilitó la cuenta"
+            icon={<ShieldCheck size={15} aria-hidden />}
+            value={enablerFilter}
+            options={enablerOptions}
+            onChange={setEnablerChoice}
+          />
+          <ProductFilterSelect
+            compact
+            label="Filtrar clientes por cuenta corriente"
+            icon={<Wallet size={15} aria-hidden />}
+            value={creditFilter}
+            options={[
+              { value: "all", label: "Cuenta corriente: todos" },
+              { value: "with", label: "Con cuenta corriente" },
+              { value: "without", label: "Sin cuenta corriente" },
+            ]}
+            onChange={(value) => setCreditFilter(value as AccountCreditFilter)}
+          />
+        </div>
+        {pageItems.length > 0 && (
+          <div
+            aria-hidden="true"
+            className={`hidden shrink-0 items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs font-medium uppercase tracking-wide text-slate-500 ${rowColumns}`}
+          >
+            <span>Cliente</span>
+            <span>CUIT / DNI y teléfono</span>
+            <span className="hidden lg:block">Creado por</span>
+            <span>Crédito</span>
+            <span className="text-right">Saldo</span>
+            <span />
+          </div>
         )}
         <div
-          role="group"
-          aria-label="Filtrar clientes por saldo"
-          className={
-            dropdown
-              ? "grid grid-cols-3 gap-1 rounded-lg bg-slate-100/80 p-1"
-              : "flex flex-wrap gap-1.5 text-[11px]"
-          }
+          key={`${scope}:${page}`}
+          className="min-h-0 flex-1 overflow-y-auto"
         >
-          {options.map((option) => (
-            <button
-              type="button"
-              key={option.id}
-              aria-pressed={filter === option.id}
-              onClick={() => setFilter(option.id)}
-              className={
-                dropdown
-                  ? `min-w-0 rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${filter === option.id ? "bg-white text-teal-800 shadow-sm" : "text-slate-500 hover:bg-white/60 hover:text-slate-700"}`
-                  : `rounded-full px-2.5 py-1.5 text-[11px] font-medium ${filter === option.id ? "bg-teal-700 text-white" : "bg-slate-50 text-slate-500 hover:bg-slate-100"}`
-              }
-            >
-              {option.label}{" "}
-              {!dropdown && (
-                <span className="ml-1 opacity-75">{option.count}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div
-        key={`${scope}:${page}`}
-        className="min-h-0 max-h-[60vh] flex-1 overflow-y-auto lg:max-h-none"
-      >
-        {pageItems.map((account) => {
-          const active = selectedId === account.id;
-          return (
-            <button
-              type="button"
-              key={account.id}
-              disabled={disabled}
-              aria-pressed={active}
-              onClick={() => onSelect(account.id)}
-              className={`flex w-full items-center gap-3 border-b border-l-[3px] border-b-slate-100 px-3 py-3.5 text-left last:border-b-0 ${active ? "border-l-teal-600 bg-teal-50/80" : "border-l-transparent hover:bg-slate-50"}`}
-            >
-              <span
-                aria-hidden="true"
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${active ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-500"}`}
-              >
-                {accountInitials(account.name)}
-              </span>
-              <span className="min-w-0 flex-1">
-                <strong
-                  className="block truncate text-sm font-semibold text-slate-800"
-                  title={account.name}
-                >
-                  {account.name}
-                </strong>
-                {(customerIdentityDetail(account) ||
-                  matchingCustomerNames(accounts, account.name, account.id)
-                    .length > 0) && (
-                  <span className="mt-1 block truncate text-[11px] text-slate-500">
-                    {customerIdentityDetail(account) ||
-                      `Ficha ${account.id.slice(0, 8)}`}
-                  </span>
-                )}
-                <span
-                  className={`mt-1 block text-[11px] ${account.creditEnabled ? "text-teal-700" : "text-slate-400"}`}
-                >
-                  {account.creditEnabled ? "Crédito habilitado" : "Sin crédito"}
-                </span>
-              </span>
-              <span className="shrink-0 text-right">
-                <strong className="block text-xs font-semibold tabular-nums text-slate-800">
-                  {money(account.balanceMinor)}
-                </strong>
-                <span
-                  className={`mt-1 inline-block rounded-md px-1.5 py-0.5 text-[10px] ${Number(account.balanceMinor) > 0 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}
-                >
-                  {Number(account.balanceMinor) > 0
-                    ? "Con deuda"
-                    : Number(account.balanceMinor) < 0
-                      ? "A favor"
-                      : "Al día"}
-                </span>
-              </span>
-              <ChevronRight
-                aria-hidden="true"
-                size={13}
-                className={active ? "text-teal-600" : "text-slate-300"}
-              />
-            </button>
-          );
-        })}
-      </div>
-      {!visible.length && (
-        <p className="p-6 text-center text-xs leading-5 text-slate-500">
-          {loading
-            ? "Cargando cuentas…"
-            : accounts.length
-              ? "No hay clientes para esta búsqueda."
-              : "Creá un cliente en Clientes para habilitar su cuenta corriente."}
-        </p>
-      )}
-      <nav
-        aria-label="Páginas de clientes"
-        className="mt-auto flex shrink-0 flex-col items-center gap-2 border-t border-slate-100 px-3 py-2.5"
-      >
-        <span role="status" className="text-[10px] text-slate-400">
-          {visible.length
-            ? `${(page - 1) * 5 + 1}–${Math.min(page * 5, visible.length)} de ${visible.length}`
-            : "0 clientes"}
-        </span>
-        <div className="flex items-center gap-1.5 text-xs">
-          <button
-            type="button"
-            aria-label="Página anterior de clientes"
-            disabled={disabled || loading || page === 1}
-            onClick={() => changePage(page - 1)}
-            className="size-7 rounded-full border border-teal-200 text-teal-700 disabled:opacity-35"
-          >
-            ‹
-          </button>
-          {historyPages(page, totalPages).map((item) =>
-            typeof item === "string" ? (
-              <span key={item} className="text-slate-400">
-                …
-              </span>
-            ) : (
+          {pageItems.map((account) => {
+            const detail =
+              customerIdentityDetail(account) ||
+              (matchingCustomerNames(accounts, account.name, account.id)
+                .length > 0
+                ? `Ficha ${account.id.slice(0, 8)}`
+                : "");
+            const credit = account.creditEnabled
+              ? "Crédito habilitado"
+              : "Sin crédito";
+            return (
               <button
-                key={item}
                 type="button"
-                aria-label={`Página ${item} de clientes`}
-                aria-current={item === page ? "page" : undefined}
-                disabled={disabled || loading}
-                onClick={() => changePage(item)}
-                className={`size-7 rounded-lg border font-medium disabled:opacity-35 ${item === page ? "border-teal-700 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-teal-700 hover:bg-teal-50"}`}
+                key={account.id}
+                disabled={disabled}
+                onClick={() => onSelect(account.id)}
+                className={`flex w-full items-center gap-3 border-b border-b-slate-100 px-4 py-2.5 text-left last:border-b-0 hover:bg-slate-50 ${rowColumns}`}
               >
-                {item}
+                <span className="flex min-w-0 flex-1 items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-500"
+                  >
+                    {accountInitials(account.name)}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <strong
+                        className="truncate text-base font-semibold text-slate-800"
+                        title={account.name}
+                      >
+                        {account.name}
+                      </strong>
+                      {account.active === false && (
+                        <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+                          Eliminado
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block truncate text-sm text-slate-500 md:hidden">
+                      {[detail, credit].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                </span>
+                <span className="hidden min-w-0 truncate text-sm text-slate-500 md:block">
+                  {detail || "Sin informar"}
+                </span>
+                <span className="hidden min-w-0 truncate text-sm text-slate-500 lg:block">
+                  {actorName(account.createdBy)}
+                </span>
+                <span className="hidden min-w-0 md:block">
+                  <span
+                    className={`block truncate text-sm ${account.creditEnabled ? "text-teal-700" : "text-slate-400"}`}
+                  >
+                    {credit}
+                  </span>
+                  {account.creditEnabled && (
+                    <span className="mt-0.5 block truncate text-xs text-slate-500">
+                      Por: {actorName(account.creditEnabledBy)}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 text-right">
+                  <strong className="block text-base font-semibold tabular-nums text-slate-800">
+                    {money(account.balanceMinor)}
+                  </strong>
+                  <span
+                    className={`mt-0.5 inline-block rounded-md px-1.5 py-0.5 text-xs ${Number(account.balanceMinor) > 0 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}
+                  >
+                    {Number(account.balanceMinor) > 0
+                      ? "Con deuda"
+                      : Number(account.balanceMinor) < 0
+                        ? "A favor"
+                        : "Al día"}
+                  </span>
+                </span>
+                <ChevronRight
+                  aria-hidden="true"
+                  size={16}
+                  className="text-slate-300"
+                />
               </button>
-            ),
+            );
+          })}
+          {!visible.length && (
+            <div className="flex flex-col items-center gap-3 p-8 text-center text-sm text-slate-500">
+              <p>
+                {loading
+                  ? "Cargando cuentas…"
+                  : !accounts.length
+                    ? "Todavía no hay clientes."
+                    : matches.length
+                      ? "No hay clientes con este filtro."
+                      : `No encontramos «${search}».`}
+              </p>
+              {!loading && (!accounts.length || suggestedName) && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onCreate(suggestedName)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700 disabled:opacity-50"
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  {suggestedName
+                    ? `Crear «${suggestedName}»`
+                    : "Crear el primer cliente"}
+                </button>
+              )}
+            </div>
           )}
-          <button
-            type="button"
-            aria-label="Página siguiente de clientes"
-            disabled={disabled || loading || page === totalPages}
-            onClick={() => changePage(page + 1)}
-            className="size-7 rounded-full border border-teal-200 text-teal-700 disabled:opacity-35"
-          >
-            ›
-          </button>
         </div>
-      </nav>
-    </section>
+        <Pagination
+          integrated
+          total={visible.length}
+          currentPage={page}
+          totalPages={totalPages}
+          noun="clientes"
+          label="Páginas de clientes"
+          onChange={changePage}
+        />
+      </section>
+    </>
   );
 }
 
@@ -352,6 +420,12 @@ export function AccountCustomerProfile({
                   : "Crédito deshabilitado"}
               </span>
             </div>
+            <AccountCustomerContact account={account} />
+            <p className="mt-1 text-xs text-slate-500">
+              Creado por: {actorName(account.createdBy)}
+              {account.creditEnabled &&
+                ` · Cuenta habilitada por: ${actorName(account.creditEnabledBy)}`}
+            </p>
           </div>
         </div>
         <dl className="account-profile-metrics grid min-w-0 grid-cols-2 gap-2">

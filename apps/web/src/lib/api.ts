@@ -1124,6 +1124,7 @@ export type Party = CustomerBilling & {
   taxId?: string | null;
   active: boolean;
 };
+export type AccountActor = { id: string; name: string | null };
 export type CustomerAccount = {
   document?: string | null;
   billingTaxId?: string | null;
@@ -1132,6 +1133,8 @@ export type CustomerAccount = {
   id: string;
   name: string;
   creditEnabled: boolean;
+  createdBy?: AccountActor | null;
+  creditEnabledBy?: AccountActor | null;
   active: boolean;
   creditLimitMinor: string | null;
   balanceMinor: string;
@@ -1482,7 +1485,7 @@ export async function createParty(
   priceListId?: string,
   billing?: CustomerBilling,
   supplierTerms?: SupplierProfileInput,
-): Promise<void> {
+): Promise<{ id: string }> {
   const response = await fetch(
     `${apiBaseUrl}/organizations/${organizationId}/${type}`,
     {
@@ -1501,6 +1504,7 @@ export async function createParty(
     },
   );
   if (!response.ok) throw await responseError(response, "No se pudo guardar.");
+  return response.json() as Promise<{ id: string }>;
 }
 
 export async function updateSupplierTerms(

@@ -7,7 +7,10 @@ import {
   type Party,
 } from "./lib/api";
 import { CustomerNameWarning } from "./customer-name-warning";
-import { normalizedCustomerName } from "./lib/customer-identity";
+import {
+  normalizedCustomerName,
+  type CustomerIdentity,
+} from "./lib/customer-identity";
 import { ProductFilterSelect } from "./product-filter-select";
 import { field, primary, secondary } from "./supplier-payables/dialog";
 
@@ -62,6 +65,7 @@ function Section({
 export function CustomerEditor({
   customer,
   customers,
+  initialName = "",
   priceLists,
   token,
   organizationId,
@@ -69,17 +73,18 @@ export function CustomerEditor({
   onSaved,
 }: {
   customer?: Party;
-  customers: Party[];
+  customers: CustomerIdentity[];
+  initialName?: string;
   priceLists: { id: string; name: string }[];
   token: string;
   organizationId: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (customerId: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     gate = useRef(false),
     titleId = useId();
-  const [name, setName] = useState(customer?.name ?? ""),
+  const [name, setName] = useState(customer?.name ?? initialName),
     [listId, setListId] = useState(customer?.priceListId ?? "");
   const [value, setValue] = useState<CustomerBilling>(() =>
     Object.fromEntries(keys.map((key) => [key, customer?.[key] ?? ""])),
@@ -131,7 +136,7 @@ export function CustomerEditor({
     setBusy(true);
     setError("");
     try {
-      if (customer)
+      if (customer) {
         await updateCustomerBilling(token, organizationId, customer.id, {
           ...value,
           ...(name !== customer.name ? { name: name.trim() } : {}),
@@ -139,8 +144,9 @@ export function CustomerEditor({
             ? { priceListId: listId || null }
             : {}),
         });
-      else
-        await createParty(
+        onSaved(customer.id);
+      } else {
+        const created = await createParty(
           token,
           organizationId,
           "customers",
@@ -149,7 +155,8 @@ export function CustomerEditor({
           listId || undefined,
           value,
         );
-      onSaved();
+        onSaved(created.id);
+      }
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo guardar el cliente.",

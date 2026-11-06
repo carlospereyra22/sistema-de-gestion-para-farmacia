@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AccountCustomerPicker } from "./account-customer-picker";
-import { AccountCustomerContact } from "./account-customer-contact";
+import { AccountCustomerHome } from "./account-customer-home";
+import { CustomerEditor } from "./customer-editor";
 import { AccountItemSelector } from "./account-item-selector";
 import { Pagination } from "./pagination";
 import { AccountCollectionDialog } from "./account-collection-dialog";
@@ -21,9 +21,19 @@ import {
   mixedReceiptPayments,
   type MixedDraft,
 } from "./lib/account-mixed-payment";
-import { AccountSummary } from "./account-summary";
 import { AccountCustomerProfile } from "./account-customer-panels";
 import { AccountDueDates } from "./account-due-dates";
+import {
+  keepAccountSelection,
+  newCustomerCredit,
+} from "./lib/account-customer-selection";
+import {
+  creditLimitMinor,
+  creditLimitText,
+  limitEnablesCredit,
+  proposesPaymentTerm,
+} from "./lib/account-credit-limit";
+import { MoneyInput } from "./money-input";
 import { accountTicket } from "./lib/thermal-ticket";
 import { DirectTicketPrint } from "./direct-ticket-print";
 import {
@@ -35,6 +45,7 @@ import {
   Printer,
   Users,
   CalendarClock,
+  ArrowLeft,
 } from "lucide-react";
 import {
   configureCustomerAccount,
@@ -42,6 +53,7 @@ import {
   getAccountReceipt,
   getCustomerAccounts,
   getCash,
+  getPriceLists,
   getAccountSaleDetail,
   assignAccountItems,
   type ItemAllocation,
@@ -102,6 +114,10 @@ export function CustomerAccounts({
   const [collectionMenuTarget, setCollectionMenuTarget] =
     useState<HTMLDivElement | null>(null);
   const [selectedId, setSelectedId] = useState("");
+  const [customerDraft, setCustomerDraft] = useState<{ name?: string }>();
+  const [priceLists, setPriceLists] = useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [expandedMovement, setExpandedMovement] = useState("");
   const [tab, setTab] = useState<"movements" | "history" | "credit" | "due">(
     "movements",
@@ -201,9 +217,40 @@ export function CustomerAccounts({
   const load = async () => {
     const items = await getCustomerAccounts(token, organizationId, branchId);
     setAccounts(items);
-    setSelectedId((id) =>
-      items.some((item) => item.id === id) ? id : (items[0]?.id ?? ""),
-    );
+    setSelectedId((id) => keepAccountSelection(items, id));
+  };
+  const openCustomerEditor = (name?: string) => {
+    setCustomerDraft({ name });
+    void getPriceLists(token, organizationId)
+      .catch(() => [])
+      .then(setPriceLists);
+  };
+  const customerCreated = async (id: string) => {
+    setCustomerDraft(undefined);
+    let creditReady = true;
+    try {
+      await configureCustomerAccount(
+        token,
+        organizationId,
+        branchId,
+        id,
+        newCustomerCredit.enabled,
+        newCustomerCredit.creditLimitMinor,
+      );
+    } catch {
+      creditReady = false;
+    }
+    try {
+      await load();
+      setSelectedId(id);
+      setTab("credit");
+      if (!creditReady)
+        error(
+          "El cliente se creó, pero no se pudo habilitar su cuenta corriente. Habilitala desde Configurar crédito.",
+        );
+    } catch {
+      error("El cliente se creó, pero no se pudo actualizar la lista.");
+    }
   };
   useEffect(() => {
     if (!active) return;
@@ -234,6 +281,16 @@ export function CustomerAccounts({
         setSessionId("");
       });
   }, [token, organizationId, branchId, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  const backToList = useCallback(() => {
+    setDueSelection(undefined);
+    setSelectionValid(false);
+    setAllocations([]);
+    setAssignmentId("");
+    setAmount("");
+    setSelectedId("");
+    setTab("movements");
+    setHistoryFilter("all");
+  }, []);
   useEffect(() => {
     if (active) {
       setDueRevision((value) => value + 1);
@@ -244,15 +301,13 @@ export function CustomerAccounts({
     setStatementOpen(false);
     setTicketTarget(undefined);
     setConfirmedReceipt(null);
-    setDueSelection(undefined);
-    setSelectionValid(false);
-    setAllocations([]);
-    setAmount("");
-  }, [active]);
+    setCustomerDraft(undefined);
+    backToList();
+  }, [active, backToList]);
   useEffect(() => {
     setEnabled(selected?.creditEnabled ?? false);
     setUnlimited(selected?.creditLimitMinor === null);
-    setLimit(String(Number(selected?.creditLimitMinor ?? 0) / 100));
+    setLimit(creditLimitText(selected?.creditLimitMinor));
     setTermDays(
       selected?.accountTermDays == null ? "" : String(selected.accountTermDays),
     );
@@ -286,11 +341,8 @@ export function CustomerAccounts({
     setConfirmedReceipt(null);
     try {
       if (kind === "credit") {
-        const minor = Math.round(Number(limit) * 100);
-        if (
-          !unlimited &&
-          (!limit.trim() || !Number.isSafeInteger(minor) || minor < 0)
-        )
+        const minor = creditLimitMinor(limit);
+        if (!unlimited && minor === null)
           throw new Error("Ingresá un límite válido.");
         const days = termDays === "" ? null : Number(termDays);
         if (
@@ -396,10 +448,6 @@ export function CustomerAccounts({
       setBusy(false);
     }
   };
-  const debt = accounts.reduce(
-    (sum, account) => sum + Math.max(Number(account.balanceMinor), 0),
-    0,
-  );
   const openDueCollection = (id: string, saleId: string) => {
     setDueSelection({ customerId: id, saleId });
     setSelectedId(id);
@@ -432,6 +480,13 @@ export function CustomerAccounts({
             }
             summaryTarget={summaryTarget}
             onStatement={() => setStatementOpen(true)}
+            onConfigureCredit={
+              !selected.creditEnabled &&
+              Number(selected.balanceMinor) <= 0 &&
+              !collectionModal
+                ? () => setTab("credit")
+                : undefined
+            }
             menuTarget={collectionMenuTarget}
             key={`${selected.id}:${selectionVersion}`}
             token={token}
@@ -608,74 +663,56 @@ export function CustomerAccounts({
           onClose={() => setTicketTarget(undefined)}
         />
       )}
-      <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(230px,1fr)_minmax(300px,380px)] xl:grid-cols-[minmax(230px,1fr)_minmax(300px,380px)_minmax(420px,1.8fr)]">
-        {screen === "clients" && (
-          <>
-            <AccountCustomerPicker
-              accounts={accounts}
-              selectedId={selectedId}
-              disabled={busy}
-              loading={loading}
-              onSelect={(id) => {
-                setDueSelection(undefined);
-                setHistoryFilter("all");
-                setSelectedId(id);
-                setScreen("clients");
-              }}
-            />
-            <AccountCustomerContact account={selected} />
-            <div className="lg:col-span-2 xl:col-span-1">
-              <AccountSummary
-                debtMinor={debt}
-                enabled={
-                  accounts.filter((account) => account.creditEnabled).length
-                }
-                owing={
-                  accounts.filter((account) => Number(account.balanceMinor) > 0)
-                    .length
-                }
-              />
-            </div>
-          </>
+      {customerDraft && (
+        <CustomerEditor
+          customers={accounts}
+          initialName={customerDraft.name}
+          priceLists={priceLists}
+          token={token}
+          organizationId={organizationId}
+          onClose={() => setCustomerDraft(undefined)}
+          onSaved={(id) => void customerCreated(id)}
+        />
+      )}
+      {active &&
+        toolbarTarget &&
+        createPortal(
+          <div className="flex flex-wrap items-center gap-2">
+            <nav
+              aria-label="Apartados de cuenta corriente"
+              className="flex gap-2"
+            >
+              {(
+                [
+                  ["clients", "Clientes"],
+                  ["due", "Vencimientos"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={busy}
+                  aria-current={screen === value ? "page" : undefined}
+                  onClick={() => {
+                    if (value === "clients" && screen === "clients")
+                      backToList();
+                    if (value === "due") setVisitedDueScope(dueScope);
+                    setScreen(value);
+                  }}
+                  className={`inline-flex h-11 items-center gap-2 rounded-lg border px-3 text-sm font-medium shadow-sm ${screen === value ? "border-teal-200 bg-teal-50 text-teal-800" : "border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}
+                >
+                  {value === "clients" ? (
+                    <Users size={16} />
+                  ) : (
+                    <CalendarClock size={16} />
+                  )}
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </div>,
+          toolbarTarget,
         )}
-        {active &&
-          toolbarTarget &&
-          createPortal(
-            <div className="flex flex-wrap items-center gap-2">
-              <nav
-                aria-label="Apartados de cuenta corriente"
-                className="flex gap-2"
-              >
-                {(
-                  [
-                    ["clients", "Clientes"],
-                    ["due", "Vencimientos"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    disabled={busy}
-                    aria-current={screen === value ? "page" : undefined}
-                    onClick={() => {
-                      if (value === "due") setVisitedDueScope(dueScope);
-                      setScreen(value);
-                    }}
-                    className={`inline-flex h-11 items-center gap-2 rounded-lg border px-3 text-sm font-medium shadow-sm ${screen === value ? "border-teal-200 bg-teal-50 text-teal-800" : "border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}
-                  >
-                    {value === "clients" ? (
-                      <Users size={16} />
-                    ) : (
-                      <CalendarClock size={16} />
-                    )}
-                    {label}
-                  </button>
-                ))}
-              </nav>
-            </div>,
-            toolbarTarget,
-          )}
-      </div>
       <div className={screen === "due" ? "min-w-0" : "hidden"}>
         {(screen === "due" || visitedDueScope === dueScope) && (
           <AccountDueDates
@@ -694,434 +731,450 @@ export function CustomerAccounts({
           screen === "clients" ? "account-client-panel min-w-0" : "hidden"
         }
       >
-        <section
-          data-collecting={tab === "movements" && Boolean(selected)}
-          className="account-customer-detail min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:p-5"
+        {/* La lista queda montada para conservar búsqueda y filtros al volver de una cuenta; se reinicia al salir de la pantalla. */}
+        <div
+          key={active ? "visible" : "oculta"}
+          className={selected ? "hidden" : "flex min-w-0 flex-1 flex-col"}
         >
-          {selected ? (
-            <>
-              <div className="account-customer-heading">
-                <AccountCustomerProfile account={selected} />
-              </div>
-              <div className="account-customer-tabs mt-5 flex flex-wrap gap-4 border-b border-slate-200">
-                {(
-                  [
-                    ["movements", "Cobrar"],
-                    ["due", "Vencimientos"],
-                    ["history", "Historial"],
-                    ["credit", "Configurar crédito"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      setDueSelection(undefined);
-                      setTab(key);
-                    }}
-                    className={`border-b-2 px-1 pb-3 text-sm ${tab === key ? "border-teal-600 font-semibold text-teal-700" : "border-transparent text-slate-500"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {tab === "due" ? (
-                <div className="account-customer-due mt-4">
-                  <AccountDueDates
-                    key={`${branchId}-${selected.id}`}
-                    token={token}
-                    organizationId={organizationId}
-                    branchId={branchId}
-                    customerId={selected.id}
-                    active={active}
-                    revision={dueRevision}
-                    onCustomer={(id, saleId) => {
-                      setDueSelection({ customerId: id, saleId });
-                      setSelectionValid(false);
-                      setCollectionError("");
-                      setSelectionVersion((value) => value + 1);
-                      setCollectionModal(false);
-                      setTab("movements");
-                    }}
-                  />
-                </div>
-              ) : tab === "credit" ? (
-                <form
-                  className="mt-5 space-y-5"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void save("credit");
+          <AccountCustomerHome
+            accounts={accounts}
+            disabled={busy}
+            loading={loading}
+            onSelect={(id) => {
+              setDueSelection(undefined);
+              setSelectedId(id);
+            }}
+            onCreate={openCustomerEditor}
+          />
+        </div>
+        {selected && (
+          <section
+            data-collecting={tab === "movements"}
+            className="account-customer-detail min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:p-5"
+          >
+            <div className="account-customer-heading">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={backToList}
+                className="mb-3 inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <ArrowLeft size={16} aria-hidden="true" />
+                Volver a clientes
+              </button>
+              <AccountCustomerProfile account={selected} />
+            </div>
+            <div className="account-customer-tabs mt-5 flex flex-wrap gap-4 border-b border-slate-200">
+              {(
+                [
+                  ["movements", "Cobrar"],
+                  ["due", "Vencimientos"],
+                  ["history", "Historial"],
+                  ["credit", "Configurar crédito"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setDueSelection(undefined);
+                    setTab(key);
                   }}
+                  className={`border-b-2 px-1 pb-3 text-sm ${tab === key ? "border-teal-600 font-semibold text-teal-700" : "border-transparent text-slate-500"}`}
                 >
-                  <div className="grid items-stretch gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-                    <div className="grid min-w-0 gap-4 xl:grid-rows-[0.8fr_1fr]">
-                      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <div className="mb-3 flex items-center gap-3">
-                          <span className="rounded-full bg-teal-50 p-2 text-teal-700">
-                            <ShieldCheck size={20} />
-                          </span>
-                          <div>
-                            <h3 className="text-base font-semibold text-slate-800">
-                              Estado del crédito
-                            </h3>
-                          </div>
-                        </div>
-                        <div
-                          className={`flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5 ${enabled ? "border-teal-100 bg-teal-50/60" : "border-slate-200 bg-slate-50/60"}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div>
-                              <h3 className="text-sm font-semibold text-slate-800">
-                                Compras a cuenta corriente
-                              </h3>
-                              <p className="mt-1 text-xs text-slate-500">
-                                {enabled
-                                  ? "El cliente puede financiar sus compras."
-                                  : "Habilitá el crédito para permitir nuevas compras."}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={enabled}
-                            aria-label="Habilitar compras a cuenta corriente"
-                            disabled={busy || !selected.active}
-                            onClick={() => setEnabled(!enabled)}
-                            className={`relative h-7 w-12 shrink-0 rounded-full border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:opacity-50 ${enabled ? "bg-teal-600" : "bg-slate-300"}`}
-                          >
-                            <span
-                              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${enabled ? "left-6" : "left-1"}`}
-                            />
-                          </button>
-                        </div>
-                      </section>
-                      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="mb-5 flex items-center gap-3">
-                          <span className="rounded-full bg-blue-50 p-3 text-blue-600">
-                            <CalendarClock size={22} />
-                          </span>
-                          <div>
-                            <h3 className="text-base font-semibold text-slate-800">
-                              Condiciones
-                            </h3>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Plazo de pago para las nuevas ventas.
-                            </p>
-                          </div>
-                        </div>
-                        <AccountPaymentTerm
-                          key={selected.id}
-                          value={termDays}
-                          onChange={setTermDays}
-                          disabled={busy}
-                        />
-                      </section>
-                    </div>
-                    <fieldset
-                      disabled={busy}
-                      className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-                    >
-                      <legend className="sr-only">Tipo de crédito</legend>
-                      <div className="mb-5 flex items-center gap-3">
-                        <span className="rounded-full bg-teal-50 p-3 text-teal-700">
-                          <CircleDollarSign size={22} />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {tab === "due" ? (
+              <div className="account-customer-due mt-4">
+                <AccountDueDates
+                  key={`${branchId}-${selected.id}`}
+                  token={token}
+                  organizationId={organizationId}
+                  branchId={branchId}
+                  customerId={selected.id}
+                  active={active}
+                  revision={dueRevision}
+                  onCustomer={(id, saleId) => {
+                    setDueSelection({ customerId: id, saleId });
+                    setSelectionValid(false);
+                    setCollectionError("");
+                    setSelectionVersion((value) => value + 1);
+                    setCollectionModal(false);
+                    setTab("movements");
+                  }}
+                />
+              </div>
+            ) : tab === "credit" ? (
+              <form
+                className="mt-5 space-y-5"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void save("credit");
+                }}
+              >
+                <div className="grid items-stretch gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                  <div className="grid min-w-0 gap-4 xl:grid-rows-[0.8fr_1fr]">
+                    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center gap-3">
+                        <span className="rounded-full bg-teal-50 p-2 text-teal-700">
+                          <ShieldCheck size={20} />
                         </span>
                         <div>
                           <h3 className="text-base font-semibold text-slate-800">
-                            Tipo de crédito
+                            Estado del crédito
+                          </h3>
+                        </div>
+                      </div>
+                      <div
+                        className={`flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5 ${enabled ? "border-teal-100 bg-teal-50/60" : "border-slate-200 bg-slate-50/60"}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-slate-800">
+                              Compras a cuenta corriente
+                            </h3>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {enabled
+                                ? "El cliente puede financiar sus compras."
+                                : "Habilitá el crédito para permitir nuevas compras."}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={enabled}
+                          aria-label="Habilitar compras a cuenta corriente"
+                          disabled={busy || !selected.active}
+                          onClick={() => setEnabled(!enabled)}
+                          className={`relative h-7 w-12 shrink-0 rounded-full border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:opacity-50 ${enabled ? "bg-teal-600" : "bg-slate-300"}`}
+                        >
+                          <span
+                            className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${enabled ? "left-6" : "left-1"}`}
+                          />
+                        </button>
+                      </div>
+                    </section>
+                    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-5 flex items-center gap-3">
+                        <span className="rounded-full bg-blue-50 p-3 text-blue-600">
+                          <CalendarClock size={22} />
+                        </span>
+                        <div>
+                          <h3 className="text-base font-semibold text-slate-800">
+                            Condiciones
                           </h3>
                           <p className="mt-1 text-xs text-slate-500">
-                            Definí cuánto puede adeudar el cliente.
+                            Plazo de pago para las nuevas ventas.
                           </p>
                         </div>
                       </div>
-                      <div className="mb-5 grid grid-cols-2 gap-3">
-                        {[
-                          {
-                            value: false,
-                            title: "Con límite",
-                            description: "Establecé un máximo de deuda.",
-                            icon: CircleDollarSign,
-                          },
-                          {
-                            value: true,
-                            title: "Sin límite",
-                            description: "Compras sin un tope de crédito.",
-                            icon: InfinityIcon,
-                          },
-                        ].map(({ value, title, description, icon: Icon }) => (
-                          <label
-                            key={title}
-                            className={`relative flex cursor-pointer flex-col items-start gap-2 rounded-xl border p-4 text-sm transition-colors focus-within:ring-2 focus-within:ring-teal-100 ${unlimited === value ? "border-teal-500 bg-teal-50/60 text-teal-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-                          >
-                            <input
-                              className="absolute right-3 top-3 h-4 w-4 accent-teal-700"
-                              type="radio"
-                              name="credit-limit-mode"
-                              checked={unlimited === value}
-                              onChange={() => setUnlimited(value)}
-                            />
-                            <Icon size={24} className="mb-1 text-teal-600" />
-                            <span className="font-semibold">{title}</span>
-                            <span className="text-xs leading-5 text-slate-500">
-                              {description}
-                            </span>
-                          </label>
-                        ))}
+                      <AccountPaymentTerm
+                        key={selected.id}
+                        value={termDays}
+                        onChange={setTermDays}
+                        disabled={busy}
+                        defaultToTerm={proposesPaymentTerm(selected)}
+                      />
+                    </section>
+                  </div>
+                  <fieldset
+                    disabled={busy}
+                    className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <legend className="sr-only">Tipo de crédito</legend>
+                    <div className="mb-5 flex items-center gap-3">
+                      <span className="rounded-full bg-teal-50 p-3 text-teal-700">
+                        <CircleDollarSign size={22} />
+                      </span>
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-800">
+                          Tipo de crédito
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Definí cuánto puede adeudar el cliente.
+                        </p>
                       </div>
-                      {!unlimited ? (
-                        <label className="block text-sm font-medium text-slate-700">
-                          Límite autorizado ($)
+                    </div>
+                    <div className="mb-5 grid grid-cols-2 gap-3">
+                      {[
+                        {
+                          value: false,
+                          title: "Con límite",
+                          description: "Establecé un máximo de deuda.",
+                          icon: CircleDollarSign,
+                        },
+                        {
+                          value: true,
+                          title: "Sin límite",
+                          description: "Compras sin un tope de crédito.",
+                          icon: InfinityIcon,
+                        },
+                      ].map(({ value, title, description, icon: Icon }) => (
+                        <label
+                          key={title}
+                          className={`relative flex cursor-pointer flex-col items-start gap-2 rounded-xl border p-4 text-sm transition-colors focus-within:ring-2 focus-within:ring-teal-100 ${unlimited === value ? "border-teal-500 bg-teal-50/60 text-teal-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                        >
                           <input
-                            className={field}
-                            type="number"
-                            min="0"
-                            step="any"
-                            required
-                            value={limit}
-                            placeholder="Ej. 50000"
-                            onChange={(event) => setLimit(event.target.value)}
+                            className="absolute right-3 top-3 h-4 w-4 accent-teal-700"
+                            type="radio"
+                            name="credit-limit-mode"
+                            checked={unlimited === value}
+                            onChange={() => setUnlimited(value)}
                           />
-                          <span className="mt-2 block text-xs font-normal text-slate-500">
-                            Con $0 no se autorizan nuevas compras a crédito.
+                          <Icon size={24} className="mb-1 text-teal-600" />
+                          <span className="font-semibold">{title}</span>
+                          <span className="text-xs leading-5 text-slate-500">
+                            {description}
                           </span>
                         </label>
-                      ) : (
-                        <p className="flex items-start gap-2 text-xs leading-5 text-slate-500">
-                          <InfinityIcon size={16} /> No se aplicará un tope de
-                          deuda mientras el crédito esté habilitado.
+                      ))}
+                    </div>
+                    {!unlimited ? (
+                      <div>
+                        <MoneyInput
+                          label="Límite autorizado"
+                          labelClassName="block text-sm font-medium text-slate-700"
+                          required={false}
+                          value={limit}
+                          onChange={(value) => {
+                            setLimit(value);
+                            if (limitEnablesCredit(value)) setEnabled(true);
+                          }}
+                        />
+                        <p className="mt-2 text-xs font-normal text-slate-500">
+                          Con $0 no se autorizan nuevas compras a crédito.
                         </p>
-                      )}
-                      <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
-                        <span className="text-xs text-slate-500">
-                          Saldo actual del cliente
-                        </span>
-                        <strong className="text-base font-semibold text-slate-800 tabular-nums">
-                          {money(selected.balanceMinor)}
-                        </strong>
                       </div>
-                    </fieldset>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
-                    <p className="max-w-md text-xs leading-5 text-slate-500">
-                      Deshabilitar el crédito conserva el historial y permite
-                      cobrar deudas pendientes.
-                    </p>
-                    <button
-                      className={`${button} inline-flex items-center gap-2`}
-                      disabled={busy}
-                    >
-                      <Check size={16} />
-                      {busy ? "Guardando..." : "Guardar cambios"}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  {tab === "movements" && !collectionModal && collectionForm}
-                  {tab === "history" && (
-                    <section className="account-history-panel flex min-h-0 flex-1 flex-col">
-                      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                        <h3 className="font-semibold">
-                          Historial de movimientos
-                        </h3>
-                        <div
-                          role="group"
-                          aria-label="Filtrar historial de cuenta"
-                          className="ml-auto inline-flex shrink-0 gap-1 rounded-lg bg-slate-100 p-1"
-                        >
-                          {(
-                            [
-                              { id: "all", label: "Todos" },
-                              { id: "sales", label: "Ventas" },
-                              { id: "receipts", label: "Cobros" },
-                            ] as const
-                          ).map((option) => (
-                            <button
-                              key={option.id}
-                              type="button"
-                              aria-pressed={historyFilter === option.id}
-                              onClick={() => setHistoryFilter(option.id)}
-                              className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-medium transition-colors ${historyFilter === option.id ? "bg-white text-teal-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-                            >
-                              {option.id === "receipts" ? (
-                                <Check size={14} />
-                              ) : (
-                                <ReceiptText size={14} />
-                              )}
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
+                    ) : (
+                      <p className="flex items-start gap-2 text-xs leading-5 text-slate-500">
+                        <InfinityIcon size={16} /> No se aplicará un tope de
+                        deuda mientras el crédito esté habilitado.
+                      </p>
+                    )}
+                    <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
+                      <span className="text-xs text-slate-500">
+                        Saldo actual del cliente
+                      </span>
+                      <strong className="text-base font-semibold text-slate-800 tabular-nums">
+                        {money(selected.balanceMinor)}
+                      </strong>
+                    </div>
+                  </fieldset>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+                  <p className="max-w-md text-xs leading-5 text-slate-500">
+                    Deshabilitar el crédito conserva el historial y permite
+                    cobrar deudas pendientes.
+                  </p>
+                  <button
+                    className={`${button} inline-flex items-center gap-2`}
+                    disabled={busy}
+                  >
+                    <Check size={16} />
+                    {busy ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                {tab === "movements" && !collectionModal && collectionForm}
+                {tab === "history" && (
+                  <section className="account-history-panel flex min-h-0 flex-1 flex-col">
+                    <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="font-semibold">
+                        Historial de movimientos
+                      </h3>
+                      <div
+                        role="group"
+                        aria-label="Filtrar historial de cuenta"
+                        className="ml-auto inline-flex shrink-0 gap-1 rounded-lg bg-slate-100 p-1"
+                      >
+                        {(
+                          [
+                            { id: "all", label: "Todos" },
+                            { id: "sales", label: "Ventas" },
+                            { id: "receipts", label: "Cobros" },
+                          ] as const
+                        ).map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            aria-pressed={historyFilter === option.id}
+                            onClick={() => setHistoryFilter(option.id)}
+                            className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-medium transition-colors ${historyFilter === option.id ? "bg-white text-teal-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                          >
+                            {option.id === "receipts" ? (
+                              <Check size={14} />
+                            ) : (
+                              <ReceiptText size={14} />
+                            )}
+                            {option.label}
+                          </button>
+                        ))}
                       </div>
-                      <div className="mt-3 max-h-[55vh] overflow-auto">
-                        <table className="w-full text-left text-sm">
-                          <thead className="bg-slate-50 text-xs text-slate-500">
-                            <tr>
-                              <th className="px-3 py-2">Fecha</th>
-                              <th className="px-3 py-2">Detalle</th>
-                              <th className="px-3 py-2 text-right">Debe</th>
-                              <th className="px-3 py-2 text-right">Haber</th>
-                              <th className="w-px px-3 py-2 text-center">
-                                Acciones
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {historyPageRows.map((movement) => (
-                              <Fragment key={movement.id}>
-                                <tr
-                                  key={movement.id}
-                                  className="border-b border-slate-100"
-                                >
-                                  <td className="px-3 py-2 whitespace-nowrap">
-                                    {new Date(
-                                      movement.createdAt,
-                                    ).toLocaleString("es-AR")}
-                                  </td>
-                                  <td className="px-3 py-2">
+                    </div>
+                    <div className="mt-3 max-h-[55vh] overflow-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-xs text-slate-500">
+                          <tr>
+                            <th className="px-3 py-2">Fecha</th>
+                            <th className="px-3 py-2">Detalle</th>
+                            <th className="px-3 py-2 text-right">Debe</th>
+                            <th className="px-3 py-2 text-right">Haber</th>
+                            <th className="w-px px-3 py-2 text-center">
+                              Acciones
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historyPageRows.map((movement) => (
+                            <Fragment key={movement.id}>
+                              <tr
+                                key={movement.id}
+                                className="border-b border-slate-100"
+                              >
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  {new Date(movement.createdAt).toLocaleString(
+                                    "es-AR",
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {movement.isPriceAdjustment ||
+                                  movement.isDebtAdjustment
+                                    ? "Ajuste de deuda"
+                                    : movement.type === "DEBIT"
+                                      ? "Venta a cuenta corriente"
+                                      : movement.saleId
+                                        ? "Anulación de venta"
+                                        : `Cobro · ${movement.paymentMethod === "CASH" ? "Efectivo" : movement.paymentMethod === "CARD" ? "Tarjeta" : movement.paymentMethod === "OTHER" ? "Pago mixto" : "Transferencia"}`}
+                                  <span className="block text-xs text-slate-500">
                                     {movement.isPriceAdjustment ||
                                     movement.isDebtAdjustment
-                                      ? "Ajuste de deuda"
-                                      : movement.type === "DEBIT"
-                                        ? "Venta a cuenta corriente"
-                                        : movement.saleId
-                                          ? "Anulación de venta"
-                                          : `Cobro · ${movement.paymentMethod === "CASH" ? "Efectivo" : movement.paymentMethod === "CARD" ? "Tarjeta" : movement.paymentMethod === "OTHER" ? "Pago mixto" : "Transferencia"}`}
-                                    <span className="block text-xs text-slate-500">
-                                      {movement.isPriceAdjustment ||
-                                      movement.isDebtAdjustment
-                                        ? movement.note
-                                        : movement.saleId
-                                          ? `Compra · ${movement.saleId.slice(0, 8).toUpperCase()}`
-                                          : movement.note}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-right">
-                                    {movement.type === "DEBIT"
-                                      ? money(movement.amountMinor)
-                                      : "—"}
-                                  </td>
-                                  <td className="px-3 py-2 text-right text-teal-700">
-                                    {movement.type === "CREDIT"
-                                      ? money(movement.amountMinor)
-                                      : "—"}
-                                  </td>
-                                  <td className="px-3 py-2 text-right whitespace-nowrap">
-                                    {movement.saleId && (
+                                      ? movement.note
+                                      : movement.saleId
+                                        ? `Compra · ${movement.saleId.slice(0, 8).toUpperCase()}`
+                                        : movement.note}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {movement.type === "DEBIT"
+                                    ? money(movement.amountMinor)
+                                    : "—"}
+                                </td>
+                                <td className="px-3 py-2 text-right text-teal-700">
+                                  {movement.type === "CREDIT"
+                                    ? money(movement.amountMinor)
+                                    : "—"}
+                                </td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap">
+                                  {movement.saleId && (
+                                    <button
+                                      type="button"
+                                      aria-expanded={
+                                        expandedMovement === movement.id
+                                      }
+                                      onClick={() =>
+                                        setExpandedMovement(
+                                          expandedMovement === movement.id
+                                            ? ""
+                                            : movement.id,
+                                        )
+                                      }
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100"
+                                    >
+                                      <ReceiptText size={14} />
+                                      {expandedMovement === movement.id
+                                        ? "Cerrar detalle"
+                                        : "Ver detalle"}
+                                    </button>
+                                  )}
+                                  {movement.type === "CREDIT" &&
+                                    !movement.saleId && (
                                       <button
                                         type="button"
-                                        aria-expanded={
-                                          expandedMovement === movement.id
-                                        }
                                         onClick={() =>
-                                          setExpandedMovement(
-                                            expandedMovement === movement.id
-                                              ? ""
-                                              : movement.id,
-                                          )
+                                          void printReceipt(movement.id)
                                         }
                                         className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100"
                                       >
-                                        <ReceiptText size={14} />
-                                        {expandedMovement === movement.id
-                                          ? "Cerrar detalle"
-                                          : "Ver detalle"}
+                                        <Printer size={14} /> Imprimir ticket
                                       </button>
                                     )}
-                                    {movement.type === "CREDIT" &&
-                                      !movement.saleId && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            void printReceipt(movement.id)
-                                          }
-                                          className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100"
-                                        >
-                                          <Printer size={14} /> Imprimir ticket
-                                        </button>
-                                      )}
+                                </td>
+                              </tr>
+                              {expandedMovement === movement.id && (
+                                <tr>
+                                  <td
+                                    colSpan={5}
+                                    className="bg-slate-50/70 p-4"
+                                  >
+                                    <PurchaseDetail
+                                      token={token}
+                                      organizationId={organizationId}
+                                      branchId={branchId}
+                                      customerId={selected.id}
+                                      movementId={movement.id}
+                                    />
                                   </td>
                                 </tr>
-                                {expandedMovement === movement.id && (
-                                  <tr>
-                                    <td
-                                      colSpan={5}
-                                      className="bg-slate-50/70 p-4"
-                                    >
-                                      <PurchaseDetail
-                                        token={token}
-                                        organizationId={organizationId}
-                                        branchId={branchId}
-                                        customerId={selected.id}
-                                        movementId={movement.id}
-                                      />
-                                    </td>
-                                  </tr>
-                                )}
-                              </Fragment>
-                            ))}
-                          </tbody>
-                        </table>
-                        {selected.movements.length > 0 &&
-                          !historyRows.length && (
-                            <p className="py-10 text-center text-sm text-slate-500">
-                              No hay{" "}
-                              {historyFilter === "receipts"
-                                ? "cobros"
-                                : "ventas"}{" "}
-                              para mostrar.
-                            </p>
+                              )}
+                            </Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                      {selected.movements.length > 0 && !historyRows.length && (
+                        <p className="py-10 text-center text-sm text-slate-500">
+                          No hay{" "}
+                          {historyFilter === "receipts" ? "cobros" : "ventas"}{" "}
+                          para mostrar.
+                        </p>
+                      )}
+                      {!selected.movements.length && (
+                        <div className="flex flex-col items-center py-10 text-center">
+                          <span className="mb-3 rounded-full bg-slate-50 p-4 text-slate-400">
+                            <ReceiptText size={25} />
+                          </span>
+                          <p className="text-sm font-medium text-slate-700">
+                            Esta cuenta todavía no tiene movimientos
+                          </p>
+                          <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                            {selected.creditEnabled
+                              ? "Las compras financiadas y los cobros aparecerán acá."
+                              : "Configurá el crédito para comenzar a operar con este cliente."}
+                          </p>
+                          {!selected.creditEnabled && (
+                            <button
+                              type="button"
+                              onClick={() => setTab("credit")}
+                              className="mt-4 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700"
+                            >
+                              Configurar crédito
+                            </button>
                           )}
-                        {!selected.movements.length && (
-                          <div className="flex flex-col items-center py-10 text-center">
-                            <span className="mb-3 rounded-full bg-slate-50 p-4 text-slate-400">
-                              <ReceiptText size={25} />
-                            </span>
-                            <p className="text-sm font-medium text-slate-700">
-                              Esta cuenta todavía no tiene movimientos
-                            </p>
-                            <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
-                              {selected.creditEnabled
-                                ? "Las compras financiadas y los cobros aparecerán acá."
-                                : "Configurá el crédito para comenzar a operar con este cliente."}
-                            </p>
-                            {!selected.creditEnabled && (
-                              <button
-                                type="button"
-                                onClick={() => setTab("credit")}
-                                className="mt-4 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700"
-                              >
-                                Configurar crédito
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <Pagination
-                        compact
-                        total={historyRows.length}
-                        currentPage={historyPage}
-                        totalPages={historyPages}
-                        noun="movimientos"
-                        label="Páginas del historial de cuenta corriente"
-                        onChange={(page) =>
-                          setHistoryPagination({ scope: historyScope, page })
-                        }
-                      />
-                    </section>
-                  )}
-                </>
-              )}
-            </>
-          ) : (
-            <p className="py-12 text-center text-slate-500">
-              Seleccioná un cliente para ver su cuenta.
-            </p>
-          )}
-        </section>
+                        </div>
+                      )}
+                    </div>
+                    <Pagination
+                      compact
+                      total={historyRows.length}
+                      currentPage={historyPage}
+                      totalPages={historyPages}
+                      noun="movimientos"
+                      label="Páginas del historial de cuenta corriente"
+                      onChange={(page) =>
+                        setHistoryPagination({ scope: historyScope, page })
+                      }
+                    />
+                  </section>
+                )}
+              </>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );

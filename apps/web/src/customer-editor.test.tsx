@@ -27,6 +27,12 @@ describe("customer editor", () => {
     expect(html).toContain('role="combobox"');
     expect(html).not.toContain("<select");
   });
+  it("precarga el nombre buscado al crear un cliente", () => {
+    const html = renderToStaticMarkup(
+      <CustomerEditor {...props} initialName="María Pérez" />,
+    );
+    expect(html).toContain('value="María Pérez"');
+  });
   it("preserves existing contact, notes, legacy VAT and an unavailable assigned list", () => {
     const html = renderToStaticMarkup(
       <CustomerEditor
