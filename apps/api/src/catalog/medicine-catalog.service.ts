@@ -23,6 +23,22 @@ import { gtinOf, snapshotKey } from "./medicine-reference-snapshot";
 import type { MedicineReference } from "./medicine-reference.service";
 
 const REMEDIES_URL = "https://preciosderemedios.com.ar/result/";
+// El archivo de carga inicial todavía contiene estos enlaces amplios. La
+// migración corrige las bases existentes; este mapa corrige cargas nuevas.
+const REMEDIES_LINK_CORRECTIONS = new Map([
+  [
+    `${REMEDIES_URL}?busqueda=acido&combo=Acidos+grasos+omega+3+al+90%25`,
+    `${REMEDIES_URL}?busqueda=Acidos+grasos+omega+3+al+90%25&combo=Acidos+grasos+omega+3+al+90%25`,
+  ],
+  [
+    `${REMEDIES_URL}?busqueda=acido&combo=Alfa+hidroxi%C3%A1cidos`,
+    `${REMEDIES_URL}?busqueda=Alfa+hidroxi%C3%A1cidos&combo=Alfa+hidroxi%C3%A1cidos`,
+  ],
+  [
+    `${REMEDIES_URL}?busqueda=vita&combo=Asc%C3%B3rbico+%C3%A1cido`,
+    `${REMEDIES_URL}?busqueda=vitamina+c&combo=Asc%C3%B3rbico+%C3%A1cido`,
+  ],
+]);
 const REQUEST_PAUSE_MS = 1500;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_PAGES = 40;
@@ -40,6 +56,13 @@ function transientSourceError(cause: unknown): boolean {
     /timeout|fetch failed|respondi[oó] (?:429|5\d\d)|no est[aá] disponible/i.test(
       cause.message,
     )
+  );
+}
+
+function sourceTimedOut(cause: unknown): boolean {
+  return (
+    cause instanceof Error &&
+    (cause.name === "TimeoutError" || /timeout/i.test(cause.message))
   );
 }
 
@@ -266,6 +289,7 @@ export class MedicineCatalogService {
         items.filter((item) => item.priceSource === "preciosderemedios"),
         aliases,
         (url, wanted) => this.remediesRows(url, wanted),
+        (url, group) => this.recoverRemediesRows(url, group),
       ),
       alfabeta: await this.refreshSource(
         items.filter((item) => item.priceSource === "alfabeta"),
@@ -283,6 +307,10 @@ export class MedicineCatalogService {
     items: CatalogItemForRefresh[],
     aliases: Map<string, string>,
     read: (url: string, wanted: Set<string>) => Promise<SourceRow[]>,
+    recover?: (
+      url: string,
+      group: CatalogItemForRefresh[],
+    ) => Promise<SourceRow[]>,
   ) {
     const result = emptyResult();
     const links = new Map<string, CatalogItemForRefresh[]>();
@@ -308,8 +336,22 @@ export class MedicineCatalogService {
               rows = await read(url, wanted);
             } catch (cause) {
               if (!transientSourceError(cause)) throw cause;
-              this.logger.warn(`Reintentando enlace de medicamentos: ${url}`);
-              rows = await read(url, wanted);
+              if (recover && sourceTimedOut(cause)) {
+                this.logger.warn(
+                  `El enlace de medicamentos agotó el tiempo; se buscan sus productos por nombre: ${url}`,
+                );
+                try {
+                  rows = await recover(url, group);
+                } catch (recoveryCause) {
+                  this.logger.warn(
+                    `Falló la búsqueda por nombre (${recoveryCause instanceof Error ? recoveryCause.message : "error desconocido"}); se reintenta el enlace: ${url}`,
+                  );
+                  rows = await read(url, wanted);
+                }
+              } else {
+                this.logger.warn(`Reintentando enlace de medicamentos: ${url}`);
+                rows = await read(url, wanted);
+              }
             }
             return {
               url,
@@ -404,6 +446,62 @@ export class MedicineCatalogService {
     return rows;
   }
 
+  // Algunos enlaces históricos buscan sustancias demasiado amplias y el sitio
+  // no responde. Conservamos su filtro de combinación y acotamos la búsqueda
+  // a cada nombre, sin aceptar una fila distinta como precio del producto.
+  private async recoverRemediesRows(
+    url: string,
+    group: CatalogItemForRefresh[],
+  ): Promise<SourceRow[]> {
+    const recovered: SourceRow[] = [];
+    const searched = new Set<string>();
+    const wanted = new Set(group.map((item) => item.sourceRowKey));
+    const readByName = async (name: string, keys: Set<string>) => {
+      const term = name.trim().toLowerCase();
+      if (!term || searched.has(term)) return [];
+      searched.add(term);
+      const target = new URL(url);
+      target.searchParams.set("busqueda", term);
+      return this.remediesRows(target.toString(), keys);
+    };
+
+    if (group.length > 1) {
+      const names = group.map((item) =>
+        item.name.trim().toLowerCase().split(/\s+/),
+      );
+      const firstName = names[0] ?? [];
+      let prefixLength = 0;
+      while (
+        firstName[prefixLength] &&
+        names.every((words) => words[prefixLength] === firstName[prefixLength])
+      )
+        prefixLength += 1;
+      const prefix = firstName.slice(0, prefixLength).join(" ");
+      const commonSearch =
+        prefix || new URL(url).searchParams.get("combo") || "";
+      try {
+        recovered.push(...(await readByName(commonSearch, wanted)));
+      } catch (cause) {
+        this.logger.warn(
+          `La búsqueda compartida no respondió; se prueban nombres individuales: ${cause instanceof Error ? cause.message : "error desconocido"}`,
+        );
+      }
+    }
+
+    for (const item of group) {
+      if (!recovered.some((row) => row.rowKey === item.sourceRowKey)) {
+        const itemKeys = new Set([item.sourceRowKey]);
+        let rows = await readByName(item.name, itemKeys);
+        const words = item.name.trim().split(/\s+/);
+        if (!rows.some((row) => itemKeys.has(row.rowKey)) && words.length > 2) {
+          rows = await readByName(words.slice(0, -1).join(" "), itemKeys);
+        }
+        recovered.push(...rows);
+      }
+    }
+    return recovered;
+  }
+
   private async alfaBetaRows(url: string): Promise<SourceRow[]> {
     await this.waitForSourceRequest();
     const page = await this.alfabeta.page(url);
@@ -480,7 +578,11 @@ export class MedicineCatalogService {
               troquel: record.troquel,
               priceSource: record.priceSource,
               priceMinor: BigInt(record.priceMinor),
-              referenceUrl: record.referenceUrl,
+              referenceUrl:
+                record.priceSource === "preciosderemedios"
+                  ? (REMEDIES_LINK_CORRECTIONS.get(record.referenceUrl ?? "") ??
+                    record.referenceUrl)
+                  : record.referenceUrl,
               sourceRowKey: compactKey(record.sourceRow),
               officialDelisted: record.officialDelisted,
               laboratoryMismatch: record.laboratoryMismatch,
@@ -515,19 +617,17 @@ export class MedicineCatalogService {
         let pendingCreated = 0;
         for (let start = 0; start < waiting.length; start += WRITE_CHUNK) {
           const { count } = await tx.medicineCatalogPending.createMany({
-            data: waiting
-              .slice(start, start + WRITE_CHUNK)
-              .map((record) => ({
-                externalKey: record.externalKey,
-                name: record.name,
-                presentation: record.presentation,
-                activeIngredient: record.activeIngredient,
-                laboratory: record.laboratory,
-                pharmaceuticalForm: record.pharmaceuticalForm,
-                saleCondition: record.saleCondition,
-                barcodes: [...new Set(record.barcodes)],
-                reason: record.reason,
-              })),
+            data: waiting.slice(start, start + WRITE_CHUNK).map((record) => ({
+              externalKey: record.externalKey,
+              name: record.name,
+              presentation: record.presentation,
+              activeIngredient: record.activeIngredient,
+              laboratory: record.laboratory,
+              pharmaceuticalForm: record.pharmaceuticalForm,
+              saleCondition: record.saleCondition,
+              barcodes: [...new Set(record.barcodes)],
+              reason: record.reason,
+            })),
             skipDuplicates: true,
           });
           pendingCreated += count;
