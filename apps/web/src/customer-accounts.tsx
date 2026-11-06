@@ -9,6 +9,10 @@ import { StatusToast } from "./status-toast";
 import { filterAccountHistory } from "./lib/account-history";
 import { AccountPaymentSummary } from "./account-payment-summary";
 import { AccountCashSession } from "./account-cash-session";
+import {
+  cashSessionLabel,
+  preferredCashSessionId,
+} from "./lib/active-cash-register";
 import { AccountMixedPayment } from "./account-mixed-payment";
 import { AccountPaymentMethods } from "./account-payment-methods";
 import { AccountPaymentTerm } from "./account-payment-term";
@@ -128,7 +132,9 @@ export function CustomerAccounts({
   const [method, setMethod] = useState<"CASH" | "CARD" | "TRANSFER">(
     "TRANSFER",
   );
-  const [sessions, setSessions] = useState<CashSession[]>([]);
+  const [sessions, setSessions] = useState<(CashSession & { label: string })[]>(
+    [],
+  );
   const [mixedPayment, setMixedPayment] = useState(false);
   const [mixedDraft, setMixedDraft] = useState<MixedDraft>({
     CASH: "",
@@ -214,9 +220,14 @@ export function CustomerAccounts({
     void getCash(token, organizationId, branchId)
       .then((cash) => {
         const open = cash.sessions.filter((session) => !session.closedAt);
-        setSessions(open);
+        setSessions(
+          open.map((session) => ({
+            ...session,
+            label: cashSessionLabel(session, cash.registers),
+          })),
+        );
         setAllowWithoutSession(cash.settings?.allowWithoutSession ?? true);
-        setSessionId(open[0]?.id ?? "");
+        setSessionId(preferredCashSessionId(open, organizationId, branchId));
       })
       .catch(() => {
         setSessions([]);

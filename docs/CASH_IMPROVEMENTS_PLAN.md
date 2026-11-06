@@ -85,7 +85,7 @@ La categoría se deriva del texto para evitar una migración. Si aparecen más o
 2. **Barra de estado:** selector de caja con el estado de cada una, responsable y aviso de cobros pendientes con cantidad y total.
 3. **Pestaña Sesión con la caja cerrada:** último cierre y formulario de apertura, con el botón "Usar último contado".
 4. **Pestaña Sesión con la caja abierta:** Esperado, Efectivo, Tarjeta y Transferencia; línea de tiempo con conceptos legibles; movimiento manual y cierre.
-5. **Pestaña Historial:** fechas de 30 días visibles, filtro por caja, Faltante y Sobrante diferenciados, y filtros que aplican de la misma forma.
+5. **Pestaña Historial:** fechas de 30 días visibles, filtro por caja, Faltante y Sobrante diferenciados, y filtros que aplican de la misma forma. El filtro Estado pasa a `ProductFilterSelect`.
 6. Avisar antes de cerrar si la caja tiene cobros pendientes asignados.
 7. Mostrar en verde el recuadro de cierre sin diferencia.
 8. Comprobar la pantalla a 390 px y actualizar `CASH_WORKSPACE.md`.

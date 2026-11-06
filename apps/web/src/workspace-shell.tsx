@@ -155,6 +155,13 @@ import {
 import { formatAmountTyping } from "./lib/amount-typing";
 import { lotCostInput, typedCostMinor } from "./lib/lot-cost";
 import { typedCashMinor } from "./lib/cash-count";
+import {
+  readCashRegisterChoice,
+  resolveCashRegister,
+  resolveSaleSession,
+  saveCashRegisterChoice,
+} from "./lib/active-cash-register";
+import { CashRegisterPicker, SaleCashStatus } from "./cash-register-picker";
 import { MoneyInput } from "./money-input";
 import { stockLevel } from "./lib/stock-level";
 import {
@@ -556,9 +563,35 @@ export function WorkspaceShell({
     [products],
   );
   const [stock, setStock] = useState<StockLot[]>([]);
-  const [session, setSession] = useState<CashSession>();
+  const [openSessions, setOpenSessions] = useState<CashSession[]>([]);
+  const [chosenRegisterId, setChosenRegisterId] = useState("");
+  const [defaultRegisterId, setDefaultRegisterId] = useState<string | null>(
+    null,
+  );
   const [allowWithoutSession, setAllowWithoutSession] = useState(true);
   const [registers, setRegisters] = useState<CashRegister[]>([]);
+  const activeRegisterId = resolveCashRegister({
+    registers,
+    openSessions,
+    chosen: chosenRegisterId,
+    defaultRegisterId,
+  });
+  const cashSession = openSessions.find(
+    (item) => item.cashRegisterId === activeRegisterId,
+  );
+  const saleSession = resolveSaleSession(openSessions, [
+    chosenRegisterId,
+    defaultRegisterId,
+  ]);
+  const chooseRegister = (registerId: string) => {
+    setChosenRegisterId(registerId);
+    if (organizationId)
+      saveCashRegisterChoice(organizationId, branchId, registerId);
+  };
+  useEffect(() => {
+    if (organizationId)
+      setChosenRegisterId(readCashRegisterChoice(organizationId, branchId));
+  }, [organizationId, branchId]);
   const [message, setMessage] = useState<string>();
   const ready = Boolean(accessToken && organizationId && branchId);
   const refreshRevision = useRef(0);
@@ -576,7 +609,8 @@ export function WorkspaceShell({
     setOrganizationProducts(sharedCatalog);
     setStock(lots);
     setRegisters(cash.registers);
-    setSession(cash.sessions.find((item) => !item.closedAt));
+    setOpenSessions(cash.sessions.filter((item) => !item.closedAt));
+    setDefaultRegisterId(cash.settings?.defaultRegisterId ?? null);
     setAllowWithoutSession(cash.settings?.allowWithoutSession ?? true);
   };
   useEffect(() => {
@@ -762,20 +796,13 @@ export function WorkspaceShell({
           )}
           {view === "Ventas" && (
             <div className="workspace-sales-actions">
-              <span
-                role="status"
-                className={`inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${session ? "bg-emerald-50 text-emerald-700" : allowWithoutSession ? "bg-amber-50 text-amber-800" : "bg-rose-50 text-rose-700"}`}
-              >
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-full bg-current"
-                />
-                {session
-                  ? "Caja abierta"
-                  : allowWithoutSession
-                    ? "Sin caja · el cobro queda pendiente"
-                    : "Sin caja abierta"}
-              </span>
+              <SaleCashStatus
+                registers={registers}
+                openSessions={openSessions}
+                session={saleSession}
+                allowWithoutSession={allowWithoutSession}
+                onChange={chooseRegister}
+              />
               {salesScreen === "pos" ? (
                 <button
                   type="button"
@@ -972,7 +999,7 @@ export function WorkspaceShell({
                 branchId={branchId}
                 products={operationalProducts}
                 stock={stock}
-                session={session}
+                session={openSessions[0]}
                 onNavigate={setPage}
               />
             </div>
@@ -1059,7 +1086,8 @@ export function WorkspaceShell({
               branchId={branchId}
               products={operationalProducts}
               stock={stock}
-              session={session}
+              session={saleSession}
+              cashChoiceRequired={openSessions.length > 1 && !saleSession}
               salesScreen={salesScreen}
               onSalesScreenChange={setSalesScreen}
               done={() => void refresh()}
@@ -1078,7 +1106,10 @@ export function WorkspaceShell({
               organizationId={organizationId!}
               branchId={branchId}
               registers={registers}
-              session={session}
+              openSessions={openSessions}
+              registerId={activeRegisterId}
+              onRegisterChange={chooseRegister}
+              session={cashSession}
               done={() => void refresh()}
               error={setMessage}
             />
@@ -4753,6 +4784,9 @@ function Inventory({
   );
 }
 
+const cashChoiceNotice =
+  "Hay varias cajas abiertas: cerrá el cobro y elegí arriba en cuál cobrar.";
+
 function Sales({
   allowWithoutSession,
   userKey,
@@ -4764,6 +4798,7 @@ function Sales({
   products: catalogProducts,
   stock,
   session,
+  cashChoiceRequired,
   salesScreen,
   onSalesScreenChange,
   done,
@@ -4779,6 +4814,7 @@ function Sales({
   products: CatalogProduct[];
   stock: StockLot[];
   session?: CashSession;
+  cashChoiceRequired: boolean;
   salesScreen: "pos" | "history";
   onSalesScreenChange: (screen: "pos" | "history") => void;
   done: () => void;
@@ -5497,6 +5533,11 @@ function Sales({
   // Recibe la lista final de pagos para no depender del setState asíncrono.
   const complete = async (finalPayments = payments) => {
     if (submitting) return;
+    if (
+      cashChoiceRequired &&
+      finalPayments.some((payment) => payment.method !== "ACCOUNT")
+    )
+      return reportPayment(cashChoiceNotice);
     if (!allowWithoutSession && !session)
       return reportPayment(
         "Esta sucursal requiere una caja abierta para vender. Abrí una caja y reintentá.",
@@ -6288,9 +6329,11 @@ function Sales({
           receivedMinor={paymentAmountMinor}
           sessionNotice={
             method !== "ACCOUNT" && !session
-              ? allowWithoutSession
-                ? "El cobro quedará pendiente de asignación a una caja."
-                : "Esta sucursal requiere una caja abierta para cobrar."
+              ? cashChoiceRequired
+                ? cashChoiceNotice
+                : allowWithoutSession
+                  ? "El cobro quedará pendiente de asignación a una caja."
+                  : "Esta sucursal requiere una caja abierta para cobrar."
               : undefined
           }
           errorMessage={checkoutError || undefined}
@@ -7512,6 +7555,9 @@ function Cash({
   organizationId,
   branchId,
   registers,
+  openSessions,
+  registerId,
+  onRegisterChange,
   session,
   done,
   error,
@@ -7523,11 +7569,13 @@ function Cash({
   organizationId: string;
   branchId: string;
   registers: CashRegister[];
+  openSessions: CashSession[];
+  registerId: string;
+  onRegisterChange: (registerId: string) => void;
   session?: CashSession;
   done: () => void;
   error: (value: string) => void;
 }): ReactElement {
-  const [registerId, setRegisterId] = useState("");
   const [opening, setOpening] = useState("");
   const [cashBusy, setCashBusy] = useState(false);
   const cashPending = useRef(false);
@@ -7541,9 +7589,6 @@ function Cash({
   const [closureDetailId, setClosureDetailId] = useState<string>();
   const [management, setManagement] = useState<CashManagement>();
   const [rules, setRules] = useState<CashSettings>();
-  useEffect(() => {
-    if (rules?.defaultRegisterId) setRegisterId(rules.defaultRegisterId);
-  }, [rules?.defaultRegisterId]);
   const [archived, setArchived] = useState(false);
   const [closureFrom, setClosureFrom] = useState("");
   const [closureTo, setClosureTo] = useState("");
@@ -7563,10 +7608,6 @@ function Cash({
     );
     if (request === closureRequest.current) setClosures(rows);
   };
-  useEffect(() => {
-    if (!registers.some((register) => register.id === registerId))
-      setRegisterId(registers[0]?.id ?? "");
-  }, [registerId, registers]);
   useEffect(() => {
     let cancelled = false;
     if (!active) return;
@@ -7626,6 +7667,7 @@ function Cash({
         openingMinor,
       );
       setOpening("");
+      onRegisterChange(registerId);
       done();
     } catch (cause) {
       error(
@@ -7636,6 +7678,14 @@ function Cash({
       setCashBusy(false);
     }
   };
+  // Lo escrito para una caja no debe registrarse por error en otra.
+  const chooseRegister = (id: string) => {
+    setOpening("");
+    setMovementAmount("");
+    setMovementReason("");
+    onRegisterChange(id);
+  };
+  const registerName = registers.find((item) => item.id === registerId)?.name;
   const movement = async (event: FormEvent) => {
     event.preventDefault();
     if (!session || cashPending.current) return;
@@ -7715,10 +7765,17 @@ function Cash({
             />
           ) : undefined
         }
-        registerName={
-          registers.find(
-            (item) => item.id === (session?.cashRegisterId ?? registerId),
-          )?.name
+        registerName={registerName}
+        registerPicker={
+          registers.length > 1 ? (
+            <CashRegisterPicker
+              registers={registers}
+              openSessions={openSessions}
+              value={registerId}
+              onChange={chooseRegister}
+              disabled={cashBusy}
+            />
+          ) : undefined
         }
       />
       <section className="cash-card cash-close">
@@ -7747,6 +7804,7 @@ function Cash({
             disabled={!management?.canManage || cashBusy}
             onRejected={done}
             onClosed={() => {
+              onRegisterChange(registerId);
               done();
               void loadClosures().catch(() =>
                 error(
@@ -7757,22 +7815,6 @@ function Cash({
           />
         ) : (
           <form onSubmit={(event) => void open(event)}>
-            <label className="mt-4 block text-sm">
-              Caja
-              <select
-                required
-                className="mt-1 h-10 w-full border px-3"
-                value={registerId}
-                onChange={(event) => setRegisterId(event.target.value)}
-              >
-                <option value="">Seleccionar…</option>
-                {registers.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
             {rules?.askOpeningAmount !== false && (
               <MoneyInput
                 label="Fondo inicial"
@@ -7784,7 +7826,7 @@ function Cash({
               disabled={cashBusy || !management?.canManage}
               className="mt-5 w-full bg-teal-700 py-2 text-sm text-white disabled:opacity-50"
             >
-              Abrir caja
+              {registerName ? `Abrir ${registerName}` : "Abrir caja"}
             </button>
           </form>
         )}

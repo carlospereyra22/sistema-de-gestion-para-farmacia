@@ -38,6 +38,24 @@ it("shows server session totals without calling them daily totals", () => {
   expect(html).not.toContain("Resumen del día");
 });
 
+it("reemplaza el nombre por el selector cuando hay varias cajas", () => {
+  const html = renderToStaticMarkup(
+    <CashOverview
+      registerName="Central"
+      registerPicker={<select aria-label="Caja" />}
+    />,
+  );
+  expect(html).toContain('aria-label="Caja"');
+  expect(html).not.toContain("Central");
+});
+
+it("usa la misma lista con desplazamiento interno con o sin movimientos", () => {
+  for (const current of [session, { ...session, movements: [] }, undefined])
+    expect(renderToStaticMarkup(<CashMovements session={current} />)).toContain(
+      "cash-movements-list",
+    );
+});
+
 it("shows five most recent movements without mutating the session", () => {
   const html = renderToStaticMarkup(<CashMovements session={session} />);
   expect(html).toContain("Movimiento 6");
