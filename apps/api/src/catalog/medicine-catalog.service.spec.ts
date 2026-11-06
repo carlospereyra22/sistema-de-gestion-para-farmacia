@@ -102,3 +102,100 @@ describe("actualización de fuentes de medicamentos", () => {
     expect(result.failedLinks).toBe(0);
   });
 });
+
+describe("carga de productos pendientes", () => {
+  const pendiente = (externalKey: string) => ({
+    kind: "pending" as const,
+    externalKey,
+    name: "CREMA",
+    presentation: "x 30 g",
+    activeIngredient: "",
+    laboratory: "Elea",
+    pharmaceuticalForm: "Crema",
+    saleCondition: "Venta Libre",
+    barcodes: ["7790001000011", "7790001000011"],
+    reason: "no está en Remedios",
+  });
+  const producto = {
+    kind: "product" as const,
+    externalKey: "ab-2",
+    name: "CREMA",
+    presentation: "x 30 g",
+    activeIngredient: "",
+    laboratory: "Elea",
+    pharmaceuticalForm: "Crema",
+    saleCondition: "Venta Libre",
+    troquel: "",
+    priceSource: "official",
+    priceMinor: 1000,
+    referenceUrl: null,
+    sourceRow: "",
+    officialDelisted: false,
+    laboratoryMismatch: null,
+    barcodes: [],
+  };
+  const armar = (existentes: string[]) => {
+    const tx = {
+      medicineCatalogItem: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue(
+            existentes.map((externalKey) => ({ externalKey })),
+          ),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      medicineCatalogBarcode: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      medicineLaboratoryAlias: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      medicineCatalogPending: {
+        createMany: jest
+          .fn()
+          .mockImplementation(({ data }: { data: unknown[] }) =>
+            Promise.resolve({ count: data.length }),
+          ),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      $transaction: (run: (client: typeof tx) => Promise<unknown>) => run(tx),
+    } as unknown as PrismaService;
+    return {
+      tx,
+      service: new MedicineCatalogService(prisma, {} as AlfaBetaService),
+    };
+  };
+
+  it("guarda el pendiente sin crearlo como referencia", async () => {
+    const { tx, service } = armar([]);
+    const result = await service.importRecords([pendiente("ab-1")]);
+    expect(tx.medicineCatalogItem.createMany).not.toHaveBeenCalled();
+    expect(tx.medicineCatalogPending.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          externalKey: "ab-1",
+          barcodes: ["7790001000011"],
+          reason: "no está en Remedios",
+        }),
+      ],
+      skipDuplicates: true,
+    });
+    expect(result.pending).toBe(1);
+  });
+
+  it("no guarda como pendiente lo que ya está en la base", async () => {
+    const { tx, service } = armar(["ab-1"]);
+    await service.importRecords([pendiente("ab-1")]);
+    expect(tx.medicineCatalogPending.createMany).not.toHaveBeenCalled();
+  });
+
+  it("saca de pendientes lo que consiguió precio y link", async () => {
+    const { tx, service } = armar([]);
+    await service.importRecords([producto]);
+    expect(tx.medicineCatalogPending.deleteMany).toHaveBeenCalledWith({
+      where: { externalKey: { in: ["ab-2"] } },
+    });
+  });
+});

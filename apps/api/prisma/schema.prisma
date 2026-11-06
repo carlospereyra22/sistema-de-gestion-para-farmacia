@@ -371,6 +371,23 @@ model MedicineCatalogBarcode {
   @@index([barcode])
 }
 
+// Producto sin precio ni link confiable (SISTEMA-35). Se guarda hasta conseguirlo:
+// no es referencia, ninguna búsqueda ni corrida de precios lo lee. Sale de acá
+// cuando entra a MedicineCatalogItem.
+model MedicineCatalogPending {
+  externalKey        String   @id @db.VarChar(40)
+  name               String
+  presentation       String   @default("")
+  activeIngredient   String   @default("")
+  laboratory         String   @default("")
+  pharmaceuticalForm String   @default("")
+  saleCondition      String   @default("")
+  barcodes           String[]
+  // Por qué no tiene fuente: no está en Remedios, ambiguo, laboratorio distinto.
+  reason             String   @default("")
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+}
+
 // Exhibidor de droguería: un código que equivale a N unidades de otro. No es un
 // producto: en Compras suma N unidades al producto base, con el costo dividido.
 model MedicineCatalogPack {
