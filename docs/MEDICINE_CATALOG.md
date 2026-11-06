@@ -111,7 +111,8 @@ falta y no pisa precios ya actualizados; también guarda los pendientes.
 ## Generar el archivo de carga
 
 Sale de la carpeta de trabajo que tiene `catalogo_precios.db` y `padron_vivo.json`. Queda
-en `data/medicine-catalog/`, ignorada por Git.
+en `data/medicine-catalog/`. La carpeta está ignorada por Git, pero `catalogo.jsonl` se
+versiona desde el 05/11/2026 (SISTEMA-35): al regenerarlo, commitear el archivo.
 
 ```powershell
 uv run --python 3.12 python scripts/medicine-catalog/exportar.py <carpeta> data/medicine-catalog/catalogo.jsonl
@@ -147,7 +148,7 @@ pnpm --filter @gestion/api catalogo-medicamentos importar <ruta-absoluta>\catalo
 ```
 
 `prisma:generate` falla con `EPERM` si la API está corriendo: frenarla antes. El
-archivo `catalogo.jsonl` no está en Git; se pasa a mano.
+archivo `catalogo.jsonl` viene con el repositorio.
 
 ### Test (hoy llamado preprod)
 
