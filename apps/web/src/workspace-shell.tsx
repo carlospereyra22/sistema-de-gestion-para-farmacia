@@ -186,7 +186,6 @@ import { InventoryLotPicker } from "./inventory-lot-picker";
 import { InventoryToolbar } from "./inventory-toolbar";
 import {
   emptyInventoryFilters,
-  inventoryMetricProducts,
   inventoryPage,
   inventoryRows,
   inventoryStockProductOptions,
@@ -4211,10 +4210,6 @@ function Inventory({
     () => inventoryRows(products, stock, inventoryFilters),
     [products, stock, inventoryFilters],
   );
-  const metricProducts = useMemo(
-    () => inventoryMetricProducts(products, stock),
-    [products, stock],
-  );
   const stockPage = inventoryPage(stockRows, stockPageNumber);
   const filterInventory = (filters: InventoryFilters) => {
     setInventoryFilters(filters);
@@ -4542,19 +4537,6 @@ function Inventory({
             onClose={() => setAdjustmentError("")}
           />
         )}
-        <div className="catalog-summary-row inventory-summary">
-          <ProductCatalogMetrics
-            products={metricProducts}
-            stock={stock}
-            selected={activeCatalogMetric(inventoryFilters)}
-            onSelect={(key) =>
-              filterInventory({
-                ...inventoryFilters,
-                ...toggleCatalogMetric(key, inventoryFilters),
-              })
-            }
-          />
-        </div>
         <InventoryToolbar
           filters={inventoryFilters}
           products={stockPage.total}

@@ -133,3 +133,11 @@ it("la barra tiene buscador general, buscador por lote, filtros y contador", () 
   expect(html).toContain("3 lotes");
   expect(html).toContain("disabled");
 });
+
+it("muestra la tabla con la escala grande", () => {
+  const html = render([lot]);
+  expect(html).toContain("w-full text-base");
+  expect(html).toContain("bg-[#f3f7f8] text-sm");
+  expect(html).toContain("mt-0.5 block text-sm text-slate-500");
+  expect(html).not.toContain("text-xs");
+});

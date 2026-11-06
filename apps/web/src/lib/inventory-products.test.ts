@@ -2,12 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { CatalogProduct, StockLot } from "./api";
 import {
   emptyInventoryFilters,
-  inventoryMetricProducts,
   inventoryPage,
   inventoryRows,
   inventoryStockProductOptions,
 } from "./inventory-products";
-import { catalogMetricCounts } from "./product-catalog-metrics";
 
 const now = new Date("2026-11-05T12:00:00.000Z");
 
@@ -154,27 +152,6 @@ describe("inventoryRows", () => {
     );
     expect(row).toMatchObject({ lots: [], physical: 0 });
     expect(row!.status.label).toBe("Sin stock");
-  });
-});
-
-describe("inventoryMetricProducts", () => {
-  it("hace que cada tarjeta coincida con lo que muestra su filtro", () => {
-    const list = [
-      ...products,
-      product("archivado", "Archivado", { active: false }),
-      product("vacio", "Archivado sin lotes", { active: false }),
-    ];
-    const lots = [...stock, lot("X-1", "archivado", "EXPIRED")];
-    const counts = catalogMetricCounts(
-      inventoryMetricProducts(list, lots),
-      lots,
-    );
-    expect(counts.out).toBe(rows({ stock: "out" }, list, lots).length);
-    expect(counts.low).toBe(rows({ stock: "low" }, list, lots).length);
-    expect(counts.expired).toBe(rows({ expiry: "expired" }, list, lots).length);
-    expect(counts.expiring).toBe(
-      rows({ expiry: "expiring" }, list, lots).length,
-    );
   });
 });
 

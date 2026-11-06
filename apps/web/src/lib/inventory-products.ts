@@ -78,18 +78,6 @@ function inventoryEntries(
   return [...catalog, ...missing];
 }
 
-// Productos que cuentan las tarjetas de Inventario. Van todos como activos
-// para que cada tarjeta coincida con lo que muestra la tabla al tocarla.
-export function inventoryMetricProducts(
-  products: CatalogProduct[],
-  stock: StockLot[],
-) {
-  return inventoryEntries(products, stock).map(({ id }) => ({
-    id,
-    active: true,
-  }));
-}
-
 function entryOption({ id, name, product }: InventoryEntry): InventoryOption {
   return product
     ? inventoryProductOption(product)

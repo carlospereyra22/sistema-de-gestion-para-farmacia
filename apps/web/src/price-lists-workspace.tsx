@@ -365,7 +365,7 @@ export function PriceListsWorkspace({
     <div className="space-y-5">
       <section
         aria-label="Lista de precios seleccionada"
-        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 rounded-xl border border-slate-200 bg-white p-5"
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3 rounded-xl border border-slate-200 bg-white px-5 py-3"
       >
         <div className="contents">
           <div className="sr-only">
@@ -421,10 +421,10 @@ export function PriceListsWorkspace({
             .map((list) => (
               <article
                 key={list.id}
-                className="flex flex-wrap items-center gap-4 text-left"
+                className="flex flex-wrap items-center gap-3 text-left"
               >
-                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-emerald-100 text-teal-700">
-                  <Tags size={24} />
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-100 text-teal-700">
+                  <Tags size={20} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -435,31 +435,27 @@ export function PriceListsWorkspace({
                       Activa
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-4">
-                    <div>
-                      <strong className="text-xl tabular-nums">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-500">
+                    <span>
+                      <strong className="font-semibold tabular-nums text-slate-800">
                         {
                           list.prices.filter((price) =>
                             products.some((p) => p.id === price.productId),
                           ).length
                         }
-                      </strong>
-                      <p className="text-sm text-slate-500">productos</p>
-                    </div>
-                    <div className="flex items-center gap-2 border-l border-slate-200 pl-4 text-slate-500">
-                      <CalendarDays size={16} />
-                      <div className="text-sm">
-                        <p>Última actualización</p>
-                        <p className="mt-0.5">
-                          {list.updatedAt
-                            ? new Date(list.updatedAt).toLocaleString("es-AR", {
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              })
-                            : "Sin cambios"}
-                        </p>
-                      </div>
-                    </div>
+                      </strong>{" "}
+                      productos
+                    </span>
+                    <span className="flex items-center gap-1.5 border-l border-slate-200 pl-3">
+                      <CalendarDays size={15} className="shrink-0" />
+                      Última actualización{" "}
+                      {list.updatedAt
+                        ? new Date(list.updatedAt).toLocaleString("es-AR", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })
+                        : "Sin cambios"}
+                    </span>
                   </div>
                 </div>
                 {list.name === "Precio general" ? (
