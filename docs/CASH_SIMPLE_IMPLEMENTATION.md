@@ -71,3 +71,9 @@
 - Fondo inicial, importe de movimiento y efectivo contado usan `MoneyInput`, aceptan puntos de miles y se convierten a centavos sin float.
 - Si la API rechaza un cierre con 404 o 409, el formulario vuelve al conteo, refresca la sesión y conserva lo contado.
 - Plan completo y próximas etapas en `CASH_IMPROVEMENTS_PLAN.md`.
+
+## Datos de sesión y egresos (06/11/2026)
+
+- Cada sesión informa `cardMinor`, `transferMinor` y `saleChangeMinor`. Tarjeta y transferencia suman ventas, recibos de cuenta corriente y cobros pendientes incorporados; nunca entran al efectivo esperado, que se calcula igual que antes.
+- La consulta de caja devuelve `cashPayments` en las sesiones abiertas. Con el fondo inicial y los movimientos permite reconstruir el esperado. La venta no guarda quién cobró, así que esos registros no tienen usuario.
+- Cada movimiento informa su `category`, deducida del concepto en `cash-movement-category.ts`. Se exige el UUID del comprobante para no confundir un motivo manual parecido con un movimiento automático.

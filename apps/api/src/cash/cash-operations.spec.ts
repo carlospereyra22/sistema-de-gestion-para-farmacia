@@ -196,6 +196,69 @@ describe("cash closing and manual movement safeguards", () => {
     expect(tx.cashMovement.create).not.toHaveBeenCalled();
     expect(audit.recordInTransaction).not.toHaveBeenCalled();
   });
+  describe("egresos manuales", () => {
+    const withdraw = (amountMinor: number) => ({
+      type: "OUT" as const,
+      amountMinor,
+      reason: "Retiro",
+      clientOperationId: "request",
+    });
+    it("rechaza un egreso mayor al efectivo disponible", async () => {
+      const { service, tx, audit } = setup();
+      await expect(
+        service.movement(
+          "actor",
+          "org",
+          "branch",
+          "session",
+          withdraw(1600001),
+        ),
+      ).rejects.toThrow("$ 16.000,00");
+      expect(tx.cashMovement.create).not.toHaveBeenCalled();
+      expect(audit.recordInTransaction).not.toHaveBeenCalled();
+    });
+    it("permite retirar exactamente el efectivo disponible", async () => {
+      const { service, tx } = setup();
+      await service.movement(
+        "actor",
+        "org",
+        "branch",
+        "session",
+        withdraw(1600000),
+      );
+      expect(tx.cashMovement.create).toHaveBeenCalled();
+    });
+    it("no limita los ingresos", async () => {
+      const { service, tx } = setup();
+      await service.movement("actor", "org", "branch", "session", {
+        ...withdraw(9000000),
+        type: "IN",
+      });
+      expect(tx.salePayment.aggregate).not.toHaveBeenCalled();
+      expect(tx.cashMovement.create).toHaveBeenCalled();
+    });
+    it("un reintento de un egreso ya registrado no vuelve a validar el saldo", async () => {
+      const { service, tx } = setup();
+      tx.cashMovement.findUnique.mockResolvedValue({
+        id: "request",
+        cashSessionId: "session",
+        actorId: "actor",
+        type: "OUT",
+        amountMinor: 1600001n,
+        reason: "Retiro",
+      });
+      await expect(
+        service.movement(
+          "actor",
+          "org",
+          "branch",
+          "session",
+          withdraw(1600001),
+        ),
+      ).resolves.toMatchObject({ amountMinor: "1600001" });
+      expect(tx.cashMovement.create).not.toHaveBeenCalled();
+    });
+  });
   it("rejects a reused request with a different payload", async () => {
     const { service, tx } = setup();
     tx.cashMovement.findUnique.mockResolvedValue({
