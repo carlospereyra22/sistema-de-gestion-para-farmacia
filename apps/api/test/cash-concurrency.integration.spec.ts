@@ -5,6 +5,7 @@ import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
 import type { EnvironmentService } from "../src/config/environment.service";
 import { CashService } from "../src/cash/cash.service";
+import { findOwnOpenSession } from "../src/cash/own-open-session";
 import { AuditService } from "../src/audit/audit.service";
 
 describe("cash concurrency on an isolated synthetic schema", () => {
@@ -158,6 +159,375 @@ describe("cash concurrency on an isolated synthetic schema", () => {
         where: { cashRegisterId: f.register.id, closedAt: null },
       }),
     ).toBe(1);
+  });
+  describe("quitar la caja de un cobro pendiente", () => {
+    async function pendingFixture() {
+      const f = await fixture();
+      const pending = await first.cashPendingCollection.create({
+        data: {
+          organizationId: f.org.id,
+          branchId: f.branch.id,
+          sourceType: "RECEIPT",
+          sourceId: randomUUID(),
+          actorId: f.user.id,
+          cashMinor: 5000n,
+          cardMinor: 0n,
+          transferMinor: 0n,
+        },
+      });
+      const service = f.services[0]!;
+      await service.setCollectionDestination(
+        ...f.args,
+        pending.id,
+        f.register.id,
+      );
+      const clear = (expected = f.register.id) =>
+        service.clearCollectionDestination(...f.args, pending.id, expected);
+      return { ...f, pending, service, clear };
+    }
+    const reload = (id: string) =>
+      first.cashPendingCollection.findUniqueOrThrow({ where: { id } });
+
+    it("informa qué usuario hizo el cobro", async () => {
+      const f = await pendingFixture();
+      const rows = await f.service.pendingCollections(...f.args);
+      expect(rows[0]?.collectedBy).toBe("Test cashier");
+    });
+    it("deja el cobro sin caja, sin mover dinero y con auditoría", async () => {
+      const f = await pendingFixture();
+      const session = await f.open();
+      await f.clear();
+      expect(await reload(f.pending.id)).toMatchObject({
+        destinationRegisterId: null,
+        destinationSetAt: null,
+        destinationSetById: null,
+        assignedAt: null,
+      });
+      expect(
+        await first.cashMovement.count({
+          where: { cashSessionId: session.id },
+        }),
+      ).toBe(0);
+      const audit = await first.auditLog.findFirstOrThrow({
+        where: { entityId: f.pending.id, action: "DESTINATION_CLEARED" },
+      });
+      expect(audit.actorId).toBe(f.user.id);
+      expect(audit.before).toMatchObject({ cashRegisterId: f.register.id });
+    });
+    it("permite asignar otra caja después de quitarla", async () => {
+      const f = await pendingFixture();
+      const other = await first.cashRegister.create({
+        data: { branchId: f.branch.id, name: "Otra" },
+      });
+      await f.clear();
+      await f.service.setCollectionDestination(
+        ...f.args,
+        f.pending.id,
+        other.id,
+      );
+      expect((await reload(f.pending.id)).destinationRegisterId).toBe(other.id);
+    });
+    it("un reintento no falla ni audita dos veces", async () => {
+      const f = await pendingFixture();
+      await f.clear();
+      await expect(f.clear()).resolves.toMatchObject({
+        destinationRegisterId: null,
+      });
+      expect(
+        await first.auditLog.count({
+          where: { entityId: f.pending.id, action: "DESTINATION_CLEARED" },
+        }),
+      ).toBe(1);
+    });
+    it("rechaza quitarla si el cobro cambió de caja", async () => {
+      const f = await pendingFixture();
+      await expect(f.clear(randomUUID())).rejects.toThrow("cambió de caja");
+      expect((await reload(f.pending.id)).destinationRegisterId).toBe(
+        f.register.id,
+      );
+    });
+    it("rechaza quitarla si el cobro ya se incorporó a una sesión", async () => {
+      const f = await pendingFixture();
+      const session = await f.open();
+      await f.service.assignCollection(...f.args, f.pending.id, session.id);
+      await expect(f.clear()).rejects.toThrow("ya se incorporó");
+      expect((await reload(f.pending.id)).destinationRegisterId).toBe(
+        f.register.id,
+      );
+    });
+    it("no alcanza cobros de otra sucursal", async () => {
+      const f = await pendingFixture();
+      const norte = await first.branch.create({
+        data: { organizationId: f.org.id, name: "Norte", code: "NORTE" },
+      });
+      await first.userBranch.create({
+        data: { userId: f.user.id, branchId: norte.id },
+      });
+      await expect(
+        f.service.clearCollectionDestination(
+          f.user.id,
+          f.org.id,
+          norte.id,
+          f.pending.id,
+          f.register.id,
+        ),
+      ).rejects.toThrow("no disponible");
+    });
+  });
+  describe("cajas de la organización", () => {
+    it("lista quién abrió cada caja, con el email si no tiene nombre", async () => {
+      const f = await fixture();
+      const service = f.services[0]!;
+      await first.userOrganization.update({
+        where: {
+          userId_organizationId: {
+            userId: f.user.id,
+            organizationId: f.org.id,
+          },
+        },
+        data: { displayName: null },
+      });
+      const email = (
+        await first.user.findUniqueOrThrow({ where: { id: f.user.id } })
+      ).email;
+      await first.userBranch.create({
+        data: { userId: f.user.id, branchId: f.branch.id },
+      });
+      await f.open();
+      const closed = await first.cashRegister.create({
+        data: { branchId: f.branch.id, name: "Zeta" },
+      });
+      const { registers } = await service.organizationRegisters(
+        f.user.id,
+        f.org.id,
+      );
+      expect(registers.map((row) => row.name)).toEqual(["Test", "Zeta"]);
+      expect(registers[0]!.session?.openedBy).toBe(email);
+      expect(registers.find((row) => row.id === closed.id)?.session).toBeNull();
+      const { sessions } = await service.list(...f.args);
+      expect(sessions[0]!.openedBy).toBe(email);
+    });
+    it("sólo muestra las sucursales asignadas al usuario", async () => {
+      const f = await fixture();
+      const service = f.services[0]!;
+      const norte = await first.branch.create({
+        data: { organizationId: f.org.id, name: "Norte", code: "NORTE" },
+      });
+      await first.cashRegister.create({
+        data: { branchId: norte.id, name: "Ajena" },
+      });
+      await first.userBranch.create({
+        data: { userId: f.user.id, branchId: f.branch.id },
+      });
+      const result = await service.organizationRegisters(f.user.id, f.org.id);
+      expect(result.branches.map((row) => row.id)).toEqual([f.branch.id]);
+      expect(result.registers.map((row) => row.name)).toEqual(["Test"]);
+    });
+    it("no da acceso a un usuario de otra organización", async () => {
+      const f = await fixture();
+      const ajena = await fixture();
+      await expect(
+        f.services[0]!.organizationRegisters(ajena.user.id, f.org.id),
+      ).rejects.toThrow();
+    });
+  });
+  describe("una caja abierta por usuario", () => {
+    const openOn = (
+      service: CashService,
+      args: readonly [string, string, string],
+      cashRegisterId: string,
+    ) => service.open(...args, { cashRegisterId, openingAmountMinor: 0 });
+    async function secondRegister(branchId: string) {
+      return first.cashRegister.create({
+        data: { branchId, name: `Caja ${randomUUID()}` },
+      });
+    }
+    async function secondUser(organizationId: string, branchId: string) {
+      const user = await first.user.create({
+        data: {
+          email: randomUUID() + "@example.invalid",
+          passwordHash: "fixture",
+        },
+      });
+      const role = await first.role.findFirstOrThrow({
+        where: { organizationId },
+      });
+      await first.userOrganization.create({
+        data: {
+          organizationId,
+          userId: user.id,
+          displayName: "Segundo cajero",
+          roles: { create: { roleId: role.id } },
+        },
+      });
+      return [user.id, organizationId, branchId] as const;
+    }
+
+    it("permite dos usuarios con cajas abiertas en sucursales distintas", async () => {
+      const f = await fixture();
+      const norte = await first.branch.create({
+        data: { organizationId: f.org.id, name: "Norte", code: "NORTE" },
+      });
+      const other = await secondRegister(norte.id);
+      const segundo = await secondUser(f.org.id, norte.id);
+      await f.open();
+      await expect(
+        openOn(f.services[0]!, segundo, other.id),
+      ).resolves.toBeDefined();
+    });
+    it("serializa dos aperturas del mismo usuario en cajas distintas", async () => {
+      const f = await fixture();
+      const other = await secondRegister(f.branch.id);
+      const results = await Promise.allSettled([
+        openOn(f.services[0]!, f.args, f.register.id),
+        openOn(f.services[1]!, f.args, other.id),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(
+        await first.cashSession.count({
+          where: { openedById: f.user.id, closedAt: null },
+        }),
+      ).toBe(1);
+    });
+    it("una apertura espera a que termine la otra del mismo usuario", async () => {
+      const f = await fixture();
+      const other = await secondRegister(f.branch.id);
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let markLocked = () => {};
+      const locked = new Promise<void>((resolve) => (markLocked = resolve));
+      // Mantiene la primera apertura sin confirmar: sin bloqueo, la segunda
+      // no vería esta sesión y abriría una caja de más.
+      const holder = first.$transaction(
+        async (tx) => {
+          await findOwnOpenSession(tx, f.user.id, f.org.id);
+          await tx.cashSession.create({
+            data: {
+              cashRegisterId: f.register.id,
+              openedById: f.user.id,
+              openingAmountMinor: 0n,
+            },
+          });
+          markLocked();
+          await gate;
+        },
+        { timeout: 20000 },
+      );
+      await locked;
+      const attempt = openOn(f.services[1]!, f.args, other.id).then(
+        () => "abrió",
+        (cause: Error) => cause.message,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      release();
+      await holder;
+      await expect(attempt).resolves.toContain("Ya tenés abierta");
+    });
+    it("rechaza una segunda caja y la permite después de cerrar", async () => {
+      const f = await fixture();
+      const service = f.services[0]!;
+      const other = await secondRegister(f.branch.id);
+      const session = await f.open();
+      await expect(openOn(service, f.args, other.id)).rejects.toThrow(
+        "Ya tenés abierta Test en Test",
+      );
+      await service.close(...f.args, session.id, {
+        closingAmountMinor: 10000,
+        expectedAmountMinor: 10000,
+      });
+      await expect(openOn(service, f.args, other.id)).resolves.toBeDefined();
+    });
+    it("también rechaza una caja de otra sucursal de la organización", async () => {
+      const f = await fixture();
+      const norte = await first.branch.create({
+        data: { organizationId: f.org.id, name: "Norte", code: "NORTE" },
+      });
+      await first.userBranch.create({
+        data: { userId: f.user.id, branchId: norte.id },
+      });
+      const other = await secondRegister(norte.id);
+      await f.open();
+      await expect(
+        openOn(f.services[0]!, [f.user.id, f.org.id, norte.id], other.id),
+      ).rejects.toThrow("Ya tenés abierta Test en Test");
+    });
+    it("no cuenta las sesiones cerradas ni las de otra organización", async () => {
+      const f = await fixture();
+      const session = await f.open();
+      await f.services[0]!.close(...f.args, session.id, {
+        closingAmountMinor: 10000,
+        expectedAmountMinor: 10000,
+      });
+      const ajena = await fixture();
+      await first.userOrganization.create({
+        data: { organizationId: ajena.org.id, userId: f.user.id },
+      });
+      await ajena.open();
+      await expect(f.open()).resolves.toBeDefined();
+    });
+    it("deja operar las sesiones que ya estaban abiertas de más", async () => {
+      const f = await fixture();
+      const service = f.services[0]!;
+      const other = await secondRegister(f.branch.id);
+      const session = await f.open();
+      const previa = await first.cashSession.create({
+        data: {
+          cashRegisterId: other.id,
+          openedById: f.user.id,
+          openingAmountMinor: 0n,
+        },
+      });
+      await service.close(...f.args, previa.id, {
+        closingAmountMinor: 0,
+        expectedAmountMinor: 0,
+      });
+      await service.close(...f.args, session.id, {
+        closingAmountMinor: 10000,
+        expectedAmountMinor: 10000,
+      });
+      expect(
+        await first.cashSession.count({
+          where: { openedById: f.user.id, closedAt: null },
+        }),
+      ).toBe(0);
+    });
+    it("permite dos usuarios con cajas abiertas e informa cuál es propia", async () => {
+      const f = await fixture();
+      const service = f.services[0]!;
+      const other = await secondRegister(f.branch.id);
+      const segundo = await secondUser(f.org.id, f.branch.id);
+      const session = await f.open();
+      const ajena = await openOn(service, segundo, other.id);
+      const { sessions } = await service.list(...f.args);
+      const propia = (id: string) =>
+        sessions.find((row) => row.id === id)?.openedByCurrentUser;
+      expect(propia(session.id)).toBe(true);
+      expect(propia(ajena.id)).toBe(false);
+    });
+    it("permite que otro usuario opere la caja ajena", async () => {
+      const f = await fixture();
+      const service = f.services[0]!;
+      const segundo = await secondUser(f.org.id, f.branch.id);
+      await first.userBranch.create({
+        data: { userId: segundo[0], branchId: f.branch.id },
+      });
+      const session = await f.open();
+      await service.movement(...segundo, session.id, {
+        type: "IN",
+        amountMinor: 100,
+        reason: "Cambio",
+        clientOperationId: randomUUID(),
+      });
+      await service.close(...segundo, session.id, {
+        closingAmountMinor: 10100,
+        expectedAmountMinor: 10100,
+      });
+      expect(
+        await first.cashMovement.count({
+          where: { cashSessionId: session.id, actorId: segundo[0] },
+        }),
+      ).toBe(1);
+    });
   });
   it("serializes double close and records one closing audit", async () => {
     const f = await fixture();

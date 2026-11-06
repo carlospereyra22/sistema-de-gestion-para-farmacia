@@ -1614,6 +1614,11 @@ describe("Current account lifecycle (rolled-back fixtures)", () => {
               [{ saleItemId: separateItem.saleItemId, amountMinor: 100 }],
             ),
           ).rejects.toThrow("caja abierta");
+          // Un usuario tiene una sola caja abierta: las anteriores ya no se usan acá.
+          await tx.cashSession.updateMany({
+            where: { openedById: user.id, closedAt: null },
+            data: { closedAt: new Date() },
+          });
           const ruleSession = await cash.open(user.id, org.id, branch.id, {
             cashRegisterId: ruleRegister.id,
             openingAmountMinor: 10000,

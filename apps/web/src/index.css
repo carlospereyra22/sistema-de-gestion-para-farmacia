@@ -200,6 +200,38 @@
   background: #fff2d8;
   color: #d97706;
 }
+/* El tamaño va acá: la regla global de button pisa las utilidades de Tailwind. */
+.cash-opening-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 5px 5px 5px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  font-size: 13px;
+  color: #64748b;
+}
+.cash-opening-suggestion strong {
+  font-weight: 600;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cash-opening-suggestion button {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: #e8faf5;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f766e;
+}
+.cash-opening-suggestion button:hover {
+  background: #d3f4ea;
+}
 .cash-difference {
   font-weight: 600;
 }

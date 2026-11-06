@@ -82,3 +82,20 @@
 
 - El acceso a cobros pendientes pasó del menú de tres puntos a la barra de estado, con cantidad y total. Reemplaza lo descripto en la segunda etapa.
 - El detalle de la pantalla está en `CASH_WORKSPACE.md`.
+
+## Una caja abierta por usuario (06/11/2026)
+
+- `open()` rechaza la apertura si el usuario ya tiene una sesión abierta en la organización. Bloquea su fila de `UserOrganization` después de la caja, porque dos aperturas en cajas distintas no comparten otro bloqueo. El orden es siempre caja y después usuario.
+- No hay migración ni índice único: las sesiones que ya estaban abiertas de más se siguen operando y cerrando.
+- Cada sesión de la consulta de caja informa `openedByCurrentUser`. La web prefiere la caja elegida en el equipo, después la propia y después la predeterminada.
+
+## Confirmación y deshacer en cobros pendientes (06/11/2026)
+
+- Reemplaza el pie compartido y el borrador de elección descriptos en "Ajuste de asignación y navegación": el pie quedaba debajo de la tabla, fuera de la vista. Ahora cada acción abre un popup sobre el diálogo. La regla anterior de no apilar ventanas deja de aplicar acá, a pedido del usuario.
+- Una caja tiene una sola sesión abierta, así que incorporar es un botón directo y ya no una lista.
+- `POST cash/pending-collections/:id/destination/clear` quita la caja. Recibe la caja esperada y responde 409 si cambió o si el cobro se incorporó o anuló. Repetirla no falla ni audita dos veces. Audita `DESTINATION_CLEARED` con el destino anterior.
+
+## Cajas de la organización (06/11/2026)
+
+- `GET organizations/:id/cash/registers` exige CASH_READ y devuelve sólo las sucursales activas asignadas al usuario, las mismas que permite `BranchAccessGuard`. Un administrador sin una sucursal asignada no la ve.
+- La consulta de caja y la actividad reciente muestran el email cuando el usuario no tiene nombre cargado. Los detalles de cierre conservan su formato.

@@ -2,7 +2,12 @@ import { CashRegisterIcon } from "./cash-register-icon";
 import type { CashRegister, CashSession } from "./lib/api";
 import { ProductFilterSelect } from "./product-filter-select";
 
-type OpenSession = Pick<CashSession, "id" | "cashRegisterId">;
+type OpenSession = Pick<CashSession, "id" | "cashRegisterId" | "openedBy">;
+
+const cashRegisterOptionLabel = (name: string, session?: OpenSession) =>
+  !session
+    ? `${name} · Cerrada`
+    : `${name} · Abierta${session.openedBy ? ` por ${session.openedBy}` : ""}`;
 
 export function CashRegisterPicker({
   registers,
@@ -27,11 +32,10 @@ export function CashRegisterPicker({
         value={value}
         options={registers.map((register) => ({
           value: register.id,
-          label: `${register.name} · ${
-            openSessions.some((item) => item.cashRegisterId === register.id)
-              ? "Abierta"
-              : "Cerrada"
-          }`,
+          label: cashRegisterOptionLabel(
+            register.name,
+            openSessions.find((item) => item.cashRegisterId === register.id),
+          ),
         }))}
         onChange={onChange}
       />

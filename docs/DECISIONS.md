@@ -2,6 +2,13 @@
 
 ## DECIDED
 
+- 06/11/2026 (SISTEMA-42): El servicio se cobra por usuario activo y por sucursal.
+  La caja no es unidad de cobro. Para que compartir un usuario no reemplace pagar
+  otro, cada usuario tiene una sola caja abierta por organización. No se vincula un
+  usuario fijo a cada caja: complicaría los cambios de turno y no agrega control.
+  La regla no impide usar un mismo login en varias PC sobre una caja; eso, los
+  planes y sus topes siguen en la epic Planes, suscripcion y cobro.
+
 - 04/11/2026 (SISTEMA-26): Los medicamentos pasan a una base propia dentro de la
   base principal, no en `catalogo_juncos_external`, porque la actualiza la corrida
   de las 09:00 y 17:00 y el rol de esa base es de sólo lectura. La corrida toma de

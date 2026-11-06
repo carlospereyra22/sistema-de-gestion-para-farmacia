@@ -12,10 +12,13 @@ import { CashCloseForm } from "./cash-close-form";
 import { CashClosureDetail } from "./cash-closure-detail";
 import { CashHistory } from "./cash-history";
 import { CashLatestClosure } from "./cash-latest-closure";
+import { CashOpeningSuggestion } from "./cash-opening-suggestion";
+import { CashOrganizationRegisters } from "./cash-organization-registers";
 import { CashMetrics, CashStatusBar, CashTimeline } from "./cash-overview";
 import { CashPendingCollections } from "./cash-pending-collections";
 import { CashRegisterIcon } from "./cash-register-icon";
 import { CashRegisterPicker } from "./cash-register-picker";
+import { ownOpenRegisterNotice } from "./lib/active-cash-register";
 import { formatAmountTyping } from "./lib/amount-typing";
 import {
   cashSettingsRequest,
@@ -35,7 +38,6 @@ import {
 } from "./lib/api";
 import { typedCashMinor } from "./lib/cash-count";
 import {
-  cashMoney,
   defaultClosureRange,
   hasAssignedCollections,
   pendingCollectionsSummary,
@@ -76,7 +78,7 @@ export function CashWorkspace({
   done: () => void;
   error: (value: string) => void;
 }): ReactElement {
-  const [tab, setTab] = useState<"session" | "history">("session");
+  const [tab, setTab] = useState<"session" | "history" | "all">("session");
   const [opening, setOpening] = useState("");
   const [cashBusy, setCashBusy] = useState(false);
   const cashPending = useRef(false);
@@ -277,6 +279,7 @@ export function CashWorkspace({
     lastClosure?.cashRegisterId === registerId
       ? lastClosure.closingAmountMinor
       : null;
+  const ownOpenNotice = ownOpenRegisterNotice(openSessions, registers);
   const noPermission = management && !management.canManage && (
     <p className="mt-3 text-xs text-slate-500">
       No tenés permiso para abrir ni cerrar cajas.
@@ -321,6 +324,7 @@ export function CashWorkspace({
           [
             ["session", "Sesión"],
             ["history", "Historial"],
+            ["all", "Todas las cajas"],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -333,7 +337,13 @@ export function CashWorkspace({
           </button>
         ))}
       </nav>
-      {tab === "history" ? (
+      {tab === "all" ? (
+        <CashOrganizationRegisters
+          token={token}
+          organizationId={organizationId}
+          refreshKey={openSessions}
+        />
+      ) : tab === "history" ? (
         <CashHistory
           closures={closures}
           registers={management?.registers ?? registers}
@@ -516,26 +526,28 @@ export function CashWorkspace({
                       onChange={setOpening}
                     />
                     {lastCounted && lastCounted !== "0" && (
-                      <button
-                        type="button"
-                        onClick={() =>
+                      <CashOpeningSuggestion
+                        amountMinor={lastCounted}
+                        onUse={() =>
                           setOpening(
                             formatAmountTyping(lotCostInput(lastCounted)),
                           )
                         }
-                        className="mt-2 text-xs text-teal-700 underline-offset-2 hover:underline"
-                      >
-                        Usar último contado ({cashMoney(lastCounted)})
-                      </button>
+                      />
                     )}
                   </>
                 )}
                 <button
-                  disabled={cashBusy || !management?.canManage}
+                  disabled={
+                    cashBusy || !management?.canManage || Boolean(ownOpenNotice)
+                  }
                   className="mt-5 w-full bg-teal-700 py-2 text-sm text-white disabled:opacity-50"
                 >
                   {register ? `Abrir ${register.name}` : "Abrir caja"}
                 </button>
+                {ownOpenNotice && (
+                  <p className="mt-3 text-xs text-amber-800">{ownOpenNotice}</p>
+                )}
               </form>
             )}
             {noPermission}

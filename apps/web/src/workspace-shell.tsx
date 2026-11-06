@@ -146,6 +146,7 @@ import { formatAmountTyping } from "./lib/amount-typing";
 import { lotCostInput, typedCostMinor } from "./lib/lot-cost";
 import {
   readCashRegisterChoice,
+  ownRegisterId,
   resolveCashRegister,
   resolveSaleSession,
   saveCashRegisterChoice,
@@ -566,6 +567,7 @@ export function WorkspaceShell({
   );
   const saleSession = resolveSaleSession(openSessions, [
     chosenRegisterId,
+    ownRegisterId(openSessions),
     defaultRegisterId,
   ]);
   const chooseRegister = (registerId: string) => {

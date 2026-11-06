@@ -42,7 +42,7 @@ export function CashStatusBar({
             ? `Desde ${new Date(session.openedAt).toLocaleString("es-AR", {
                 dateStyle: "short",
                 timeStyle: "short",
-              })}${session.openedBy ? ` · ${session.openedBy}` : ""}`
+              })}${session.openedBy ? ` · Abrió ${session.openedBy}` : ""}`
             : "Abrí una sesión para operar con efectivo."}
           {responsibleName ? ` · Responsable: ${responsibleName}` : ""}
         </span>

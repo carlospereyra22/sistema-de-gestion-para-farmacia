@@ -50,6 +50,9 @@ class AssignCollectionDto {
 class CollectionDestinationDto {
   @IsUUID() cashRegisterId!: string;
 }
+class ClearCollectionDestinationDto {
+  @IsUUID() expectedRegisterId!: string;
+}
 class OpenSessionDto {
   @IsString() cashRegisterId!: string;
   @Type(() => Number) @IsInt() @Min(0) openingAmountMinor!: number;
@@ -82,6 +85,18 @@ class EditRegisterDto {
 class ClosureVisibilityDto {
   @IsBoolean() archived!: boolean;
   @IsString() @MinLength(3) @MaxLength(300) reason!: string;
+}
+
+@Controller("organizations/:organizationId/cash")
+@UseGuards(JwtAccessGuard)
+export class CashOrganizationController {
+  constructor(private readonly cash: CashService) {}
+  @Get("registers") registers(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+  ) {
+    return this.cash.organizationRegisters(request.auth!.sub, organizationId);
+  }
 }
 
 @Controller("organizations/:organizationId/branches/:branchId/cash")
@@ -150,6 +165,22 @@ export class CashController {
       branchId,
       collectionId,
       body.cashRegisterId,
+    );
+  }
+  @Post("pending-collections/:collectionId/destination/clear")
+  clearCollectionDestination(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Param("collectionId", ParseUUIDPipe) collectionId: string,
+    @Body() body: ClearCollectionDestinationDto,
+  ) {
+    return this.cash.clearCollectionDestination(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      collectionId,
+      body.expectedRegisterId,
     );
   }
   @Get("pending-collections") pendingCollections(
