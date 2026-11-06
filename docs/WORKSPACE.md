@@ -130,3 +130,9 @@ Se conserva el umbral existente de 1800 px CSS: al entrar, escritorio amplio exp
 La cabecera permanece visible. ResizeObserver mide su altura real (incluidas filas adicionales) y el lateral ocupa el resto de 100dvh, con desplazamiento propio, espacio al pie y acceso a los últimos botones. El tooltip se posiciona fuera del contenedor desplazable. No cambia rutas, permisos, selección de sucursal ni datos comerciales.
 
 Verificación en Edge headless con una página temporal usando los componentes reales: 1920×1080, 1366×768, 1024×600, 768×900 y 390×700; valores predeterminados, alternancia, altura al pie del viewport, acceso al último elemento y scroll de página. La página temporal fue retirada. Captura local: `.cache/sidebar-expanded.png`.
+
+## Legibilidad de Listas de precios (06/11/2026)
+
+Listas de precios usa las proporciones de Clientes, Proveedores y Cuentas por pagar: tabla en texto base, encabezados y datos secundarios en texto chico. Los selectores de lista, Categoría y Laboratorio usan `ProductFilterSelect` completo, con buscador y botones de la misma altura; los de Editar lista y Ajuste de precios usan la versión `compact`. No cambian reglas ni precios.
+
+La paginación común muestra su resumen en texto chico (14 px) en todas las pantallas y agranda las flechas. Dentro de una tarjeta de listado va con `integrated`.

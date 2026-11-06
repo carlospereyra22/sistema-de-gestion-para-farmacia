@@ -44,5 +44,7 @@ it("shows percentage units and does not require a preview button", () => {
   );
   expect(html).toContain("Porcentaje");
   expect(html).toContain("automáticamente");
-  expect(html.match(/<button/g)).toHaveLength(2);
+  // Aumentar, Bajar y el selector de tipo de ajuste.
+  expect(html.match(/<button/g)).toHaveLength(3);
+  expect(html).not.toContain("<select");
 });

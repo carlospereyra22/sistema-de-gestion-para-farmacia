@@ -26,7 +26,7 @@ export function Pagination({
       aria-label={label}
       className={`pagination-footer flex shrink-0 flex-wrap items-center justify-center gap-2 bg-white ${integrated ? "border-t px-3 py-1.5" : `rounded-xl border ${compact ? "px-3 py-1.5" : "p-4"}`}`}
     >
-      <span className="mr-3 text-xs text-slate-500">
+      <span className="mr-3 text-sm text-slate-500">
         {total} {noun} · {pageSize} por página
       </span>
       <button
@@ -34,7 +34,7 @@ export function Pagination({
         aria-label="Página anterior"
         disabled={currentPage === 1}
         onClick={() => onChange(currentPage - 1)}
-        className="size-9 rounded-full border text-teal-800 disabled:opacity-40"
+        className="size-9 rounded-full border text-lg leading-none text-teal-800 disabled:opacity-40"
       >
         ‹
       </button>
@@ -61,7 +61,7 @@ export function Pagination({
         aria-label="Página siguiente"
         disabled={currentPage === totalPages}
         onClick={() => onChange(currentPage + 1)}
-        className="size-9 rounded-full border text-teal-800 disabled:opacity-40"
+        className="size-9 rounded-full border text-lg leading-none text-teal-800 disabled:opacity-40"
       >
         ›
       </button>
