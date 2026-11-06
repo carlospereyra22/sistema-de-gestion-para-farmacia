@@ -1,3 +1,5 @@
+import { ProductFilterSelect } from "./product-filter-select";
+
 export function PriceAdjustmentControls({
   direction,
   mode,
@@ -35,19 +37,20 @@ export function PriceAdjustmentControls({
         </div>
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-sm font-medium">
-          Tipo de ajuste
-          <select
-            className="mt-2 h-10 w-full rounded-lg border bg-white px-3"
+        <div className="text-sm">
+          <p className="mb-2 font-medium">Tipo de ajuste</p>
+          <ProductFilterSelect
+            compact
+            label="Tipo de ajuste"
+            icon={null}
             value={mode}
-            onChange={(event) =>
-              onModeChange(event.target.value as "PERCENT" | "FIXED")
-            }
-          >
-            <option value="PERCENT">Porcentaje (%)</option>
-            <option value="FIXED">Monto fijo ($)</option>
-          </select>
-        </label>
+            options={[
+              { value: "PERCENT", label: "Porcentaje (%)" },
+              { value: "FIXED", label: "Monto fijo ($)" },
+            ]}
+            onChange={(next) => onModeChange(next as "PERCENT" | "FIXED")}
+          />
+        </div>
         <label className="text-sm font-medium">
           {mode === "PERCENT" ? "Porcentaje" : "Monto"} a{" "}
           {direction === "UP" ? "aumentar" : "bajar"}
@@ -72,7 +75,7 @@ export function PriceAdjustmentControls({
           </span>
         </label>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-sm text-slate-500">
         Ingresá solo el valor, sin signo. La vista previa se actualiza
         automáticamente.
       </p>

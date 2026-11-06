@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Box,
   Download,
   CalendarDays,
+  FlaskConical,
   LockKeyhole,
   MoreHorizontal,
   Pencil,
@@ -30,6 +32,7 @@ import { downloadPriceListPdf } from "./lib/price-list-pdf";
 import { defaultPriceListTitle } from "./lib/default-price-list-title";
 import { Pagination } from "./pagination";
 import { PriceAdjustmentControls } from "./price-adjustment-controls";
+import { ProductFilterSelect } from "./product-filter-select";
 import { ListPriceInput } from "./list-price-input";
 import { preservePriceListSelection } from "./lib/price-list-selection";
 
@@ -64,6 +67,7 @@ function Modal({
   return (
     <dialog
       ref={ref}
+      data-product-editor-body
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -368,33 +372,31 @@ export function PriceListsWorkspace({
             <h2 className="font-semibold text-slate-800">
               Tus listas de precios
             </h2>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-sm text-slate-500">
               Elegí una lista para consultar o administrar sus precios.
             </p>
           </div>
           <div className="flex max-w-full flex-wrap items-center gap-3">
-            <label className="relative block min-w-0">
-              <span className="sr-only">Seleccionar lista</span>
-              <Tags
-                size={16}
-                className="pointer-events-none absolute left-3 top-3 text-teal-700"
-              />
-              <select
-                className={`${field} pl-10 sm:w-64`}
+            <div className="w-full sm:w-64">
+              <ProductFilterSelect
+                label="Lista de precios"
+                icon={<Tags size={18} />}
                 value={selectedId}
                 disabled={busy || !lists.length}
-                onChange={(event) => switchList(event.target.value)}
-              >
-                {!selectedId && <option value="">Seleccionar lista</option>}
-                {lists.map((list) => (
-                  <option key={list.id} value={list.id}>
-                    {list.id === selectedId ? `Lista: ${list.name}` : list.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={[
+                  ...(selectedId
+                    ? []
+                    : [{ value: "", label: "Seleccionar lista" }]),
+                  ...lists.map((list) => ({
+                    value: list.id,
+                    label: list.name,
+                  })),
+                ]}
+                onChange={switchList}
+              />
+            </div>
             <button
-              className={`${primary} min-h-10`}
+              className={`${primary} h-12`}
               disabled={busy || changes.length > 0}
               title={
                 changes.length
@@ -426,25 +428,27 @@ export function PriceListsWorkspace({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold break-words">{list.name}</h3>
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-teal-700">
+                    <h3 className="text-lg font-semibold break-words">
+                      {list.name}
+                    </h3>
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-sm font-medium text-teal-700">
                       Activa
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-4">
                     <div>
-                      <strong className="text-lg tabular-nums">
+                      <strong className="text-xl tabular-nums">
                         {
                           list.prices.filter((price) =>
                             products.some((p) => p.id === price.productId),
                           ).length
                         }
                       </strong>
-                      <p className="text-xs text-slate-500">productos</p>
+                      <p className="text-sm text-slate-500">productos</p>
                     </div>
                     <div className="flex items-center gap-2 border-l border-slate-200 pl-4 text-slate-500">
                       <CalendarDays size={16} />
-                      <div className="text-xs">
+                      <div className="text-sm">
                         <p>Última actualización</p>
                         <p className="mt-0.5">
                           {list.updatedAt
@@ -459,8 +463,8 @@ export function PriceListsWorkspace({
                   </div>
                 </div>
                 {list.name === "Precio general" ? (
-                  <span className="flex items-center gap-2 text-xs text-slate-500">
-                    <LockKeyhole size={15} />
+                  <span className="flex items-center gap-2 text-sm text-slate-500">
+                    <LockKeyhole size={16} />
                     Solo lectura
                   </span>
                 ) : (
@@ -479,7 +483,7 @@ export function PriceListsWorkspace({
                       setModal("edit");
                     }}
                   >
-                    <Pencil size={15} />
+                    <Pencil size={16} />
                     Editar lista
                   </button>
                 )}
@@ -487,9 +491,9 @@ export function PriceListsWorkspace({
             ))}
         </div>
       </section>
-      <div className="flex flex-wrap gap-3 rounded-xl border bg-white p-4">
-        <label className="relative min-w-60 flex-1">
-          <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+      <div className="flex flex-wrap gap-2 rounded-xl border bg-white p-4">
+        <label className="relative min-w-64 flex-1">
+          <Search size={16} className="absolute left-3 top-4 text-slate-400" />
           <input
             aria-label="Buscar producto"
             value={query}
@@ -498,56 +502,54 @@ export function PriceListsWorkspace({
               setPage(1);
             }}
             placeholder="Nombre, principio activo o código"
-            className={`${field} pl-9`}
+            className="h-12 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-base shadow-sm"
           />
         </label>
-        <select
-          aria-label="Categoría"
-          className={`${field} sm:w-44`}
-          value={category}
-          onChange={(e) => {
-            setCategory(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">Categorías</option>
-          {categories.map(([id, label]) => (
-            <option key={id} value={id}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Laboratorio"
-          className={`${field} sm:w-44`}
-          value={laboratory}
-          onChange={(e) => {
-            setLaboratory(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">Laboratorios</option>
-          {laboratories.map(([id, label]) => (
-            <option key={id} value={id}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <div className="w-full sm:w-44">
+          <ProductFilterSelect
+            label="Categoría"
+            icon={<Box size={18} />}
+            value={category}
+            options={[
+              { value: "", label: "Todas" },
+              ...categories.map(([value, label]) => ({ value, label })),
+            ]}
+            onChange={(value) => {
+              setCategory(value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <div className="w-full sm:w-44">
+          <ProductFilterSelect
+            label="Laboratorio"
+            icon={<FlaskConical size={18} />}
+            value={laboratory}
+            options={[
+              { value: "", label: "Todos" },
+              ...laboratories.map(([value, label]) => ({ value, label })),
+            ]}
+            onChange={(value) => {
+              setLaboratory(value);
+              setPage(1);
+            }}
+          />
+        </div>
         <button
           disabled={readOnly || busy}
-          className={secondary}
+          className={`${secondary} h-12`}
           onClick={() => {
             setAddIds([]);
             setAddQuery("");
             setModal("add");
           }}
         >
-          <Plus size={15} />
+          <Plus size={16} />
           Productos
         </button>
         <button
           disabled={readOnly || busy || !visible.length}
-          className={secondary}
+          className={`${secondary} h-12`}
           onClick={() =>
             openIncrease(
               selection.length
@@ -558,26 +560,26 @@ export function PriceListsWorkspace({
             )
           }
         >
-          <TrendingUp size={15} />
+          <TrendingUp size={16} />
           Ajuste masivo
         </button>
         <button
           disabled={!included.length || busy || !!changes.length}
-          className={secondary}
+          className={`${secondary} h-12`}
           onClick={() => {
             setName(defaultPriceListTitle());
             setSubtitle("");
             setModal("export");
           }}
         >
-          <Download size={15} />
+          <Download size={16} />
           Exportar PDF
         </button>
       </div>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_220px] 2xl:grid-cols-[minmax(0,1fr)_260px]">
         <section className="overflow-x-auto rounded-xl border bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
+          <table className="w-full min-w-[820px] text-left text-base">
+            <thead className="bg-slate-50 text-sm text-slate-500">
               <tr>
                 <th className="p-3">
                   <input
@@ -596,9 +598,13 @@ export function PriceListsWorkspace({
                   />
                 </th>
                 <th>Producto</th>
-                <th className="p-3">Categoría / laboratorio</th>
-                <th className="p-3 text-right">Precio actual</th>
-                <th className="p-3 text-center">Nuevo precio</th>
+                <th className="whitespace-nowrap p-3">Categoría / lab.</th>
+                <th className="whitespace-nowrap p-3 text-right">
+                  Precio actual
+                </th>
+                <th className="whitespace-nowrap p-3 text-center">
+                  Nuevo precio
+                </th>
                 <th className="p-3">Estado</th>
                 <th className="p-3">Acciones</th>
               </tr>
@@ -622,19 +628,19 @@ export function PriceListsWorkspace({
                     />
                   </td>
                   <td className="min-w-44 py-3">
-                    <strong className="font-medium">{product.name}</strong>
-                    <p className="text-xs text-slate-500">
+                    <strong className="font-semibold">{product.name}</strong>
+                    <p className="mt-0.5 text-sm text-slate-500">
                       {product.presentation}
                     </p>
                   </td>
-                  <td className="p-3 text-xs text-slate-500">
+                  <td className="p-3 text-sm text-slate-500">
                     {product.category?.path ??
                       product.category?.name ??
                       "Sin categoría"}
                     <br />
                     {product.laboratory?.name ?? "Sin laboratorio"}
                   </td>
-                  <td className="whitespace-nowrap p-3 text-right">
+                  <td className="whitespace-nowrap p-3 text-right font-medium tabular-nums">
                     {money(
                       selected?.prices.find((p) => p.productId === product.id)
                         ?.amountMinor,
@@ -663,9 +669,9 @@ export function PriceListsWorkspace({
                       />
                     )}
                   </td>
-                  <td className="p-3 text-xs">
+                  <td className="whitespace-nowrap p-3 text-sm">
                     {draft[product.id] ? (
-                      <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-800">
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">
                         Pendiente
                       </span>
                     ) : (
@@ -684,7 +690,7 @@ export function PriceListsWorkspace({
                           onEditProduct(product);
                         }}
                       >
-                        <Pencil size={16} />
+                        <Pencil size={18} />
                       </button>
                       <button
                         aria-label={`Acciones de ${product.name}`}
@@ -713,7 +719,7 @@ export function PriceListsWorkspace({
                           setMenu(menu === product.id ? undefined : product.id);
                         }}
                       >
-                        <MoreHorizontal size={18} />
+                        <MoreHorizontal size={20} />
                       </button>
                     </div>
                   </td>
@@ -722,12 +728,13 @@ export function PriceListsWorkspace({
             </tbody>
           </table>
           {!rows.length && (
-            <p className="p-8 text-center text-sm text-slate-500">
+            <p className="p-8 text-center text-base text-slate-500">
               No hay productos en esta selección.
               {!readOnly && " Agregá productos a la lista."}
             </p>
           )}
           <Pagination
+            integrated
             total={visible.length}
             currentPage={currentPage}
             totalPages={pages}
@@ -737,7 +744,7 @@ export function PriceListsWorkspace({
           />
         </section>
         <aside className="space-y-4 rounded-xl border bg-white p-5">
-          <h2 className="font-semibold">Resumen de la selección</h2>
+          <h2 className="text-lg font-semibold">Resumen de la selección</h2>
           <p className="text-sm text-slate-500">
             Productos visibles{" "}
             <strong className="block text-2xl text-slate-800">
@@ -776,7 +783,7 @@ export function PriceListsWorkspace({
           >
             Descartar cambios
           </button>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-slate-500">
             Los cambios se aplican solo a {selected?.name}. Los productos no
             incluidos usan{" "}
             {lists.find((list) => list.id === selected?.fallbackPriceListId)
@@ -837,28 +844,30 @@ export function PriceListsWorkspace({
                   onChange={(event) => setName(event.target.value)}
                 />
               </label>
-              <label className="mt-4 block text-sm">
-                Si el producto no está en esta lista
-                <select
-                  className={`${field} mt-2`}
+              <div className="mt-4 text-sm">
+                <p className="mb-2">Si el producto no está en esta lista</p>
+                <ProductFilterSelect
+                  compact
+                  label="Si el producto no está en esta lista"
+                  icon={null}
                   value={fallbackListId}
-                  onChange={(event) => setFallbackListId(event.target.value)}
-                >
-                  <option value="">Usar Precio general</option>
-                  {lists
-                    .filter(
-                      (list) =>
-                        list.id !== selectedId &&
-                        list.name !== "Precio general",
-                    )
-                    .map((list) => (
-                      <option key={list.id} value={list.id}>
-                        Usar {list.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <p className="mt-2 rounded-lg bg-teal-50 p-3 text-xs text-teal-800">
+                  options={[
+                    { value: "", label: "Usar Precio general" },
+                    ...lists
+                      .filter(
+                        (list) =>
+                          list.id !== selectedId &&
+                          list.name !== "Precio general",
+                      )
+                      .map((list) => ({
+                        value: list.id,
+                        label: `Usar ${list.name}`,
+                      })),
+                  ]}
+                  onChange={setFallbackListId}
+                />
+              </div>
+              <p className="mt-2 rounded-lg bg-teal-50 p-3 text-sm text-teal-800">
                 Orden al vender: {name.trim() || "Esta lista"} →{" "}
                 {fallbackListId
                   ? `${lists.find((list) => list.id === fallbackListId)?.name ?? "Lista de respaldo"} → `
@@ -867,7 +876,7 @@ export function PriceListsWorkspace({
                 {fallbackListId &&
                   " Se consulta sólo esa lista de respaldo, no sus propias asociaciones."}
               </p>
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 text-sm text-slate-500">
                 Cambiar el nombre no modifica los productos, sus precios ni los
                 clientes asignados.
               </p>
@@ -947,7 +956,7 @@ export function PriceListsWorkspace({
                       />
                       {all ? "Todos los productos" : "Personalizada"}
                     </span>
-                    <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    <p className="mt-2 text-sm leading-relaxed text-slate-500">
                       {all
                         ? `Copia los precios generales de los ${products.length} productos activos. Después podés ajustarlos.`
                         : "Elegís los productos que querés incluir. Los demás mantienen su precio general al vender."}
@@ -997,7 +1006,7 @@ export function PriceListsWorkspace({
                   .map((product) => (
                     <label
                       key={product.id}
-                      className="flex items-center gap-3 border-t py-3 text-sm"
+                      className="flex items-center gap-3 border-t py-3 text-base"
                     >
                       <input
                         type="checkbox"
@@ -1070,7 +1079,7 @@ export function PriceListsWorkspace({
                   Vista previa
                 </p>
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${direction === "DOWN" ? "bg-orange-50 text-orange-800" : "bg-teal-50 text-teal-800"}`}
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${direction === "DOWN" ? "bg-orange-50 text-orange-800" : "bg-teal-50 text-teal-800"}`}
                 >
                   {
                     preview.filter(
@@ -1086,8 +1095,8 @@ export function PriceListsWorkspace({
                 </p>
               )}
               <div className="my-4 max-h-72 overflow-auto rounded-xl border border-slate-200">
-                <table className="w-full text-sm tabular-nums">
-                  <thead className="sticky top-0 z-10 bg-slate-100 text-xs text-slate-600">
+                <table className="w-full text-base tabular-nums">
+                  <thead className="sticky top-0 z-10 bg-slate-100 text-sm text-slate-600">
                     <tr className="text-left">
                       <th className="px-4 py-3 font-medium">Producto</th>
                       <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
@@ -1135,7 +1144,7 @@ export function PriceListsWorkspace({
                 </table>
               </div>
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                <p className="max-w-sm text-xs leading-relaxed text-slate-500">
+                <p className="max-w-sm text-sm leading-relaxed text-slate-500">
                   Todavía no se guardará ningún precio. Después de aplicar,
                   revisá la lista y pulsá Guardar cambios.
                 </p>

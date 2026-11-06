@@ -27,7 +27,7 @@ export function ListPriceInput({
       inputMode="decimal"
       disabled={disabled}
       placeholder="—"
-      className={`h-9 w-36 rounded-lg border px-3 text-right text-sm tabular-nums disabled:opacity-50 ${amount == null ? "border-slate-200 bg-transparent text-slate-700" : "border-teal-200 bg-teal-50 text-teal-800 font-medium"}`}
+      className={`h-10 w-36 rounded-lg border px-3 text-right text-base tabular-nums disabled:opacity-50 ${amount == null ? "border-slate-200 bg-transparent text-slate-700" : "border-teal-200 bg-teal-50 text-teal-800 font-medium"}`}
       value={focused ? text : display}
       onFocus={() => {
         setFocused(true);
