@@ -1918,7 +1918,9 @@ export async function getLatestCashClosure(
       response,
       "No se pudo consultar el último cierre.",
     );
-  return (await response.json()) as CashClosure | null;
+  // Una caja sin cierres responde con cuerpo vacío, no con el JSON `null`.
+  const body = await response.text();
+  return body ? (JSON.parse(body) as CashClosure | null) : null;
 }
 
 export async function createCashRegister(
@@ -1960,6 +1962,9 @@ export async function openCashSession(
     throw await responseError(response, "No se pudo abrir la caja.");
 }
 
+/** La API rechazó el cierre porque la sesión cambió: hay que refrescarla. */
+export class CashCloseRejected extends Error {}
+
 export async function closeCashSession(
   token: string,
   organizationId: string,
@@ -1981,8 +1986,12 @@ export async function closeCashSession(
       }),
     },
   );
-  if (!response.ok)
-    throw await responseError(response, "No se pudo cerrar la caja.");
+  if (!response.ok) {
+    const error = await responseError(response, "No se pudo cerrar la caja.");
+    if (response.status === 404 || response.status === 409)
+      throw new CashCloseRejected(error.message);
+    throw error;
+  }
 }
 
 export async function createCashMovement(

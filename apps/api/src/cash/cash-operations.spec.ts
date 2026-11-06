@@ -220,7 +220,7 @@ describe("cash closing and manual movement safeguards", () => {
       service.close("actor", "org", "branch", "session", {
         closingAmountMinor: 0,
       }),
-    ).rejects.toThrow("permission");
+    ).rejects.toThrow("permiso");
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
   it("rejects a register outside the requested branch", async () => {

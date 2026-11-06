@@ -63,3 +63,11 @@
 - Aplicar primero la migración y API, luego el frontend. Sólo se aplicó en la base local de desarrollo; no se publicó en producción.
 - Pruebas unitarias de medios/vuelto, reintentos, permisos de sesión y anulación; integración PostgreSQL con fixtures revertidos para creación, asignación repetida y compensación. La verificación final agrega concurrencia y el cruce fiscal descritos arriba.
 - La configuración posterior permite deshabilitar los nuevos cobros sin sesión por sucursal; no altera los cobros pendientes existentes.
+
+## Correcciones de la revisión de Caja (05/11/2026)
+
+- Una caja sin cierres muestra el estado vacío: la API responde con cuerpo vacío y el cliente lo lee como sin cierre.
+- Anular una venta con vuelto crea el ingreso `Anulación de vuelto` en la misma sesión y lo deja en la auditoría de la anulación. Reconoce también el concepto anterior `Change for sale`. Las anulaciones hechas antes de esta corrección no se recalculan.
+- Fondo inicial, importe de movimiento y efectivo contado usan `MoneyInput`, aceptan puntos de miles y se convierten a centavos sin float.
+- Si la API rechaza un cierre con 404 o 409, el formulario vuelve al conteo, refresca la sesión y conserva lo contado.
+- Plan completo y próximas etapas en `CASH_IMPROVEMENTS_PLAN.md`.

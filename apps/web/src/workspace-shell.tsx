@@ -154,6 +154,7 @@ import {
 } from "./lib/product-catalog-metrics";
 import { formatAmountTyping } from "./lib/amount-typing";
 import { lotCostInput, typedCostMinor } from "./lib/lot-cost";
+import { typedCashMinor } from "./lib/cash-count";
 import { MoneyInput } from "./money-input";
 import { stockLevel } from "./lib/stock-level";
 import {
@@ -7604,13 +7605,13 @@ function Cash({
   const open = async (event: FormEvent) => {
     event.preventDefault();
     if (cashPending.current) return;
-    const openingAmount =
-      rules?.askOpeningAmount === false ? 0 : Number(opening);
+    const openingMinor =
+      rules?.askOpeningAmount === false ? 0 : typedCashMinor(opening);
     if (!registerId) {
       error("Seleccioná una caja para abrir la sesión.");
       return;
     }
-    if (!Number.isFinite(openingAmount) || openingAmount < 0) {
+    if (openingMinor === null) {
       error("Ingresá un fondo inicial válido.");
       return;
     }
@@ -7622,8 +7623,9 @@ function Cash({
         organizationId,
         branchId,
         registerId,
-        Math.round(openingAmount * 100),
+        openingMinor,
       );
+      setOpening("");
       done();
     } catch (cause) {
       error(
@@ -7637,6 +7639,18 @@ function Cash({
   const movement = async (event: FormEvent) => {
     event.preventDefault();
     if (!session || cashPending.current) return;
+    const amountMinor = typedCashMinor(movementAmount);
+    if (!amountMinor) {
+      error("Ingresá un importe mayor a cero.");
+      return;
+    }
+    if (
+      rules?.requireMovementReason !== false &&
+      movementReason.trim().length < 3
+    ) {
+      error("Indicá un motivo de al menos 3 caracteres.");
+      return;
+    }
     const signature = JSON.stringify([
       session.id,
       movementType,
@@ -7651,7 +7665,7 @@ function Cash({
       await createCashMovement(token, organizationId, branchId, session.id, {
         clientOperationId: movementRequest.current.id,
         type: movementType,
-        amountMinor: Math.round(Number(movementAmount) * 100),
+        amountMinor,
         reason: movementReason,
       });
       movementRequest.current = null;
@@ -7731,6 +7745,7 @@ function Cash({
             organizationId={organizationId}
             branchId={branchId}
             disabled={!management?.canManage || cashBusy}
+            onRejected={done}
             onClosed={() => {
               done();
               void loadClosures().catch(() =>
@@ -7759,9 +7774,8 @@ function Cash({
               </select>
             </label>
             {rules?.askOpeningAmount !== false && (
-              <Input
+              <MoneyInput
                 label="Fondo inicial"
-                type="number"
                 value={opening}
                 onChange={setOpening}
               />
@@ -7773,6 +7787,11 @@ function Cash({
               Abrir caja
             </button>
           </form>
+        )}
+        {management && !management.canManage && (
+          <p className="mt-3 text-xs text-slate-500">
+            No tenés permiso para abrir ni cerrar cajas.
+          </p>
         )}
       </section>
       {session &&
@@ -7812,9 +7831,8 @@ function Cash({
             </button>
           </div>
           <div className="grid gap-x-3 sm:grid-cols-2">
-            <Input
+            <MoneyInput
               label="Importe"
-              type="number"
               value={movementAmount}
               onChange={setMovementAmount}
             />

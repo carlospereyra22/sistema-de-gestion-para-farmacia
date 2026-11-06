@@ -9,14 +9,18 @@ export function MoneyInput({
   value,
   onChange,
   required = true,
+  disabled = false,
+  labelClassName = "mt-4 block text-sm",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  disabled?: boolean;
+  labelClassName?: string;
 }): ReactElement {
   return (
-    <label className="mt-4 block text-sm">
+    <label className={labelClassName}>
       {label}
       <span className="money-input-field mt-1 grid h-10 grid-cols-[40px_minmax(0,1fr)] overflow-hidden rounded-lg border bg-white">
         <span
@@ -30,6 +34,7 @@ export function MoneyInput({
           inputMode="decimal"
           autoComplete="off"
           required={required}
+          disabled={disabled}
           value={value}
           placeholder="0,00"
           onChange={(event) => onChange(formatAmountTyping(event.target.value))}
@@ -40,7 +45,7 @@ export function MoneyInput({
               onChange(formatAmountTyping(`${value},`));
             }
           }}
-          className="min-w-0 bg-transparent px-3 tabular-nums outline-none"
+          className="min-w-0 bg-transparent px-3 text-sm tabular-nums outline-none disabled:cursor-not-allowed disabled:text-slate-400"
         />
       </span>
     </label>

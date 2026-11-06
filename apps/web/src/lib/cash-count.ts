@@ -6,3 +6,8 @@ export function cashCountMinor(value: string): number | null {
   const minor = Number(whole) * 100 + Number(decimal.padEnd(2, "0"));
   return Number.isSafeInteger(minor) && minor >= 0 ? minor : null;
 }
+
+/** Importe de MoneyInput: los puntos son de miles y la coma separa centavos. */
+export function typedCashMinor(value: string): number | null {
+  return cashCountMinor(value.replace(/\./g, "").replace(/,$/, ""));
+}

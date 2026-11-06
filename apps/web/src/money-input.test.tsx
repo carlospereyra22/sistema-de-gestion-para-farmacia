@@ -15,6 +15,20 @@ it("muestra el símbolo de pesos y 0,00 de referencia sin flechas de número", (
   expect(html).not.toContain("text-right");
 });
 
+it("se puede deshabilitar y adaptar a un formulario compacto", () => {
+  const html = renderToStaticMarkup(
+    <MoneyInput
+      label="Efectivo contado"
+      value=""
+      onChange={vi.fn()}
+      disabled
+      labelClassName="block text-xs"
+    />,
+  );
+  expect(html).toContain('<label class="block text-xs"');
+  expect(html).toMatch(/<input[^>]*disabled=""/);
+});
+
 it("muestra el importe recibido", () => {
   expect(
     renderToStaticMarkup(
