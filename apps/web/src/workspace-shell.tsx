@@ -333,6 +333,10 @@ import {
   type UserListItem,
   updateUser,
 } from "./lib/api";
+import {
+  effectiveSalePriceListId,
+  salePriceListOptions,
+} from "./lib/price-list-selection";
 
 const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Inicio", icon: LayoutDashboard },
@@ -4986,6 +4990,15 @@ function Sales({
   const [customers, setCustomers] = useState<Party[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [salePriceListId, setSalePriceListId] = useState("");
+  const resetSaleParties = useCallback(() => {
+    setCustomerId("");
+    setSalePriceListId("");
+  }, []);
+  // Cada venta nueva arranca en Público general y Precio general. Con productos
+  // cargados no se toca: es una venta en curso y se decide al volver.
+  useEffect(() => {
+    if (!posVisible && lines.length === 0) resetSaleParties();
+  }, [posVisible, lines.length, resetSaleParties]);
   const [invoiceSaleId, setInvoiceSaleId] = useState<string>();
   const [fiscalSettingsOpen, setFiscalSettingsOpen] = useState(false);
   const [fiscalOptions, setFiscalOptions] = useState<SaleFiscalOptions>(
@@ -5025,6 +5038,11 @@ function Sales({
       current = false;
     };
   }, [active, token, organizationId]);
+  const activeSaleListId = effectiveSalePriceListId(
+    salePriceLists,
+    salePriceListId,
+    customers.find((customer) => customer.id === customerId)?.priceListId,
+  );
   const [pricing, setPricing] = useState<{
     key: string;
     data: EffectivePrices;
@@ -5723,6 +5741,7 @@ function Sales({
           payments: finalPayments,
         });
       setLines([]);
+      resetSaleParties();
       setLastAddedId("");
       setFiscalOptions(defaultSaleFiscalOptions);
       setPayments([]);
@@ -5812,8 +5831,7 @@ function Sales({
           setFiscalOptions(defaultSaleFiscalOptions);
           setFiscalSettingsOpen(false);
           setPayments([]);
-          setCustomerId("");
-          setSalePriceListId("");
+          resetSaleParties();
           setMethod("CASH");
           setPaymentAmount("");
           setCheckoutOpen(false);
@@ -6030,6 +6048,7 @@ function Sales({
         onCheckout={openCheckout}
         onClear={() => {
           setLines([]);
+          resetSaleParties();
           setLastAddedId("");
           setFiscalOptions(defaultSaleFiscalOptions);
           setFiscalSettingsOpen(false);
@@ -6112,23 +6131,8 @@ function Sales({
                 label="Lista de precios"
                 tinted
                 floatingOptions
-                options={[
-                  ...(customerId
-                    ? [{ value: "", label: "Según cliente" }]
-                    : []),
-                  ...salePriceLists.map((list) => ({
-                    value: list.id,
-                    label: list.name,
-                  })),
-                ]}
-                value={
-                  salePriceListId ||
-                  (!customerId
-                    ? (salePriceLists.find(
-                        (list) => list.name === "Precio general",
-                      )?.id ?? "")
-                    : "")
-                }
+                options={salePriceListOptions(salePriceLists, activeSaleListId)}
+                value={activeSaleListId}
                 onChange={(value) => {
                   setSalePriceListId(value);
                   setPayments([]);
@@ -6395,16 +6399,9 @@ function Sales({
             })(),
             customers.find((customer) => customer.id === customerId)?.name ??
               "Público general",
-            salePriceLists.find(
-              (list) =>
-                list.id ===
-                (salePriceListId ||
-                  (!customerId
-                    ? salePriceLists.find(
-                        (item) => item.name === "Precio general",
-                      )?.id
-                    : undefined)),
-            )?.name ?? "Según cliente",
+            salePriceListOptions(salePriceLists, activeSaleListId).find(
+              (option) => option.value === activeSaleListId,
+            )?.label ?? "Precio general",
           ].join(" · ")}
           subtotalMinor={subtotal}
           discountMinor={discountMinor}
