@@ -45,6 +45,18 @@ function transientSourceError(cause: unknown): boolean {
 
 export type CatalogImportRecord =
   | {
+      kind: "pending";
+      externalKey: string;
+      name: string;
+      presentation: string;
+      activeIngredient: string;
+      laboratory: string;
+      pharmaceuticalForm: string;
+      saleCondition: string;
+      barcodes: string[];
+      reason: string;
+    }
+  | {
       kind: "laboratory";
       catalogName: string;
       sourceName: string;
@@ -438,6 +450,9 @@ export class MedicineCatalogService {
     const laboratories = records.flatMap((record) =>
       record.kind === "laboratory" ? [record] : [],
     );
+    const pending = records.flatMap((record) =>
+      record.kind === "pending" ? [record] : [],
+    );
     return this.prisma.$transaction(
       async (tx) => {
         const existing = new Set(
@@ -481,6 +496,41 @@ export class MedicineCatalogService {
               })),
             ),
           });
+          // Consiguió precio y link: deja de estar pendiente.
+          await tx.medicineCatalogPending.deleteMany({
+            where: {
+              externalKey: {
+                in: chunk.map(({ record }) => record.externalKey),
+              },
+            },
+          });
+        }
+        const catalogKeys = new Set([
+          ...existing,
+          ...fresh.map(({ record }) => record.externalKey),
+        ]);
+        const waiting = pending.filter(
+          (record) => !catalogKeys.has(record.externalKey),
+        );
+        let pendingCreated = 0;
+        for (let start = 0; start < waiting.length; start += WRITE_CHUNK) {
+          const { count } = await tx.medicineCatalogPending.createMany({
+            data: waiting
+              .slice(start, start + WRITE_CHUNK)
+              .map((record) => ({
+                externalKey: record.externalKey,
+                name: record.name,
+                presentation: record.presentation,
+                activeIngredient: record.activeIngredient,
+                laboratory: record.laboratory,
+                pharmaceuticalForm: record.pharmaceuticalForm,
+                saleCondition: record.saleCondition,
+                barcodes: [...new Set(record.barcodes)],
+                reason: record.reason,
+              })),
+            skipDuplicates: true,
+          });
+          pendingCreated += count;
         }
         await tx.medicineLaboratoryAlias.createMany({
           data: laboratories.map(({ catalogName, sourceName, status }) => ({
@@ -494,6 +544,7 @@ export class MedicineCatalogService {
           created: fresh.length,
           skipped: products.length - fresh.length,
           laboratories: laboratories.length,
+          pending: pendingCreated,
         };
       },
       { timeout: 120_000 },
@@ -528,6 +579,7 @@ export class MedicineCatalogService {
       review: await this.prisma.medicineCatalogItem.count({
         where: { reviewReason: { not: null } },
       }),
+      pending: await this.prisma.medicineCatalogPending.count(),
     };
   }
 }

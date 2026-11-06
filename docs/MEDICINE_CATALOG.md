@@ -20,9 +20,13 @@ Productos ya no tiene botón para actualizar; la revisión es la de las 09:00 y 
 | `MedicineCatalogItem`     | Producto, fuente del precio, precio en centavos, link y marcas  |
 | `MedicineCatalogBarcode`  | Códigos de cada producto, también los de dígito de control malo |
 | `MedicineLaboratoryAlias` | Equivalencias de laboratorio entre la base y las fuentes        |
+| `MedicineCatalogPending`  | Productos sin precio ni link, guardados hasta conseguirlos      |
 
-Solo entran productos con precio y link: lo demás se revisa aparte en el Excel de
-productos sin link y se carga si aparece una solución.
+Solo entran a la referencia productos con precio y link. Los demás se guardan en
+`MedicineCatalogPending` (05/11/2026, SISTEMA-35): no se muestran, ninguna búsqueda los
+encuentra y la corrida de precios no los lee. Cuando una carga trae el producto con
+precio y link, entra a la base y sale de pendientes. El Excel de productos sin link
+sigue sirviendo para revisarlos.
 
 Carga del 04/11/2026: 17.848 productos (padrón 16.441, Precios de Remedios 1.398,
 AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
@@ -102,12 +106,13 @@ pnpm --filter @gestion/api catalogo-medicamentos actualizar
 ```
 
 `actualizar` lee Remedios y AlfaBeta sin tocar productos. `importar` solo agrega lo que
-falta y no pisa precios ya actualizados.
+falta y no pisa precios ya actualizados; también guarda los pendientes.
 
 ## Generar el archivo de carga
 
 Sale de la carpeta de trabajo que tiene `catalogo_precios.db` y `padron_vivo.json`. Queda
-en `data/medicine-catalog/`, ignorada por Git.
+en `data/medicine-catalog/`. La carpeta está ignorada por Git, pero `catalogo.jsonl` se
+versiona desde el 05/11/2026 (SISTEMA-35): al regenerarlo, commitear el archivo.
 
 ```powershell
 uv run --python 3.12 python scripts/medicine-catalog/exportar.py <carpeta> data/medicine-catalog/catalogo.jsonl
@@ -143,7 +148,7 @@ pnpm --filter @gestion/api catalogo-medicamentos importar <ruta-absoluta>\catalo
 ```
 
 `prisma:generate` falla con `EPERM` si la API está corriendo: frenarla antes. El
-archivo `catalogo.jsonl` no está en Git; se pasa a mano.
+archivo `catalogo.jsonl` viene con el repositorio.
 
 ### Test (hoy llamado preprod)
 

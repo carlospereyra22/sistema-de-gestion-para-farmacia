@@ -16,6 +16,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261105120000_purchase_pack_lots` (SISTEMA-26): `PurchaseItem.packFactor` recuerda que el renglón vino en exhibidor; `ProductLot.packFactor` y `packCount` guardan cuántos entraron en el lote. Columnas aditivas con CHECK, sin rellenar lotes existentes.
 
+`20261106000000_medicine_catalog_pending` (SISTEMA-35): `MedicineCatalogPending` guarda los productos sin precio ni link hasta conseguirlos. No es referencia: ninguna búsqueda ni corrida de precios la lee, y un producto sale de ahí cuando entra a `MedicineCatalogItem`.
+
 `20261105033000_medicine_catalog_pack` (SISTEMA-26): `MedicineCatalogPack` guarda el código de un exhibidor de droguería, el código base y el factor (2 a 1000), con CHECK de que no sean el mismo código. Solo crea la tabla.
 
 `20261105011859_medicine_catalog` (SISTEMA-26): base propia de medicamentos, compartida por todas las organizaciones (sin `organizationId`). `MedicineCatalogItem` guarda producto, fuente, precio en centavos, link y marcas, con CHECK de precio positivo, fuente conocida y link obligatorio fuera del padrón; `MedicineCatalogBarcode` guarda sus códigos, con `gtin` vacío si el dígito de control es inválido; `MedicineLaboratoryAlias` guarda las equivalencias de laboratorio. La migración solo crea tablas. Ver MEDICINE_CATALOG.md.

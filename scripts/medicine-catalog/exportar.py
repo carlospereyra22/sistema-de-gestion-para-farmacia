@@ -1,8 +1,8 @@
 """Exporta la base de medicamentos a un JSONL para importarla en PostgreSQL (SISTEMA-26).
 
 Entrada: la carpeta de trabajo con catalogo_precios.db y padron_vivo.json. Solo lee.
-Salida: una línea por laboratorio y por producto con precio y link. Lo que no tiene precio
-queda afuera: se revisa en el Excel de productos sin link.
+Salida: una línea por laboratorio, por producto con precio y link y, como pendiente, por
+producto sin ellos: se guarda hasta conseguirlos, pero no es referencia.
 
 Uso:
   uv run --python 3.12 python scripts/medicine-catalog/exportar.py <carpeta> data/medicine-catalog/catalogo.jsonl
@@ -56,6 +56,19 @@ def main(carpeta: Path, salida: Path) -> None:
                 'laboratoryMismatch': distinto.group(1) if distinto else None, 'barcodes': codigos.get(pid, []),
             }, ensure_ascii=False) + '\n')
             cantidades[fuente] = cantidades.get(fuente, 0) + 1
+        for (pid, nombre, presentacion, droga, laboratorio, forma, venta, motivo) in db.execute('''
+                SELECT p.id, p.nombre, p.presentacion, p.principio_activo, p.laboratorio, p.forma,
+                       p.condicion_venta, c.motivo
+                FROM productos p LEFT JOIN clasificacion c ON c.producto_id = p.id
+                WHERE c.producto_id IS NULL OR c.fuente NOT IN ('padron', 'remedios', 'alfabeta')
+                      OR c.precio IS NULL OR c.precio <= 0
+                ORDER BY p.id'''):
+            archivo.write(json.dumps({
+                'kind': 'pending', 'externalKey': pid, 'name': nombre, 'presentation': presentacion or '',
+                'activeIngredient': droga or '', 'laboratory': laboratorio or '', 'pharmaceuticalForm': forma or '',
+                'saleCondition': venta or '', 'barcodes': codigos.get(pid, []), 'reason': motivo or '',
+            }, ensure_ascii=False) + '\n')
+            cantidades['pendientes'] = cantidades.get('pendientes', 0) + 1
     print(f'{sum(cantidades.values())} productos en {salida}: {cantidades}')
 
 
