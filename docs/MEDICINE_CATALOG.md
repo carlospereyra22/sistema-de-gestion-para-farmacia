@@ -57,10 +57,26 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
   `PriceRefreshRun.message`.
 - **Recorrido de enlaces (05/11/2026):** hasta cuatro enlaces se leen en paralelo,
   manteniendo 1,5 segundos entre inicios de solicitudes a las fuentes. El log informa
-  el avance cada 50 enlaces. Un timeout o error transitorio se reintenta una vez,
-  sin reintentar enlaces inválidos. Una fuente con enlaces fallidos, una descarga del padrón
+  el avance cada 50 enlaces. Un error transitorio se reintenta una vez; para un
+  timeout de Precios de Remedios se intenta primero la búsqueda por nombre y, si
+  ésta falla, se reintenta el enlace original. No se reintentan enlaces inválidos.
+  Una fuente con enlaces fallidos, una descarga del padrón
   fallida o un error de la base deja la corrida en `PARTIAL`, con el detalle en
   `PriceRefreshRun.message`; no se informa como exitosa una actualización incompleta.
+- **Enlaces amplios de Precios de Remedios (05/11/2026):** si una consulta por
+  sustancia agota el tiempo, se conserva el filtro de combinación y se busca primero
+  el prefijo compartido de los nombres del grupo (por ejemplo `vitamina c`). Se
+  recorren sus páginas hasta hallar las filas exactas. Sólo si falta alguna se
+  consulta ese nombre individualmente. Si el sitio responde pero no publica una
+  presentación, se cuenta como `sin fila` y se conserva su último precio; nunca se
+  asigna el precio de otra presentación. Si tampoco responde la búsqueda acotada,
+  el enlace sigue fallido y la corrida queda `PARTIAL`.
+- **Enlaces corregidos (06/11/2026):** la migración
+  `20261106050000_focus_remedies_links` reemplaza tres búsquedas antiguas
+  (`acido` y `vita`) por búsquedas comprobadas de omega 3, alfa hidroxiácidos y
+  vitamina C. Las tres páginas nuevas cubren las 11 fichas, incluida la segunda
+  página de vitamina C. La importación inicial aplica la misma corrección al
+  archivo de catálogo anterior, aunque la migración haya corrido con la base vacía.
 - **Productos vinculados:** toman el precio de la base por código o por nombre y
   presentación exactos, con las reglas de siempre (divisor, recargo, unidad de venta,
   pausa e historial). Lo que no está en la base sigue con su fuente anterior.

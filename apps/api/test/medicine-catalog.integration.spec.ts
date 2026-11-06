@@ -112,12 +112,14 @@ describe("base de medicamentos en esquema aislado", () => {
       created: 1,
       skipped: 0,
       laboratories: 1,
+      pending: 0,
     });
     await db.medicineCatalogItem.updateMany({ data: { priceMinor: 111n } });
     expect(await service.importRecords(records)).toEqual({
       created: 0,
       skipped: 1,
       laboratories: 1,
+      pending: 0,
     });
     expect((await db.medicineCatalogItem.findFirstOrThrow()).priceMinor).toBe(
       111n,
