@@ -812,16 +812,13 @@ export class CashService {
       const register = await tx.cashRegister.findFirst({
         where: { id: input.cashRegisterId, branchId, active: true },
       });
-      if (!register)
-        throw new NotFoundException("Cash register is unavailable.");
+      if (!register) throw new NotFoundException("La caja no está disponible.");
       if (
         await tx.cashSession.findFirst({
           where: { cashRegisterId: register.id, closedAt: null },
         })
       )
-        throw new ConflictException(
-          "Cash register already has an open session.",
-        );
+        throw new ConflictException("Esta caja ya tiene una sesión abierta.");
       const session = await tx.cashSession.create({
         data: {
           cashRegisterId: register.id,
@@ -911,7 +908,7 @@ export class CashService {
           BigInt(input.expectedAmountMinor) !== expected)
       )
         throw new ConflictException(
-          "El efectivo esperado cambió. Actualizá la caja y volvé a contar antes de cerrar.",
+          "El efectivo esperado cambió. Revisá la diferencia y volvé a confirmar el cierre.",
         );
       if (
         BigInt(input.closingAmountMinor) !== expected &&
@@ -1062,7 +1059,7 @@ export class CashService {
         where: { id: branchId, organizationId },
       }))
     )
-      throw new NotFoundException("Branch is unavailable.");
+      throw new NotFoundException("La sucursal no está disponible.");
   }
   private responsibleName(value?: string | null) {
     const name = value?.trim() || null;
@@ -1082,7 +1079,7 @@ export class CashService {
       Number.isNaN(end.valueOf()) ||
       start > end
     )
-      throw new ConflictException("The cash closure date range is invalid.");
+      throw new ConflictException("Revisá el rango de fechas de los cierres.");
     return { start, end };
   }
   private async summarizeSessions(
@@ -1177,6 +1174,8 @@ export class CashService {
         role.permissions.some(({ permission }) => permission.code === code),
       )
     )
-      throw new ForbiddenException("You do not have the required permission.");
+      throw new ForbiddenException(
+        "No tenés permiso para esta acción de caja.",
+      );
   }
 }

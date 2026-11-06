@@ -1,7 +1,12 @@
 import { useRef, useState } from "react";
-import { closeCashSession, type CashSession } from "./lib/api";
-import { cashCountMinor } from "./lib/cash-count";
+import {
+  CashCloseRejected,
+  closeCashSession,
+  type CashSession,
+} from "./lib/api";
+import { typedCashMinor } from "./lib/cash-count";
 import { CashDialog } from "./cash-dialog";
+import { MoneyInput } from "./money-input";
 
 const money = (minor: number) =>
   (minor / 100).toLocaleString("es-AR", { style: "currency", currency: "ARS" });
@@ -13,6 +18,7 @@ export function CashCloseForm({
   branchId,
   disabled = false,
   onClosed,
+  onRejected,
 }: {
   session: CashSession;
   token: string;
@@ -20,6 +26,7 @@ export function CashCloseForm({
   branchId: string;
   disabled?: boolean;
   onClosed: () => void;
+  onRejected?: () => void;
 }) {
   const pending = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -31,7 +38,7 @@ export function CashCloseForm({
     expected: number;
     reason: string;
   }>();
-  const minor = cashCountMinor(counted);
+  const minor = typedCashMinor(counted);
   const expected = Number(session.expectedAmountMinor);
   const difference = minor === null ? null : minor - expected;
   const save = async (snapshot: {
@@ -56,6 +63,11 @@ export function CashCloseForm({
       setConfirmation(undefined);
       onClosed();
     } catch (cause) {
+      // Se vuelve al conteo con la sesión actualizada: lo contado se conserva.
+      if (cause instanceof CashCloseRejected) {
+        setConfirmation(undefined);
+        onRejected?.();
+      }
       setError(
         cause instanceof Error ? cause.message : "No se pudo cerrar la caja.",
       );
@@ -89,18 +101,13 @@ export function CashCloseForm({
       }}
     >
       <div className="grid grid-cols-2 items-start gap-3">
-        <label className="block min-w-0 text-xs">
-          Efectivo contado
-          <input
-            required
-            disabled={busy || disabled}
-            inputMode="decimal"
-            value={counted}
-            onChange={(event) => setCounted(event.target.value)}
-            placeholder="Importe contado"
-            className="mt-1 h-10 w-full min-w-0 border px-3 text-sm"
-          />
-        </label>
+        <MoneyInput
+          label="Efectivo contado"
+          labelClassName="block min-w-0 text-xs"
+          disabled={busy || disabled}
+          value={counted}
+          onChange={setCounted}
+        />
         <div className="min-w-0 text-xs">
           <span>Diferencia</span>
           <div

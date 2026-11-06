@@ -698,7 +698,7 @@ export class SalesService {
             .reduce((sum, payment) => sum + BigInt(payment.amountMinor), 0n);
           if (changeMinor > cashPaid)
             throw new BadRequestException(
-              "Change can only be returned from a cash payment.",
+              "El vuelto sólo puede salir de un pago en efectivo.",
             );
           const collectionSessions = [
             ...new Set(
@@ -733,7 +733,7 @@ export class SalesService {
               : null;
             if (!register)
               throw new BadRequestException(
-                "Cash session is not open for this branch.",
+                "La sesión de caja no está abierta en esta sucursal.",
               );
           }
           const sale = await tx.sale.create({
@@ -829,14 +829,14 @@ export class SalesService {
             const cashSessionId = collectionSessionId;
             if (!cashSessionId)
               throw new BadRequestException(
-                "Cash change requires an open cash session.",
+                "Para dar vuelto hace falta una caja abierta.",
               );
             await tx.cashMovement.create({
               data: {
                 cashSessionId,
                 type: CashMovementType.OUT,
                 amountMinor: changeMinor,
-                reason: `Change for sale ${sale.id}`,
+                reason: `Vuelto de venta ${sale.id}`,
                 actorId,
               },
             });
@@ -1012,7 +1012,7 @@ export class SalesService {
           });
           if (closedSession)
             throw new BadRequestException(
-              "A cash sale cannot be cancelled after its cash session is closed.",
+              "No se puede anular una venta cuya sesión de caja ya está cerrada.",
             );
         }
         for (const item of sale.items) {
@@ -1090,6 +1090,32 @@ export class SalesService {
             data: { voidedAt: new Date() },
           });
         }
+        // El pago deja de contar al anular, así que el vuelto entregado también
+        // se compensa. El texto anterior sigue en ventas de sesiones aún abiertas.
+        const change = cashSessionIds.length
+          ? await tx.cashMovement.findFirst({
+              where: {
+                cashSessionId: { in: cashSessionIds },
+                type: CashMovementType.OUT,
+                reason: {
+                  in: [
+                    `Vuelto de venta ${sale.id}`,
+                    `Change for sale ${sale.id}`,
+                  ],
+                },
+              },
+            })
+          : null;
+        if (change)
+          await tx.cashMovement.create({
+            data: {
+              cashSessionId: change.cashSessionId,
+              type: CashMovementType.IN,
+              amountMinor: change.amountMinor,
+              actorId,
+              reason: `Anulación de vuelto · Venta ${sale.id}: ${reason.trim()}`,
+            },
+          });
         const cancelled = await tx.sale.update({
           where: { id: sale.id },
           data: { status: "CANCELLED" },
@@ -1105,7 +1131,13 @@ export class SalesService {
             status: "COMPLETED",
             totalMinor: sale.totalMinor.toString(),
           },
-          after: { status: "CANCELLED", reason: reason.trim() },
+          after: {
+            status: "CANCELLED",
+            reason: reason.trim(),
+            ...(change
+              ? { changeReversedMinor: change.amountMinor.toString() }
+              : {}),
+          },
         });
         return { id: cancelled.id, status: cancelled.status };
       },

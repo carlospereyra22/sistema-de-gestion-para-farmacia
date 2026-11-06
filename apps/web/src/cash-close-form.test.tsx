@@ -30,6 +30,7 @@ it("starts with an empty count and a disabled single-line reason, without submit
   expect(html).not.toContain("<dialog");
   expect(html).toContain('<form aria-label="Cerrar caja"');
   expect(html).toContain('value=""');
+  expect(html).toContain('placeholder="0,00"');
   expect(html).not.toContain("<textarea");
   expect(html).toContain("grid-cols-2");
   expect(html).toMatch(/<input[^>]*disabled[^>]*placeholder="No corresponde"/);
