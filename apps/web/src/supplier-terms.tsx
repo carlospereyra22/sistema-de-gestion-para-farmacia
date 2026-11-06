@@ -26,7 +26,7 @@ export function SupplierTermsFields({
       className="mt-5 border-t border-slate-100 pt-4"
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="text-xs text-slate-500">
+        <div className="text-sm text-slate-500">
           <p className="mb-1">Condición de pago</p>
           <ProductFilterSelect
             compact
@@ -47,7 +47,7 @@ export function SupplierTermsFields({
           />
         </div>
         {value.accountEnabled && (
-          <label className="block text-xs text-slate-500">
+          <label className="block text-sm text-slate-500">
             Plazo de pago
             <span className="relative mt-1 block max-w-48">
               <input
@@ -71,13 +71,13 @@ export function SupplierTermsFields({
                 días
               </span>
             </span>
-            <span className="mt-1.5 block text-[11px] text-slate-400">
+            <span className="mt-1.5 block text-xs text-slate-400">
               Días corridos. Vacío: sin vencimiento · 0: mismo día.
             </span>
           </label>
         )}
       </div>
-      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+      <p className="mt-3 text-xs leading-relaxed text-slate-400">
         {value.accountEnabled
           ? "Se usará al proponer la deuda de cada recepción."
           : "No se propondrá una deuda al recibir mercadería."}

@@ -29,6 +29,16 @@ it("offers a supplier directory with search, account filters, creation and botto
   expect(html).not.toContain("Cargando proveedores…");
 });
 
+it("usa la paginación común, sin selector propio de cantidad", () => {
+  const html = renderToStaticMarkup(
+    <SuppliersWorkspace token="test" organizationId="org" />,
+  );
+  expect(html).toContain("0 proveedores · 10 por página");
+  expect(html).toMatch(/pagination-footer[^"]*border-t/);
+  expect(html).not.toContain("<select");
+  expect(html).not.toContain("Mostrar");
+});
+
 it("renders nothing while another section is active", () => {
   expect(
     renderToStaticMarkup(

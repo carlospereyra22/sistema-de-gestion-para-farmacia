@@ -7,7 +7,6 @@ import {
   Mail,
   Check,
   Minus,
-  Eye,
   Pencil,
   Download,
   Trash2,
@@ -25,7 +24,9 @@ import {
 import { Pagination } from "./pagination";
 import { StatusToast } from "./status-toast";
 import { SupplierDetail } from "./supplier-detail";
+import { normalizePhone } from "./lib/phone-number";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
+import { PhoneInput } from "./phone-input";
 import { SupplierTermsFields } from "./supplier-terms";
 import {
   PayableDialog,
@@ -34,15 +35,16 @@ import {
   secondary,
 } from "./supplier-payables/dialog";
 
+const pageSize = 10;
 const action =
-  "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-teal-700 focus-visible:outline-2 focus-visible:outline-teal-500";
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-teal-700 focus-visible:outline-2 focus-visible:outline-teal-500";
 function AccountBadge({ enabled }: { enabled?: boolean }) {
   const Icon = enabled ? Check : Minus;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium ${enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-sm font-medium ${enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
     >
-      <Icon size={13} />
+      <Icon size={15} />
       {enabled ? "Con cuenta corriente" : "Sin cuenta corriente"}
     </span>
   );
@@ -68,8 +70,7 @@ export function SuppliersWorkspace({
   const [selectedId, setSelectedId] = useState<string>();
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all"),
-    [page, setPage] = useState(1),
-    [pageSize, setPageSize] = useState(10);
+    [page, setPage] = useState(1);
   const [editor, setEditor] = useState<{
     supplier?: Party;
     readOnly: boolean;
@@ -118,6 +119,8 @@ export function SuppliersWorkspace({
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize)),
     current = Math.min(page, pages);
   const selected = filtered.find((s) => s.id === selectedId && s.active);
+  // La ficha ya muestra estos datos; así la tabla entra sin cortarse.
+  const sideColumn = selected ? "hidden 2xl:table-cell" : "";
   const exportCsv = () => {
     const cell = (value: string) =>
       `"${(/^[=+@\-\t\r]/.test(value) ? "'" + value : value).replace(/"/g, '""')}"`;
@@ -210,7 +213,7 @@ export function SuppliersWorkspace({
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
             aria-label="Buscar proveedor"
-            className={`${field} pl-9`}
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-50"
             placeholder="Buscar por nombre, contacto o correo…"
             value={query}
             onChange={(e) => {
@@ -260,11 +263,11 @@ export function SuppliersWorkspace({
         </button>
       </div>
       <div
-        className={`grid flex-1 items-stretch gap-4 ${selected ? "xl:grid-cols-[minmax(0,1fr)_300px]" : "grid-cols-1"}`}
+        className={`grid flex-1 items-stretch gap-4 ${selected ? "xl:grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1"}`}
       >
         <section className="flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-100 px-4">
-            <span className="text-xs font-medium text-slate-500">
+            <span className="text-sm font-medium text-slate-500">
               {showArchived ? "Proveedores eliminados" : "Proveedores activos"}
             </span>
             <button
@@ -277,15 +280,17 @@ export function SuppliersWorkspace({
                 setSelectedId(undefined);
               }}
             >
-              <Archive size={14} /> Eliminados
+              <Archive size={16} /> Eliminados
               <span className="tabular-nums text-slate-400">
                 {items.filter((s) => !s.active).length}
               </span>
             </button>
           </div>
           <div className="flex-1 overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="bg-slate-50/80 text-[11px] text-slate-500">
+            <table
+              className={`w-full text-left text-base ${selected ? "2xl:min-w-[900px]" : "min-w-[900px]"}`}
+            >
+              <thead className="bg-slate-50/80 text-sm text-slate-500">
                 <tr>
                   {[
                     "Proveedor",
@@ -297,7 +302,7 @@ export function SuppliersWorkspace({
                   ].map((h) => (
                     <th
                       key={h}
-                      className={`px-4 py-3 font-medium ${h === "Acciones" ? "text-center" : ""}`}
+                      className={`px-5 py-3 font-medium ${h === "Acciones" ? "text-center" : h === "Proveedor" || h === "Cuenta corriente" ? "" : sideColumn}`}
                     >
                       {h}
                     </th>
@@ -310,50 +315,59 @@ export function SuppliersWorkspace({
                   .map((s) => (
                     <tr
                       key={s.id}
-                      onClick={() => setSelectedId(s.id)}
+                      onClick={() =>
+                        s.active
+                          ? setSelectedId(s.id)
+                          : setEditor({ supplier: s, readOnly: true })
+                      }
                       className={`cursor-pointer transition-colors ${selectedId === s.id ? "bg-teal-50/60 shadow-[inset_3px_0_0_#0d9488]" : "hover:bg-slate-50/60"}`}
                     >
-                      <td className="max-w-64 px-4 py-3">
+                      <td className="max-w-64 px-5 py-2.5">
                         <button
-                          className="text-left font-medium text-slate-800"
+                          className="text-left font-semibold text-slate-800"
                           aria-expanded={selectedId === s.id}
                           aria-controls="supplier-detail"
-                          onClick={() => setSelectedId(s.id)}
                         >
                           {s.name}
                         </button>
                         {s.taxId && (
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="mt-0.5 text-sm text-slate-400">
                             {s.taxId}
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      <td
+                        className={`px-5 py-2.5 text-sm text-slate-500 ${sideColumn}`}
+                      >
                         {s.phone && (
                           <p className="flex items-center gap-2">
-                            <Phone size={13} />
+                            <Phone size={15} />
                             {s.phone}
                           </p>
                         )}
                         {s.email && (
                           <p className="mt-1 flex items-center gap-2">
-                            <Mail size={13} />
+                            <Mail size={15} />
                             {s.email}
                           </p>
                         )}
                         {!s.phone && !s.email && (s.contactName || "—")}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-2.5">
                         <AccountBadge enabled={s.accountEnabled} />
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      <td
+                        className={`px-5 py-2.5 text-sm text-slate-500 ${sideColumn}`}
+                      >
                         {s.accountEnabled
                           ? s.accountTermDays == null
                             ? "Sin plazo definido"
                             : `${s.accountTermDays} días`
                           : "—"}
                       </td>
-                      <td className="max-w-64 px-4 py-3 text-xs text-slate-500">
+                      <td
+                        className={`max-w-64 px-5 py-2.5 text-sm text-slate-500 ${sideColumn}`}
+                      >
                         <p
                           className="line-clamp-2"
                           title={s.notes ?? undefined}
@@ -362,21 +376,10 @@ export function SuppliersWorkspace({
                         </p>
                       </td>
                       <td
-                        className="px-4 py-3"
+                        className="px-5 py-2.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="flex items-center justify-center gap-1">
-                          <button
-                            className={action}
-                            onClick={() =>
-                              s.active
-                                ? setSelectedId(s.id)
-                                : setEditor({ supplier: s, readOnly: true })
-                            }
-                          >
-                            <Eye size={15} />
-                            Ver
-                          </button>
                           <button
                             aria-label={`Editar ${s.name}`}
                             disabled={!s.active}
@@ -386,7 +389,7 @@ export function SuppliersWorkspace({
                               setEditor({ supplier: s, readOnly: false })
                             }
                           >
-                            <Pencil size={14} />
+                            <Pencil size={16} />
                           </button>
                           <button
                             className={`${action} hover:text-rose-700`}
@@ -399,9 +402,9 @@ export function SuppliersWorkspace({
                             onClick={() => setLifecycle(s)}
                           >
                             {s.active ? (
-                              <Trash2 size={15} />
+                              <Trash2 size={16} />
                             ) : (
-                              <RotateCcw size={15} />
+                              <RotateCcw size={16} />
                             )}
                           </button>
                         </div>
@@ -436,7 +439,7 @@ export function SuppliersWorkspace({
                       ? "No hay proveedores que coincidan con la búsqueda."
                       : "Todavía no hay proveedores cargados."}
                   </p>
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-sm text-slate-400">
                     {active.length
                       ? "Probá otro nombre o cambiá el filtro."
                       : "Creá el primero desde Nuevo proveedor."}
@@ -445,39 +448,18 @@ export function SuppliersWorkspace({
               )
             )}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2">
-            <label className="flex items-center gap-2 text-xs text-slate-500">
-              Mostrar
-              <select
-                className="rounded-lg border border-slate-200 bg-white px-2 py-2"
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(1);
-                  setSelectedId(undefined);
-                }}
-              >
-                {[10, 25, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n} por página
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Pagination
-              total={filtered.length}
-              currentPage={current}
-              totalPages={pages}
-              pageSize={pageSize}
-              noun="proveedores"
-              label="Páginas de proveedores"
-              onChange={(value) => {
-                setPage(value);
-                setSelectedId(undefined);
-              }}
-              compact
-            />
-          </div>
+          <Pagination
+            integrated
+            total={filtered.length}
+            currentPage={current}
+            totalPages={pages}
+            noun="proveedores"
+            label="Páginas de proveedores"
+            onChange={(value) => {
+              setPage(value);
+              setSelectedId(undefined);
+            }}
+          />
         </section>
         {selected && selected.active && (
           <SupplierDetail
@@ -542,9 +524,10 @@ function SupplierEditor({
     gate.current = true;
     setBusy(true);
     setError("");
+    const profile = { ...value, phone: normalizePhone(value.phone) };
     try {
       if (supplier)
-        await updateSupplierTerms(token, organizationId, supplier, value);
+        await updateSupplierTerms(token, organizationId, supplier, profile);
       else
         await createParty(
           token,
@@ -554,7 +537,7 @@ function SupplierEditor({
           "",
           undefined,
           undefined,
-          value,
+          profile,
         );
       onSaved();
     } catch (e) {
@@ -594,8 +577,8 @@ function SupplierEditor({
               .filter(([key]) => key !== "name")
               .map(([key, label]) => (
                 <div key={key}>
-                  <dt className="text-xs text-slate-400">{label}</dt>
-                  <dd className="mt-1 break-words text-sm">
+                  <dt className="text-sm text-slate-400">{label}</dt>
+                  <dd className="mt-0.5 break-words text-base">
                     {value[key] || "Sin informar"}
                   </dd>
                 </div>
@@ -603,7 +586,7 @@ function SupplierEditor({
           </dl>
           <div className="my-5 flex items-center gap-3">
             <AccountBadge enabled={value.accountEnabled} />
-            <span className="text-xs text-slate-500">
+            <span className="text-sm text-slate-500">
               {value.accountEnabled &&
                 (value.accountTermDays == null
                   ? "Sin plazo definido"
@@ -618,7 +601,7 @@ function SupplierEditor({
               Cerrar
             </button>
             <button className={primary} onClick={() => setViewing(false)}>
-              <Pencil size={15} />
+              <Pencil size={16} />
               Editar proveedor
             </button>
           </footer>
@@ -632,37 +615,44 @@ function SupplierEditor({
         >
           <fieldset disabled={busy}>
             <div className="grid gap-4 sm:grid-cols-2">
-              {fields.map(([key, label, max]) => (
-                <label
-                  key={key}
-                  className={`text-xs text-slate-500 ${key === "address" ? "sm:col-span-2" : ""}`}
-                >
-                  {label}
-                  <input
-                    className={`${field} mt-1`}
-                    type={
-                      key === "email"
-                        ? "email"
-                        : key === "phone"
-                          ? "tel"
-                          : "text"
-                    }
-                    required={key === "name"}
-                    minLength={key === "name" ? 2 : undefined}
+              {fields.map(([key, label, max]) =>
+                key === "phone" ? (
+                  <PhoneInput
+                    key={key}
+                    label={label}
                     maxLength={max}
-                    value={value[key] ?? ""}
-                    onChange={(e) =>
-                      setValue({ ...value, [key]: e.target.value })
-                    }
+                    value={value.phone}
+                    onChange={(phone) => setValue({ ...value, phone })}
                   />
-                </label>
-              ))}
+                ) : (
+                  <label
+                    key={key}
+                    className={`text-sm text-slate-500 ${key === "address" ? "sm:col-span-2" : ""}`}
+                  >
+                    {label}
+                    <input
+                      className={`${field} mt-1`}
+                      type={key === "email" ? "email" : "text"}
+                      required={key === "name"}
+                      minLength={key === "name" ? 2 : undefined}
+                      maxLength={max}
+                      placeholder={
+                        key === "email" ? "nombre@ejemplo.com" : undefined
+                      }
+                      value={value[key] ?? ""}
+                      onChange={(e) =>
+                        setValue({ ...value, [key]: e.target.value })
+                      }
+                    />
+                  </label>
+                ),
+              )}
             </div>
             <SupplierTermsFields
               value={value}
               onChange={(terms) => setValue({ ...value, ...terms })}
             />
-            <label className="mt-4 block text-xs text-slate-500">
+            <label className="mt-4 block text-sm text-slate-500">
               Observaciones
               <textarea
                 className="mt-1 min-h-20 w-full resize-y rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-teal-500"

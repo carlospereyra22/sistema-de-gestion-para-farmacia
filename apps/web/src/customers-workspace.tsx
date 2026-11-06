@@ -25,15 +25,15 @@ import { StatusToast } from "./status-toast";
 import { CatalogItemDialog } from "./catalog-item-dialog";
 import { CustomerEditor } from "./customer-editor";
 import { ProductFilterSelect } from "./product-filter-select";
-import { field, primary, secondary } from "./supplier-payables/dialog";
+import { primary, secondary } from "./supplier-payables/dialog";
 
 import { filterCustomers } from "./lib/customer-directory";
 const rowAction =
-  "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-slate-500 hover:bg-slate-100 hover:text-teal-700";
+  "inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-teal-700";
 function State({ active }: { active: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium ${active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium ${active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
     >
       <span className="size-1.5 rounded-full bg-current" />
       {active ? "Activo" : "Eliminado"}
@@ -44,7 +44,7 @@ function Avatar({ name }: { name: string }) {
   return (
     <span
       aria-hidden="true"
-      className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-50 text-sm font-semibold text-teal-700"
+      className="grid size-10 shrink-0 place-items-center rounded-full bg-teal-50 text-base font-semibold text-teal-700"
     >
       {name.trim().slice(0, 1).toLocaleUpperCase("es") || "C"}
     </span>
@@ -104,6 +104,8 @@ export function CustomersWorkspace({
   const pages = Math.max(1, Math.ceil(filtered.length / 10)),
     current = Math.min(page, pages);
   const selected = filtered.find((c) => c.id === selectedId);
+  // La ficha ya muestra estos datos; así la tabla entra sin cortarse.
+  const sideColumn = selected ? "hidden 2xl:table-cell" : "";
   const listName = (c: Party) =>
     !c.priceListId
       ? "Precio general"
@@ -130,7 +132,7 @@ export function CustomersWorkspace({
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
             aria-label="Buscar clientes"
-            className={`${field} pl-9`}
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-50"
             placeholder="Buscar por nombre, documento o ficha…"
             value={query}
             onChange={(e) => {
@@ -160,7 +162,7 @@ export function CustomersWorkspace({
             ]}
           />
         </div>
-        <label className="flex items-center gap-2 whitespace-nowrap text-xs text-slate-500">
+        <label className="flex items-center gap-2 whitespace-nowrap text-sm text-slate-500">
           <input
             type="checkbox"
             className="accent-teal-700"
@@ -190,15 +192,15 @@ export function CustomersWorkspace({
         </p>
       )}
       <div
-        className={`grid flex-1 items-stretch gap-4 ${selected ? "xl:grid-cols-[minmax(0,1fr)_300px]" : "grid-cols-1"}`}
+        className={`grid flex-1 items-stretch gap-4 ${selected ? "xl:grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1"}`}
       >
         <section className="flex min-h-[calc(100dvh-200px)] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex-1 overflow-x-auto">
             <table
-              className="w-full min-w-[720px] text-left text-sm"
+              className={`w-full text-left text-base ${selected ? "2xl:min-w-[860px]" : "min-w-[860px]"}`}
               aria-label="Clientes"
             >
-              <thead className="bg-slate-50/80 text-[11px] text-slate-500">
+              <thead className="bg-slate-50/80 text-sm text-slate-500">
                 <tr>
                   {[
                     "Cliente",
@@ -208,7 +210,10 @@ export function CustomersWorkspace({
                     "Estado",
                     "Acciones",
                   ].map((label) => (
-                    <th key={label} className="px-4 py-3 font-medium">
+                    <th
+                      key={label}
+                      className={`px-5 py-3 font-medium ${label === "Contacto" || label === "Estado" ? sideColumn : ""}`}
+                    >
                       {label}
                     </th>
                   ))}
@@ -221,38 +226,40 @@ export function CustomersWorkspace({
                     onClick={() => setSelectedId(c.id)}
                     className={`cursor-pointer transition-colors ${selectedId === c.id ? "bg-teal-50/60 shadow-[inset_3px_0_0_#0d9488]" : "hover:bg-slate-50/70"}`}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-5 py-2.5">
                       <button
                         aria-expanded={selectedId === c.id}
                         aria-controls="customer-detail"
-                        className="flex items-center gap-3 text-left font-medium text-slate-800"
+                        className="flex items-center gap-3 text-left font-semibold text-slate-800"
                         onClick={() => setSelectedId(c.id)}
                       >
                         <Avatar name={c.name} />
                         {c.name}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
+                    <td className="whitespace-nowrap px-5 py-2.5 text-sm text-slate-500">
                       <p>{c.billingTaxId || c.document || "Sin documento"}</p>
-                      <p className="mt-1 text-[11px] text-slate-400">
+                      <p className="mt-0.5 text-sm text-slate-400">
                         Ficha {c.id.slice(0, 8)}
                       </p>
                     </td>
-                    <td className="max-w-48 px-4 py-3 text-xs text-slate-500">
+                    <td
+                      className={`max-w-56 px-5 py-2.5 text-sm text-slate-500 ${sideColumn}`}
+                    >
                       <p className="truncate">
                         {c.billingPhone || c.billingEmail || "—"}
                       </p>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                    <td className="px-5 py-2.5">
+                      <span className="whitespace-nowrap rounded-md bg-slate-100 px-2.5 py-1 text-sm text-slate-600">
                         {listName(c)}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={`px-5 py-2.5 ${sideColumn}`}>
                       <State active={c.active} />
                     </td>
                     <td
-                      className="px-3 py-3"
+                      className="px-4 py-2.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex gap-1">
@@ -261,7 +268,7 @@ export function CustomersWorkspace({
                           aria-label={`Editar ${c.name}`}
                           onClick={() => setEditor({ customer: c })}
                         >
-                          <Pencil size={14} />
+                          <Pencil size={16} />
                           Editar
                         </button>
                         {c.active ? (
@@ -270,7 +277,7 @@ export function CustomersWorkspace({
                             aria-label={`Eliminar ${c.name}`}
                             onClick={() => setDeleting(c)}
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={16} />
                           </button>
                         ) : (
                           <button
@@ -279,7 +286,7 @@ export function CustomersWorkspace({
                             aria-label={`Restaurar ${c.name}`}
                             onClick={() => void restore(c)}
                           >
-                            <RotateCcw size={14} />
+                            <RotateCcw size={16} />
                             Restaurar
                           </button>
                         )}
@@ -328,10 +335,10 @@ export function CustomersWorkspace({
             <header className="flex items-start gap-3 border-b border-slate-100 bg-slate-50/60 p-5">
               <Avatar name={selected.name} />
               <div className="min-w-0 flex-1">
-                <p className="mb-1 text-[11px] font-medium text-slate-500">
+                <p className="mb-1 text-sm font-medium text-slate-500">
                   Ficha del cliente
                 </p>
-                <h2 className="break-words text-base font-semibold text-slate-800">
+                <h2 className="break-words text-lg font-semibold text-slate-800">
                   {selected.name}
                 </h2>
                 <div className="mt-2">
@@ -377,15 +384,15 @@ export function CustomersWorkspace({
                 return (
                   <div key={String(label)} className="flex gap-2.5">
                     <ItemIcon
-                      size={15}
+                      size={17}
                       className="mt-0.5 shrink-0 text-slate-400"
                     />
                     <div className="min-w-0">
-                      <dt className="text-[11px] font-medium text-slate-500">
+                      <dt className="text-sm font-medium text-slate-500">
                         {String(label)}
                       </dt>
                       <dd
-                        className={`mt-1 break-words text-xs leading-relaxed ${value ? "text-slate-800" : "text-slate-400"}`}
+                        className={`mt-0.5 break-words text-base leading-relaxed ${value ? "text-slate-800" : "text-slate-400"}`}
                       >
                         {value ? String(value) : "Sin especificar"}
                       </dd>
@@ -394,19 +401,19 @@ export function CustomersWorkspace({
                 );
               })}
             </dl>
-            <div className="mx-5 space-y-3 border-t border-slate-100 py-5 text-xs text-slate-500">
-              <h3 className="font-medium text-slate-700">Contacto</h3>
+            <div className="mx-5 space-y-3 border-t border-slate-100 py-5 text-sm text-slate-500">
+              <h3 className="text-base font-medium text-slate-700">Contacto</h3>
               <p className="flex items-center gap-2">
-                <Phone size={14} />
+                <Phone size={16} />
                 {selected.billingPhone || "Sin teléfono"}
               </p>
               <p className="flex items-center gap-2 break-all">
-                <Mail size={14} />
+                <Mail size={16} />
                 {selected.billingEmail || "Sin email"}
               </p>
               {selected.notes && (
                 <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-                  <h3 className="mb-1.5 text-[11px] font-medium text-slate-600">
+                  <h3 className="mb-1.5 text-sm font-medium text-slate-600">
                     Observaciones
                   </h3>
                   <p className="whitespace-pre-wrap break-words leading-relaxed">
@@ -420,7 +427,7 @@ export function CustomersWorkspace({
                 className={`${secondary} w-full`}
                 onClick={() => setEditor({ customer: selected })}
               >
-                <Pencil size={14} />
+                <Pencil size={16} />
                 Editar cliente
               </button>
             </footer>

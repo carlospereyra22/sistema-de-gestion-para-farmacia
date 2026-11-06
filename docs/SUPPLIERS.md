@@ -10,7 +10,7 @@ La ficha organizacional admite nombre, teléfono, correo, persona de contacto, d
 
 PARTY_READ protege la consulta y PARTY_MANAGE el alta y la edición. El servidor valida longitudes y correo, normaliza espacios y guarda ficha y auditoría en una transacción. La edición comparte el bloqueo y la versión `expectedUpdatedAt` de las condiciones de pago; una edición desactualizada se rechaza. Cambiar plazo o cuenta corriente sólo influye en las propuestas futuras, no recalcula deudas confirmadas. No se agrega eliminación de proveedores históricos.
 
-La pantalla presenta título con camión, búsqueda por nombre/contacto/correo/documento, filtros por cuenta corriente, tabla y paginación de 10/25/50 registros. Ver abre la ficha; Editar y Nuevo proveedor usan el mismo formulario. La exportación CSV incluye todos los resultados filtrados, no sólo la página visible, escapando celdas y prefijos de fórmulas. No exporta operaciones, saldos ni secretos.
+La pantalla presenta título con camión, búsqueda por nombre/contacto/correo/documento, filtros por cuenta corriente, tabla y la paginación común de 10 registros. Hacer clic en la fila abre la ficha lateral, o la ficha de solo lectura si el proveedor está eliminado; Editar y Nuevo proveedor usan el mismo formulario. El teléfono se carga con selector de país, igual que en Clientes (ver `CUSTOMERS.md`). La exportación CSV incluye todos los resultados filtrados, no sólo la página visible, escapando celdas y prefijos de fórmulas. No exporta operaciones, saldos ni secretos.
 
 El listado carga los proveedores de la organización y filtra/pagina en cliente; para catálogos de gran volumen se deberá migrar a paginación y búsqueda en servidor. No hay eliminación, mensajes automáticos, envíos de correo ni integración externa.
 

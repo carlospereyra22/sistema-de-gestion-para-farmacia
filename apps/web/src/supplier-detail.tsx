@@ -48,18 +48,18 @@ export function SupplierDetail({
       className="order-first flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:order-none"
     >
       <header className="flex items-start gap-3 border-b border-slate-100 bg-slate-50/60 p-5">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-50 text-teal-700">
-          <Truck size={18} />
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-teal-50 text-teal-700">
+          <Truck size={20} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-[11px] font-medium text-slate-500">
+          <p className="mb-1 text-sm font-medium text-slate-500">
             Ficha del proveedor
           </p>
-          <h2 className="break-words text-base font-semibold text-slate-800">
+          <h2 className="break-words text-lg font-semibold text-slate-800">
             {supplier.name}
           </h2>
           <span
-            className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-medium ${supplier.accountEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+            className={`mt-2 inline-flex rounded-md px-2.5 py-1 text-sm font-medium ${supplier.accountEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
           >
             {supplier.accountEnabled
               ? "Con cuenta corriente"
@@ -77,13 +77,11 @@ export function SupplierDetail({
       <dl className="space-y-5 p-5">
         {fields.map(({ icon: Icon, label, value }) => (
           <div key={label} className="flex gap-2.5">
-            <Icon size={15} className="mt-0.5 shrink-0 text-slate-400" />
+            <Icon size={17} className="mt-0.5 shrink-0 text-slate-400" />
             <div className="min-w-0">
-              <dt className="text-[11px] font-medium text-slate-500">
-                {label}
-              </dt>
+              <dt className="text-sm font-medium text-slate-500">{label}</dt>
               <dd
-                className={`mt-1 break-words text-xs leading-relaxed ${value ? "text-slate-800" : "text-slate-400"}`}
+                className={`mt-0.5 break-words text-base leading-relaxed ${value ? "text-slate-800" : "text-slate-400"}`}
               >
                 {value || "Sin especificar"}
               </dd>
@@ -91,18 +89,18 @@ export function SupplierDetail({
           </div>
         ))}
       </dl>
-      <div className="mx-5 space-y-3 border-t border-slate-100 py-5 text-xs text-slate-500">
-        <h3 className="font-medium text-slate-700">Contacto</h3>
+      <div className="mx-5 space-y-3 border-t border-slate-100 py-5 text-sm text-slate-500">
+        <h3 className="text-base font-medium text-slate-700">Contacto</h3>
         <p className="flex items-start gap-2 break-all">
-          <Phone size={14} className="shrink-0" />
+          <Phone size={16} className="shrink-0" />
           {supplier.phone || "Sin teléfono"}
         </p>
         <p className="flex items-start gap-2 break-all">
-          <Mail size={14} className="shrink-0" />
+          <Mail size={16} className="shrink-0" />
           {supplier.email || "Sin email"}
         </p>
         <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-          <h3 className="mb-1.5 text-[11px] font-medium text-slate-600">
+          <h3 className="mb-1.5 text-sm font-medium text-slate-600">
             Observaciones
           </h3>
           <p className="whitespace-pre-wrap break-words leading-relaxed">
@@ -112,7 +110,7 @@ export function SupplierDetail({
       </div>
       <footer className="mt-auto border-t border-slate-100 p-4">
         <button className={`${secondary} w-full`} onClick={onEdit}>
-          <Pencil size={14} />
+          <Pencil size={16} />
           Editar proveedor
         </button>
       </footer>
