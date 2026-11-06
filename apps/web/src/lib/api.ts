@@ -1841,6 +1841,9 @@ export type CashSession = {
   openingAmountMinor: string;
   closingAmountMinor: string | null;
   cashSalesMinor: string;
+  saleChangeMinor: string;
+  cardMinor: string;
+  transferMinor: string;
   manualInMinor: string;
   manualOutMinor: string;
   expectedAmountMinor: string;
@@ -1852,8 +1855,62 @@ export type CashSession = {
     amountMinor: string;
     reason: string;
     createdAt: string;
+    category?: string;
+  }[];
+  /** Sólo en sesiones abiertas: cobros en efectivo de ventas. */
+  cashPayments?: {
+    id: string;
+    saleId: string;
+    amountMinor: string;
+    createdAt: string;
   }[];
 };
+
+export type CashPendingCollection = {
+  id: string;
+  sourceType: "SALE" | "RECEIPT";
+  sourceId: string;
+  collectedAt: string;
+  cashMinor: string;
+  cardMinor: string;
+  transferMinor: string;
+  destinationRegisterId: string | null;
+};
+
+export type CashRecentActivity = Pick<
+  CashSession,
+  "movements" | "cashPayments"
+>;
+
+export async function getCashRecentActivity(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  registerId: string,
+): Promise<CashRecentActivity> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/cash/registers/${registerId}/recent-activity`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw new Error("No se pudieron consultar los movimientos.");
+  return (await response.json()) as CashRecentActivity;
+}
+
+export async function getCashPendingCollections(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  signal?: AbortSignal,
+): Promise<CashPendingCollection[]> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/cash/pending-collections`,
+    { headers: { Authorization: `Bearer ${token}` }, signal },
+  );
+  if (!response.ok)
+    throw new Error("No se pudieron consultar los cobros pendientes.");
+  return (await response.json()) as CashPendingCollection[];
+}
 
 export type CashClosure = CashSession & {
   registerResponsibleName?: string | null;

@@ -40,6 +40,8 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
         Awaited<ReturnType<CashService["list"]>>["sessions"][number]
       >;
       withdraw: (amountMinor: number) => ReturnType<CashService["movement"]>;
+      recent: () => ReturnType<CashService["recentActivity"]>;
+      sessionId: string;
       expected: () => Promise<string>;
       movements: () => Promise<
         { type: string; amountMinor: bigint; reason: string }[]
@@ -139,6 +141,9 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
             tx,
             sellWith,
             current,
+            sessionId: session.id,
+            recent: () =>
+              cash.recentActivity(user.id, org.id, branch.id, register.id),
             sell: (paidMinor) =>
               sellWith([{ method: "CASH", amountMinor: paidMinor }]),
             withdraw: (amountMinor) =>
@@ -263,6 +268,58 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
       await withdraw(1000);
       await sell(1000);
       expect(await expected()).toBe("800");
+    });
+  });
+
+  describe("actividad reciente de la caja", () => {
+    const days = (amount: number) => new Date(Date.now() - amount * 86_400_000);
+
+    it("muestra lo de una sesión cerrada en los últimos 7 días", async () => {
+      await withFixture(async ({ tx, sell, cancel, recent, sessionId }) => {
+        const kept = await sell(1000);
+        const cancelled = await sell(800);
+        await cancel(cancelled.id);
+        await tx.cashSession.update({
+          where: { id: sessionId },
+          data: { closedAt: new Date(), closingAmountMinor: 1800n },
+        });
+        const activity = await recent();
+        expect(activity.cashPayments.map((row) => row.saleId)).toEqual([
+          kept.id,
+        ]);
+        expect(activity.movements).toEqual([
+          expect.objectContaining({
+            category: "SALE_CHANGE",
+            amountMinor: "200",
+          }),
+        ]);
+      });
+    });
+
+    it("deja afuera lo anterior a 7 días", async () => {
+      await withFixture(async ({ tx, sell, recent, sessionId }) => {
+        const sale = await sell(1000);
+        await tx.cashMovement.updateMany({
+          where: { cashSessionId: sessionId },
+          data: { createdAt: days(8) },
+        });
+        await tx.salePayment.updateMany({
+          where: { saleId: sale.id },
+          data: { createdAt: days(8) },
+        });
+        expect(await recent()).toEqual({ movements: [], cashPayments: [] });
+      });
+    });
+
+    it("no muestra cierres eliminados del listado", async () => {
+      await withFixture(async ({ tx, sell, recent, sessionId }) => {
+        await sell(1000);
+        await tx.cashSession.update({
+          where: { id: sessionId },
+          data: { closedAt: new Date(), archivedAt: new Date() },
+        });
+        expect(await recent()).toEqual({ movements: [], cashPayments: [] });
+      });
     });
   });
 

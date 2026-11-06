@@ -18,7 +18,7 @@ export function CashRegisterPicker({
   disabled?: boolean;
 }) {
   return (
-    <div className="mt-3">
+    <div>
       <ProductFilterSelect
         compact
         label="Caja"

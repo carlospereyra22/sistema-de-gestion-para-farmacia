@@ -571,6 +571,73 @@ export class CashService {
       })),
     };
   }
+  /** Actividad de efectivo de una caja en los últimos 7 días, sin cierres archivados. */
+  async recentActivity(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    registerId: string,
+  ) {
+    await this.assert(actorId, organizationId, "CASH_READ");
+    await this.branch(organizationId, branchId);
+    const register = await this.prisma.cashRegister.findFirst({
+      where: { id: registerId, branchId },
+    });
+    if (!register) throw new NotFoundException("La caja no está disponible.");
+    const since = new Date(Date.now() - 7 * 86_400_000);
+    const sessions = await this.prisma.cashSession.findMany({
+      where: {
+        cashRegisterId: registerId,
+        archivedAt: null,
+        OR: [{ closedAt: null }, { closedAt: { gte: since } }],
+      },
+      select: { id: true },
+    });
+    const sessionIds = sessions.map((session) => session.id);
+    const [movements, payments] = await Promise.all([
+      this.prisma.cashMovement.findMany({
+        where: { cashSessionId: { in: sessionIds }, createdAt: { gte: since } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      this.prisma.salePayment.findMany({
+        where: {
+          cashSessionId: { in: sessionIds },
+          method: "CASH",
+          createdAt: { gte: since },
+          sale: { status: "COMPLETED" },
+        },
+        select: { id: true, saleId: true, amountMinor: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+    ]);
+    const members = await this.prisma.userOrganization.findMany({
+      where: {
+        organizationId,
+        userId: { in: [...new Set(movements.map((row) => row.actorId))] },
+      },
+      select: { userId: true, displayName: true },
+    });
+    const names = new Map(
+      members.map((member) => [member.userId, member.displayName]),
+    );
+    return {
+      movements: movements.map((movement) => ({
+        id: movement.id,
+        type: movement.type,
+        amountMinor: movement.amountMinor.toString(),
+        reason: movement.reason,
+        createdAt: movement.createdAt,
+        category: cashMovementCategory(movement.reason),
+        actorName: names.get(movement.actorId) ?? null,
+      })),
+      cashPayments: payments.map((payment) => ({
+        ...payment,
+        amountMinor: payment.amountMinor.toString(),
+      })),
+    };
+  }
   async closures(
     actorId: string,
     organizationId: string,

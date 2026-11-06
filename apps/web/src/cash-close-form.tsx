@@ -17,6 +17,7 @@ export function CashCloseForm({
   organizationId,
   branchId,
   disabled = false,
+  pendingCollections = 0,
   onClosed,
   onRejected,
 }: {
@@ -25,6 +26,8 @@ export function CashCloseForm({
   organizationId: string;
   branchId: string;
   disabled?: boolean;
+  /** Cobros asignados a esta caja que todavía no entraron a la sesión. */
+  pendingCollections?: number;
   onClosed: () => void;
   onRejected?: () => void;
 }) {
@@ -118,7 +121,7 @@ export function CashCloseForm({
               ? "—"
               : difference === 0
                 ? "$ 0,00 · Coincide"
-                : `${difference < 0 ? "Faltante" : "Sobrante"}: ${money(difference)}`}
+                : `${difference < 0 ? "Faltante" : "Sobrante"}: ${money(Math.abs(difference))}`}
           </div>
         </div>
       </div>
@@ -171,7 +174,20 @@ export function CashCloseForm({
               <dd>{money(confirmation.minor)}</dd>
             </div>
           </dl>
-          <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
+          {pendingCollections > 0 && (
+            <p
+              role="alert"
+              className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800"
+            >
+              {pendingCollections === 1
+                ? "Esta caja tiene 1 cobro asignado sin incorporar."
+                : `Esta caja tiene ${pendingCollections} cobros asignados sin incorporar.`}{" "}
+              Si cerrás ahora, no entran en este cierre.
+            </p>
+          )}
+          <div
+            className={`mt-3 rounded-xl border p-4 ${confirmation.minor === confirmation.expected ? "border-teal-100 bg-teal-50 text-teal-800" : "border-amber-100 bg-amber-50 text-amber-800"}`}
+          >
             <p className="text-xs">
               {confirmation.minor === confirmation.expected
                 ? "Sin diferencia"

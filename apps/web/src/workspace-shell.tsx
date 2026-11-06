@@ -65,11 +65,6 @@ import {
   saleProductDetail,
   saleCategoryOptions,
 } from "./lib/sale-catalog";
-import { RegisterManager, ClosureVisibility } from "./record-maintenance";
-import { getCashManagement, type CashManagement } from "./lib/api";
-import { cashSettingsRequest, type CashSettings } from "./lib/api";
-import { CashPendingCollections } from "./cash-pending-collections";
-import { CashClosureDetail } from "./cash-closure-detail";
 import { ResumeSaleDialog } from "./resume-sale-dialog";
 import { PriceListsWorkspace } from "./price-lists-workspace";
 import { sortSaleLines } from "./lib/sort-sale-lines";
@@ -84,11 +79,6 @@ import {
 } from "./lib/price-lists-api";
 import { AccountMenu } from "./account-menu";
 import { CashRegisterIcon } from "./cash-register-icon";
-import { CashCloseForm } from "./cash-close-form";
-import { createPortal } from "react-dom";
-import { CashOverview, CashMovements } from "./cash-overview";
-import { CashLatestClosure } from "./cash-latest-closure";
-import { cashResponsibleLabel } from "./lib/cash-responsible";
 import { AccountBranchSelector } from "./account-branch-selector";
 import { OrganizationWorkspace } from "./organization-workspace";
 import { OrganizationLogo } from "./organization-logo";
@@ -154,14 +144,14 @@ import {
 } from "./lib/product-catalog-metrics";
 import { formatAmountTyping } from "./lib/amount-typing";
 import { lotCostInput, typedCostMinor } from "./lib/lot-cost";
-import { typedCashMinor } from "./lib/cash-count";
 import {
   readCashRegisterChoice,
   resolveCashRegister,
   resolveSaleSession,
   saveCashRegisterChoice,
 } from "./lib/active-cash-register";
-import { CashRegisterPicker, SaleCashStatus } from "./cash-register-picker";
+import { SaleCashStatus } from "./cash-register-picker";
+import { CashWorkspace } from "./cash-workspace";
 import { MoneyInput } from "./money-input";
 import { stockLevel } from "./lib/stock-level";
 import {
@@ -260,7 +250,6 @@ import {
   NotebookTabs,
   CreditCard,
   HeartPulse,
-  Eye,
   History,
   Minus,
   Package,
@@ -278,7 +267,6 @@ import {
 } from "lucide-react";
 
 import {
-  createCashMovement,
   createCatalogProduct,
   createRole,
   createUser,
@@ -291,7 +279,6 @@ import {
   dispatchTransfer,
   getBranches,
   getCash,
-  getCashClosures,
   getCustomerAccounts,
   type CustomerAccount,
   getCatalogProducts,
@@ -312,7 +299,6 @@ import {
   getTransfers,
   getUserCreateOptions,
   getUsers,
-  openCashSession,
   receiveStock,
   receiveTransfer,
   updateCatalogProduct,
@@ -323,7 +309,6 @@ import {
   type SaleUnit,
   type CashRegister,
   type CashSession,
-  type CashClosure,
   type Party,
   type PriceList,
   type ReportSummary,
@@ -1095,7 +1080,7 @@ export function WorkspaceShell({
             />
           ) : null}
           {ready && (view === "Caja" || visitedCashScope === accountsScope) ? (
-            <Cash
+            <CashWorkspace
               key={`cash:${organizationId}:${branchId}`}
               active={view === "Caja"}
               branchName={
@@ -7544,535 +7529,6 @@ function Select({
         ))}
       </select>
     </label>
-  );
-}
-
-function Cash({
-  active,
-  branchName,
-  toolbarTarget,
-  token,
-  organizationId,
-  branchId,
-  registers,
-  openSessions,
-  registerId,
-  onRegisterChange,
-  session,
-  done,
-  error,
-}: {
-  active: boolean;
-  branchName?: string;
-  toolbarTarget: HTMLDivElement | null;
-  token: string;
-  organizationId: string;
-  branchId: string;
-  registers: CashRegister[];
-  openSessions: CashSession[];
-  registerId: string;
-  onRegisterChange: (registerId: string) => void;
-  session?: CashSession;
-  done: () => void;
-  error: (value: string) => void;
-}): ReactElement {
-  const [opening, setOpening] = useState("");
-  const [cashBusy, setCashBusy] = useState(false);
-  const cashPending = useRef(false);
-  const movementRequest = useRef<{ signature: string; id: string } | null>(
-    null,
-  );
-  const [movementType, setMovementType] = useState<"IN" | "OUT">("IN");
-  const [movementAmount, setMovementAmount] = useState("");
-  const [movementReason, setMovementReason] = useState("");
-  const [closures, setClosures] = useState<CashClosure[]>([]);
-  const [closureDetailId, setClosureDetailId] = useState<string>();
-  const [management, setManagement] = useState<CashManagement>();
-  const [rules, setRules] = useState<CashSettings>();
-  const [archived, setArchived] = useState(false);
-  const [closureFrom, setClosureFrom] = useState("");
-  const [closureTo, setClosureTo] = useState("");
-  const closureRequest = useRef(0);
-  useEffect(() => {
-    if (active) done();
-  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
-  const loadClosures = async () => {
-    const request = ++closureRequest.current;
-    const rows = await getCashClosures(
-      token,
-      organizationId,
-      branchId,
-      closureFrom || undefined,
-      closureTo || undefined,
-      archived,
-    );
-    if (request === closureRequest.current) setClosures(rows);
-  };
-  useEffect(() => {
-    let cancelled = false;
-    if (!active) return;
-    void Promise.all([
-      getCashManagement(token, organizationId, branchId),
-      cashSettingsRequest(token, organizationId, branchId),
-    ])
-      .then(([value, settings]) => {
-        if (!cancelled) {
-          setManagement(value);
-          setRules(settings);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled)
-          error(
-            cause instanceof Error
-              ? cause.message
-              : "No se pudo cargar la gestión de cajas.",
-          );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, organizationId, branchId, registers, active]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!active) return;
-    void loadClosures().catch((cause: unknown) =>
-      error(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudieron cargar los cierres.",
-      ),
-    );
-  }, [branchId, organizationId, token, archived, active]); // eslint-disable-line react-hooks/exhaustive-deps
-  const open = async (event: FormEvent) => {
-    event.preventDefault();
-    if (cashPending.current) return;
-    const openingMinor =
-      rules?.askOpeningAmount === false ? 0 : typedCashMinor(opening);
-    if (!registerId) {
-      error("Seleccioná una caja para abrir la sesión.");
-      return;
-    }
-    if (openingMinor === null) {
-      error("Ingresá un fondo inicial válido.");
-      return;
-    }
-    cashPending.current = true;
-    setCashBusy(true);
-    try {
-      await openCashSession(
-        token,
-        organizationId,
-        branchId,
-        registerId,
-        openingMinor,
-      );
-      setOpening("");
-      onRegisterChange(registerId);
-      done();
-    } catch (cause) {
-      error(
-        cause instanceof Error ? cause.message : "No se pudo abrir la caja.",
-      );
-    } finally {
-      cashPending.current = false;
-      setCashBusy(false);
-    }
-  };
-  // Lo escrito para una caja no debe registrarse por error en otra.
-  const chooseRegister = (id: string) => {
-    setOpening("");
-    setMovementAmount("");
-    setMovementReason("");
-    onRegisterChange(id);
-  };
-  const registerName = registers.find((item) => item.id === registerId)?.name;
-  const movement = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!session || cashPending.current) return;
-    const amountMinor = typedCashMinor(movementAmount);
-    if (!amountMinor) {
-      error("Ingresá un importe mayor a cero.");
-      return;
-    }
-    if (
-      rules?.requireMovementReason !== false &&
-      movementReason.trim().length < 3
-    ) {
-      error("Indicá un motivo de al menos 3 caracteres.");
-      return;
-    }
-    const signature = JSON.stringify([
-      session.id,
-      movementType,
-      movementAmount,
-      movementReason.trim(),
-    ]);
-    if (movementRequest.current?.signature !== signature)
-      movementRequest.current = { signature, id: crypto.randomUUID() };
-    cashPending.current = true;
-    setCashBusy(true);
-    try {
-      await createCashMovement(token, organizationId, branchId, session.id, {
-        clientOperationId: movementRequest.current.id,
-        type: movementType,
-        amountMinor,
-        reason: movementReason,
-      });
-      movementRequest.current = null;
-      setMovementType("IN");
-      setMovementAmount("");
-      setMovementReason("");
-      done();
-    } catch (cause) {
-      error(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudo registrar el movimiento de caja.",
-      );
-    } finally {
-      cashPending.current = false;
-      setCashBusy(false);
-    }
-  };
-  return (
-    <div className={active ? "cash-workspace" : "hidden"}>
-      {active &&
-        management?.canManage &&
-        toolbarTarget &&
-        createPortal(
-          <RegisterManager
-            branchName={branchName}
-            token={token}
-            organizationId={organizationId}
-            branchId={branchId}
-            registers={management.registers}
-            done={done}
-          />,
-          toolbarTarget,
-        )}
-      <CashOverview
-        session={session}
-        closedDetails={
-          active && registerId ? (
-            <CashLatestClosure
-              key={`${organizationId}:${branchId}:${registerId}`}
-              token={token}
-              organizationId={organizationId}
-              branchId={branchId}
-              registerId={registerId}
-              refreshKey={closures}
-              onView={setClosureDetailId}
-            />
-          ) : undefined
-        }
-        registerName={registerName}
-        registerPicker={
-          registers.length > 1 ? (
-            <CashRegisterPicker
-              registers={registers}
-              openSessions={openSessions}
-              value={registerId}
-              onChange={chooseRegister}
-              disabled={cashBusy}
-            />
-          ) : undefined
-        }
-      />
-      <section className="cash-card cash-close">
-        <div className="cash-card-heading">
-          <span className="cash-icon bg-amber-50 text-amber-600">
-            <CashRegisterIcon size={20} />
-          </span>
-          <h2>{session ? "Cierre pendiente" : "Abrir caja"}</h2>
-          <CashPendingCollections
-            token={token}
-            organizationId={organizationId}
-            branchId={branchId}
-            registers={registers}
-            canManage={Boolean(management?.canManage)}
-            active={active}
-            onAssigned={done}
-          />
-        </div>
-        {session ? (
-          <CashCloseForm
-            key={session.id}
-            session={session}
-            token={token}
-            organizationId={organizationId}
-            branchId={branchId}
-            disabled={!management?.canManage || cashBusy}
-            onRejected={done}
-            onClosed={() => {
-              onRegisterChange(registerId);
-              done();
-              void loadClosures().catch(() =>
-                error(
-                  "El cierre se guardó, pero no se pudo actualizar el historial.",
-                ),
-              );
-            }}
-          />
-        ) : (
-          <form onSubmit={(event) => void open(event)}>
-            {rules?.askOpeningAmount !== false && (
-              <MoneyInput
-                label="Fondo inicial"
-                value={opening}
-                onChange={setOpening}
-              />
-            )}
-            <button
-              disabled={cashBusy || !management?.canManage}
-              className="mt-5 w-full bg-teal-700 py-2 text-sm text-white disabled:opacity-50"
-            >
-              {registerName ? `Abrir ${registerName}` : "Abrir caja"}
-            </button>
-          </form>
-        )}
-        {management && !management.canManage && (
-          <p className="mt-3 text-xs text-slate-500">
-            No tenés permiso para abrir ni cerrar cajas.
-          </p>
-        )}
-      </section>
-      {session &&
-      management?.canManage &&
-      rules?.allowManualMovements !== false ? (
-        <form
-          onSubmit={(event) => void movement(event)}
-          className="cash-card cash-manual"
-        >
-          <div className="cash-card-heading">
-            <span className="cash-icon bg-slate-50 text-slate-500">
-              <ArrowLeftRight size={20} />
-            </span>
-            <h2>Movimiento manual</h2>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Registrá ingresos o egresos de efectivo en la caja actual.
-          </p>
-          <div
-            className="cash-movement-toggle"
-            role="group"
-            aria-label="Tipo de movimiento"
-          >
-            <button
-              type="button"
-              aria-pressed={movementType === "IN"}
-              onClick={() => setMovementType("IN")}
-            >
-              ↑ Ingreso de efectivo
-            </button>
-            <button
-              type="button"
-              aria-pressed={movementType === "OUT"}
-              onClick={() => setMovementType("OUT")}
-            >
-              ↓ Egreso de efectivo
-            </button>
-          </div>
-          <div className="grid gap-x-3 sm:grid-cols-2">
-            <MoneyInput
-              label="Importe"
-              value={movementAmount}
-              onChange={setMovementAmount}
-            />
-            <Input
-              label="Motivo"
-              required={rules?.requireMovementReason !== false}
-              value={movementReason}
-              onChange={setMovementReason}
-            />
-          </div>
-          <button
-            disabled={cashBusy}
-            className="mt-5 w-full bg-teal-700 py-2 text-sm text-white disabled:opacity-50"
-          >
-            {cashBusy
-              ? "Guardando…"
-              : movementType === "IN"
-                ? "Registrar ingreso"
-                : "Registrar egreso"}
-          </button>
-        </form>
-      ) : (
-        <section className="cash-card cash-manual">
-          <div className="cash-card-heading">
-            <span className="cash-icon">
-              <ArrowLeftRight size={20} />
-            </span>
-            <h2>Movimiento manual</h2>
-          </div>
-          <p className="py-8 text-sm text-slate-500">
-            {session
-              ? rules?.allowManualMovements === false
-                ? "Los movimientos manuales están deshabilitados en esta sucursal."
-                : "No tenés permiso para registrar movimientos de caja."
-              : "Abrí una caja para registrar ingresos y egresos."}
-          </p>
-        </section>
-      )}
-      <CashMovements key={session?.id ?? "closed"} session={session} />
-      <section className="cash-card cash-closures">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="flex items-center gap-2 font-semibold">
-              <History size={19} className="text-teal-700" />
-              Historial de cierres
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Consultá el efectivo esperado, contado y la diferencia por cada
-              cierre.
-            </p>
-          </div>
-          <form
-            className="flex flex-wrap items-end gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void loadClosures().catch((cause: unknown) =>
-                error(
-                  cause instanceof Error
-                    ? cause.message
-                    : "No se pudieron cargar los cierres.",
-                ),
-              );
-            }}
-          >
-            <Input
-              label="Desde"
-              type="date"
-              value={closureFrom}
-              onChange={setClosureFrom}
-              required={false}
-              className="h-9"
-              labelClassName="mt-0 text-xs"
-            />
-            <Input
-              label="Hasta"
-              type="date"
-              value={closureTo}
-              onChange={setClosureTo}
-              required={false}
-              className="h-9"
-              labelClassName="mt-0 text-xs"
-            />
-            {management?.canArchive && (
-              <label className="block text-xs text-slate-500">
-                Estado
-                <select
-                  aria-label="Estado de los cierres"
-                  className="mt-1 h-9 w-full min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/15"
-                  value={archived ? "archived" : "visible"}
-                  onChange={(event) => {
-                    setClosures([]);
-                    setArchived(event.target.value === "archived");
-                  }}
-                >
-                  <option value="visible">Visibles</option>
-                  <option value="archived">Eliminados</option>
-                </select>
-              </label>
-            )}
-            <button className="h-9 bg-teal-700 px-4 text-sm text-white">
-              Ver cierres
-            </button>
-          </form>
-        </div>
-        <div className="mt-5 overflow-x-auto">
-          {closures.length ? (
-            <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="border-y text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-2 py-3">Cierre</th>
-                  <th className="px-2 py-3">Caja</th>
-                  <th className="px-2 py-3">Responsable</th>
-                  <th className="px-2 py-3 text-right">Esperado</th>
-                  <th className="px-2 py-3 text-right">Contado</th>
-                  <th className="px-2 py-3 text-right">Diferencia</th>
-                  <th className="w-px whitespace-nowrap px-2 py-3 text-center">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {closures.map((closure) => (
-                  <tr key={closure.id} className="border-b">
-                    <td className="px-2 py-3">
-                      {new Date(closure.closedAt!).toLocaleString("es-AR")}
-                    </td>
-                    <td className="px-2 py-3">{closure.cashRegisterName}</td>
-                    <td className="px-2 py-3 text-xs text-slate-500">
-                      {cashResponsibleLabel(closure)}
-                    </td>
-                    <td className="px-2 py-3 text-right">
-                      {money(closure.expectedAmountMinor)}
-                    </td>
-                    <td className="px-2 py-3 text-right">
-                      {money(closure.closingAmountMinor ?? "0")}
-                    </td>
-                    <td
-                      className={`px-2 py-3 text-right font-semibold ${
-                        closure.differenceMinor === "0"
-                          ? "text-teal-700"
-                          : "text-rose-600"
-                      }`}
-                    >
-                      {money(closure.differenceMinor ?? "0")}
-                    </td>
-                    <td className="px-2 py-3">
-                      <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setClosureDetailId(closure.id)}
-                          className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
-                        >
-                          <Eye size={15} aria-hidden /> Ver cierre
-                        </button>
-                        {management?.canArchive && (
-                          <ClosureVisibility
-                            key={`${closure.id}-${archived}`}
-                            token={token}
-                            organizationId={organizationId}
-                            branchId={branchId}
-                            id={closure.id}
-                            label={`${closure.cashRegisterName} · ${new Date(closure.closedAt!).toLocaleString("es-AR")}`}
-                            archived={archived}
-                            done={() => {
-                              void loadClosures().catch((cause: unknown) =>
-                                error(
-                                  cause instanceof Error
-                                    ? cause.message
-                                    : "No se pudieron actualizar los cierres.",
-                                ),
-                              );
-                            }}
-                          />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="py-5 text-sm text-slate-500">
-              No hay cierres para el período seleccionado.
-            </p>
-          )}
-        </div>
-      </section>
-      {active && closureDetailId && (
-        <CashClosureDetail
-          key={closureDetailId}
-          token={token}
-          organizationId={organizationId}
-          branchId={branchId}
-          id={closureDetailId}
-          onClose={() => setClosureDetailId(undefined)}
-        />
-      )}
-    </div>
   );
 }
 
