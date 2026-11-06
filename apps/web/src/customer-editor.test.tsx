@@ -27,6 +27,28 @@ describe("customer editor", () => {
     expect(html).toContain('role="combobox"');
     expect(html).not.toContain("<select");
   });
+  it("ofrece el teléfono con +54 y un email de ejemplo", () => {
+    const html = renderToStaticMarkup(<CustomerEditor {...props} />);
+    expect(html).toContain("Argentina +54");
+    expect(html).toContain('aria-label="País del teléfono"');
+    expect(html).toContain('placeholder="9 376 412-3456"');
+    expect(html).toContain('placeholder="nombre@ejemplo.com"');
+  });
+  it("abre un teléfono cargado separado del código de país", () => {
+    const html = renderToStaticMarkup(
+      <CustomerEditor
+        {...props}
+        customer={{
+          id: "customer",
+          name: "María",
+          active: true,
+          billingPhone: "+595981123456",
+        }}
+      />,
+    );
+    expect(html).toContain("Paraguay +595");
+    expect(html).toContain('value="981123456"');
+  });
   it("precarga el nombre buscado al crear un cliente", () => {
     const html = renderToStaticMarkup(
       <CustomerEditor {...props} initialName="María Pérez" />,

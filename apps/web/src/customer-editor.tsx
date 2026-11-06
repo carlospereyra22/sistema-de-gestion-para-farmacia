@@ -11,6 +11,8 @@ import {
   normalizedCustomerName,
   type CustomerIdentity,
 } from "./lib/customer-identity";
+import { normalizePhone } from "./lib/phone-number";
+import { PhoneInput } from "./phone-input";
 import { ProductFilterSelect } from "./product-filter-select";
 import { field, primary, secondary } from "./supplier-payables/dialog";
 
@@ -50,7 +52,7 @@ function Section({
       open={open}
       className="group rounded-xl border border-slate-200 bg-white"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 text-sm font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 text-base font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
         <span className="text-teal-700">{icon}</span>
         {title}
         <ChevronDown
@@ -86,9 +88,10 @@ export function CustomerEditor({
     titleId = useId();
   const [name, setName] = useState(customer?.name ?? initialName),
     [listId, setListId] = useState(customer?.priceListId ?? "");
-  const [value, setValue] = useState<CustomerBilling>(() =>
-    Object.fromEntries(keys.map((key) => [key, customer?.[key] ?? ""])),
-  );
+  const [value, setValue] = useState<CustomerBilling>(() => ({
+    ...Object.fromEntries(keys.map((key) => [key, customer?.[key] ?? ""])),
+    billingPhone: normalizePhone(customer?.billingPhone),
+  }));
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
@@ -118,7 +121,7 @@ export function CustomerEditor({
     type = "text",
     placeholder?: string,
   ) => (
-    <label className="block text-xs text-slate-500">
+    <label className="block text-sm text-slate-500">
       {label}
       <input
         className={`${field} mt-1`}
@@ -174,7 +177,7 @@ export function CustomerEditor({
         e.preventDefault();
         if (!gate.current) onClose();
       }}
-      className="m-auto w-[min(760px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto w-[min(820px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-xl backdrop:bg-slate-950/35"
     >
       <form
         className="flex max-h-[90dvh] flex-col"
@@ -188,10 +191,10 @@ export function CustomerEditor({
             <UserRound size={21} />
           </span>
           <div>
-            <h2 id={titleId} className="font-semibold">
+            <h2 id={titleId} className="text-lg font-semibold">
               {customer ? "Editar cliente" : "Nuevo cliente"}
             </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-sm text-slate-500">
               Datos de la ficha y condiciones comerciales.
             </p>
           </div>
@@ -205,15 +208,15 @@ export function CustomerEditor({
             <X size={19} />
           </button>
         </header>
-        <div className="min-h-0 overflow-y-auto p-5">
+        <div data-product-editor-body className="min-h-0 overflow-y-auto p-5">
           <fieldset disabled={busy} className="space-y-4">
             <section className="rounded-xl border border-slate-200 p-4">
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <h3 className="mb-3 flex items-center gap-2 text-base font-semibold">
                 <UserRound size={17} className="text-teal-700" />
                 Datos principales
               </h3>
               <div className="grid gap-3 sm:grid-cols-[1.5fr_1fr]">
-                <label className="text-xs text-slate-500">
+                <label className="text-sm text-slate-500">
                   Nombre o razón social <span className="text-rose-500">*</span>
                   <input
                     autoFocus
@@ -226,7 +229,7 @@ export function CustomerEditor({
                     onChange={(e) => setName(e.target.value)}
                   />
                 </label>
-                <div className="text-xs text-slate-500">
+                <div className="text-sm text-slate-500">
                   <p className="mb-1">Lista de precios</p>
                   <ProductFilterSelect
                     compact
@@ -257,7 +260,7 @@ export function CustomerEditor({
                   "text",
                   "Sin especificar",
                 )}
-                <div className="text-xs text-slate-500">
+                <div className="text-sm text-slate-500">
                   <p className="mb-1">Condición frente al IVA</p>
                   <ProductFilterSelect
                     compact
@@ -309,7 +312,7 @@ export function CustomerEditor({
                 160,
               )}
               {customer && (
-                <p className="mt-3 text-xs text-slate-400">
+                <p className="mt-3 text-sm text-slate-400">
                   Ficha {customer.id.slice(0, 8)}
                   {customer.document
                     ? ` · Documento registrado: ${customer.document}`
@@ -319,9 +322,21 @@ export function CustomerEditor({
             </Section>
             <Section title="Contacto" icon={<Phone size={17} />}>
               <div className="grid gap-3 sm:grid-cols-2">
-                {input("billingPhone", "Teléfono / WhatsApp", 40, "tel")}
-                {input("billingEmail", "Email", 254, "email")}
-                <label className="text-xs text-slate-500 sm:col-span-2">
+                <PhoneInput
+                  label="Teléfono / WhatsApp"
+                  value={value.billingPhone}
+                  onChange={(billingPhone) =>
+                    setValue({ ...value, billingPhone })
+                  }
+                />
+                {input(
+                  "billingEmail",
+                  "Email",
+                  254,
+                  "email",
+                  "nombre@ejemplo.com",
+                )}
+                <label className="text-sm text-slate-500 sm:col-span-2">
                   Observaciones
                   <textarea
                     maxLength={1000}
