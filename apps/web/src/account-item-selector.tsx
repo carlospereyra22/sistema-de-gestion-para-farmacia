@@ -78,6 +78,7 @@ export function AccountItemSelector({
   saleScope,
   summaryTarget,
   onStatement,
+  onConfigureCredit,
   menuTarget,
   onUpdated,
   token,
@@ -93,6 +94,7 @@ export function AccountItemSelector({
   onInitialSaleHandled?: () => void;
   saleScope?: string;
   onStatement?: () => void;
+  onConfigureCredit?: () => void;
   token: string;
   onUpdated: () => Promise<void>;
   organizationId: string;
@@ -1064,11 +1066,22 @@ export function AccountItemSelector({
               );
             })}
           {!visibleGroups.length && (
-            <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-              {saleSearch.trim()
-                ? "No hay ventas que coincidan con la búsqueda."
-                : "No hay ventas pendientes para esta selección."}
-            </p>
+            <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+              <p>
+                {saleSearch.trim()
+                  ? "No hay ventas que coincidan con la búsqueda."
+                  : "No hay ventas pendientes para esta selección."}
+              </p>
+              {onConfigureCredit && !saleSearch.trim() && (
+                <button
+                  type="button"
+                  onClick={onConfigureCredit}
+                  className="mt-4 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700"
+                >
+                  Configurar crédito
+                </button>
+              )}
+            </div>
           )}
         </div>
         {Object.keys(chosen).length > 0 && (

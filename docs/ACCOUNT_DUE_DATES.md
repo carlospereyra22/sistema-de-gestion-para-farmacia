@@ -18,6 +18,22 @@ Apartados Clientes y Vencimientos. Se conserva la pantalla Clientes y su borrado
 
 ## Despliegue y verificación
 
+### Entrada por lista de clientes (06/11/2026)
+
+Cuentas corrientes no abre ninguna cuenta por su cuenta: el apartado Clientes empieza con los indicadores generales y la lista de clientes, de diez por página, con búsqueda por nombre, CUIT o teléfono, filtros Todos/Con deuda/Al día, filtro de cuenta corriente (Todos de forma predeterminada, Con cuenta corriente, Sin cuenta corriente) y Nuevo cliente. Los clientes eliminados siguen en la lista con su etiqueta, porque pueden tener deuda por cobrar.
+
+Si la búsqueda no encuentra a nadie y contiene letras, ofrece crear el cliente con ese nombre; un CUIT o teléfono no se propone como nombre. El alta usa el mismo modal que Clientes, con sus permisos y validaciones. Al guardar se habilita la cuenta corriente del cliente nuevo, con tope cero, y se abre en Configurar crédito para definir el límite. Si el cliente se crea pero la habilitación falla, por ejemplo sin ACCOUNT_MANAGE, la cuenta se abre igual y un aviso pide habilitarla desde ahí.
+
+Elegir un cliente abre su cuenta; Volver a clientes, o pulsar Clientes en la barra superior, regresa a la lista y descarta la selección de cobro, conservando búsqueda y filtros. Si el cliente abierto deja de existir, también se vuelve a la lista: nunca se salta a otro. Cambiar entre Clientes y Vencimientos conserva cliente y borrador. Salir de la pantalla por el menú principal cierra la cuenta abierta, para que nadie retome por error la que dejó otra persona en la misma caja.
+
+Cobrar sin ventas pendientes, en un cliente sin crédito y sin deuda, ofrece ir a Configurar crédito.
+
+La lista y la ficha muestran qué usuario creó el cliente y cuál habilitó su cuenta corriente, que pueden ser distintos, y la lista permite filtrar por cada uno. No hay columnas nuevas: el listado de cuentas lo deduce de la auditoría (`CUSTOMER_CREATED` y `CREDIT_CONFIGURED`), por lo que también cubre clientes anteriores. Reconfigurar un crédito activo no cambia quién lo habilitó; si se deshabilita y se vuelve a habilitar, cuenta el último. Los nombres salen de la membresía en la organización: sin registro, o sin nombre, se informa Sin datos y nunca se usa el correo. Una cuenta sin crédito no muestra quién la habilitó.
+
+En Configurar crédito, el límite usa el campo de importe con `$` y separador de miles. Cargar un importe mayor a cero enciende el switch de compras a cuenta corriente, a la vista y antes de guardar; se puede volver a apagar a mano. Elegir Sin límite no lo enciende, porque no habilita por sí solo. Abrir y guardar sin tocar el límite conserva el estado, así que un crédito deshabilitado a propósito no se reactiva.
+
+El plazo de pago ofrece A plazo primero y lo propone cuando la cuenta todavía no tiene condiciones: tope cero y sin plazo, como un cliente recién creado. Los días no se completan solos: hay que cargarlos o elegir Sin vencimiento para guardar. Con un límite cargado, o Sin límite, sin plazo guardado, se muestra Sin vencimiento porque esa fue la elección. Es solo una propuesta de la pantalla: no cambia el plazo guardado ni los vencimientos de ventas anteriores.
+
 ### Presentación de cuentas
 
 El botón de embudo junto al buscador agrupa los filtros de vencimiento en un desplegable con selección múltiple. Los estados seleccionados se combinan como alternativas (por ejemplo, hoy o sin fecha); sin selección se muestran todos. Sólo los activos aparecen como etiquetas removibles. Cambiar o limpiar filtros reinicia la paginación. La selección se aplica después de restringir por cliente y búsqueda, sin modificar saldos.
@@ -76,7 +92,7 @@ El historial del panel se presenta cronológicamente, del movimiento más antigu
 
 Las tarjetas y la tabla se apilan dentro de una misma columna independiente del panel derecho: su altura no estira el espacio entre tarjetas y tabla. La separación es de 16 px tanto con el panel vacío como con una venta abierta. Toda la fila permite consultar la venta; los botones de número y Ver detalle conservan acceso por teclado. Ninguna de estas acciones inicia el cobro: el popup requiere pulsar Cobrar saldo pendiente dentro del panel. Verificado en navegador con datos simulados, sin operaciones reales.
 
-La tarjeta Datos del cliente conserva los tres campos con iconos laterales (CUIT/DNI, teléfono y WhatsApp), cabecera y estado de crédito. La columna admite hasta 380 px, con altura compacta para no agrandar los KPI vecinos. Los valores largos tienen su contenido completo en el atributo title. Usa únicamente información guardada y conserva la validación de número internacional para habilitar WhatsApp; no agrega datos ni supone país.
+Los datos de contacto (CUIT/DNI, teléfono y WhatsApp) se muestran en una línea debajo del nombre, en la ficha del cliente, sin repetir el estado de crédito. Usa únicamente información guardada y conserva la validación de número internacional para habilitar WhatsApp; no agrega datos ni supone país.
 
 El detalle lateral y su popup corresponden sólo a Vencimientos general. En Clientes → Vencimientos se conserva únicamente la tabla: Cobrar lleva a la pestaña Cobrar del cliente, selecciona y despliega la venta elegida y prepara sus artículos pendientes con el selector existente. No abre modal ni registra pagos; se requiere Confirmar cobro. Las ventas no conciliadas conservan sus controles y no reciben asignaciones inventadas.
 

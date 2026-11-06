@@ -5,12 +5,14 @@ export function AccountPaymentTerm({
   value,
   onChange,
   disabled,
+  defaultToTerm = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  defaultToTerm?: boolean;
 }) {
-  const [editingDays, setEditingDays] = useState(value !== "");
+  const [editingDays, setEditingDays] = useState(value !== "" || defaultToTerm);
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   const withTerm = value !== "" || editingDays;
@@ -26,20 +28,26 @@ export function AccountPaymentTerm({
         <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs">
           {[
             {
+              term: true,
+              selected: withTerm,
+              label: "A plazo",
+              icon: CalendarClock,
+            },
+            {
+              term: false,
               selected: !withTerm,
               label: "Sin vencimiento",
               icon: InfinityIcon,
             },
-            { selected: withTerm, label: "A plazo", icon: CalendarClock },
-          ].map(({ selected, label, icon: Icon }, index) => (
+          ].map(({ term, selected, label, icon: Icon }) => (
             <button
               key={label}
               type="button"
               aria-pressed={selected}
               onClick={() => {
-                setEditingDays(index === 1);
-                if (index === 0) onChange("");
-                else requestAnimationFrame(() => input.current?.focus());
+                setEditingDays(term);
+                if (term) requestAnimationFrame(() => input.current?.focus());
+                else onChange("");
               }}
               className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-50 ${selected ? "bg-white font-semibold text-teal-700 shadow-sm ring-1 ring-slate-200/70" : "text-slate-500 hover:text-teal-700"}`}
             >

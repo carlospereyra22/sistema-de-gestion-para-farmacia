@@ -11,6 +11,28 @@ it("shows the no-due-date choice without an unnecessary days input", () => {
   expect(html).not.toContain('type="number"');
   expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
 });
+it("ofrece A plazo primero", () => {
+  const html = renderToStaticMarkup(
+    <AccountPaymentTerm value="" onChange={() => {}} disabled={false} />,
+  );
+  expect(html.indexOf("A plazo")).toBeLessThan(html.indexOf("Sin vencimiento"));
+});
+it("propone A plazo con los días por completar, sin inventar una cantidad", () => {
+  const html = renderToStaticMarkup(
+    <AccountPaymentTerm
+      value=""
+      onChange={() => {}}
+      disabled={false}
+      defaultToTerm
+    />,
+  );
+  expect(html).toContain('type="number"');
+  expect(html).toContain('required=""');
+  expect(html).toContain('value=""');
+  expect(html.indexOf('aria-pressed="true"')).toBeLessThan(
+    html.indexOf('aria-pressed="false"'),
+  );
+});
 it.each(["0", "30", "3650"])(
   "preserves the configured term %s with whole-day steps",
   (value) => {

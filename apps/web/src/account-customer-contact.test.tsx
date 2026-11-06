@@ -11,12 +11,6 @@ it("opens only explicit international phone numbers without guessing a country",
   expect(whatsappLink("+javascript:alert(1)")).toBeNull();
   expect(whatsappLink(null)).toBeNull();
 });
-it("shows missing contact information without an actionable WhatsApp link", () => {
-  const html = renderToStaticMarkup(<AccountCustomerContact />);
-  expect(html).toContain("Sin informar");
-  expect(html).not.toContain("href=");
-});
-
 const account: CustomerAccount = {
   id: "abel",
   name: "Abel",
@@ -28,24 +22,33 @@ const account: CustomerAccount = {
   document: "27-34567890-1",
   billingPhone: "+54 9 3765 123456",
 };
-it("shows a titled contact card, real document and separate telephone/WhatsApp fields", () => {
+it("muestra datos faltantes sin un enlace de WhatsApp", () => {
+  const html = renderToStaticMarkup(
+    <AccountCustomerContact
+      account={{ ...account, document: null, billingPhone: null }}
+    />,
+  );
+  expect(html).toContain("Sin informar");
+  expect(html).not.toContain("href=");
+});
+it("muestra documento, teléfono y WhatsApp en línea, sin repetir el estado del crédito", () => {
   const html = renderToStaticMarkup(
     <AccountCustomerContact account={account} />,
   );
-  expect(html).toContain("Datos del cliente");
+  expect(html).toContain('aria-label="Datos del cliente"');
   expect(html).toContain("CUIT / DNI");
   expect(html).toContain("27-34567890-1");
   expect(html).toContain("Teléfono");
   expect(html).toContain('href="https://wa.me/5493765123456"');
-  expect(html).toContain("Crédito habilitado");
+  expect(html).not.toContain("Crédito");
 });
-it("does not enable credit or a WhatsApp link for inactive customers or local-only phones", () => {
+it("no ofrece WhatsApp con teléfonos sin código de país", () => {
   const html = renderToStaticMarkup(
     <AccountCustomerContact
-      account={{ ...account, active: false, billingPhone: "3765123456" }}
+      account={{ ...account, billingPhone: "3765123456" }}
     />,
   );
-  expect(html).toContain("Crédito deshabilitado");
   expect(html).not.toContain("href=");
   expect(html).toContain("3765123456");
+  expect(html).toContain("WhatsApp no disponible");
 });

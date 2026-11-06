@@ -16,6 +16,7 @@ import { priceAdjustments, priceIncrease } from "./price-adjustment";
 import { settlementAdjustments } from "./settlement-adjustments";
 import { accountToday, accountDueStatus } from "./account-due-date";
 import { saleAccountHistory } from "./sale-account-history";
+import { customerAccountActors } from "./customer-account-actors";
 import {
   normalizeReceiptPayments,
   readReceiptPayments,
@@ -46,6 +47,43 @@ export class AccountsService {
       },
       orderBy: { name: "asc" },
     });
+    const actors = customerAccountActors(
+      await this.prisma.auditLog.findMany({
+        where: {
+          organizationId,
+          OR: [
+            { entityType: "CUSTOMER", action: "CUSTOMER_CREATED" },
+            { entityType: "CUSTOMER_ACCOUNT", action: "CREDIT_CONFIGURED" },
+          ],
+        },
+        select: {
+          entityId: true,
+          actorId: true,
+          action: true,
+          before: true,
+          after: true,
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
+    const actorIds = [...actors.values()].flatMap((actor) =>
+      [actor.createdById, actor.creditEnabledById].filter(
+        (id): id is string => id !== null,
+      ),
+    );
+    const members = await this.prisma.userOrganization.findMany({
+      where: { organizationId, userId: { in: [...new Set(actorIds)] } },
+      select: { userId: true, displayName: true },
+    });
+    const actorOf = (id: string | null | undefined) =>
+      id
+        ? {
+            id,
+            name:
+              members.find((member) => member.userId === id)?.displayName ??
+              null,
+          }
+        : null;
     return customers.map((customer) => ({
       id: customer.id,
       name: customer.name,
@@ -53,6 +91,10 @@ export class AccountsService {
       billingTaxId: customer.billingTaxId,
       billingPhone: customer.billingPhone,
       creditEnabled: customer.creditEnabled,
+      createdBy: actorOf(actors.get(customer.id)?.createdById),
+      creditEnabledBy: customer.creditEnabled
+        ? actorOf(actors.get(customer.id)?.creditEnabledById)
+        : null,
       active: customer.active,
       creditLimitMinor: customer.creditLimitMinor?.toString() ?? null,
       accountTermDays: customer.accountTermDays,
