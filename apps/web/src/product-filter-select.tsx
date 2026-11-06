@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { selectListPlacement } from "./lib/select-list-placement";
 
 export function ProductFilterSelect({
   label,
@@ -23,6 +24,7 @@ export function ProductFilterSelect({
   const list = useRef<HTMLUListElement>(null);
   const [open, setOpen] = useState(false);
   const [above, setAbove] = useState(false);
+  const [maxHeight, setMaxHeight] = useState<number>();
   const [active, setActive] = useState(0);
   const search = useRef({ text: "", time: 0 });
   const selected = options.findIndex((option) => option.value === value);
@@ -31,14 +33,16 @@ export function ProductFilterSelect({
     const body = root.current
       ?.closest("[data-product-editor-body]")
       ?.getBoundingClientRect();
-    setAbove(
-      Boolean(
-        bounds &&
-        body &&
-        body.bottom - bounds.bottom < 170 &&
-        bounds.top - body.top > 170,
-      ),
-    );
+    const placement =
+      bounds && body
+        ? selectListPlacement(
+            options.length,
+            body.bottom - bounds.bottom,
+            bounds.top - body.top,
+          )
+        : undefined;
+    setAbove(placement?.above ?? false);
+    setMaxHeight(placement?.maxHeight);
     setActive(Math.max(0, selected));
     setOpen(true);
   };
@@ -172,6 +176,7 @@ export function ProductFilterSelect({
             id={id}
             role="listbox"
             aria-label={label}
+            style={{ maxHeight }}
             className="product-filter-options relative max-h-56 overflow-y-auto overscroll-contain"
           >
             {options.map((option, index) => (

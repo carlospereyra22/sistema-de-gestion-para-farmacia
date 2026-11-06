@@ -1,3 +1,4 @@
+import { formatAmountTyping } from "../lib/amount-typing";
 import { apiBaseUrl } from "../lib/api";
 
 export type PayableScope = {
@@ -192,6 +193,22 @@ export function inputMinor(value: string) {
       "El importe debe ser mayor que cero y estar dentro del límite permitido.",
     );
   return minor.toString();
+}
+/**
+ * Lee lo cargado en MoneyInput, donde el punto marca miles. Un borrador anterior
+ * con punto decimal ("1000.50") no tiene forma de miles y se lee como antes.
+ */
+export function moneyInputMinor(value: string) {
+  const text = value.trim().replace(/,$/, "");
+  return inputMinor(
+    /^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(text)
+      ? text.replace(/\./g, "")
+      : text,
+  );
+}
+/** Importe en centavos con el formato que muestra MoneyInput. */
+export function moneyAmount(amountMinor?: string): string {
+  return formatAmountTyping(purchaseAmountInput(amountMinor));
 }
 export function purchaseAmountInput(amountMinor?: string): string {
   if (amountMinor === undefined) return "";

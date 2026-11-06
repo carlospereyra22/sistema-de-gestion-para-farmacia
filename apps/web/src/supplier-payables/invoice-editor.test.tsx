@@ -33,7 +33,7 @@ it("opens from a purchase with its amount and supplier term already filled", () 
       onSaved={() => undefined}
     />,
   );
-  expect(html).toContain('value="144000,00"');
+  expect(html).toContain('value="144.000,00"');
   expect(html).toContain('value="2026-11-04"');
   expect(html).toContain("En cuotas");
   expect(html).toContain("Sin fecha");

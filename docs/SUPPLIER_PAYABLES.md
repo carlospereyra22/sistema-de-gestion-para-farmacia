@@ -142,3 +142,13 @@ Migración nueva: `20261021000000_supplier_payments`, con asignaciones en centav
 Pendientes fuera de esta etapa: notas de crédito, estado de cuenta dedicado desde Proveedores, alertas en Inicio e integración de pagos con Caja/bancos. El filtro por proveedor permite consultar sus deudas en Cuentas por pagar.
 
 Verificación local de etapa 2: 463 pruebas API, 537 web y 18 de impresión aprobadas; lint, typecheck y build aprobados (build conserva advertencia de tamaño de bundle). Navegador Edge a 1366×768 con API simulada: saldo precargado, actualización de saldo parcial y envío/limpieza de solicitud; captura `.cache/payment-editor.png`. Se retiró la página temporal. Respaldo `compras-v2-20261021-143808.dump`, 375302 bytes, índice legible verificado, sin ensayo completo de restauración. Migración aplicada únicamente a gestion_dev: 57 migraciones. No se desplegó producción ni se registraron pagos sintéticos en la base comercial.
+
+### Legibilidad y selectores (06/11/2026)
+
+Cuentas por pagar usa las mismas proporciones que Clientes, Proveedores y Cuentas corrientes: tabla en texto base, encabezados y datos secundarios en texto chico, sin tamaños menores a 12 px en el listado. Los filtros de Proveedor, Vencimiento y Estado usan `ProductFilterSelect` completo, con buscador y botones de la misma altura; los formularios lo usan en versión `compact`, con la etiqueta arriba. La columna de botones se titula Acciones. No cambian reglas, importes ni API. Los campos de deuda dentro de la recepción de Compras quedan como estaban.
+
+Registrar pago valida el formulario y abre una confirmación con proveedor, importe, medio y fecha; recién al aceptar se envía. Si el resultado es incierto, el formulario vuelve con la solicitud conservada y el reintento no pregunta de nuevo, porque repite lo ya confirmado. Pagos y deudas se avisan con `StatusToast` abajo a la derecha. El aviso de solicitud conservada no aparece mientras se envía la deuda, solo si falla.
+
+Los importes de Registrar pago y Registrar deuda usan `MoneyInput`, con el `$` y los puntos de miles que pone la web. `moneyInputMinor` los convierte a centavos; `inputMinor` sigue rechazando separadores de miles porque lo usa la deuda de la recepción de Compras. Un borrador anterior con punto decimal ("1000.50") se sigue leyendo como decimal.
+
+La lista de `ProductFilterSelect` dentro de un diálogo abre hacia donde entra completa y se achica si no entra de ningún lado (`lib/select-list-placement.ts`).

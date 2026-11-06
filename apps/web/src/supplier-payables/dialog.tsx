@@ -6,16 +6,20 @@ export const secondary =
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-teal-700 hover:bg-teal-50 disabled:opacity-50";
 export const primary =
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50";
+export const moneyLabel =
+  "text-sm text-slate-500 [&_input]:font-semibold [&_input]:text-teal-800";
 export function PayableDialog({
   title,
   onClose,
   children,
   confirmation,
+  confirmationLabel = "Confirmar salida",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   confirmation?: ReactNode;
+  confirmationLabel?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     titleId = useId();
@@ -27,8 +31,9 @@ export function PayableDialog({
   return (
     <dialog
       ref={ref}
+      data-product-editor-body
       aria-labelledby={confirmation ? undefined : titleId}
-      aria-label={confirmation ? "Confirmar salida" : undefined}
+      aria-label={confirmation ? confirmationLabel : undefined}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();

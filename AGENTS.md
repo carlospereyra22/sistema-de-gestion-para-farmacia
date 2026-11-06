@@ -62,6 +62,7 @@ Unica carpeta de skills del proyecto, para Codex y Claude Code. No crear copias 
 | -------------------------------------------------------- | ------------------------------------------------- |
 | Cambiar backend: endpoints, servicios, reglas de negocio | `.agents/skills/nueva-funcionalidad-api/SKILL.md` |
 | Cambiar frontend: pantallas, componentes, `lib/`         | `.agents/skills/nueva-funcionalidad-web/SKILL.md` |
+| Arreglar una vista con selectores o agregar uno          | `.agents/skills/selectores-web/SKILL.md`          |
 | Cambiar `schema.prisma` o crear migraciones              | `.agents/skills/migracion-prisma/SKILL.md`        |
 | Terminar cualquier cambio de codigo                      | `.agents/skills/cerrar-tarea/SKILL.md`            |
 | Ramas, commits, pull requests, merge o conflictos de git | `.agents/skills/git-equipo/SKILL.md`              |

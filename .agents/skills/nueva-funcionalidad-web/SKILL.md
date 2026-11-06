@@ -45,6 +45,8 @@ doble clic mientras hay una solicitud en curso. Ver `docs/BUSINESS_RULES.md`.
 - Respetar los cortes de `docs/WORKSPACE.md` (1800/1600/1440/1200/1024/768 px CSS),
   `workspace-split` para listado + formulario, sin scroll horizontal del documento.
 - Accesibilidad: `aria-label` en inputs y botones de icono; los tests lo verifican.
+- Selectores: si la vista que se arregla tiene `<select>` nativos, pasarlos a
+  `ProductFilterSelect` en el mismo arreglo (skill `selectores-web`).
 
 ## Tests
 

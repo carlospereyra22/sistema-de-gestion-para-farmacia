@@ -26,14 +26,14 @@ export function VoidPayment({
         if (!busy) onClose();
       }}
     >
-      <p className="text-sm text-slate-600">
+      <p className="text-base text-slate-600">
         Se volverán a dejar pendientes {ars(payment.amountMinor)} de{" "}
         {invoice.supplierName}. El pago seguirá visible como anulado.
       </p>
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-sm text-slate-500">
         Solo corrige el registro: no devuelve dinero ni modifica Caja.
       </p>
-      <label className="mt-4 block text-xs text-slate-500">
+      <label className="mt-4 block text-sm text-slate-500">
         Motivo de la anulación
         <input
           autoFocus
