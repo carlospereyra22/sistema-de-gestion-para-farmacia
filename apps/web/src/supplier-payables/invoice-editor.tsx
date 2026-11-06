@@ -9,20 +9,22 @@ import {
   ListOrdered,
   RotateCcw,
 } from "lucide-react";
+import { MoneyInput } from "../money-input";
+import { ProductFilterSelect } from "../product-filter-select";
 import { SearchableSaleSelect } from "../searchable-sale-select";
 import { PurchaseExitDialog } from "../purchase-dialog-extras";
 import {
   ars,
   documentLabels,
-  inputMinor,
-  purchaseAmountInput,
+  moneyAmount,
+  moneyInputMinor,
   payableRequest,
   PayableError,
   type InvoiceInput,
   type PayableOptions,
   type PayableScope,
 } from "./api";
-import { field, primary, secondary, PayableDialog } from "./dialog";
+import { field, moneyLabel, primary, secondary, PayableDialog } from "./dialog";
 import { supplierInvoiceDue } from "./invoice-due";
 
 type Draft = {
@@ -45,12 +47,12 @@ type Draft = {
 function buildInvoice(draft: Draft): InvoiceInput {
   if (!draft.supplierId) throw new Error("Elegí un proveedor.");
   if (!draft.issuedOn) throw new Error("Indicá la fecha de emisión.");
-  const amountMinor = inputMinor(draft.amount);
+  const amountMinor = moneyInputMinor(draft.amount);
   const dues =
     draft.mode === "split"
       ? draft.dues.map((d) => ({
           dueOn: d.dueOn,
-          amountMinor: inputMinor(d.amount),
+          amountMinor: moneyInputMinor(d.amount),
         }))
       : [{ dueOn: draft.mode === "none" ? null : draft.dueOn, amountMinor }];
   if (dues.some((d) => d.dueOn === ""))
@@ -103,7 +105,7 @@ export function InvoiceEditor({
             ? d
             : {
                 ...d,
-                amount: purchaseAmountInput(
+                amount: moneyAmount(
                   options.purchases.find((p) => p.id === d.purchaseId)
                     ?.amountMinor,
                 ),
@@ -121,7 +123,7 @@ export function InvoiceEditor({
       pointOfSale: "",
       documentNumber: "",
       issuedOn: options.today,
-      amount: purchaseAmountInput(purchase?.amountMinor),
+      amount: moneyAmount(purchase?.amountMinor),
       reference: "",
       notes: "",
       ...supplierInvoiceDue(
@@ -162,13 +164,13 @@ export function InvoiceEditor({
   const supplier = options.suppliers.find((s) => s.id === draft.supplierId);
   let entered: string | undefined;
   try {
-    entered = inputMinor(draft.amount);
+    entered = moneyInputMinor(draft.amount);
   } catch {
     /* importe todavía incompleto */
   }
   const splitTotal = draft.dues.reduce((sum, d) => {
     try {
-      return sum + BigInt(inputMinor(d.amount));
+      return sum + BigInt(moneyInputMinor(d.amount));
     } catch {
       return sum;
     }
@@ -228,7 +230,7 @@ export function InvoiceEditor({
         )
       }
     >
-      <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-500">
+      <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-500">
         Registrás una deuda administrativa. No modifica mercadería, precios ni
         Caja.
       </p>
@@ -246,7 +248,7 @@ export function InvoiceEditor({
           {error}
         </p>
       )}
-      {draft.locked && (
+      {draft.locked && !busy && (
         <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
           Solicitud enviada. Si hubo una interrupción, reintentá los mismos
           datos para no duplicar la factura.
@@ -254,7 +256,7 @@ export function InvoiceEditor({
       )}
       <fieldset disabled={busy || Boolean(draft.locked)} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs font-medium text-slate-500">
+          <label className="text-sm font-medium text-slate-500">
             Proveedor
             <SearchableSaleSelect
               label="Proveedor de la factura"
@@ -277,7 +279,7 @@ export function InvoiceEditor({
               }
             />
           </label>
-          <label className="text-xs font-medium text-slate-500">
+          <label className="text-sm font-medium text-slate-500">
             Fecha de registro
             <input
               type="date"
@@ -300,26 +302,25 @@ export function InvoiceEditor({
             />
           </label>
         </div>
-        <details className="rounded-lg border border-slate-100 p-3 text-xs text-slate-500">
+        <details className="rounded-lg border border-slate-100 p-3 text-sm text-slate-500">
           <summary className="cursor-pointer">
             Datos del comprobante (opcional)
           </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <label className="text-xs font-medium text-slate-500">
-              Tipo de comprobante
-              <select
-                className={`${field} mt-1`}
+            <div className="text-sm text-slate-500">
+              <p className="mb-1 font-medium">Tipo de comprobante</p>
+              <ProductFilterSelect
+                compact
+                label="Tipo de comprobante"
+                icon={null}
                 value={draft.documentType}
-                onChange={(e) => patch({ documentType: e.target.value })}
-              >
-                {Object.entries(documentLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-medium text-slate-500">
+                options={Object.entries(documentLabels).map(
+                  ([value, label]) => ({ value, label }),
+                )}
+                onChange={(documentType) => patch({ documentType })}
+              />
+            </div>
+            <label className="text-sm font-medium text-slate-500">
               Punto de venta
               <input
                 className={`${field} mt-1`}
@@ -330,7 +331,7 @@ export function InvoiceEditor({
                 onChange={(e) => patch({ pointOfSale: e.target.value })}
               />
             </label>
-            <label className="text-xs font-medium text-slate-500">
+            <label className="text-sm font-medium text-slate-500">
               Número de comprobante
               <input
                 className={`${field} mt-1`}
@@ -343,46 +344,45 @@ export function InvoiceEditor({
           </div>
         </details>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs font-medium text-slate-500">
-            Importe total a pagar (ARS)
-            <input
-              inputMode="decimal"
-              className={`${field} mt-1 font-semibold text-teal-800`}
-              placeholder="Ej. 500000,00"
-              value={draft.amount}
-              onChange={(e) => patch({ amount: e.target.value })}
-            />
-          </label>
-          <label className="text-xs font-medium text-slate-500">
-            Compra relacionada <span className="font-normal">(opcional)</span>
-            <select
-              className={`${field} mt-1`}
+          <MoneyInput
+            label="Importe total a pagar"
+            labelClassName={`${moneyLabel} font-medium`}
+            value={draft.amount}
+            onChange={(amount) => patch({ amount })}
+          />
+          <div className="text-sm text-slate-500">
+            <p className="mb-1 font-medium">
+              Compra relacionada <span className="font-normal">(opcional)</span>
+            </p>
+            <ProductFilterSelect
+              compact
+              label="Compra relacionada"
+              icon={null}
               value={draft.purchaseId}
               disabled={!draft.supplierId}
-              onChange={(e) =>
+              options={[
+                { value: "", label: "Sin compra relacionada" },
+                ...options.purchases
+                  .filter((p) => p.supplierId === draft.supplierId)
+                  .map((p) => ({
+                    value: p.id,
+                    label: `${p.reference || p.id.slice(0, 8).toUpperCase()} · ${ars(p.amountMinor)}`,
+                  })),
+              ]}
+              onChange={(purchaseId) =>
                 patch({
-                  purchaseId: e.target.value,
-                  amount: purchaseAmountInput(
-                    options.purchases.find((p) => p.id === e.target.value)
+                  purchaseId,
+                  amount: moneyAmount(
+                    options.purchases.find((p) => p.id === purchaseId)
                       ?.amountMinor,
                   ),
                 })
               }
-            >
-              <option value="">Sin compra relacionada</option>
-              {options.purchases
-                .filter((p) => p.supplierId === draft.supplierId)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.reference || p.id.slice(0, 8).toUpperCase()} ·{" "}
-                    {ars(p.amountMinor)}
-                  </option>
-                ))}
-            </select>
-          </label>
+            />
+          </div>
         </div>
         {linked && (
-          <p className="flex items-start gap-2 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-xs text-teal-800">
+          <p className="flex items-start gap-2 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-sm text-teal-800">
             <Link2 size={15} className="shrink-0" />
             <span>
               Estimado de la compra: <strong>{ars(linked.amountMinor)}</strong>.
@@ -401,7 +401,7 @@ export function InvoiceEditor({
         )}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50 p-3 sm:p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-slate-700">
               <CalendarDays size={16} className="text-teal-600" />
               Vencimiento
             </h3>
@@ -409,7 +409,7 @@ export function InvoiceEditor({
               <button
                 type="button"
                 title="Usar el plazo del proveedor desde la fecha de registro"
-                className="inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-700 hover:bg-teal-100"
+                className="inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-100"
                 onClick={() =>
                   patch({
                     ...supplierInvoiceDue(supplier, draft.issuedOn),
@@ -434,7 +434,7 @@ export function InvoiceEditor({
                 key={option.id}
                 type="button"
                 aria-pressed={draft.mode === option.id}
-                className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 ${draft.mode === option.id ? "bg-white font-semibold text-teal-800 shadow-sm" : "text-slate-500 hover:bg-white/60"}`}
+                className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 ${draft.mode === option.id ? "bg-white font-semibold text-teal-800 shadow-sm" : "text-slate-500 hover:bg-white/60"}`}
                 onClick={() =>
                   patch({
                     mode: option.id,
@@ -460,7 +460,7 @@ export function InvoiceEditor({
           </div>
           {draft.mode === "date" && (
             <div className="mt-3 grid items-end gap-3 sm:grid-cols-[220px_1fr]">
-              <label className="block text-xs text-slate-500">
+              <label className="block text-sm text-slate-500">
                 Fecha de vencimiento
                 <input
                   type="date"
@@ -472,14 +472,14 @@ export function InvoiceEditor({
                   }
                 />
               </label>
-              <p className="pb-2 text-xs leading-relaxed text-slate-400">
+              <p className="pb-2 text-sm leading-relaxed text-slate-400">
                 Una sola fecha para el total. Podés cambiar la sugerida por el
                 proveedor.
               </p>
             </div>
           )}
           {draft.mode === "none" && (
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-sm text-slate-500">
               Quedará pendiente, sin alertas de atraso hasta contar con una
               fecha.
             </p>
@@ -491,10 +491,10 @@ export function InvoiceEditor({
                   key={due.key}
                   className="grid grid-cols-[20px_1fr_1fr_30px] items-end gap-2"
                 >
-                  <span className="pb-3 text-xs text-slate-400">
+                  <span className="pb-3 text-sm text-slate-400">
                     {index + 1}
                   </span>
-                  <label className="text-xs text-slate-500">
+                  <label className="text-sm text-slate-500">
                     Fecha
                     <input
                       type="date"
@@ -513,24 +513,19 @@ export function InvoiceEditor({
                       }
                     />
                   </label>
-                  <label className="text-xs text-slate-500">
-                    Importe (ARS)
-                    <input
-                      inputMode="decimal"
-                      aria-label={`Importe del vencimiento ${index + 1}`}
-                      className={`${field} mt-1`}
-                      value={due.amount}
-                      onChange={(e) =>
-                        patch({
-                          dues: draft.dues.map((d) =>
-                            d.key === due.key
-                              ? { ...d, amount: e.target.value }
-                              : d,
-                          ),
-                        })
-                      }
-                    />
-                  </label>
+                  <MoneyInput
+                    label="Importe"
+                    ariaLabel={`Importe del vencimiento ${index + 1}`}
+                    labelClassName="text-sm text-slate-500"
+                    value={due.amount}
+                    onChange={(amount) =>
+                      patch({
+                        dues: draft.dues.map((d) =>
+                          d.key === due.key ? { ...d, amount } : d,
+                        ),
+                      })
+                    }
+                  />
                   <button
                     type="button"
                     aria-label={`Quitar vencimiento ${index + 1}`}
@@ -550,7 +545,7 @@ export function InvoiceEditor({
                 <button
                   type="button"
                   disabled={draft.dues.length >= 36}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-700"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-teal-700"
                   onClick={() =>
                     patch({
                       dues: [
@@ -564,7 +559,7 @@ export function InvoiceEditor({
                   Agregar vencimiento
                 </button>
                 <span
-                  className={`text-xs ${entered && splitTotal === BigInt(entered) ? "text-teal-700" : "text-amber-700"}`}
+                  className={`text-sm ${entered && splitTotal === BigInt(entered) ? "text-teal-700" : "text-amber-700"}`}
                 >
                   Asignado {ars(splitTotal.toString())}
                   {entered ? ` de ${ars(entered)}` : ""}
@@ -576,10 +571,10 @@ export function InvoiceEditor({
         <details className="text-sm">
           <summary className="cursor-pointer text-slate-500">
             Referencia y observaciones{" "}
-            <span className="text-xs">(opcional)</span>
+            <span className="text-sm">(opcional)</span>
           </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-slate-500">
+            <label className="text-sm text-slate-500">
               Referencia
               <input
                 className={`${field} mt-1`}
@@ -588,7 +583,7 @@ export function InvoiceEditor({
                 onChange={(e) => patch({ reference: e.target.value })}
               />
             </label>
-            <label className="text-xs text-slate-500">
+            <label className="text-sm text-slate-500">
               Observaciones
               <input
                 className={`${field} mt-1`}
@@ -601,7 +596,7 @@ export function InvoiceEditor({
         </details>
       </fieldset>
       <footer className="sticky -bottom-5 mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white py-4">
-        <p className="text-xs text-slate-500">
+        <p className="text-sm text-slate-500">
           Se registra al confirmar. No emite una factura fiscal.
         </p>
         <div className="flex gap-2">

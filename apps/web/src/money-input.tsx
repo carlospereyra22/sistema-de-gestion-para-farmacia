@@ -11,6 +11,7 @@ export function MoneyInput({
   required = true,
   disabled = false,
   labelClassName = "mt-4 block text-sm",
+  ariaLabel,
 }: {
   label: string;
   value: string;
@@ -18,6 +19,7 @@ export function MoneyInput({
   required?: boolean;
   disabled?: boolean;
   labelClassName?: string;
+  ariaLabel?: string;
 }): ReactElement {
   return (
     <label className={labelClassName}>
@@ -32,6 +34,7 @@ export function MoneyInput({
         <input
           type="text"
           inputMode="decimal"
+          aria-label={ariaLabel}
           autoComplete="off"
           required={required}
           disabled={disabled}

@@ -3,16 +3,19 @@ import { CheckCircle2, WalletCards } from "lucide-react";
 import {
   ars,
   dateLabel,
-  inputMinor,
+  moneyAmount,
+  moneyInputMinor,
   payableRequest,
   PayableError,
   paymentMethods,
-  purchaseAmountInput,
   type Invoice,
   type PayableScope,
   type SupplierPaymentInput,
 } from "./api";
-import { field, primary, secondary, PayableDialog } from "./dialog";
+import { ProductFilterSelect } from "../product-filter-select";
+import { MoneyInput } from "../money-input";
+import { field, moneyLabel, primary, secondary, PayableDialog } from "./dialog";
+import { PaymentConfirm } from "./payment-confirm";
 
 export function PaymentEditor({
   invoice,
@@ -40,18 +43,19 @@ export function PaymentEditor({
   });
   const [amount, setAmount] = useState(
       locked
-        ? purchaseAmountInput(locked.amountMinor)
-        : purchaseAmountInput(invoice.balanceMinor),
+        ? moneyAmount(locked.amountMinor)
+        : moneyAmount(invoice.balanceMinor),
     ),
     [paidOn, setPaidOn] = useState(locked?.paidOn ?? today),
     [method, setMethod] = useState(locked?.method ?? ""),
     [reference, setReference] = useState(locked?.reference ?? ""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [confirming, setConfirming] = useState(false);
   const gate = useRef(false);
   let entered = 0n;
   try {
-    entered = BigInt(inputMinor(amount));
+    entered = BigInt(moneyInputMinor(amount));
   } catch {
     /* Input still incomplete. */
   }
@@ -71,18 +75,28 @@ export function PaymentEditor({
       unassigned -= applied;
       return [{ date: d.dueOn, amount: applied }];
     });
-  const submit = async () => {
+  const problem = () => {
+    if (!method) return "Elegí el medio con el que realizaste el pago.";
+    if (!locked && (entered <= 0n || entered > balance))
+      return "El importe debe ser positivo y no superar el saldo.";
+    if (!paidOn || paidOn < invoice.issuedOn || paidOn > today)
+      return "Revisá la fecha del pago.";
+    return "";
+  };
+  const review = () => {
+    const message = problem();
+    setError(message);
+    if (message) return;
+    // Un reintento repite lo ya confirmado: solo el primer intento pregunta.
+    if (locked) void send();
+    else setConfirming(true);
+  };
+  const send = async () => {
     if (gate.current) return;
     try {
-      if (!method)
-        throw new Error("Elegí el medio con el que realizaste el pago.");
-      if (!locked && (entered <= 0n || entered > balance))
-        throw new Error("El importe debe ser positivo y no superar el saldo.");
-      if (!paidOn || paidOn < invoice.issuedOn || paidOn > today)
-        throw new Error("Revisá la fecha del pago.");
       const body = locked ?? {
         operationId: crypto.randomUUID(),
-        amountMinor: inputMinor(amount),
+        amountMinor: moneyInputMinor(amount),
         expectedBalanceMinor: invoice.balanceMinor,
         paidOn,
         method,
@@ -104,6 +118,7 @@ export function PaymentEditor({
         sessionStorage.removeItem(storageKey);
         setLocked(undefined);
       }
+      setConfirming(false);
       setError(
         e instanceof Error ? e.message : "No se pudo registrar el pago.",
       );
@@ -116,20 +131,41 @@ export function PaymentEditor({
     <PayableDialog
       title="Registrar pago"
       onClose={() => {
-        if (!busy) onClose();
+        if (busy) return;
+        if (confirming) setConfirming(false);
+        else onClose();
       }}
+      confirmationLabel="Confirmar pago"
+      confirmation={
+        confirming && (
+          <PaymentConfirm
+            supplierName={invoice.supplierName}
+            amount={ars(entered.toString())}
+            method={paymentMethods[method] ?? method}
+            date={dateLabel(paidOn)}
+            outcome={
+              remaining === 0n
+                ? "La deuda quedará pagada."
+                : `Quedará pendiente ${ars(remaining.toString())}.`
+            }
+            busy={busy}
+            onBack={() => setConfirming(false)}
+            onConfirm={() => void send()}
+          />
+        )
+      }
     >
       <div className="mb-4 flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4">
         <div>
-          <p className="text-sm font-semibold">{invoice.supplierName}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="text-base font-semibold">{invoice.supplierName}</p>
+          <p className="mt-1 text-sm text-slate-500">
             {invoice.reference ||
               invoice.documentNumber ||
               "Deuda sin comprobante"}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-500">Saldo pendiente</p>
+          <p className="text-sm text-slate-500">Saldo pendiente</p>
           <strong className="text-lg text-teal-700">
             {ars(invoice.balanceMinor)}
           </strong>
@@ -144,7 +180,7 @@ export function PaymentEditor({
         </p>
       )}
       {locked && (
-        <p className="mb-3 text-xs text-amber-700">
+        <p className="mb-3 text-sm text-amber-700">
           Solicitud conservada. Reintentá los mismos datos para verificar el
           resultado sin duplicar el pago.
         </p>
@@ -153,17 +189,13 @@ export function PaymentEditor({
         disabled={busy || Boolean(locked)}
         className="grid gap-3 sm:grid-cols-2"
       >
-        <label className="text-xs text-slate-500">
-          Importe pagado (ARS)
-          <input
-            autoFocus
-            className={`${field} mt-1 font-semibold text-teal-800`}
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-        </label>
-        <label className="text-xs text-slate-500">
+        <MoneyInput
+          label="Importe pagado"
+          labelClassName={moneyLabel}
+          value={amount}
+          onChange={setAmount}
+        />
+        <label className="text-sm text-slate-500">
           Fecha del pago
           <input
             className={`${field} mt-1`}
@@ -174,22 +206,25 @@ export function PaymentEditor({
             onChange={(e) => setPaidOn(e.target.value)}
           />
         </label>
-        <label className="text-xs text-slate-500">
-          Medio de pago
-          <select
-            className={`${field} mt-1`}
+        <div className="text-sm text-slate-500">
+          <p className="mb-1">Medio de pago</p>
+          <ProductFilterSelect
+            compact
+            label="Medio de pago"
+            icon={null}
             value={method}
-            onChange={(e) => setMethod(e.target.value)}
-          >
-            <option value="">Seleccionar…</option>
-            {Object.entries(paymentMethods).map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-xs text-slate-500">
+            disabled={busy || Boolean(locked)}
+            options={[
+              { value: "", label: "Seleccionar…" },
+              ...Object.entries(paymentMethods).map(([value, label]) => ({
+                value,
+                label,
+              })),
+            ]}
+            onChange={setMethod}
+          />
+        </div>
+        <label className="text-sm text-slate-500">
           Referencia (opcional)
           <input
             className={`${field} mt-1`}
@@ -209,7 +244,7 @@ export function PaymentEditor({
         </div>
       )}
       {invoice.dues.length > 1 && (
-        <details className="mt-3 text-xs text-slate-500">
+        <details className="mt-3 text-sm text-slate-500">
           <summary className="cursor-pointer">
             Aplicación a vencimientos · Primero los más antiguos
           </summary>
@@ -224,18 +259,14 @@ export function PaymentEditor({
         </details>
       )}
       <footer className="mt-5 border-t border-slate-100 pt-4">
-        <p className="mb-3 text-xs text-slate-500">
+        <p className="mb-3 text-sm text-slate-500">
           Confirmás un pago ya realizado. No envía dinero ni modifica Caja.
         </p>
         <div className="flex justify-end gap-2">
           <button className={secondary} disabled={busy} onClick={onClose}>
             {locked ? "Cerrar y conservar solicitud" : "Cancelar"}
           </button>
-          <button
-            className={primary}
-            disabled={busy}
-            onClick={() => void submit()}
-          >
+          <button className={primary} disabled={busy} onClick={review}>
             <WalletCards size={16} />
             {busy
               ? "Registrando…"
