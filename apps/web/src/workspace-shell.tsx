@@ -116,7 +116,12 @@ import { ReportsWorkspace } from "./reports-workspace";
 import { DashboardRecentSales } from "./dashboard-recent-sales";
 import { ProductSyncStatus } from "./product-sync-status";
 import { CatalogUpdateStatus } from "./catalog-update-status";
-import { lotHasManyCosts, lotReceiptRows } from "./lib/lot-costs";
+import {
+  adjustmentsByLot,
+  lotHasManyCosts,
+  lotReceiptRows,
+  supplierNamesById,
+} from "./lib/lot-costs";
 import { DistributionWorkspace } from "./distribution-workspace";
 import {
   ProductFormImage,
@@ -190,6 +195,8 @@ import {
 import {
   NO_SUPPLIER,
   noSupplierOption,
+  inventoryAdjustSuppliers,
+  inventoryDefaultAdjustSupplier,
   inventoryDefaultReturnSupplier,
   inventoryReturnSuppliers,
   inventorySupplierOption,
@@ -216,8 +223,13 @@ import { shouldFocusSalesBackground } from "./lib/sales-background-focus";
 import { CatalogOptionsManager } from "./catalog-options-manager";
 import { CatalogOptionSelect } from "./catalog-option-select";
 import { createOrSelectCatalogOption } from "./lib/catalog-option";
+import { StockAdjustmentCost } from "./stock-adjustment-cost";
 import { StockAdjustmentQuantity } from "./stock-adjustment-quantity";
-import { stockAdjustmentDelta } from "./lib/stock-adjustment";
+import {
+  stockAdjustmentCost,
+  stockAdjustmentDelta,
+  type AdjustmentCostMode,
+} from "./lib/stock-adjustment";
 import { ProductSaveErrorDialog } from "./product-save-error-dialog";
 import { MedicineReferenceNote } from "./medicine-reference-note";
 import { medicineSources } from "./lib/medicine-search";
@@ -1671,6 +1683,14 @@ function Products({
     () => new Map(costs?.lots.map((item) => [item.lotId, item.receipts])),
     [costs],
   );
+  const lotAdjustments = useMemo(
+    () => adjustmentsByLot(costs?.adjustments),
+    [costs],
+  );
+  const lotSupplierNames = useMemo(
+    () => supplierNamesById(costs?.suppliers),
+    [costs],
+  );
   // "Precio general" es lo que la tabla ya muestra como Público.
   const selectablePriceLists = priceLists.filter(
     (list) => list.name !== "Precio general",
@@ -3008,6 +3028,8 @@ function Products({
                             lotReceiptRows(
                               lotCosts.get(lot.id),
                               lot.unitCostMinor,
+                              lotAdjustments.get(lot.id),
+                              lotSupplierNames,
                             )
                           }
                         />
@@ -4213,6 +4235,10 @@ function Inventory({
     "subtract" | "add"
   >("add");
   const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [adjustmentSupplierId, setAdjustmentSupplierId] = useState("");
+  const [adjustmentCostMode, setAdjustmentCostMode] =
+    useState<AdjustmentCostMode>("none");
+  const [adjustmentCost, setAdjustmentCost] = useState("");
   const [suppliers, setSuppliers] = useState<Party[]>([]);
   const [returnSupplierId, setReturnSupplierId] = useState("");
   const [returnProductId, setReturnProductId] = useState("");
@@ -4221,6 +4247,7 @@ function Inventory({
   const [returnReason, setReturnReason] = useState("");
   const scannerInputRef = useRef<HTMLInputElement>(null);
   const lotInputRef = useRef<HTMLInputElement>(null);
+  const receiveQuantityInputRef = useRef<HTMLInputElement>(null);
   const adjustmentLotSelectRef = useRef<HTMLInputElement>(null);
   const adjustmentQuantityInputRef = useRef<HTMLInputElement>(null);
   const [adjustmentError, setAdjustmentError] = useState("");
@@ -4247,6 +4274,36 @@ function Inventory({
     stock.find((lot) => lot.id === returnLotId),
     supplierOptions,
   );
+  const adjustmentLot = stock.find((lot) => lot.id === adjustmentLotId);
+  const adjustmentSupplierOptions = inventoryAdjustSuppliers(
+    adjustmentLot,
+    supplierOptions,
+    adjustmentDirection,
+  );
+  const clearAdjustmentCost = () => {
+    setAdjustmentCostMode("none");
+    setAdjustmentCost("");
+  };
+  const chooseAdjustmentLot = (id: string, supplierId?: string) => {
+    setAdjustmentLotId(id);
+    clearAdjustmentCost();
+    setAdjustmentSupplierId(
+      supplierId ??
+        inventoryDefaultAdjustSupplier(stock.find((lot) => lot.id === id)),
+    );
+  };
+  // Lo elegido para sumar puede no tener unidades para restar.
+  const chooseAdjustmentDirection = (direction: "subtract" | "add") => {
+    setAdjustmentDirection(direction);
+    if (direction === "subtract") clearAdjustmentCost();
+    const available = inventoryAdjustSuppliers(
+      adjustmentLot,
+      supplierOptions,
+      direction,
+    );
+    if (!available.some((option) => option.value === adjustmentSupplierId))
+      setAdjustmentSupplierId(inventoryDefaultAdjustSupplier(adjustmentLot));
+  };
   const chooseReturnLot = (id: string, supplierId?: string) => {
     setReturnLotId(id);
     setReturnSupplierId(
@@ -4286,7 +4343,7 @@ function Inventory({
     setScanStatus(`${product.name}. ${detail}`);
     if (inventoryMode === "adjust") {
       setAdjustmentProductId(product.id);
-      setAdjustmentLotId(selectedLot?.id ?? "");
+      chooseAdjustmentLot(selectedLot?.id ?? "");
       window.requestAnimationFrame(() =>
         (selectedLot
           ? adjustmentQuantityInputRef.current
@@ -4326,10 +4383,21 @@ function Inventory({
     setExpiresAt(lot.expiresAt?.slice(0, 10) ?? "");
   };
   // Atajos desde un lote de la tabla: abren el formulario con el lote elegido.
-  const adjustLot = (lot: StockLot) => {
+  const receiveLot = (lot: StockLot, supplierId?: string) => {
+    setInventoryMode("receive");
+    setProductId(lot.productId);
+    setReceiveSupplierId(supplierId ?? inventoryDefaultAdjustSupplier(lot));
+    pickReceiveLot(lot);
+    setScanStatus("");
+    setScanError(false);
+    window.requestAnimationFrame(() =>
+      receiveQuantityInputRef.current?.focus(),
+    );
+  };
+  const adjustLot = (lot: StockLot, supplierId?: string) => {
     setInventoryMode("adjust");
     setAdjustmentProductId(lot.productId);
-    setAdjustmentLotId(lot.id);
+    chooseAdjustmentLot(lot.id, supplierId);
     setScanStatus("");
     setScanError(false);
     window.requestAnimationFrame(() =>
@@ -4357,7 +4425,7 @@ function Inventory({
   };
   const clearAdjustForm = () => {
     setAdjustmentProductId("");
-    setAdjustmentLotId("");
+    chooseAdjustmentLot("");
     setAdjustmentQuantity("");
     setAdjustmentReason("");
     setScannedCode("");
@@ -4400,14 +4468,28 @@ function Inventory({
   };
   const adjust = async (event: FormEvent) => {
     event.preventDefault();
+    if (!adjustmentSupplierId) {
+      setAdjustmentError("Elegí de qué proveedor son las unidades.");
+      return;
+    }
     try {
       await adjustStock(token, organizationId, branchId, {
         lotId: adjustmentLotId,
         quantity: stockAdjustmentDelta(adjustmentQuantity, adjustmentDirection),
         reason: adjustmentReason,
+        supplierId:
+          adjustmentSupplierId === NO_SUPPLIER ? null : adjustmentSupplierId,
+        unitCostMinor: stockAdjustmentCost(
+          adjustmentCostMode,
+          adjustmentDirection,
+          adjustmentLot?.unitCostMinor,
+          adjustmentCost,
+        ),
       });
+      clearAdjustmentCost();
       setAdjustmentQuantity("");
       setAdjustmentReason("");
+      setAdjustmentSupplierId(inventoryDefaultAdjustSupplier(adjustmentLot));
       setScannedCode("");
       setScanStatus("Ajuste registrado. Escaneá el siguiente producto.");
       setScanError(false);
@@ -4484,6 +4566,7 @@ function Inventory({
             branchId={branchId}
             done={done}
             onAdjust={adjustLot}
+            onReceive={receiveLot}
             onReturn={returnLot}
             footer={
               <Pagination
@@ -4583,6 +4666,7 @@ function Inventory({
               type="number"
               value={quantity}
               onChange={setQuantity}
+              inputRef={receiveQuantityInputRef}
             />
             <MoneyInput
               label="Costo unitario"
@@ -4649,10 +4733,10 @@ function Inventory({
               lotInputRef={adjustmentLotSelectRef}
               onProductChange={(id) => {
                 setAdjustmentProductId(id);
-                setAdjustmentLotId("");
+                chooseAdjustmentLot("");
               }}
               onLotChange={(id) => {
-                setAdjustmentLotId(id);
+                chooseAdjustmentLot(id);
                 if (id)
                   window.requestAnimationFrame(() =>
                     adjustmentQuantityInputRef.current?.focus(),
@@ -4661,11 +4745,30 @@ function Inventory({
             />
             <StockAdjustmentQuantity
               direction={adjustmentDirection}
-              onDirectionChange={setAdjustmentDirection}
+              onDirectionChange={chooseAdjustmentDirection}
               value={adjustmentQuantity}
               onChange={setAdjustmentQuantity}
               inputRef={adjustmentQuantityInputRef}
             />
+            <InventorySearchSelect
+              label="Proveedor"
+              value={adjustmentSupplierId}
+              options={adjustmentSupplierOptions}
+              disabled={!adjustmentLotId}
+              placeholder={
+                adjustmentLotId ? "Elegí el proveedor" : "Elegí primero el lote"
+              }
+              onChange={setAdjustmentSupplierId}
+            />
+            {adjustmentDirection === "add" ? (
+              <StockAdjustmentCost
+                lastCostMinor={adjustmentLot?.unitCostMinor}
+                mode={adjustmentCostMode}
+                onModeChange={setAdjustmentCostMode}
+                value={adjustmentCost}
+                onChange={setAdjustmentCost}
+              />
+            ) : null}
             <Input
               label="Motivo"
               value={adjustmentReason}

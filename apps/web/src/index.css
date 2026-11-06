@@ -200,6 +200,13 @@
   background: #fff2d8;
   color: #d97706;
 }
+/* Acciones de un lote: mismo tamaño en el lote y en cada proveedor. */
+.lot-action {
+  min-width: 76px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
 /* El tamaño va acá: la regla global de button pisa las utilidades de Tailwind. */
 .cash-opening-suggestion {
   display: flex;

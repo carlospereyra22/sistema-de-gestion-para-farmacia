@@ -17,6 +17,23 @@ describe("unidades de cada proveedor en un lote", () => {
     expect(breakdown(42)).toEqual({ juan: 41, carlos: 1 });
   });
 
+  it("un ajuste que resta sale del proveedor elegido y el resto del más viejo", () => {
+    expect(
+      breakdown(12, { returns: [{ supplierId: "carlos", quantity: 1 }] }),
+    ).toEqual({ juan: 12, carlos: 0 });
+  });
+
+  it("un ajuste que resta Sin proveedor no toca a los proveedores", () => {
+    expect(
+      Object.fromEntries(
+        lotSupplierBreakdown(12, {
+          receipts: [{ supplierId: "juan", quantity: 10 }],
+          returns: [{ supplierId: null, quantity: 3 }],
+        }),
+      ),
+    ).toEqual({ juan: 10, null: 2 });
+  });
+
   it("las ventas gastan primero lo más viejo", () => {
     expect(breakdown(12)).toEqual({ juan: 11, carlos: 1 });
     expect(breakdown(1)).toEqual({ juan: 0, carlos: 1 });

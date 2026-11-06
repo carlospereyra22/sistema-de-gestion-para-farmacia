@@ -13,9 +13,10 @@ import {
   loadLotHistories,
   lotReturnableStock,
   lotSupplierBreakdown,
+  SUPPLIER_ADJUSTMENT,
 } from "./lot-suppliers";
 import { stockAvailability } from "./stock-availability";
-import { inventoryCosts } from "./lot-costs";
+import { inventoryCosts, lotAdjustments, lotReturns } from "./lot-costs";
 
 function lotSupplierStock(
   stock: ReturnType<typeof lotReturnableStock>,
@@ -240,8 +241,11 @@ export class InventoryService {
         where: {
           organizationId,
           branchId,
-          type: "PURCHASE_RECEIPT",
           lotId: { not: null },
+          OR: [
+            { type: "PURCHASE_RECEIPT" },
+            { type: "ADJUSTMENT_IN", unitCostMinor: { not: null } },
+          ],
         },
         orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
         select: {
@@ -252,6 +256,8 @@ export class InventoryService {
           occurredAt: true,
           unitCostMinor: true,
           referenceType: true,
+          supplierId: true,
+          type: true,
         },
       }),
       this.prisma.productLot.findMany({
@@ -265,23 +271,65 @@ export class InventoryService {
         },
       }),
     ]);
-    const purchaseItems = await this.prisma.purchaseReceiptItem.findMany({
+    const stockedLotIds = lots
+      .filter((lot) => lot.quantity > 0)
+      .map((lot) => lot.id);
+    const [purchaseItems, adjustments, returns] = await Promise.all([
+      this.prisma.purchaseReceiptItem.findMany({
+        where: {
+          movementId: {
+            in: movements
+              .filter((movement) => movement.unitCostMinor === null)
+              .map((movement) => movement.id),
+          },
+        },
+        select: { movementId: true, unitCostMinor: true },
+      }),
+      this.prisma.auditLog.findMany({
+        where: {
+          organizationId,
+          branchId,
+          entityType: "PRODUCT_LOT",
+          action: "STOCK_ADJUSTED",
+          entityId: { in: stockedLotIds },
+        },
+        select: { entityId: true, createdAt: true, after: true },
+      }),
+      this.prisma.supplierReturn.findMany({
+        where: { organizationId, branchId, lotId: { in: stockedLotIds } },
+        select: {
+          lotId: true,
+          supplierId: true,
+          quantity: true,
+          reason: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+    const lotChanges = [...lotAdjustments(adjustments), ...lotReturns(returns)];
+    // Incluye los dados de baja: el historial conserva quién entregó cada carga.
+    const suppliers = await this.prisma.supplier.findMany({
       where: {
-        movementId: {
-          in: movements
-            .filter((movement) => movement.unitCostMinor === null)
-            .map((movement) => movement.id),
+        organizationId,
+        id: {
+          in: [...movements, ...lotChanges].flatMap((item) =>
+            item.supplierId ? [item.supplierId] : [],
+          ),
         },
       },
-      select: { movementId: true, unitCostMinor: true },
+      select: { id: true, name: true },
     });
-    return inventoryCosts(
-      movements,
-      new Map(
-        purchaseItems.map((item) => [item.movementId, item.unitCostMinor]),
+    return {
+      ...inventoryCosts(
+        movements,
+        new Map(
+          purchaseItems.map((item) => [item.movementId, item.unitCostMinor]),
+        ),
+        lots,
       ),
-      lots,
-    );
+      adjustments: lotChanges,
+      suppliers,
+    };
   }
 
   async expiring(actorId: string, organizationId: string, branchId: string) {
@@ -444,14 +492,22 @@ export class InventoryService {
       lotId: string;
       quantity: number;
       reason: string;
+      supplierId?: string | null;
+      unitCostMinor?: number;
     },
   ) {
     await this.assert(actorId, input.organizationId, "INVENTORY_MANAGE");
+    if (input.unitCostMinor !== undefined && input.quantity < 0)
+      throw new BadRequestException(
+        "El costo solo se indica al sumar unidades.",
+      );
     if (!input.quantity)
       throw new ForbiddenException(
         "La variación de cantidad no puede ser 0: no modificaría el stock. Ingresá un número positivo para sumar unidades o negativo para restarlas. Para dejar el lote en cero, restá su cantidad actual.",
       );
     return this.prisma.$transaction(async (tx) => {
+      // Dos ajustes a la vez no pueden pasarse de lo que tiene el proveedor.
+      await tx.$queryRaw`SELECT id FROM "ProductLot" WHERE id=${input.lotId}::uuid FOR UPDATE`;
       const lot = await tx.productLot.findFirst({
         where: {
           id: input.lotId,
@@ -464,9 +520,19 @@ export class InventoryService {
         throw new ForbiddenException(
           "The adjustment would create negative stock.",
         );
+      await this.assertAdjustmentSupplier(tx, lot, input);
       const updated = await tx.productLot.update({
         where: { id: lot.id },
-        data: { quantity: { increment: input.quantity } },
+        data: {
+          quantity: { increment: input.quantity },
+          // Igual que una recepción: el costo del lote pasa a ser el último.
+          ...(input.unitCostMinor === undefined
+            ? {}
+            : {
+                unitCostMinor: BigInt(input.unitCostMinor),
+                metadataVersion: { increment: 1 },
+              }),
+        },
       });
       await tx.inventoryMovement.create({
         data: {
@@ -477,7 +543,12 @@ export class InventoryService {
           type: input.quantity > 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT",
           quantity: input.quantity,
           actorId,
-          referenceType: "ADJUSTMENT",
+          referenceType:
+            input.supplierId === undefined ? "ADJUSTMENT" : SUPPLIER_ADJUSTMENT,
+          supplierId: input.supplierId ?? null,
+          ...(input.unitCostMinor === undefined
+            ? {}
+            : { unitCostMinor: BigInt(input.unitCostMinor) }),
         },
       });
       await this.audit.recordInTransaction(tx, {
@@ -487,11 +558,20 @@ export class InventoryService {
         entityType: "PRODUCT_LOT",
         entityId: lot.id,
         action: "STOCK_ADJUSTED",
-        before: { quantity: lot.quantity },
+        before: {
+          quantity: lot.quantity,
+          unitCostMinor: lot.unitCostMinor.toString(),
+        },
         after: {
           quantity: updated.quantity,
           delta: input.quantity,
           reason: input.reason.trim(),
+          ...(input.supplierId === undefined
+            ? {}
+            : { supplierId: input.supplierId }),
+          ...(input.unitCostMinor === undefined
+            ? {}
+            : { unitCostMinor: String(input.unitCostMinor) }),
         },
       });
       return { id: updated.id, quantity: updated.quantity };
@@ -535,21 +615,7 @@ export class InventoryService {
         throw new NotFoundException("Supplier is unavailable.");
       if (!lot || lot.quantity < input.quantity)
         throw new ForbiddenException("Insufficient stock for supplier return.");
-      const breakdown = lotSupplierBreakdown(
-        lot.quantity,
-        (await loadLotHistories(tx, [lot.id])).get(lot.id)!,
-      );
-      const activeSuppliers = await tx.supplier.findMany({
-        where: {
-          id: { in: [...breakdown.keys()].filter((id) => id !== null) },
-          active: true,
-        },
-        select: { id: true },
-      });
-      const { suppliers, unassigned } = lotReturnableStock(
-        breakdown,
-        new Set(activeSuppliers.map((item) => item.id)),
-      );
+      const { suppliers, unassigned } = await this.lotStockBySupplier(tx, lot);
       // A quien entregó el lote solo se le devuelve lo suyo. El stock sin
       // proveedor sale sin proveedor o a uno que no figura en el lote.
       const delivered = supplier ? suppliers.has(supplier.id) : false;
@@ -609,6 +675,68 @@ export class InventoryService {
       });
       return supplierReturn;
     });
+  }
+
+  /** Lo que tiene hoy cada proveedor activo del lote y lo que queda sin proveedor. */
+  private async lotStockBySupplier(
+    tx: Prisma.TransactionClient,
+    lot: { id: string; quantity: number },
+  ) {
+    const breakdown = lotSupplierBreakdown(
+      lot.quantity,
+      (await loadLotHistories(tx, [lot.id])).get(lot.id)!,
+    );
+    const activeSuppliers = await tx.supplier.findMany({
+      where: {
+        id: { in: [...breakdown.keys()].filter((id) => id !== null) },
+        active: true,
+      },
+      select: { id: true },
+    });
+    return lotReturnableStock(
+      breakdown,
+      new Set(activeSuppliers.map((item) => item.id)),
+    );
+  }
+
+  /** Restar sale de quien tiene unidades; sumar puede ser de cualquier proveedor activo. */
+  private async assertAdjustmentSupplier(
+    tx: Prisma.TransactionClient,
+    lot: { id: string; quantity: number },
+    input: {
+      organizationId: string;
+      quantity: number;
+      supplierId?: string | null;
+    },
+  ) {
+    const { supplierId, quantity } = input;
+    if (
+      supplierId &&
+      !(await tx.supplier.findFirst({
+        where: {
+          id: supplierId,
+          organizationId: input.organizationId,
+          active: true,
+        },
+      }))
+    )
+      throw new NotFoundException("El proveedor no está disponible.");
+    if (quantity > 0) return;
+    const { suppliers, unassigned } = await this.lotStockBySupplier(tx, lot);
+    if (supplierId === undefined) {
+      const origins =
+        [...suppliers.values()].filter(Boolean).length + (unassigned ? 1 : 0);
+      if (origins > 1)
+        throw new BadRequestException(
+          "Este lote tiene varios proveedores. Elegí de cuál son las unidades.",
+        );
+      return;
+    }
+    const limit = supplierId ? (suppliers.get(supplierId) ?? 0) : unassigned;
+    if (-quantity > limit)
+      throw new ForbiddenException(
+        `${supplierId ? "Ese proveedor tiene" : "Sin proveedor hay"} ${limit} un. en este lote.`,
+      );
   }
 
   private async branch(organizationId: string, branchId: string) {

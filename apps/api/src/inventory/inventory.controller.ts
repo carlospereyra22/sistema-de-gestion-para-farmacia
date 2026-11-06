@@ -45,6 +45,9 @@ class AdjustStockDto {
   @IsString() lotId!: string;
   @Type(() => Number) @IsInt() quantity!: number;
   @IsString() @IsNotEmpty() reason!: string;
+  // null es Sin proveedor; sin el campo, no se indicó.
+  @IsOptional() @IsUUID() supplierId?: string | null;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) unitCostMinor?: number;
 }
 class EditLotDto {
   @ValidateIf((_object, value: unknown) => value !== undefined)

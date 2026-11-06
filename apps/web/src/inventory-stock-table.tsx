@@ -34,7 +34,7 @@ const columns: DataTableColumn[] = [
 ];
 
 const lotButton =
-  "rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-2 focus-visible:outline-teal-600";
+  "lot-action rounded-lg border border-slate-200 bg-white font-medium text-slate-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-2 focus-visible:outline-teal-600";
 
 export function InventoryStockTable({
   rows,
@@ -44,6 +44,7 @@ export function InventoryStockTable({
   branchId,
   done,
   onAdjust,
+  onReceive,
   onReturn,
   footer,
 }: {
@@ -53,7 +54,8 @@ export function InventoryStockTable({
   organizationId: string;
   branchId: string;
   done: () => void;
-  onAdjust: (lot: StockLot) => void;
+  onAdjust: (lot: StockLot, supplierId?: string) => void;
+  onReceive: (lot: StockLot, supplierId?: string) => void;
   onReturn: (lot: StockLot, supplierId?: string) => void;
   footer?: ReactNode;
 }) {
@@ -125,15 +127,7 @@ export function InventoryStockTable({
                 <span className="text-xs text-slate-500">un.</span>
               </DataTableCell>
               <DataTableCell align="right" numeric>
-                <span
-                  className={
-                    row.sellable === row.physical
-                      ? "text-slate-700"
-                      : "font-medium text-rose-700"
-                  }
-                >
-                  {row.sellable}
-                </span>
+                <span className="text-slate-700">{row.sellable}</span>
               </DataTableCell>
               <DataTableCell numeric>
                 {nextExpiry
@@ -164,7 +158,7 @@ export function InventoryStockTable({
                   lots={row.lots}
                   hidden={row.hiddenLots}
                   actions={(lot) => (
-                    <span className="inline-flex items-center justify-end gap-1.5">
+                    <span className="inline-flex items-center justify-end gap-2">
                       <LotMetadataEditor
                         compact
                         token={token}
@@ -173,40 +167,70 @@ export function InventoryStockTable({
                         lot={lot}
                         done={done}
                       />
-                      <button
-                        type="button"
-                        aria-label={`Ajustar lote ${lot.number} de ${row.name}`}
-                        onClick={() => onAdjust(lot)}
-                        className={lotButton}
-                      >
-                        Ajustar
-                      </button>
                       {lotHasSupplierRows(lot) ? null : (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Recibir lote ${lot.number} de ${row.name}`}
+                            onClick={() => onReceive(lot)}
+                            className={lotButton}
+                          >
+                            Recibir
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Ajustar lote ${lot.number} de ${row.name}`}
+                            onClick={() => onAdjust(lot)}
+                            className={lotButton}
+                          >
+                            Ajustar
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Devolver lote ${lot.number} de ${row.name}`}
+                            onClick={() => onReturn(lot)}
+                            className={lotButton}
+                          >
+                            Devolver
+                          </button>
+                        </>
+                      )}
+                    </span>
+                  )}
+                  supplierActions={(lot, supplier) => {
+                    const origin = supplier
+                      ? `${supplier.name}`
+                      : "sin proveedor";
+                    const supplierId = supplier?.id ?? NO_SUPPLIER;
+                    return (
+                      <span className="inline-flex items-center justify-end gap-2">
                         <button
                           type="button"
-                          aria-label={`Devolver lote ${lot.number} de ${row.name}`}
-                          onClick={() => onReturn(lot)}
+                          aria-label={`Recibir ${origin} lote ${lot.number} de ${row.name}`}
+                          onClick={() => onReceive(lot, supplierId)}
+                          className={lotButton}
+                        >
+                          Recibir
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Ajustar ${origin} lote ${lot.number} de ${row.name}`}
+                          onClick={() => onAdjust(lot, supplierId)}
+                          className={lotButton}
+                        >
+                          Ajustar
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Devolver ${supplier ? `a ${supplier.name}` : "sin proveedor"} lote ${lot.number} de ${row.name}`}
+                          onClick={() => onReturn(lot, supplierId)}
                           className={lotButton}
                         >
                           Devolver
                         </button>
-                      )}
-                    </span>
-                  )}
-                  supplierActions={(lot, supplier) =>
-                    supplier?.quantity === 0 ? null : (
-                      <button
-                        type="button"
-                        aria-label={`Devolver ${supplier ? `a ${supplier.name}` : "sin proveedor"} lote ${lot.number} de ${row.name}`}
-                        onClick={() =>
-                          onReturn(lot, supplier?.id ?? NO_SUPPLIER)
-                        }
-                        className={lotButton}
-                      >
-                        Devolver
-                      </button>
-                    )
-                  }
+                      </span>
+                    );
+                  }}
                 />
               </DataTableDetailRow>
             ) : null}

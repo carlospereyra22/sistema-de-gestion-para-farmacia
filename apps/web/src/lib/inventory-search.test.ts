@@ -10,7 +10,10 @@ import {
   inventoryDefaultReturnSupplier,
   inventoryProductOption,
   inventoryReturnSuppliers,
+  inventoryAdjustSuppliers,
+  inventoryDefaultAdjustSupplier,
   lotHasSupplierRows,
+  lotStockOrigins,
   lotSupplierSummary,
   inventorySupplierOption,
   scanAutoDelay,
@@ -149,6 +152,78 @@ it("con stock sin proveedor suma al resto de los proveedores", () => {
   expect(lotHasSupplierRows(lot)).toBe(true);
   expect(lotHasSupplierRows({ ...lot, unassignedQuantity: 0 })).toBe(false);
   expect(lotSupplierSummary(lot)).toBe("B · 1 un. / Sin proveedor · 40 un.");
+});
+
+describe("proveedor al ajustar", () => {
+  const all = [
+    inventorySupplierOption({ id: "a", name: "A" }),
+    inventorySupplierOption({ id: "b", name: "B" }),
+  ];
+  const lot = {
+    suppliers: [
+      { id: "a", name: "A", quantity: 0 },
+      { id: "b", name: "B", quantity: 2 },
+    ],
+    unassignedQuantity: 3,
+  };
+
+  it("al restar ofrece sólo quien tiene unidades, con cuántas", () => {
+    expect(
+      inventoryAdjustSuppliers(lot, all, "subtract").map((option) => [
+        option.value,
+        option.detail,
+      ]),
+    ).toEqual([
+      ["b", "2 un. de este lote"],
+      [NO_SUPPLIER, "3 un. de este lote"],
+    ]);
+  });
+  it("al sumar ofrece Sin proveedor y todos los proveedores", () => {
+    expect(
+      inventoryAdjustSuppliers(lot, all, "add").map((option) => option.value),
+    ).toEqual([NO_SUPPLIER, "a", "b"]);
+  });
+  it("sin lote no ofrece nada", () => {
+    expect(inventoryAdjustSuppliers(undefined, all, "add")).toEqual([]);
+  });
+  it("elige solo cuando hay un único origen", () => {
+    expect(inventoryDefaultAdjustSupplier(undefined)).toBe("");
+    expect(inventoryDefaultAdjustSupplier(lot)).toBe("");
+    expect(
+      inventoryDefaultAdjustSupplier({ ...lot, unassignedQuantity: 0 }),
+    ).toBe("b");
+    expect(inventoryDefaultAdjustSupplier({ unassignedQuantity: 3 })).toBe(
+      NO_SUPPLIER,
+    );
+  });
+});
+
+describe("lotStockOrigins", () => {
+  const juan = { id: "a", name: "juan", quantity: 0 };
+  const carlos = { id: "b", name: "carlos", quantity: 2 };
+
+  it("deja sólo lo que el lote tiene hoy, con Sin proveedor al final", () => {
+    expect(
+      lotStockOrigins({ suppliers: [juan, carlos], unassignedQuantity: 34 }),
+    ).toEqual([
+      { key: "b", name: "carlos", quantity: 2, supplier: carlos },
+      { key: NO_SUPPLIER, name: "Sin proveedor", quantity: 34, supplier: null },
+    ]);
+  });
+  it("incluye el stock sin proveedor aunque no haya proveedores conocidos", () => {
+    expect(
+      lotStockOrigins({ unassignedQuantity: 401 }).map((row) => row.name),
+    ).toEqual(["Sin proveedor"]);
+    expect(lotStockOrigins({})).toEqual([]);
+  });
+  it("con un solo origen restante no pide renglones", () => {
+    const lot = { suppliers: [juan], unassignedQuantity: 34 };
+    expect(lotHasSupplierRows(lot)).toBe(false);
+    expect(lotSupplierSummary(lot)).toBe("Sin proveedor · 34 un.");
+  });
+  it("sin proveedores conocidos no agrega aclaración", () => {
+    expect(lotSupplierSummary({ unassignedQuantity: 401 })).toBe("");
+  });
 });
 
 it("elige solo el proveedor del lote cuando no hay nada que decidir", () => {
