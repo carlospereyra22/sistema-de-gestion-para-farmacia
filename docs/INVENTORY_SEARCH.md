@@ -26,9 +26,9 @@ Reemplaza la lista plana de lotes descripta arriba: lo anterior sobre búsqueda 
 
 - **Una fila por producto**, con lotes, stock físico, vendibles, próximo vencimiento y estado. Reutiliza los criterios de Productos (`productStockStatus`, `byLotOrder`, `catalogStockTone`), así que las dos pantallas informan lo mismo.
 - **Lotes desplegables**: tocar la fila abre sus lotes (`ProductLotsDetail`) con editar, Ajustar y Devolver. Ajustar y Devolver abren el formulario de la derecha con el lote elegido; no registran nada por sí solos.
-- **Tarjetas** Sin stock, Stock bajo, Por vencer y Vencidos, iguales a las de Productos: tocarlas filtra y tocarlas de nuevo quita el filtro. También están los desplegables Stock y Vencimiento.
+- **Filtros** Stock y Vencimiento: ofrecen Sin stock, Stock bajo, Vencidos y los próximos a vencer. Las tarjetas de arriba se quitaron el 06/11/2026; Productos las conserva.
 - **Dos buscadores**: el principal busca por nombre, código de barras, laboratorio, presentación, principio activo y forma farmacéutica; "Buscar por lote..." busca sólo el número de lote, ignora mayúsculas, espacios y guiones, y abre el producto con ese lote. El buscador principal ya no encuentra números de lote.
-- **Qué se lista**: los productos activos de la sucursal y cualquier producto con unidades, aunque esté archivado o no figure en el catálogo cargado. Las tarjetas cuentan ese mismo conjunto, por lo que pueden diferir de Productos si hay archivados con stock.
+- **Qué se lista**: los productos activos de la sucursal y cualquier producto con unidades, aunque esté archivado o no figure en el catálogo cargado.
 - **Vencimiento y lote**: muestran sólo los lotes que cumplen y avisan cuántos quedan ocultos. El stock y los vendibles de la fila siguen siendo los totales del producto.
 - **Orden**: próximos a vencer, normales, vencidos y al final los productos sin stock. Se pagina de a 10 productos; cambiar un filtro vuelve a la página 1.
 - Un producto con todas sus unidades vencidas no cuenta como Sin stock (tiene stock físico) ni como Stock bajo (0 vendibles): aparece en Vencidos, igual que en Productos.
@@ -44,3 +44,5 @@ Reemplaza la lista plana de lotes descripta arriba: lo anterior sobre búsqueda 
 - **Escáner sin Enter**: en Recibir, Ajustar y Devolver el código se procesa solo 250 ms después del último carácter, si coincide con un producto. Si no coincide y tiene 8 caracteres o más, avisa "No encontramos..." al segundo. Enter sigue funcionando y procesa al instante. La pausa se reinicia con cada carácter, para que un código que empieza como otro más corto no elija el producto equivocado.
 
 Es un cambio de presentación: no modifica API, base, stock, disponibilidad, permisos ni historial. La API sigue devolviendo sólo lotes con unidades; Sin stock se arma cruzando con el catálogo.
+
+La tabla usa `DataTable` con `large`: texto base y encabezados y datos secundarios en texto chico, como Clientes y Cuentas por pagar. El detalle de lotes conserva su tamaño porque es compartido con Productos.

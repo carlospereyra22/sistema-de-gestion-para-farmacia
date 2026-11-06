@@ -17,7 +17,7 @@ import { ProductLotsDetail } from "./product-lots-detail";
 import { LotMetadataEditor } from "./record-maintenance";
 
 const columns: DataTableColumn[] = [
-  { label: "Producto", className: "min-w-60" },
+  { label: "Producto", className: "min-w-64" },
   { label: "Lotes", align: "center", className: "w-16" },
   { label: "Stock", align: "right", className: "w-20" },
   {
@@ -74,6 +74,7 @@ export function InventoryStockTable({
       label="Existencias por producto"
       columns={columns}
       minWidthClass="min-w-190"
+      large
       footer={footer}
     >
       {rows.map((row) => {
@@ -99,10 +100,10 @@ export function InventoryStockTable({
                       aria-controls={open ? lotsId : undefined}
                       aria-label={`${open ? "Ocultar" : "Ver"} lotes de ${row.name}`}
                       onClick={() => toggle(row.productId)}
-                      className="mt-0.5 grid size-5 shrink-0 place-items-center rounded text-slate-400 hover:bg-teal-50 hover:text-teal-700 focus-visible:outline-2 focus-visible:outline-teal-600"
+                      className="mt-1 grid size-5 shrink-0 place-items-center rounded text-slate-400 hover:bg-teal-50 hover:text-teal-700 focus-visible:outline-2 focus-visible:outline-teal-600"
                     >
                       <ChevronRight
-                        size={16}
+                        size={18}
                         className={`transition-transform ${open ? "rotate-90" : ""}`}
                       />
                     </button>
@@ -111,6 +112,7 @@ export function InventoryStockTable({
                   )}
                   <span className="min-w-0 break-words">
                     <CellText
+                      large
                       primary={row.name}
                       secondary={inventoryProductDetail(row.product)}
                     />
@@ -124,7 +126,7 @@ export function InventoryStockTable({
                 <span className="font-semibold text-slate-800">
                   {row.physical}
                 </span>{" "}
-                <span className="text-xs text-slate-500">un.</span>
+                <span className="text-sm text-slate-500">un.</span>
               </DataTableCell>
               <DataTableCell align="right" numeric>
                 <span className="text-slate-700">{row.sellable}</span>
@@ -139,11 +141,11 @@ export function InventoryStockTable({
                     : "—"}
               </DataTableCell>
               <DataTableCell>
-                <StatusLabel tone={row.status.tone}>
+                <StatusLabel large tone={row.status.tone}>
                   {row.status.label}
                 </StatusLabel>
                 {row.status.expiredLots ? (
-                  <span className="mt-0.5 block whitespace-nowrap text-xs text-rose-600">
+                  <span className="mt-0.5 block whitespace-nowrap text-sm text-rose-600">
                     {row.status.expiredLots === 1
                       ? "1 lote vencido"
                       : `${row.status.expiredLots} lotes vencidos`}

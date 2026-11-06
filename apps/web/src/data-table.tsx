@@ -4,6 +4,7 @@ import { ReportHelp } from "./report-states";
 // Estilo único de tablas del sistema. Productos es el modelo; el resto de las
 // tablas se pasa a este componente de a poco.
 // Escala: 14 px para el dato principal, 12 px para lo secundario y encabezados.
+// Con large: 16 px y 14 px, para las pantallas que ya se agrandaron.
 
 type Align = "left" | "right" | "center";
 
@@ -25,6 +26,7 @@ export function DataTable({
   label,
   columns,
   minWidthClass = "",
+  large = false,
   footer,
   children,
 }: {
@@ -32,6 +34,7 @@ export function DataTable({
   columns: DataTableColumn[];
   // Clase de Tailwind con el ancho mínimo antes de desplazar, por ejemplo "min-w-235".
   minWidthClass?: string;
+  large?: boolean;
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -40,9 +43,11 @@ export function DataTable({
       <div className="overflow-x-auto">
         <table
           aria-label={label}
-          className={`w-full text-sm text-slate-700 ${minWidthClass}`}
+          className={`w-full ${large ? "text-base" : "text-sm"} text-slate-700 ${minWidthClass}`}
         >
-          <thead className="border-b border-slate-200 bg-[#f3f7f8] text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <thead
+            className={`border-b border-slate-200 bg-[#f3f7f8] ${large ? "text-sm" : "text-xs"} font-semibold uppercase tracking-wide text-slate-500`}
+          >
             <tr>
               {columns.map((column, index) => (
                 <th
@@ -130,15 +135,25 @@ export function DataTableCell({
 export function CellText({
   primary,
   secondary,
+  large = false,
 }: {
   primary: ReactNode;
   secondary?: ReactNode;
+  large?: boolean;
 }) {
   return (
     <>
-      <span className="block font-medium text-slate-800">{primary}</span>
+      <span
+        className={`block ${large ? "font-semibold" : "font-medium"} text-slate-800`}
+      >
+        {primary}
+      </span>
       {secondary ? (
-        <span className="mt-0.5 block text-xs text-slate-500">{secondary}</span>
+        <span
+          className={`mt-0.5 block ${large ? "text-sm" : "text-xs"} text-slate-500`}
+        >
+          {secondary}
+        </span>
       ) : null}
     </>
   );
@@ -155,13 +170,17 @@ const statusDot: Record<StatusTone, string> = {
 
 export function StatusLabel({
   tone,
+  large = false,
   children,
 }: {
   tone: StatusTone;
+  large?: boolean;
   children: ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-slate-600">
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap ${large ? "text-sm" : "text-xs"} font-medium text-slate-600`}
+    >
       <span
         aria-hidden="true"
         className={`size-2 rounded-full ${statusDot[tone]}`}

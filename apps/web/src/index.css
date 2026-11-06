@@ -720,9 +720,6 @@
 .inventory-filters-lot {
   grid-column: span 2;
 }
-.inventory-summary {
-  padding-right: 0;
-}
 @media (min-width: 1500px) {
   .inventory-filters {
     grid-template-columns: repeat(5, minmax(0, 1fr));
