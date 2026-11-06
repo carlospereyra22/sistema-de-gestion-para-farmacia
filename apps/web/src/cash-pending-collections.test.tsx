@@ -18,7 +18,7 @@ it("uses a floating searchable destination in one dialog, retaining the draft wh
 
 it("keeps the closure actions column compact and right aligned with a centered title", () => {
   const source = readFileSync(
-    new URL("./workspace-shell.tsx", import.meta.url),
+    new URL("./cash-history.tsx", import.meta.url),
     "utf8",
   );
   expect(source).toContain("w-px whitespace-nowrap px-2 py-3 text-center");
@@ -27,21 +27,20 @@ it("keeps the closure actions column compact and right aligned with a centered t
   );
 });
 
-it("keeps pending collections behind an always-available options menu, even without a session", () => {
-  const html = renderToStaticMarkup(
-    <CashPendingCollections
-      token="test"
-      organizationId="org"
-      branchId="branch"
-      registers={[]}
-      canManage
-      active
-      onAssigned={() => {}}
-    />,
-  );
-  expect(html).toContain('aria-label="Opciones de caja"');
-  expect(html).toContain("Cobros pendientes de caja");
-  expect(html).not.toContain("<table");
-  expect(html).not.toContain("<dialog");
-  expect(html).not.toContain("Abrí una caja");
+it("no muestra nada hasta que se abre desde la barra de estado", () => {
+  expect(
+    renderToStaticMarkup(
+      <CashPendingCollections
+        token="test"
+        organizationId="org"
+        branchId="branch"
+        registers={[]}
+        canManage
+        registerId="caja"
+        open={false}
+        onClose={() => {}}
+        onAssigned={() => {}}
+      />,
+    ),
+  ).toBe("");
 });

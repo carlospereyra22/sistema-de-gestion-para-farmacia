@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 
 it("starts movements as income and restores income only after a successful save", () => {
   const source = readFileSync(
-    new URL("./workspace-shell.tsx", import.meta.url),
+    new URL("./cash-workspace.tsx", import.meta.url),
     "utf8",
   );
   expect(source).toContain('useState<"IN" | "OUT">("IN")');

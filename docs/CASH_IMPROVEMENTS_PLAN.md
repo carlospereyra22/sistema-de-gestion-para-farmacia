@@ -83,7 +83,7 @@ La categoría se deriva del texto para evitar una migración. Si aparecen más o
 
 1. Mover `Cash` de `workspace-shell.tsx` a `apps/web/src/cash-workspace.tsx`.
 2. **Barra de estado:** selector de caja con el estado de cada una, responsable y aviso de cobros pendientes con cantidad y total.
-3. **Pestaña Sesión con la caja cerrada:** último cierre y formulario de apertura, con el botón "Usar último contado".
+3. **Pestaña Sesión con la caja cerrada:** datos del último cierre, movimientos de los últimos 7 días y formulario de apertura, con el botón "Usar último contado". Abrir una caja con cobros asignados abre Cobros pendientes.
 4. **Pestaña Sesión con la caja abierta:** Esperado, Efectivo, Tarjeta y Transferencia; línea de tiempo con conceptos legibles; movimiento manual y cierre.
 5. **Pestaña Historial:** fechas de 30 días visibles, filtro por caja, Faltante y Sobrante diferenciados, y filtros que aplican de la misma forma. El filtro Estado pasa a `ProductFilterSelect`.
 6. Avisar antes de cerrar si la caja tiene cobros pendientes asignados.

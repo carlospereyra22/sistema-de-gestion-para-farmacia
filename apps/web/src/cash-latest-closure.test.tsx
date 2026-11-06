@@ -1,6 +1,18 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { CashLatestClosure } from "./cash-latest-closure";
+
+it("no vacía los datos al volver a consultar, para que no parpadeen", () => {
+  const source = readFileSync(
+    new URL("./cash-latest-closure.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(source).not.toContain("setResult(undefined)");
+  expect(
+    readFileSync(new URL("./cash-workspace.tsx", import.meta.url), "utf8"),
+  ).not.toContain("setRecent({ registerId });");
+});
 
 it("loads the selected register closure without inventing dates or balances", () => {
   const html = renderToStaticMarkup(

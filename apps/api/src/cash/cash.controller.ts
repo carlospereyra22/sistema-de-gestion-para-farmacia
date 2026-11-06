@@ -106,6 +106,19 @@ export class CashController {
     );
     return rows[0] ?? null;
   }
+  @Get("registers/:registerId/recent-activity") recentActivity(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Param("registerId", ParseUUIDPipe) registerId: string,
+  ) {
+    return this.cash.recentActivity(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      registerId,
+    );
+  }
   @Get("settings") settings(
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,

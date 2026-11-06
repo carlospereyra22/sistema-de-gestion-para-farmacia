@@ -15,7 +15,7 @@ describe("workspace panel identity", () => {
   });
   it.each([
     ["Sales", "sales"],
-    ["Cash", "cash"],
+    ["CashWorkspace", "cash"],
     ["Inventory", "inventory"],
   ])(
     "namespaces %s independently of other sibling screens",
@@ -40,9 +40,9 @@ describe("workspace panel identity", () => {
       'view === "Caja" || visitedCashScope === accountsScope',
     );
     expect(source).toContain('active={view === "Caja"}');
-    expect(source).toContain(
-      'className={active ? "cash-workspace" : "hidden"}',
-    );
+    expect(
+      readFileSync(new URL("../cash-workspace.tsx", import.meta.url), "utf8"),
+    ).toContain('className={active ? "cash-workspace" : "hidden"}');
     expect(source).toContain("key={`cash:${organizationId}:${branchId}`}");
   });
   it("keeps the visited dashboard mounted and scopes it to the organization and branch", () => {
