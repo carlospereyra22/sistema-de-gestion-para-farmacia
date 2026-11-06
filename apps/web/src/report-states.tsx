@@ -1,4 +1,11 @@
-import { useId, type ReactElement, type ReactNode } from "react";
+import {
+  useId,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  type SyntheticEvent,
+} from "react";
 import {
   AlertTriangle,
   ChartNoAxesCombined,
@@ -16,13 +23,35 @@ export const reportCardClass =
 export function ReportHelp({
   title = "Cómo se calcula",
   text,
+  floating = false,
 }: {
   title?: string;
   text: string;
+  // Dentro de un contenedor con scroll, el globo se ubica respecto de la ventana
+  // para que no quede recortado.
+  floating?: boolean;
 }): ReactElement {
   const id = useId();
+  const [place, setPlace] = useState<CSSProperties>();
+  const locate = (event: SyntheticEvent<HTMLElement>) => {
+    if (!floating) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setPlace({
+      position: "fixed",
+      left: Math.max(8, Math.min(bounds.left - 8, window.innerWidth - 264)),
+      transform: "none",
+      marginTop: 0,
+      ...(bounds.top > 120
+        ? { top: "auto", bottom: window.innerHeight - bounds.top + 8 }
+        : { top: bounds.bottom + 8 }),
+    });
+  };
   return (
-    <span className="group relative inline-flex">
+    <span
+      className="group relative inline-flex"
+      onMouseEnter={locate}
+      onFocus={locate}
+    >
       <span
         tabIndex={0}
         aria-describedby={id}
@@ -34,7 +63,8 @@ export function ReportHelp({
       <span
         id={id}
         role="tooltip"
-        className="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-2 w-64 max-w-[70vw] -translate-x-1/2 rounded-lg border border-[#d3e5e0] bg-white px-3 py-2 text-left text-[11px] font-normal leading-4 text-slate-600 opacity-0 shadow-[0_4px_12px_rgb(15_23_42_/_10%)] transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+        style={place}
+        className="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-2 w-64 max-w-[70vw] -translate-x-1/2 whitespace-normal break-words rounded-lg border border-[#d3e5e0] bg-white px-3 py-2 text-left text-[11px] font-normal leading-4 text-slate-600 opacity-0 shadow-[0_4px_12px_rgb(15_23_42_/_10%)] transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
       >
         <strong className="mb-0.5 block font-semibold text-[#0f766e]">
           {title}

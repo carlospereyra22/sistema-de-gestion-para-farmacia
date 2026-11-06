@@ -1614,10 +1614,25 @@ export type LotCostReceipt = {
   // null: recepción vieja cuyo costo ya no se conoce.
   unitCostMinor: string | null;
   receivedAt: string;
+  supplierId?: string | null;
+};
+export type LotAdjustment = {
+  // Una API anterior no lo envía: sin dato es un ajuste.
+  kind?: "ADJUSTMENT" | "RETURN";
+  lotId: string;
+  // Positivo suma, negativo resta.
+  quantity: number;
+  reason: string;
+  adjustedAt: string;
+  supplierId?: string | null;
+  unitCostMinor?: string | null;
 };
 export type InventoryCosts = {
   products: { productId: string; unitCostMinor: string; receivedAt: string }[];
   lots: { lotId: string; receipts: LotCostReceipt[] }[];
+  // La web y la API se publican por separado: una API anterior no los envía.
+  adjustments?: LotAdjustment[];
+  suppliers?: { id: string; name: string }[];
 };
 
 export async function getInventoryCosts(
@@ -1666,7 +1681,14 @@ export async function adjustStock(
   token: string,
   organizationId: string,
   branchId: string,
-  input: { lotId: string; quantity: number; reason: string },
+  input: {
+    lotId: string;
+    quantity: number;
+    reason: string;
+    // null es Sin proveedor.
+    supplierId: string | null;
+    unitCostMinor?: number;
+  },
 ): Promise<void> {
   const response = await fetch(
     `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/adjustments`,

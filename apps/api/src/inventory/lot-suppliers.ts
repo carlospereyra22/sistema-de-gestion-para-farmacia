@@ -14,9 +14,13 @@ function take(entries: LotEntry[], quantity: number) {
   return pending;
 }
 
-// De quién son las unidades que le quedan al lote. Ventas, ajustes y demás
-// salidas no dicen de qué proveedor salen: se gasta primero lo más viejo. Las
-// devoluciones sí lo dicen. Lo que sobre sin carga conocida queda sin proveedor,
+// Un ajuste con proveedor elegido, aunque sea Sin proveedor. Los anteriores no
+// dicen de quién son, y supplierId null no alcanzaría para distinguirlos.
+export const SUPPLIER_ADJUSTMENT = "ADJUSTMENT_SUPPLIER";
+
+// De quién son las unidades que le quedan al lote. Ventas y demás salidas no
+// dicen de qué proveedor salen: se gasta primero lo más viejo. Las devoluciones
+// y los ajustes con proveedor sí lo dicen. Lo que sobre sin carga conocida queda sin proveedor,
 // así la suma siempre da el stock del lote. `receipts` va de la más vieja a la
 // más nueva; un proveedor que ya no tiene unidades queda en 0.
 export function lotSupplierBreakdown(lotQuantity: number, history: LotHistory) {
@@ -67,22 +71,33 @@ export async function loadLotHistories(
     lotIds.map((id) => [id, { receipts: [], returns: [] }]),
   );
   if (!lotIds.length) return histories;
-  const [receipts, returns] = await Promise.all([
+  const [movements, returns] = await Promise.all([
     db.inventoryMovement.findMany({
       where: {
         lotId: { in: lotIds },
-        type: { in: ["PURCHASE_RECEIPT", "TRANSFER_IN"] },
+        OR: [
+          { type: { in: ["PURCHASE_RECEIPT", "TRANSFER_IN"] } },
+          {
+            type: { in: ["ADJUSTMENT_IN", "ADJUSTMENT_OUT"] },
+            referenceType: SUPPLIER_ADJUSTMENT,
+          },
+        ],
       },
       orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
-      select: { lotId: true, supplierId: true, quantity: true },
+      select: { lotId: true, supplierId: true, quantity: true, type: true },
     }),
     db.supplierReturn.findMany({
       where: { lotId: { in: lotIds } },
       select: { lotId: true, supplierId: true, quantity: true },
     }),
   ]);
-  for (const { lotId, ...entry } of receipts)
-    if (lotId) histories.get(lotId)?.receipts.push(entry);
+  // Un ajuste que suma es otra carga; uno que resta sale como una devolución.
+  for (const { lotId, type, supplierId, quantity } of movements) {
+    const history = lotId ? histories.get(lotId) : undefined;
+    if (type === "ADJUSTMENT_OUT")
+      history?.returns.push({ supplierId, quantity: Math.abs(quantity) });
+    else history?.receipts.push({ supplierId, quantity });
+  }
   for (const { lotId, ...entry } of returns)
     histories.get(lotId)?.returns.push(entry);
   return histories;

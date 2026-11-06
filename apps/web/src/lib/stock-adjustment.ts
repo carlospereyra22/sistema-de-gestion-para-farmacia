@@ -1,3 +1,5 @@
+import { typedCostMinor } from "./lot-cost";
+
 export function stockAdjustmentDelta(
   value: string,
   direction: "subtract" | "add",
@@ -9,4 +11,17 @@ export function stockAdjustmentDelta(
     );
   }
   return direction === "subtract" ? -quantity : quantity;
+}
+
+export type AdjustmentCostMode = "none" | "last" | "other";
+
+// Costo que acompaña al ajuste. Restar no agrega unidades, así que no lleva.
+export function stockAdjustmentCost(
+  mode: AdjustmentCostMode,
+  direction: "subtract" | "add",
+  lastCostMinor: string | undefined,
+  typed: string,
+): number | undefined {
+  if (direction === "subtract" || mode === "none") return undefined;
+  return Number(mode === "last" ? lastCostMinor : typedCostMinor(typed));
 }

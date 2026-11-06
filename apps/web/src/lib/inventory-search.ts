@@ -109,19 +109,69 @@ export function inventoryDefaultReturnSupplier(lot: LotSuppliers | undefined) {
   if (!available.length) return NO_SUPPLIER;
   return available.length === 1 ? available[0]!.id : "";
 }
+type LotSupplier = NonNullable<StockLot["suppliers"]>[number];
+// De quién es lo que el lote tiene hoy. Un proveedor en 0 trajo unidades que ya
+// salieron: no forma parte del stock actual. supplier null es sin proveedor.
+export function lotStockOrigins<S extends LotSupplier>(lot: {
+  suppliers?: S[];
+  unassignedQuantity?: number;
+}) {
+  const origins: {
+    key: string;
+    name: string;
+    quantity: number;
+    supplier: S | null;
+  }[] = (lot.suppliers ?? [])
+    .filter((supplier) => supplier.quantity > 0)
+    .map((supplier) => ({
+      key: supplier.id,
+      name: supplier.name,
+      quantity: supplier.quantity,
+      supplier,
+    }));
+  if (lot.unassignedQuantity)
+    origins.push({
+      key: NO_SUPPLIER,
+      name: "Sin proveedor",
+      quantity: lot.unassignedQuantity,
+      supplier: null,
+    });
+  return origins;
+}
+// Restar sale de quien tiene unidades en el lote. Sumar puede ser de cualquiera.
+export function inventoryAdjustSuppliers(
+  lot: LotSuppliers | undefined,
+  all: InventoryOption[],
+  direction: "subtract" | "add",
+) {
+  if (!lot) return [];
+  if (direction === "add") return [noSupplierOption, ...all];
+  return lotStockOrigins(lot).map((origin) =>
+    origin.supplier
+      ? inventorySupplierOption(origin.supplier)
+      : {
+          ...noSupplierOption,
+          detail: `${origin.quantity} un. de este lote`,
+        },
+  );
+}
+// Proveedor que queda elegido al ajustar; con varios orígenes decide el usuario.
+export function inventoryDefaultAdjustSupplier(lot: LotSuppliers | undefined) {
+  if (!lot) return "";
+  const origins = lotStockOrigins(lot);
+  if (origins.length > 1) return "";
+  return origins[0]?.supplier?.id ?? NO_SUPPLIER;
+}
 // Con más de un origen, cada uno va en su renglón para que los números sumen.
 export function lotHasSupplierRows(lot: LotSuppliers) {
-  const count = lot.suppliers?.length ?? 0;
-  return count > 1 || (count === 1 && Boolean(lot.unassignedQuantity));
+  return lotStockOrigins(lot).length > 1;
 }
+// Un lote sin proveedores conocidos no necesita aclaración.
 export function lotSupplierSummary(lot: LotSuppliers) {
-  const known = lot.suppliers ?? [];
-  const parts = known.map(
-    (supplier) => `${supplier.name} · ${supplier.quantity} un.`,
-  );
-  if (known.length && lot.unassignedQuantity)
-    parts.push(`Sin proveedor · ${lot.unassignedQuantity} un.`);
-  return parts.join(" / ");
+  if (!lot.suppliers?.length) return "";
+  return lotStockOrigins(lot)
+    .map((origin) => `${origin.name} · ${origin.quantity} un.`)
+    .join(" / ");
 }
 // Un QR puede traer el código dentro de otro texto, y un GTIN de 14 dígitos
 // que empieza con 0 equivale al EAN de 13.

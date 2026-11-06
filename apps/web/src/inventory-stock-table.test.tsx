@@ -55,6 +55,7 @@ function render(
       branchId="branch"
       done={() => {}}
       onAdjust={() => {}}
+      onReceive={() => {}}
       onReturn={() => {}}
     />,
   );
@@ -95,6 +96,7 @@ it("al buscar por lote abre el producto con ese lote y sus acciones", () => {
   expect(html).not.toContain("VIEJO");
   expect(html).toContain("1 lote más no se muestra por los filtros.");
   expect(html).toContain('aria-label="Editar lote ABC de Loratadina"');
+  expect(html).toContain('aria-label="Recibir lote ABC de Loratadina"');
   expect(html).toContain('aria-label="Ajustar lote ABC de Loratadina"');
   expect(html).toContain('aria-label="Devolver lote ABC de Loratadina"');
 });
