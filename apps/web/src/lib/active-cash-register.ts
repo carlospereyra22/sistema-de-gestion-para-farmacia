@@ -1,5 +1,9 @@
 type Register = { id: string; name: string };
-type OpenSession = { id: string; cashRegisterId: string };
+type OpenSession = {
+  id: string;
+  cashRegisterId: string;
+  openedByCurrentUser?: boolean;
+};
 
 const storageKey = (organizationId: string, branchId: string) =>
   `gestion:cash-register:${organizationId}:${branchId}`;
@@ -36,6 +40,23 @@ export function saveCashRegisterChoice(
   }
 }
 
+/** Caja que abrió el usuario actual. Es una sugerencia, no limita dónde cobra. */
+export function ownRegisterId(openSessions: OpenSession[]): string | undefined {
+  return openSessions.find((session) => session.openedByCurrentUser)
+    ?.cashRegisterId;
+}
+
+/** Motivo por el que el usuario no puede abrir otra caja en esta sucursal. */
+export function ownOpenRegisterNotice(
+  openSessions: OpenSession[],
+  registers: Register[],
+): string | null {
+  const id = ownRegisterId(openSessions);
+  if (!id) return null;
+  const name = registers.find((register) => register.id === id)?.name;
+  return `Ya tenés abierta ${name ?? "otra caja"}. Cerrala para abrir otra.`;
+}
+
 /** Caja que muestra la pantalla: una caja elegida se respeta aunque esté cerrada. */
 export function resolveCashRegister({
   registers,
@@ -53,6 +74,8 @@ export function resolveCashRegister({
   const open = (id?: string | null) =>
     openSessions.some((session) => session.cashRegisterId === id);
   if (available(chosen)) return chosen;
+  const own = ownRegisterId(openSessions);
+  if (available(own)) return own!;
   if (available(defaultRegisterId) && open(defaultRegisterId))
     return defaultRegisterId!;
   const firstOpen = openSessions.find((session) =>
@@ -89,6 +112,7 @@ export function preferredCashSessionId(
   return (
     resolveSaleSession(openSessions, [
       readCashRegisterChoice(organizationId, branchId, storage),
+      ownRegisterId(openSessions),
     ])?.id ?? ""
   );
 }

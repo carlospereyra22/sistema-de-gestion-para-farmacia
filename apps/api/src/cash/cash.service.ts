@@ -10,6 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { CashMovementType, Prisma } from "@prisma/client";
 import { lockCashSession } from "./lock-cash-session";
+import { findOwnOpenSession } from "./own-open-session";
 import { randomUUID } from "node:crypto";
 import { readReceiptPayments } from "../accounts/receipt-payments";
 import {
@@ -125,8 +126,13 @@ export class CashService {
       where: { organizationId, branchId, assignedAt: null, voidedAt: null },
       orderBy: [{ collectedAt: "asc" }, { id: "asc" }],
     });
+    const names = await this.memberLabels(
+      organizationId,
+      rows.map((row) => row.actorId),
+    );
     return rows.map((row) => ({
       ...row,
+      collectedBy: names.get(row.actorId) ?? null,
       cashMinor: row.cashMinor.toString(),
       cardMinor: row.cardMinor.toString(),
       transferMinor: row.transferMinor.toString(),
@@ -313,6 +319,59 @@ export class CashService {
         },
       });
       return { id, destinationRegisterId: registerId };
+    });
+  }
+  /** Deshace la asignación de caja. Sólo cambia el destino: nunca mueve dinero. */
+  async clearCollectionDestination(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    id: string,
+    expectedRegisterId: string,
+  ) {
+    await this.assert(actorId, organizationId, "CASH_MANAGE");
+    await this.branch(organizationId, branchId);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "CashPendingCollection" WHERE id=${id}::uuid AND "organizationId"=${organizationId}::uuid AND "branchId"=${branchId}::uuid FOR UPDATE`;
+      const row = await tx.cashPendingCollection.findFirst({
+        where: { id, organizationId, branchId },
+      });
+      if (!row) throw new NotFoundException("Cobro pendiente no disponible.");
+      if (row.voidedAt || row.assignedAt)
+        throw new ConflictException(
+          "El cobro fue anulado o ya se incorporó a una sesión.",
+        );
+      // Reintento de una solicitud que ya se aplicó.
+      if (!row.destinationRegisterId)
+        return { id, destinationRegisterId: null };
+      if (row.destinationRegisterId !== expectedRegisterId)
+        throw new ConflictException(
+          "El cobro cambió de caja. Actualizá y volvé a intentarlo.",
+        );
+      await tx.cashPendingCollection.update({
+        where: { id },
+        data: {
+          destinationRegisterId: null,
+          destinationSetAt: null,
+          destinationSetById: null,
+        },
+      });
+      await this.audit.recordInTransaction(tx, {
+        organizationId,
+        branchId,
+        actorId,
+        entityType: "CASH_PENDING_COLLECTION",
+        entityId: id,
+        action: "DESTINATION_CLEARED",
+        before: {
+          cashRegisterId: row.destinationRegisterId,
+          destinationSetAt: row.destinationSetAt?.toISOString() ?? null,
+          destinationSetById: row.destinationSetById,
+          sourceId: row.sourceId,
+          collectedAt: row.collectedAt.toISOString(),
+        },
+      });
+      return { id, destinationRegisterId: null };
     });
   }
   async editRegister(
@@ -505,24 +564,12 @@ export class CashService {
       }),
     ]);
     const sessions = [...openSessions, ...recentClosed];
-    const members = await this.prisma.userOrganization.findMany({
-      where: {
-        organizationId,
-        userId: {
-          in: [
-            ...new Set(
-              sessions.flatMap((session) => [
-                session.openedById,
-                ...session.movements.map((movement) => movement.actorId),
-              ]),
-            ),
-          ],
-        },
-      },
-      select: { userId: true, displayName: true },
-    });
-    const memberNames = new Map(
-      members.map((member) => [member.userId, member.displayName]),
+    const memberNames = await this.memberLabels(
+      organizationId,
+      sessions.flatMap((session) => [
+        session.openedById,
+        ...session.movements.map((movement) => movement.actorId),
+      ]),
     );
     // La línea de tiempo sólo se arma para las sesiones que se están operando.
     const openPayments = openSessions.length
@@ -559,6 +606,8 @@ export class CashService {
           memberNames.get(
             sessions.find((row) => row.id === session.id)!.openedById,
           ) ?? null,
+        openedByCurrentUser:
+          sessions.find((row) => row.id === session.id)!.openedById === actorId,
         movements: session.movements.map((movement) => ({
           ...movement,
           actorName:
@@ -569,6 +618,61 @@ export class CashService {
             ) ?? null,
         })),
       })),
+    };
+  }
+  /** Cajas de las sucursales asignadas al usuario, con quién tiene abierta cada una. */
+  async organizationRegisters(actorId: string, organizationId: string) {
+    await this.assert(actorId, organizationId, "CASH_READ");
+    const branches = await this.prisma.branch.findMany({
+      where: {
+        organizationId,
+        active: true,
+        userMemberships: { some: { userId: actorId } },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    const registers = await this.prisma.cashRegister.findMany({
+      where: { branchId: { in: branches.map((branch) => branch.id) } },
+      orderBy: { name: "asc" },
+    });
+    const sessions = await this.prisma.cashSession.findMany({
+      where: {
+        cashRegisterId: { in: registers.map((register) => register.id) },
+        closedAt: null,
+        archivedAt: null,
+      },
+      select: { cashRegisterId: true, openedById: true, openedAt: true },
+    });
+    const names = await this.memberLabels(
+      organizationId,
+      sessions.map((session) => session.openedById),
+    );
+    return {
+      branches,
+      registers: branches.flatMap((branch) =>
+        registers
+          .filter((register) => register.branchId === branch.id)
+          .map((register) => {
+            const session = sessions.find(
+              (row) => row.cashRegisterId === register.id,
+            );
+            return {
+              id: register.id,
+              name: register.name,
+              active: register.active,
+              responsibleName: register.responsibleName,
+              branchId: branch.id,
+              branchName: branch.name,
+              session: session
+                ? {
+                    openedAt: session.openedAt,
+                    openedBy: names.get(session.openedById) ?? null,
+                  }
+                : null,
+            };
+          }),
+      ),
     };
   }
   /** Actividad de efectivo de una caja en los últimos 7 días, sin cierres archivados. */
@@ -612,15 +716,9 @@ export class CashService {
         take: 100,
       }),
     ]);
-    const members = await this.prisma.userOrganization.findMany({
-      where: {
-        organizationId,
-        userId: { in: [...new Set(movements.map((row) => row.actorId))] },
-      },
-      select: { userId: true, displayName: true },
-    });
-    const names = new Map(
-      members.map((member) => [member.userId, member.displayName]),
+    const names = await this.memberLabels(
+      organizationId,
+      movements.map((row) => row.actorId),
     );
     return {
       movements: movements.map((movement) => ({
@@ -918,6 +1016,11 @@ export class CashService {
         })
       )
         throw new ConflictException("Esta caja ya tiene una sesión abierta.");
+      const own = await findOwnOpenSession(tx, actorId, organizationId);
+      if (own)
+        throw new ConflictException(
+          `Ya tenés abierta ${own.registerName} en ${own.branchName}. Cerrala antes de abrir otra.`,
+        );
       const session = await tx.cashSession.create({
         data: {
           cashRegisterId: register.id,
@@ -1135,6 +1238,23 @@ export class CashService {
       });
       return { ...movement, amountMinor: movement.amountMinor.toString() };
     });
+  }
+  /** Nombre visible de cada usuario: sin nombre cargado, se identifica por su email. */
+  private async memberLabels(organizationId: string, userIds: string[]) {
+    const members = await this.prisma.userOrganization.findMany({
+      where: { organizationId, userId: { in: [...new Set(userIds)] } },
+      select: {
+        userId: true,
+        displayName: true,
+        user: { select: { email: true } },
+      },
+    });
+    return new Map(
+      members.map((member) => [
+        member.userId,
+        member.displayName || member.user.email,
+      ]),
+    );
   }
   private async branch(organizationId: string, branchId: string) {
     if (

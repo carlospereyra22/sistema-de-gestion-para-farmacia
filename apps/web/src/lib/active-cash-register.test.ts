@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   cashSessionLabel,
+  ownOpenRegisterNotice,
+  ownRegisterId,
   preferredCashSessionId,
   readCashRegisterChoice,
   resolveCashRegister,
@@ -100,6 +102,54 @@ describe("elección guardada", () => {
     expect(() =>
       saveCashRegisterChoice("org", "b", "a", { setItem: fail }),
     ).not.toThrow();
+  });
+});
+
+describe("caja propia", () => {
+  const own = (cashRegisterId: string) => ({
+    ...sessionOf(cashRegisterId),
+    openedByCurrentUser: true,
+  });
+  const open = [sessionOf("a"), own("b")];
+  const saved = (value: string | null) => ({ getItem: () => value });
+
+  it("identifica la caja que abrió el usuario", () => {
+    expect(ownRegisterId(open)).toBe("b");
+    expect(ownRegisterId([sessionOf("a")])).toBeUndefined();
+  });
+  it("se usa para cobrar antes que la predeterminada", () => {
+    expect(
+      resolveSaleSession(open, ["", ownRegisterId(open), "a"])?.cashRegisterId,
+    ).toBe("b");
+  });
+  it("no pisa la caja elegida en el equipo", () => {
+    expect(
+      resolveSaleSession(open, ["a", ownRegisterId(open), "c"])?.cashRegisterId,
+    ).toBe("a");
+    expect(preferredCashSessionId(open, "org", "b", saved("a"))).toBe(
+      "sesion-a",
+    );
+  });
+  it("se sugiere en los formularios sin elección guardada", () => {
+    expect(preferredCashSessionId(open, "org", "b", saved(null))).toBe(
+      "sesion-b",
+    );
+  });
+  it("se muestra en pantalla si no hay caja elegida", () => {
+    expect(
+      resolveCashRegister({
+        registers,
+        openSessions: open,
+        chosen: "",
+        defaultRegisterId: "a",
+      }),
+    ).toBe("b");
+  });
+  it("explica por qué no se puede abrir otra", () => {
+    expect(ownOpenRegisterNotice(open, registers)).toBe(
+      "Ya tenés abierta Perfumería. Cerrala para abrir otra.",
+    );
+    expect(ownOpenRegisterNotice([sessionOf("a")], registers)).toBeNull();
   });
 });
 

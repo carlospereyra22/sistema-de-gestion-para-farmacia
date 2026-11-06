@@ -1832,8 +1832,35 @@ export async function editLotMetadata(
   if (!response.ok)
     throw await responseError(response, "No se pudo corregir el lote.");
 }
+export type CashOrganizationRegister = {
+  id: string;
+  name: string;
+  active: boolean;
+  responsibleName?: string | null;
+  branchId: string;
+  branchName: string;
+  session: { openedAt: string; openedBy: string | null } | null;
+};
+export type CashOrganizationOverview = {
+  branches: { id: string; name: string }[];
+  registers: CashOrganizationRegister[];
+};
+export async function getCashOrganizationRegisters(
+  token: string,
+  organizationId: string,
+  signal?: AbortSignal,
+): Promise<CashOrganizationOverview> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/cash/registers`,
+    { headers: { Authorization: `Bearer ${token}` }, signal },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron consultar las cajas.");
+  return (await response.json()) as CashOrganizationOverview;
+}
 export type CashSession = {
   openedBy?: string | null;
+  openedByCurrentUser?: boolean;
   id: string;
   cashRegisterId: string;
   openedAt: string;
@@ -1871,6 +1898,7 @@ export type CashPendingCollection = {
   sourceType: "SALE" | "RECEIPT";
   sourceId: string;
   collectedAt: string;
+  collectedBy?: string | null;
   cashMinor: string;
   cardMinor: string;
   transferMinor: string;
