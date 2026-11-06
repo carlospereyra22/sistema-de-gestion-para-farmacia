@@ -57,6 +57,72 @@ export function inventoryLotChoice(lot: StockLot): InventoryOption {
   const detail = inventoryLotDetail(lot);
   return { value: lot.id, label, detail, searchText: `${label} ${detail}` };
 }
+export function inventorySupplierOption(supplier: {
+  id: string;
+  name: string;
+  quantity?: number;
+}): InventoryOption {
+  return {
+    value: supplier.id,
+    label: supplier.name,
+    detail:
+      supplier.quantity === undefined
+        ? ""
+        : `${supplier.quantity} un. de este lote`,
+    searchText: supplier.name,
+  };
+}
+type LotSuppliers = Pick<StockLot, "suppliers" | "unassignedQuantity">;
+// Valor de la opción "Sin proveedor" al devolver: la API lo recibe como null.
+export const NO_SUPPLIER = "sin-proveedor";
+export const noSupplierOption: InventoryOption = {
+  value: NO_SUPPLIER,
+  label: "Sin proveedor",
+  detail: "",
+  searchText: "Sin proveedor",
+};
+// Al devolver se elige entre los proveedores del lote que todavía tienen unidades.
+// El stock sin proveedor sale sin proveedor o a uno que no figura en el lote.
+export function inventoryReturnSuppliers(
+  lot: LotSuppliers | undefined,
+  all: InventoryOption[],
+) {
+  if (!lot) return all;
+  const known = lot.suppliers ?? [];
+  if (!known.length) return [noSupplierOption, ...all];
+  const own = known
+    .filter((supplier) => supplier.quantity > 0)
+    .map(inventorySupplierOption);
+  if (!lot.unassignedQuantity) return own;
+  return [
+    ...own,
+    noSupplierOption,
+    ...all.filter((option) => !known.some((item) => item.id === option.value)),
+  ];
+}
+// Proveedor que queda elegido al tomar un lote; con varios decide el usuario.
+export function inventoryDefaultReturnSupplier(lot: LotSuppliers | undefined) {
+  if (!lot) return "";
+  const available = (lot.suppliers ?? []).filter(
+    (supplier) => supplier.quantity > 0,
+  );
+  if (!available.length) return NO_SUPPLIER;
+  return available.length === 1 ? available[0]!.id : "";
+}
+// Con más de un origen, cada uno va en su renglón para que los números sumen.
+export function lotHasSupplierRows(lot: LotSuppliers) {
+  const count = lot.suppliers?.length ?? 0;
+  return count > 1 || (count === 1 && Boolean(lot.unassignedQuantity));
+}
+export function lotSupplierSummary(lot: LotSuppliers) {
+  const known = lot.suppliers ?? [];
+  const parts = known.map(
+    (supplier) => `${supplier.name} · ${supplier.quantity} un.`,
+  );
+  if (known.length && lot.unassignedQuantity)
+    parts.push(`Sin proveedor · ${lot.unassignedQuantity} un.`);
+  return parts.join(" / ");
+}
 // Un QR puede traer el código dentro de otro texto, y un GTIN de 14 dígitos
 // que empieza con 0 equivale al EAN de 13.
 export function findScannedProduct<T extends { barcodes: { code: string }[] }>(

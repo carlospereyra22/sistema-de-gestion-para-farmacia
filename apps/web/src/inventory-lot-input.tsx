@@ -87,7 +87,7 @@ export function InventoryLotInput<T extends SuggestedLot>({
   }, [floatingList, open, input]);
   return (
     <div
-      className={compact ? undefined : "mt-4"}
+      className={compact ? undefined : "relative mt-4"}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           setOpen(false);
@@ -209,13 +209,18 @@ export function InventoryLotInput<T extends SuggestedLot>({
           </ul>
         )}
       </div>
+      {/* Flota en el espacio entre campos: el aviso no mueve el formulario. */}
       {compact ? null : existing ? (
-        <p className="mt-1 text-xs leading-4 text-amber-700">
-          Lote existente ({existing.quantity} un.): las unidades se suman y el
-          costo y vencimiento que cargues lo reemplazan.
+        <p
+          title={`Lote existente (${existing.quantity} un.): las unidades se suman y el costo y vencimiento que cargues lo reemplazan.`}
+          className="absolute inset-x-0 top-full mt-0.5 truncate text-xs leading-4 text-amber-700"
+        >
+          Existente ({existing.quantity} un.): reemplaza costo y vencimiento.
         </p>
       ) : number && productSelected ? (
-        <p className="mt-1 text-xs leading-4 text-teal-700">Lote nuevo.</p>
+        <p className="absolute inset-x-0 top-full mt-0.5 text-xs leading-4 text-teal-700">
+          Lote nuevo.
+        </p>
       ) : null}
     </div>
   );

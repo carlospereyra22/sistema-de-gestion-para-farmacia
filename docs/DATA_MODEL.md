@@ -16,6 +16,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261105120000_purchase_pack_lots` (SISTEMA-26): `PurchaseItem.packFactor` recuerda que el renglón vino en exhibidor; `ProductLot.packFactor` y `packCount` guardan cuántos entraron en el lote. Columnas aditivas con CHECK, sin rellenar lotes existentes.
 
+`20261106030000_supplier_return_optional_supplier` (SISTEMA-36): `SupplierReturn.supplierId` admite nulo para devolver stock sin proveedor. `20261106040000_inventory_movement_supplier`: `InventoryMovement.supplierId` guarda el proveedor de cada carga (nulo: sin proveedor), completado desde las recepciones de Compras. Las unidades por proveedor de un lote se calculan desde esas cargas y `SupplierReturn`; no se guardan aparte.
+
 `20261106000000_medicine_catalog_pending` (SISTEMA-35): `MedicineCatalogPending` guarda los productos sin precio ni link hasta conseguirlos. No es referencia: ninguna búsqueda ni corrida de precios la lee, y un producto sale de ahí cuando entra a `MedicineCatalogItem`.
 
 `20261105033000_medicine_catalog_pack` (SISTEMA-26): `MedicineCatalogPack` guarda el código de un exhibidor de droguería, el código base y el factor (2 a 1000), con CHECK de que no sean el mismo código. Solo crea la tabla.

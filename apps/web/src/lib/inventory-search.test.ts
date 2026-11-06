@@ -6,7 +6,13 @@ import {
   inventoryEnterOption,
   inventoryLotChoice,
   inventoryProductDetail,
+  NO_SUPPLIER,
+  inventoryDefaultReturnSupplier,
   inventoryProductOption,
+  inventoryReturnSuppliers,
+  lotHasSupplierRows,
+  lotSupplierSummary,
+  inventorySupplierOption,
   scanAutoDelay,
 } from "./inventory-search";
 function product(id: string, laboratory: string, code: string): CatalogProduct {
@@ -109,4 +115,68 @@ describe("escáner sin Enter", () => {
     expect(scanAutoDelay(false, "1234567")).toBeNull();
     expect(scanAutoDelay(false, "   ")).toBeNull();
   });
+});
+
+it("al devolver ofrece los proveedores del lote y, sin datos, todos", () => {
+  const all = [
+    inventorySupplierOption({ id: "a", name: "Droguería A" }),
+    inventorySupplierOption({ id: "b", name: "Droguería B" }),
+  ];
+  const known = { suppliers: [{ id: "b", name: "Droguería B", quantity: 41 }] };
+  expect(inventoryReturnSuppliers(known, all)).toEqual([
+    expect.objectContaining({ value: "b", detail: "41 un. de este lote" }),
+  ]);
+  expect(
+    inventoryReturnSuppliers({ suppliers: [] }, all).map((o) => o.value),
+  ).toEqual([NO_SUPPLIER, "a", "b"]);
+  expect(inventoryReturnSuppliers(undefined, all)).toBe(all);
+});
+
+it("con stock sin proveedor suma al resto de los proveedores", () => {
+  const all = [
+    inventorySupplierOption({ id: "a", name: "A" }),
+    inventorySupplierOption({ id: "b", name: "B" }),
+  ];
+  const lot = {
+    suppliers: [{ id: "b", name: "B", quantity: 1 }],
+    unassignedQuantity: 40,
+  };
+  expect(inventoryReturnSuppliers(lot, all).map((o) => o.value)).toEqual([
+    "b",
+    NO_SUPPLIER,
+    "a",
+  ]);
+  expect(lotHasSupplierRows(lot)).toBe(true);
+  expect(lotHasSupplierRows({ ...lot, unassignedQuantity: 0 })).toBe(false);
+  expect(lotSupplierSummary(lot)).toBe("B · 1 un. / Sin proveedor · 40 un.");
+});
+
+it("elige solo el proveedor del lote cuando no hay nada que decidir", () => {
+  const supplier = { id: "a", name: "A", quantity: 1 };
+  expect(inventoryDefaultReturnSupplier(undefined)).toBe("");
+  expect(inventoryDefaultReturnSupplier({ suppliers: [] })).toBe(NO_SUPPLIER);
+  expect(inventoryDefaultReturnSupplier({ suppliers: [supplier] })).toBe("a");
+  expect(
+    inventoryDefaultReturnSupplier({ suppliers: [supplier, supplier] }),
+  ).toBe("");
+});
+
+it("no ofrece a un proveedor al que ya se le devolvió todo", () => {
+  const lot = {
+    suppliers: [
+      { id: "a", name: "A", quantity: 0 },
+      { id: "b", name: "B", quantity: 3 },
+    ],
+    unassignedQuantity: 0,
+  };
+  expect(inventoryReturnSuppliers(lot, []).map((o) => o.value)).toEqual(["b"]);
+  expect(inventoryDefaultReturnSupplier(lot)).toBe("b");
+  const empty = {
+    suppliers: [{ id: "a", name: "A", quantity: 0 }],
+    unassignedQuantity: 38,
+  };
+  expect(inventoryReturnSuppliers(empty, []).map((o) => o.value)).toEqual([
+    NO_SUPPLIER,
+  ]);
+  expect(inventoryDefaultReturnSupplier(empty)).toBe(NO_SUPPLIER);
 });

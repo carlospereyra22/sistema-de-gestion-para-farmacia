@@ -1048,9 +1048,31 @@
 .sale-checkout-amount input,
 .sale-checkout-amount input:focus,
 .sale-general-discount-field input,
-.sale-general-discount-field input:focus {
+.sale-general-discount-field input:focus,
+.money-input-field input,
+.money-input-field input:focus,
+.inventory-scan-field input,
+.inventory-scan-field input:focus {
   border: 0;
   box-shadow: none;
+}
+.money-input-field {
+  border-color: #d3dfe7;
+}
+.money-input-field:focus-within,
+.inventory-scan-field:focus-within {
+  border-color: #31826a;
+  box-shadow: 0 0 0 3px rgb(49 130 106 / 14%);
+}
+/* Recibir, Ajustar y Devolver: una sola distancia entre campos. Los avisos
+   flotan dentro de ese espacio, así el formulario no cambia de alto. */
+.inventory-side-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.inventory-side-form > * {
+  margin-top: 0;
 }
 .discount-amount-field input:focus {
   height: 100%;

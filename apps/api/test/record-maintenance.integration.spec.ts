@@ -112,10 +112,14 @@ describe("record maintenance in isolated local rollback transactions", () => {
         unitCostMinor: 200n,
       },
     });
+    const supplier = await tx.supplier.create({
+      data: { organizationId: org.id, name: "Proveedor" },
+    });
     return {
       org,
       branch,
       otherBranch,
+      supplier,
       admin,
       cashier,
       viewer,
@@ -434,6 +438,7 @@ describe("record maintenance in isolated local rollback transactions", () => {
         organizationId: f.org.id,
         branchId: f.branch.id,
         productId: f.product.id,
+        supplierId: f.supplier.id,
         lotNumber: input.number,
         quantity: 1,
         unitCostMinor: 200,

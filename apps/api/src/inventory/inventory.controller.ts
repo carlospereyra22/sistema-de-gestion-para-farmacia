@@ -17,6 +17,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  IsUUID,
   MinLength,
   MaxLength,
   ValidateIf,
@@ -30,6 +31,10 @@ import { InventoryService } from "./inventory.service";
 
 class ReceiveStockDto {
   @IsString() productId!: string;
+  // null: se cargó como Sin proveedor.
+  @ValidateIf((_object, value: unknown) => value !== null)
+  @IsUUID()
+  supplierId!: string | null;
   @IsString() @MinLength(1) lotNumber!: string;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @Type(() => Number) @IsInt() @Min(0) unitCostMinor!: number;
@@ -55,7 +60,10 @@ class EditLotDto {
   @IsString() @MinLength(3) @MaxLength(300) reason!: string;
 }
 class SupplierReturnDto {
-  @IsString() supplierId!: string;
+  // null: stock sin proveedor conocido.
+  @ValidateIf((_object, value: unknown) => value !== null)
+  @IsUUID()
+  supplierId!: string | null;
   @IsString() lotId!: string;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @IsString() @IsNotEmpty() reason!: string;

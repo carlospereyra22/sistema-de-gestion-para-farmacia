@@ -9,8 +9,27 @@ import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import {
+  loadLotHistories,
+  lotReturnableStock,
+  lotSupplierBreakdown,
+} from "./lot-suppliers";
 import { stockAvailability } from "./stock-availability";
 import { inventoryCosts } from "./lot-costs";
+
+function lotSupplierStock(
+  stock: ReturnType<typeof lotReturnableStock>,
+  names: Map<string, string>,
+) {
+  return {
+    suppliers: [...stock.suppliers].map(([id, quantity]) => ({
+      id,
+      name: names.get(id)!,
+      quantity,
+    })),
+    unassignedQuantity: stock.unassigned,
+  };
+}
 
 @Injectable()
 export class InventoryService {
@@ -172,11 +191,42 @@ export class InventoryService {
     const names = new Map(
       products.map((product) => [product.id, product.name]),
     );
+    const histories = await loadLotHistories(
+      this.prisma,
+      lots.map((lot) => lot.id),
+    );
+    const breakdowns = new Map(
+      lots.map((lot) => [
+        lot.id,
+        lotSupplierBreakdown(lot.quantity, histories.get(lot.id)!),
+      ]),
+    );
+    const supplierIds = [...breakdowns.values()].flatMap((breakdown) =>
+      [...breakdown.keys()].filter((id) => id !== null),
+    );
+    const suppliers = supplierIds.length
+      ? await this.prisma.supplier.findMany({
+          where: {
+            organizationId,
+            id: { in: [...new Set(supplierIds)] },
+            active: true,
+          },
+          select: { id: true, name: true },
+        })
+      : [];
+    const supplierNames = new Map(
+      suppliers.map((supplier) => [supplier.id, supplier.name]),
+    );
+    const activeSuppliers = new Set(supplierNames.keys());
     return lots.map((lot) => ({
       ...lot,
       ...stockAvailability(lot),
       productName: names.get(lot.productId) ?? "Producto eliminado",
       unitCostMinor: lot.unitCostMinor.toString(),
+      ...lotSupplierStock(
+        lotReturnableStock(breakdowns.get(lot.id)!, activeSuppliers),
+        supplierNames,
+      ),
     }));
   }
 
@@ -293,6 +343,7 @@ export class InventoryService {
       organizationId: string;
       branchId: string;
       productId: string;
+      supplierId: string | null;
       lotNumber: string;
       quantity: number;
       unitCostMinor: number;
@@ -313,6 +364,17 @@ export class InventoryService {
         "Product is unavailable in this organization.",
       );
     return this.prisma.$transaction(async (tx) => {
+      if (
+        input.supplierId &&
+        !(await tx.supplier.findFirst({
+          where: {
+            id: input.supplierId,
+            organizationId: input.organizationId,
+            active: true,
+          },
+        }))
+      )
+        throw new NotFoundException("El proveedor no está disponible.");
       const existing = await tx.productLot.findUnique({
         where: {
           branchId_productId_number: {
@@ -352,6 +414,7 @@ export class InventoryService {
           type: "PURCHASE_RECEIPT",
           quantity: input.quantity,
           unitCostMinor: BigInt(input.unitCostMinor),
+          supplierId: input.supplierId,
           actorId,
         },
       });
@@ -364,6 +427,7 @@ export class InventoryService {
         action: "STOCK_RECEIVED",
         after: {
           productId: input.productId,
+          supplierId: input.supplierId,
           lotNumber: input.lotNumber.trim(),
           quantity: input.quantity,
         },
@@ -439,7 +503,7 @@ export class InventoryService {
     input: {
       organizationId: string;
       branchId: string;
-      supplierId: string;
+      supplierId: string | null;
       lotId: string;
       quantity: number;
       reason: string;
@@ -447,14 +511,18 @@ export class InventoryService {
   ) {
     await this.assert(actorId, input.organizationId, "INVENTORY_MANAGE");
     return this.prisma.$transaction(async (tx) => {
+      // Dos devoluciones a la vez no pueden pasarse del límite del proveedor.
+      await tx.$queryRaw`SELECT id FROM "ProductLot" WHERE id=${input.lotId}::uuid FOR UPDATE`;
       const [supplier, lot] = await Promise.all([
-        tx.supplier.findFirst({
-          where: {
-            id: input.supplierId,
-            organizationId: input.organizationId,
-            active: true,
-          },
-        }),
+        input.supplierId
+          ? tx.supplier.findFirst({
+              where: {
+                id: input.supplierId,
+                organizationId: input.organizationId,
+                active: true,
+              },
+            })
+          : null,
         tx.productLot.findFirst({
           where: {
             id: input.lotId,
@@ -463,9 +531,39 @@ export class InventoryService {
           },
         }),
       ]);
-      if (!supplier) throw new NotFoundException("Supplier is unavailable.");
+      if (input.supplierId && !supplier)
+        throw new NotFoundException("Supplier is unavailable.");
       if (!lot || lot.quantity < input.quantity)
         throw new ForbiddenException("Insufficient stock for supplier return.");
+      const breakdown = lotSupplierBreakdown(
+        lot.quantity,
+        (await loadLotHistories(tx, [lot.id])).get(lot.id)!,
+      );
+      const activeSuppliers = await tx.supplier.findMany({
+        where: {
+          id: { in: [...breakdown.keys()].filter((id) => id !== null) },
+          active: true,
+        },
+        select: { id: true },
+      });
+      const { suppliers, unassigned } = lotReturnableStock(
+        breakdown,
+        new Set(activeSuppliers.map((item) => item.id)),
+      );
+      // A quien entregó el lote solo se le devuelve lo suyo. El stock sin
+      // proveedor sale sin proveedor o a uno que no figura en el lote.
+      const delivered = supplier ? suppliers.has(supplier.id) : false;
+      if (!delivered && !unassigned)
+        throw new ForbiddenException(
+          supplier
+            ? "Este lote no entró por ese proveedor. Elegí uno de los proveedores del lote."
+            : "Todas las unidades de este lote tienen proveedor. Elegí uno.",
+        );
+      const limit = delivered ? suppliers.get(supplier!.id)! : unassigned;
+      if (input.quantity > limit)
+        throw new ForbiddenException(
+          `${supplier ? "A ese proveedor solo se le pueden devolver" : "Sin proveedor solo se pueden devolver"} ${limit} un. de este lote.`,
+        );
       const supplierReturn = await tx.supplierReturn.create({
         data: {
           organizationId: input.organizationId,

@@ -1,6 +1,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import type { StockLot } from "./lib/api";
 import { StatusLabel } from "./data-table";
+import { lotHasSupplierRows, lotSupplierSummary } from "./lib/inventory-search";
 import type { LotReceiptRow } from "./lib/lot-costs";
 import { withStockAvailability } from "./lib/stock-availability";
 
@@ -15,6 +16,8 @@ type DetailLot = Pick<
   | "expiresAt"
   | "expiryStatus"
   | "sellableQuantity"
+  | "suppliers"
+  | "unassignedQuantity"
 >;
 
 // Detalle de lotes que se despliega debajo de un producto en la tabla.
@@ -24,6 +27,7 @@ export function ProductLotsDetail<T extends DetailLot>({
   hidden = 0,
   actions,
   receipts,
+  supplierActions,
 }: {
   productName: string;
   lots: T[];
@@ -34,6 +38,12 @@ export function ProductLotsDetail<T extends DetailLot>({
   // Con receipts, cada lote muestra cuándo entró y qué se pagó: un renglón por
   // recepción, porque un mismo lote puede entrar varias veces.
   receipts?: (lot: T) => LotReceiptRow[];
+  // Lo que se puede hacer con las unidades de cada proveedor del lote; null es
+  // el stock sin proveedor.
+  supplierActions?: (
+    lot: T,
+    supplier: NonNullable<T["suppliers"]>[number] | null,
+  ) => ReactNode;
 }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? lots : lots.slice(0, VISIBLE_LOTS);
@@ -77,11 +87,20 @@ export function ProductLotsDetail<T extends DetailLot>({
             const lot = withStockAvailability(original);
             const [first, ...others] = receipts?.(original) ?? [];
             const span = others.length + 1;
+            const lotSuppliers = lot.suppliers ?? [];
+            // Sin receipts hay columna de unidades: un renglón por proveedor.
+            const supplierRows =
+              !receipts && lotHasSupplierRows(lot) ? lotSuppliers : [];
             return (
               <Fragment key={lot.id}>
                 <tr>
                   <td rowSpan={span} className="py-1.5 pr-4 text-slate-700">
                     {lot.number}
+                    {lotSuppliers.length && !supplierRows.length ? (
+                      <span className="block text-xs text-slate-500">
+                        {lotSupplierSummary(lot)}
+                      </span>
+                    ) : null}
                   </td>
                   {first ? (
                     <td className="py-1.5 pr-4 tabular-nums text-slate-700">
@@ -126,6 +145,36 @@ export function ProductLotsDetail<T extends DetailLot>({
                     </td>
                   ) : null}
                 </tr>
+                {supplierRows.map((supplier) => (
+                  <tr key={supplier.id} className="text-xs text-slate-600">
+                    <td className="py-1 pl-3 pr-4">{supplier.name}</td>
+                    <td className="py-1 pr-4" />
+                    <td className="py-1 pr-4 text-right tabular-nums">
+                      {supplier.quantity}
+                    </td>
+                    <td className="py-1" />
+                    {actions ? (
+                      <td className="py-1 pl-4 text-right">
+                        {supplierActions?.(original, supplier)}
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+                {supplierRows.length && lot.unassignedQuantity ? (
+                  <tr className="text-xs text-slate-500">
+                    <td className="py-1 pl-3 pr-4">Sin proveedor</td>
+                    <td className="py-1 pr-4" />
+                    <td className="py-1 pr-4 text-right tabular-nums">
+                      {lot.unassignedQuantity}
+                    </td>
+                    <td className="py-1" />
+                    {actions ? (
+                      <td className="py-1 pl-4 text-right">
+                        {supplierActions?.(original, null)}
+                      </td>
+                    ) : null}
+                  </tr>
+                ) : null}
                 {others.map((row, index) => (
                   <tr key={index}>
                     <td className="py-1.5 pr-4 tabular-nums text-slate-700">

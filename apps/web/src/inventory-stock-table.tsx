@@ -10,6 +10,7 @@ import {
   type DataTableColumn,
 } from "./data-table";
 import type { StockLot } from "./lib/api";
+import { NO_SUPPLIER, lotHasSupplierRows } from "./lib/inventory-search";
 import type { InventoryRow } from "./lib/inventory-products";
 import { inventoryProductDetail } from "./lib/inventory-search";
 import { ProductLotsDetail } from "./product-lots-detail";
@@ -53,7 +54,7 @@ export function InventoryStockTable({
   branchId: string;
   done: () => void;
   onAdjust: (lot: StockLot) => void;
-  onReturn: (lot: StockLot) => void;
+  onReturn: (lot: StockLot, supplierId?: string) => void;
   footer?: ReactNode;
 }) {
   // Al buscar por lote el detalle arranca abierto: estar en toggled significa
@@ -180,16 +181,32 @@ export function InventoryStockTable({
                       >
                         Ajustar
                       </button>
+                      {lotHasSupplierRows(lot) ? null : (
+                        <button
+                          type="button"
+                          aria-label={`Devolver lote ${lot.number} de ${row.name}`}
+                          onClick={() => onReturn(lot)}
+                          className={lotButton}
+                        >
+                          Devolver
+                        </button>
+                      )}
+                    </span>
+                  )}
+                  supplierActions={(lot, supplier) =>
+                    supplier?.quantity === 0 ? null : (
                       <button
                         type="button"
-                        aria-label={`Devolver lote ${lot.number} de ${row.name}`}
-                        onClick={() => onReturn(lot)}
+                        aria-label={`Devolver ${supplier ? `a ${supplier.name}` : "sin proveedor"} lote ${lot.number} de ${row.name}`}
+                        onClick={() =>
+                          onReturn(lot, supplier?.id ?? NO_SUPPLIER)
+                        }
                         className={lotButton}
                       >
                         Devolver
                       </button>
-                    </span>
-                  )}
+                    )
+                  }
                 />
               </DataTableDetailRow>
             ) : null}

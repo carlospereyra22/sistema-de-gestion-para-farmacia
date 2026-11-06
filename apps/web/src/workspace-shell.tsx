@@ -152,7 +152,9 @@ import {
   catalogStockTotals,
   toggleCatalogMetric,
 } from "./lib/product-catalog-metrics";
-import { lotCostInput } from "./lib/lot-cost";
+import { formatAmountTyping } from "./lib/amount-typing";
+import { lotCostInput, typedCostMinor } from "./lib/lot-cost";
+import { MoneyInput } from "./money-input";
 import { stockLevel } from "./lib/stock-level";
 import {
   leadingLot,
@@ -169,6 +171,10 @@ import {
   emptyCatalogAdditionalFilters,
   matchesCatalogAdditionalFilters,
 } from "./lib/catalog-additional-filters";
+import {
+  InventoryFormActions,
+  InventoryScanField,
+} from "./inventory-form-parts";
 import { InventorySearchSelect } from "./inventory-search-select";
 import { InventoryStockTable } from "./inventory-stock-table";
 import { InventoryLotInput } from "./inventory-lot-input";
@@ -183,6 +189,11 @@ import {
   type InventoryFilters,
 } from "./lib/inventory-products";
 import {
+  NO_SUPPLIER,
+  noSupplierOption,
+  inventoryDefaultReturnSupplier,
+  inventoryReturnSuppliers,
+  inventorySupplierOption,
   inventoryProductOption,
   findScannedProduct,
   scanAutoDelay,
@@ -1440,7 +1451,10 @@ function Home({
     <div className="mt-8 space-y-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
-          <article key={metric.label} className="border bg-white p-5">
+          <article
+            key={metric.label}
+            className="inventory-side-form border bg-white p-5"
+          >
             <span
               className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${metric.tone}`}
             >
@@ -4033,7 +4047,7 @@ function Products({
       </div>
       <form
         onSubmit={(event) => void save(event)}
-        className="border bg-white p-5"
+        className="inventory-side-form border bg-white p-5"
       >
         <h2 className="font-semibold">
           {editingProduct ? "Editar producto" : "Nuevo producto"}
@@ -4168,6 +4182,7 @@ function Inventory({
   const [scannedCode, setScannedCode] = useState("");
   const [scanStatus, setScanStatus] = useState("");
   const [scanError, setScanError] = useState(false);
+  const [receiveSupplierId, setReceiveSupplierId] = useState("");
   const [lotNumber, setLotNumber] = useState("");
   const [quantity, setQuantity] = useState("");
   const [cost, setCost] = useState("");
@@ -4205,6 +4220,20 @@ function Inventory({
   }, [organizationId, token]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusScanner = () => {
     window.requestAnimationFrame(() => scannerInputRef.current?.focus());
+  };
+  const supplierOptions = suppliers
+    .filter((supplier) => supplier.active)
+    .map(inventorySupplierOption);
+  const returnSupplierOptions = inventoryReturnSuppliers(
+    stock.find((lot) => lot.id === returnLotId),
+    supplierOptions,
+  );
+  const chooseReturnLot = (id: string, supplierId?: string) => {
+    setReturnLotId(id);
+    setReturnSupplierId(
+      supplierId ??
+        inventoryDefaultReturnSupplier(stock.find((lot) => lot.id === id)),
+    );
   };
   const selectScannedProduct = () => {
     if (!scannedCode.trim()) return;
@@ -4248,7 +4277,7 @@ function Inventory({
       return;
     }
     setReturnProductId(product.id);
-    setReturnLotId(selectedLot?.id ?? "");
+    chooseReturnLot(selectedLot?.id ?? "");
     window.requestAnimationFrame(() =>
       (selectedLot
         ? returnQuantityInputRef.current
@@ -4274,7 +4303,7 @@ function Inventory({
   // precargan los actuales para no cambiarlos sin querer.
   const pickReceiveLot = (lot: StockLot) => {
     setLotNumber(lot.number);
-    setCost(lotCostInput(lot.unitCostMinor));
+    setCost(formatAmountTyping(lotCostInput(lot.unitCostMinor)));
     setExpiresAt(lot.expiresAt?.slice(0, 10) ?? "");
   };
   // Atajos desde un lote de la tabla: abren el formulario con el lote elegido.
@@ -4288,32 +4317,58 @@ function Inventory({
       adjustmentQuantityInputRef.current?.focus(),
     );
   };
-  const returnLot = (lot: StockLot) => {
+  const returnLot = (lot: StockLot, supplierId?: string) => {
     setInventoryMode("return");
     setReturnProductId(lot.productId);
-    setReturnLotId(lot.id);
+    chooseReturnLot(lot.id, supplierId);
     setScanStatus("");
     setScanError(false);
     window.requestAnimationFrame(() => returnQuantityInputRef.current?.focus());
+  };
+  // El proveedor queda elegido: una misma entrega trae varios productos.
+  const clearReceiveItem = () => {
+    setProductId("");
+    setScannedCode("");
+    setLotNumber("");
+    setQuantity("");
+    setCost("");
+    setExpiresAt("");
+    setScanStatus("");
+    setScanError(false);
+  };
+  const clearAdjustForm = () => {
+    setAdjustmentProductId("");
+    setAdjustmentLotId("");
+    setAdjustmentQuantity("");
+    setAdjustmentReason("");
+    setScannedCode("");
+    setScanStatus("");
+    setScanError(false);
+  };
+  const clearReturnForm = () => {
+    setReturnProductId("");
+    setReturnLotId("");
+    setReturnQuantity("");
+    setReturnSupplierId("");
+    setReturnReason("");
+    setScannedCode("");
+    setScanStatus("");
+    setScanError(false);
   };
   const save = async (event: FormEvent) => {
     event.preventDefault();
     try {
       await receiveStock(token, organizationId, branchId, {
         productId,
+        supplierId:
+          receiveSupplierId === NO_SUPPLIER ? null : receiveSupplierId,
         lotNumber,
         quantity: Number(quantity),
-        unitCostMinor: Math.round(Number(cost) * 100),
+        unitCostMinor: Number(typedCostMinor(cost)),
         expiresAt: expiresAt || undefined,
       });
-      setProductId("");
-      setScannedCode("");
-      setLotNumber("");
-      setQuantity("");
-      setCost("");
-      setExpiresAt("");
+      clearReceiveItem();
       setScanStatus("Recepción registrada. Escaneá el siguiente producto.");
-      setScanError(false);
       done();
       focusScanner();
     } catch (cause) {
@@ -4351,12 +4406,13 @@ function Inventory({
     event.preventDefault();
     try {
       await createSupplierReturn(token, organizationId, branchId, {
-        supplierId: returnSupplierId,
+        supplierId: returnSupplierId === NO_SUPPLIER ? null : returnSupplierId,
         lotId: returnLotId,
         quantity: Number(returnQuantity),
         reason: returnReason,
       });
       setReturnQuantity("");
+      setReturnSupplierId("");
       setReturnReason("");
       setScannedCode("");
       setScanStatus("Devolución registrada. Escaneá el siguiente producto.");
@@ -4459,49 +4515,27 @@ function Inventory({
         {inventoryMode === "receive" ? (
           <form
             onSubmit={(event) => void save(event)}
-            className="border bg-white p-5"
+            className="inventory-side-form border bg-white p-5"
           >
-            <h2 className="mb-4 font-semibold">Recibir mercadería</h2>
-            <label className="block text-sm font-medium text-slate-700">
-              Escanear código o QR
-              <div className="mt-1 flex items-center gap-2 rounded-md border border-teal-600 bg-teal-50/40 px-3 focus-within:ring-2 focus-within:ring-teal-200">
-                <ScanBarcode size={19} className="shrink-0 text-teal-700" />
-                <input
-                  ref={scannerInputRef}
-                  autoFocus
-                  value={scannedCode}
-                  onChange={(event) => {
-                    setScannedCode(event.target.value);
-                    setScanStatus("");
-                    setScanError(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      selectScannedProduct();
-                    }
-                  }}
-                  placeholder="Escaneá el código"
-                  className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
-                />
-              </div>
-            </label>
-            {scanStatus ? (
-              <p
-                className={`mt-2 text-xs ${
-                  scanError ? "text-rose-600" : "text-teal-700"
-                }`}
-              >
-                {scanStatus}
-              </p>
-            ) : null}
-            <h2 className="sr-only">Recibir mercadería</h2>
-            <InventoryPendingPurchase
-              token={token}
-              organizationId={organizationId}
-              branchId={branchId}
-              productId={productId}
-              onOpen={onPurchase}
+            <h2 className="font-semibold">Recibir mercadería</h2>
+            <InventoryScanField
+              value={scannedCode}
+              status={scanStatus}
+              error={scanError}
+              inputRef={scannerInputRef}
+              onChange={(value) => {
+                setScannedCode(value);
+                setScanStatus("");
+                setScanError(false);
+              }}
+              onSubmit={selectScannedProduct}
+            />
+            <InventorySearchSelect
+              label="Proveedor"
+              value={receiveSupplierId}
+              options={[noSupplierOption, ...supplierOptions]}
+              placeholder="Elegí el proveedor"
+              onChange={setReceiveSupplierId}
             />
             <InventorySearchSelect
               label="Producto"
@@ -4531,9 +4565,8 @@ function Inventory({
               value={quantity}
               onChange={setQuantity}
             />
-            <Input
+            <MoneyInput
               label="Costo unitario"
-              type="number"
               value={cost}
               onChange={setCost}
             />
@@ -4544,48 +4577,51 @@ function Inventory({
               onChange={setExpiresAt}
               required={false}
             />
-            <button className="mt-5 w-full bg-teal-700 py-2 text-sm text-white">
-              Confirmar recepción
-            </button>
+            <InventoryFormActions
+              submitLabel="Confirmar recepción"
+              canClear={Boolean(
+                receiveSupplierId ||
+                productId ||
+                scannedCode ||
+                lotNumber ||
+                quantity ||
+                cost ||
+                expiresAt,
+              )}
+              onClear={() => {
+                clearReceiveItem();
+                setReceiveSupplierId("");
+                focusScanner();
+              }}
+            />
+            {/* Va al final: su alto varía y no debe correr los campos. */}
+            <InventoryPendingPurchase
+              token={token}
+              organizationId={organizationId}
+              branchId={branchId}
+              productId={productId}
+              onOpen={onPurchase}
+            />
           </form>
         ) : null}
         {inventoryMode === "adjust" ? (
           <form
             onSubmit={(event) => void adjust(event)}
-            className="border bg-white p-5"
+            className="inventory-side-form border bg-white p-5"
           >
             <h2 className="font-semibold">Ajuste de stock</h2>
-            <label className="mt-4 block text-sm font-medium text-slate-700">
-              Escanear código o QR
-              <div className="mt-1 flex items-center gap-2 rounded-md border border-teal-600 bg-teal-50/40 px-3 focus-within:ring-2 focus-within:ring-teal-200">
-                <ScanBarcode size={19} className="shrink-0 text-teal-700" />
-                <input
-                  ref={scannerInputRef}
-                  autoFocus
-                  value={scannedCode}
-                  onChange={(event) => {
-                    setScannedCode(event.target.value);
-                    setScanStatus("");
-                    setScanError(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      selectScannedProduct();
-                    }
-                  }}
-                  placeholder="Escaneá el código"
-                  className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
-                />
-              </div>
-            </label>
-            {scanStatus ? (
-              <p
-                className={`mt-2 text-xs ${scanError ? "text-rose-600" : "text-teal-700"}`}
-              >
-                {scanStatus}
-              </p>
-            ) : null}
+            <InventoryScanField
+              value={scannedCode}
+              status={scanStatus}
+              error={scanError}
+              inputRef={scannerInputRef}
+              onChange={(value) => {
+                setScannedCode(value);
+                setScanStatus("");
+                setScanError(false);
+              }}
+              onSubmit={selectScannedProduct}
+            />
             <InventoryLotPicker
               stock={stock}
               productOptions={stockProductOptions}
@@ -4616,52 +4652,45 @@ function Inventory({
               value={adjustmentReason}
               onChange={setAdjustmentReason}
             />
-            <button className="mt-5 w-full border border-teal-700 py-2 text-sm text-teal-800">
-              Registrar ajuste
-            </button>
+            <InventoryFormActions
+              submitLabel="Registrar ajuste"
+              canClear={Boolean(
+                adjustmentProductId ||
+                scannedCode ||
+                adjustmentQuantity ||
+                adjustmentReason,
+              )}
+              onClear={() => {
+                clearAdjustForm();
+                focusScanner();
+              }}
+            />
           </form>
         ) : null}
         {inventoryMode === "return" ? (
           <form
             onSubmit={(event) => void returnToSupplier(event)}
-            className="border bg-white p-5"
+            className="inventory-side-form border bg-white p-5"
           >
-            <h2 className="font-semibold">Devolución a proveedor</h2>
-            <label className="mt-4 block text-sm font-medium text-slate-700">
-              Escanear código o QR
-              <div className="mt-1 flex items-center gap-2 rounded-md border border-teal-600 bg-teal-50/40 px-3 focus-within:ring-2 focus-within:ring-teal-200">
-                <ScanBarcode size={19} className="shrink-0 text-teal-700" />
-                <input
-                  ref={scannerInputRef}
-                  autoFocus
-                  value={scannedCode}
-                  onChange={(event) => {
-                    setScannedCode(event.target.value);
-                    setScanStatus("");
-                    setScanError(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      selectScannedProduct();
-                    }
-                  }}
-                  placeholder="Escaneá el código"
-                  className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
-                />
-              </div>
-            </label>
-            {scanStatus ? (
-              <p
-                className={`mt-2 text-xs ${scanError ? "text-rose-600" : "text-teal-700"}`}
-              >
-                {scanStatus}
+            <div>
+              <h2 className="font-semibold">Devolución a proveedor</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Da salida al lote; usalo para vencidos, daños o reclamos al
+                proveedor.
               </p>
-            ) : null}
-            <p className="mt-2 text-xs text-slate-500">
-              Da salida al lote; usalo para vencidos, daños o reclamos al
-              proveedor.
-            </p>
+            </div>
+            <InventoryScanField
+              value={scannedCode}
+              status={scanStatus}
+              error={scanError}
+              inputRef={scannerInputRef}
+              onChange={(value) => {
+                setScannedCode(value);
+                setScanStatus("");
+                setScanError(false);
+              }}
+              onSubmit={selectScannedProduct}
+            />
             <InventoryLotPicker
               stock={stock}
               productOptions={stockProductOptions}
@@ -4670,10 +4699,10 @@ function Inventory({
               lotInputRef={returnLotSelectRef}
               onProductChange={(id) => {
                 setReturnProductId(id);
-                setReturnLotId("");
+                chooseReturnLot("");
               }}
               onLotChange={(id) => {
-                setReturnLotId(id);
+                chooseReturnLot(id);
                 if (id)
                   window.requestAnimationFrame(() =>
                     returnQuantityInputRef.current?.focus(),
@@ -4687,30 +4716,35 @@ function Inventory({
               onChange={setReturnQuantity}
               inputRef={returnQuantityInputRef}
             />
-            <label className="mt-4 block text-sm">
-              Proveedor
-              <select
-                required
-                className="mt-1 h-10 w-full border px-3"
-                value={returnSupplierId}
-                onChange={(event) => setReturnSupplierId(event.target.value)}
-              >
-                <option value="">Seleccionar…</option>
-                {suppliers.map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {supplier.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <InventorySearchSelect
+              label="Proveedor"
+              value={returnSupplierId}
+              options={returnSupplierOptions}
+              disabled={!returnLotId}
+              placeholder={
+                returnLotId ? "Elegí el proveedor" : "Elegí primero el lote"
+              }
+              onChange={setReturnSupplierId}
+            />
             <Input
               label="Motivo"
               value={returnReason}
               onChange={setReturnReason}
             />
-            <button className="mt-5 w-full border border-teal-700 py-2 text-sm text-teal-800">
-              Confirmar devolución
-            </button>
+            <InventoryFormActions
+              submitLabel="Confirmar devolución"
+              canClear={Boolean(
+                returnProductId ||
+                scannedCode ||
+                returnQuantity ||
+                returnSupplierId ||
+                returnReason,
+              )}
+              onClear={() => {
+                clearReturnForm();
+                focusScanner();
+              }}
+            />
           </form>
         ) : null}
       </div>
@@ -7288,7 +7322,7 @@ function UsersPanel({
       </div>
       <form
         onSubmit={(event) => void save(event)}
-        className="border bg-white p-5"
+        className="inventory-side-form border bg-white p-5"
       >
         <h2 className="font-semibold">Nuevo usuario</h2>
         <UserTicketNameField value={displayName} onChange={setDisplayName} />
@@ -7385,7 +7419,7 @@ function RolesPanel({
       </div>
       <form
         onSubmit={(event) => void save(event)}
-        className="border bg-white p-5"
+        className="inventory-side-form border bg-white p-5"
       >
         <h2 className="font-semibold">Nuevo rol</h2>
         <Input label="Nombre" value={name} onChange={setName} />
