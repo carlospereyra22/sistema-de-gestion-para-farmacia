@@ -4,6 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import {
+  loadLotHistories,
+  lotSupplierBreakdown,
+} from "../inventory/lot-suppliers";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 @Injectable()
@@ -194,19 +198,34 @@ export class TransfersService {
           },
           update: { quantity: { increment: item.quantity } },
         });
-        await tx.inventoryMovement.create({
-          data: {
-            organizationId,
-            branchId: destinationBranchId,
-            productId: item.productId,
-            lotId: lot.id,
-            type: "TRANSFER_IN",
-            quantity: item.quantity,
-            actorId,
-            referenceType: "TRANSFER",
-            referenceId: id,
-          },
-        });
+        // El lote conserva su origen: lo transferido es lo más viejo del lote,
+        // así que se reparte por proveedor con ese mismo criterio.
+        const history = (await loadLotHistories(tx, [sourceLot.id])).get(
+          sourceLot.id,
+        )!;
+        const after = lotSupplierBreakdown(sourceLot.quantity, history);
+        const before = lotSupplierBreakdown(
+          sourceLot.quantity + item.quantity,
+          history,
+        );
+        for (const [supplierId, quantity] of before) {
+          const moved = quantity - (after.get(supplierId) ?? 0);
+          if (moved > 0)
+            await tx.inventoryMovement.create({
+              data: {
+                organizationId,
+                branchId: destinationBranchId,
+                productId: item.productId,
+                lotId: lot.id,
+                type: "TRANSFER_IN",
+                quantity: moved,
+                supplierId,
+                actorId,
+                referenceType: "TRANSFER",
+                referenceId: id,
+              },
+            });
+        }
       }
       const updated = await tx.transfer.update({
         where: { id },

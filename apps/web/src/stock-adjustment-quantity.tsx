@@ -15,9 +15,9 @@ export function StockAdjustmentQuantity({
   inputRef: RefObject<HTMLInputElement | null>;
 }) {
   return (
-    <fieldset className="mt-4">
+    <fieldset>
       <legend className="text-sm">Ajustar cantidad</legend>
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-1 grid grid-cols-2 gap-2">
         <button
           type="button"
           aria-pressed={direction === "subtract"}
@@ -37,7 +37,7 @@ export function StockAdjustmentQuantity({
           Sumar
         </button>
       </div>
-      <label className="mt-3 block text-sm">
+      <label className="mt-[22px] block text-sm">
         {direction === "subtract" ? "Unidades a restar" : "Unidades a sumar"}
         <input
           ref={inputRef}
@@ -49,7 +49,7 @@ export function StockAdjustmentQuantity({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder="Ej. 4"
-          className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3"
+          className="mt-1 h-10 w-full rounded-lg border bg-white px-3"
         />
       </label>
     </fieldset>

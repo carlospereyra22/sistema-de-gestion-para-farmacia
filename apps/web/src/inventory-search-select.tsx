@@ -74,7 +74,7 @@ export function InventorySearchSelect({
   }
   return (
     <div
-      className="mt-4"
+      className="relative mt-4"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           setOpen(false);
@@ -201,10 +201,12 @@ export function InventorySearchSelect({
           </div>
         )}
       </div>
+      {/* Flota en el espacio entre campos: elegir no mueve el formulario. */}
       {selected && (
         <p
           id={`${id}-detail`}
-          className="mt-1 break-words text-xs leading-4 text-slate-500"
+          title={selected.detail}
+          className="absolute inset-x-0 top-full mt-0.5 truncate text-xs leading-4 text-slate-500"
         >
           {selected.detail}
         </p>

@@ -1587,6 +1587,11 @@ export type StockLot = {
   unitCostMinor: string;
   packFactor?: number | null;
   packCount?: number;
+  // quantity: lo que le queda en el lote, gastando primero lo más viejo. En 0
+  // si ya salió todo lo suyo.
+  suppliers?: { id: string; name: string; quantity: number }[];
+  // Stock del lote cargado como Sin proveedor.
+  unassignedQuantity?: number;
 };
 
 export async function getStock(
@@ -1635,6 +1640,7 @@ export async function receiveStock(
   branchId: string,
   input: {
     productId: string;
+    supplierId: string | null;
     lotNumber: string;
     quantity: number;
     unitCostMinor: number;
@@ -1675,7 +1681,7 @@ export async function createSupplierReturn(
   organizationId: string,
   branchId: string,
   input: {
-    supplierId: string;
+    supplierId: string | null;
     lotId: string;
     quantity: number;
     reason: string;

@@ -92,3 +92,68 @@ it("con receipts suma Recibido y Costo, con un renglón por recepción", () => {
     ),
   ).not.toContain("Recibido");
 });
+
+const mixedLot = {
+  id: "3",
+  number: "L-300",
+  quantity: 42,
+  expiresAt: null,
+  expiryStatus: "AVAILABLE" as const,
+  sellableQuantity: 42,
+  suppliers: [
+    { id: "a", name: "juan", quantity: 41 },
+    { id: "b", name: "carlos", quantity: 1 },
+  ],
+};
+
+it("separa las unidades de cada proveedor con su propia acción", () => {
+  const html = renderToStaticMarkup(
+    <ProductLotsDetail
+      productName="ACTRON"
+      lots={[mixedLot]}
+      actions={() => null}
+      supplierActions={(_lot, supplier) => (
+        <button>Devolver a {supplier?.name}</button>
+      )}
+    />,
+  );
+  expect(html).toContain(">41</td>");
+  expect(html).toContain(">1</td>");
+  expect(html).toContain("Devolver a juan");
+  expect(html).toContain("Devolver a carlos");
+});
+
+it("muestra el stock sin proveedor para que los números sumen", () => {
+  const html = renderToStaticMarkup(
+    <ProductLotsDetail
+      productName="ACTRON"
+      lots={[
+        {
+          ...mixedLot,
+          suppliers: [
+            { id: "a", name: "juan", quantity: 1 },
+            { id: "b", name: "carlos", quantity: 1 },
+          ],
+          unassignedQuantity: 40,
+        },
+      ]}
+      actions={() => null}
+      supplierActions={(_lot, supplier) => (
+        <button>Devolver {supplier?.name ?? "sin proveedor"}</button>
+      )}
+    />,
+  );
+  expect(html).toContain("Sin proveedor");
+  expect(html).toContain(">40</td>");
+  expect(html).toContain("Devolver sin proveedor");
+});
+
+it("con un solo proveedor lo muestra debajo del lote", () => {
+  const html = renderToStaticMarkup(
+    <ProductLotsDetail
+      productName="ACTRON"
+      lots={[{ ...mixedLot, suppliers: [mixedLot.suppliers[0]!] }]}
+    />,
+  );
+  expect(html).toContain("juan · 41 un.");
+});

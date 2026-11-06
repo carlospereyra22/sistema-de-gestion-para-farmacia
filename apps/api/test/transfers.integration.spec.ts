@@ -97,6 +97,20 @@ describe("transfers between branches (isolated schema)", () => {
         unitCostMinor: 100n,
       },
     });
+    const supplier = await first.supplier.create({
+      data: { organizationId: org.id, name: "Proveedor del lote" },
+    });
+    await first.inventoryMovement.create({
+      data: {
+        organizationId: org.id,
+        branchId: source.id,
+        productId: product.id,
+        lotId: sourceLot.id,
+        type: "PURCHASE_RECEIPT",
+        quantity: 4,
+        supplierId: supplier.id,
+      },
+    });
     const firstService = new TransfersService(first, new AuditService(first));
     const secondService = new TransfersService(
       second,
@@ -131,6 +145,16 @@ describe("transfers between branches (isolated schema)", () => {
       },
     });
     expect(destinationLot?.quantity).toBe(2);
+    // El lote conserva su proveedor para poder devolverlo desde el destino.
+    expect(
+      await first.inventoryMovement.count({
+        where: {
+          lotId: destinationLot!.id,
+          supplierId: supplier.id,
+          quantity: 2,
+        },
+      }),
+    ).toBe(1);
     expect(
       await first.inventoryMovement.count({
         where: { referenceId: transfer.id, type: "TRANSFER_IN" },

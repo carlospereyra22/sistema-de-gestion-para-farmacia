@@ -518,6 +518,7 @@ export class PurchasesService {
           type: "PURCHASE_RECEIPT",
           quantity: line.quantity,
           unitCostMinor: item.unitCostMinor,
+          supplierId: p.supplierId,
           actorId,
           referenceType: "PURCHASE",
           referenceId: purchaseId,

@@ -380,6 +380,76 @@ describe("purchase receipts on an isolated synthetic schema", () => {
       (await f.services[0]!.detail(...f.args, p.id)).receipts[0]!.actorName,
     ).toBe("Test receiver");
   });
+  it("guarda los proveedores del lote y solo deja devolverle a ellos", async () => {
+    const f = await fixture(1);
+    const inventory = new InventoryService(first, new AuditService(first));
+    const createSupplier = (name: string) =>
+      first.supplier.create({ data: { organizationId: f.org.id, name } });
+    const other = await createSupplier("Otro proveedor");
+    const stranger = await createSupplier("Proveedor ajeno");
+    const location = { organizationId: f.org.id, branchId: f.branch.id };
+    const receive = (supplierId: string) =>
+      inventory.receive(f.user.id, {
+        ...location,
+        productId: f.products[0]!.id,
+        supplierId,
+        lotNumber: "MIX",
+        quantity: 2,
+        unitCostMinor: 100,
+      });
+    await receive(f.supplier.id);
+    await receive(other.id);
+    const [lot] = await inventory.stock(f.user.id, f.org.id, f.branch.id);
+    expect(
+      lot!.suppliers
+        .map((supplier) => [supplier.name, supplier.quantity])
+        .sort(),
+    ).toEqual([
+      ["Otro proveedor", 2],
+      ["Test supplier", 2],
+    ]);
+    const devolution = (supplierId: string | null, quantity = 1) =>
+      inventory.supplierReturn(f.user.id, {
+        ...location,
+        supplierId,
+        lotId: lot!.id,
+        quantity,
+        reason: "Vencido",
+      });
+    await expect(devolution(stranger.id)).rejects.toThrow(
+      "no entró por ese proveedor",
+    );
+    await devolution(other.id);
+    await expect(devolution(other.id, 2)).rejects.toThrow(
+      "solo se le pueden devolver 1 un.",
+    );
+    expect(
+      (await first.productLot.findUniqueOrThrow({ where: { id: lot!.id } }))
+        .quantity,
+    ).toBe(3);
+    // Stock sin proveedor: se le puede devolver a cualquiera, hasta esa cantidad.
+    await first.productLot.update({
+      where: { id: lot!.id },
+      data: { quantity: { increment: 5 } },
+    });
+    const unassigned = async () =>
+      (await inventory.stock(f.user.id, f.org.id, f.branch.id))[0]!
+        .unassignedQuantity;
+    expect(await unassigned()).toBe(5);
+    // Aunque haya stock sin proveedor, a cada uno solo lo que entregó.
+    await expect(devolution(other.id, 2)).rejects.toThrow(
+      "solo se le pueden devolver 1 un.",
+    );
+    await expect(devolution(null, 6)).rejects.toThrow(
+      "Sin proveedor solo se pueden devolver 5 un.",
+    );
+    await devolution(stranger.id, 4);
+    await devolution(null, 1);
+    expect(await unassigned()).toBe(0);
+    await expect(devolution(null)).rejects.toThrow(
+      "Todas las unidades de este lote tienen proveedor",
+    );
+  });
   it("conserva cada costo de un mismo lote recibido por Compras e Inventario", async () => {
     const f = await fixture(1);
     const productId = f.products[0]!.id;
@@ -400,11 +470,17 @@ describe("purchase receipts on an isolated synthetic schema", () => {
     };
     await purchaseLot(70000, 20);
     await purchaseLot(90000, 5);
+    expect(
+      await first.inventoryMovement.count({
+        where: { supplierId: f.supplier.id, type: "PURCHASE_RECEIPT" },
+      }),
+    ).toBe(2);
     const inventory = new InventoryService(first, new AuditService(first));
     await inventory.receive(f.user.id, {
       organizationId: f.org.id,
       branchId: f.branch.id,
       productId,
+      supplierId: f.supplier.id,
       lotNumber: "VAR",
       quantity: 3,
       unitCostMinor: 120000,
