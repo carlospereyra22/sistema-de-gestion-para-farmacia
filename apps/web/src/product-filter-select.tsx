@@ -8,6 +8,7 @@ export function ProductFilterSelect({
   icon,
   onChange,
   compact = false,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -15,6 +16,7 @@ export function ProductFilterSelect({
   icon: ReactNode;
   onChange: (value: string) => void;
   compact?: boolean;
+  disabled?: boolean;
 }) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -78,6 +80,7 @@ export function ProductFilterSelect({
       <button
         type="button"
         role="combobox"
+        disabled={disabled}
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -136,7 +139,7 @@ export function ProductFilterSelect({
             }
           }
         }}
-        className={`flex ${compact ? "h-10" : "h-12"} w-full min-w-0 items-center gap-2 rounded-lg border bg-white px-3 text-left shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${open ? "border-teal-400 ring-2 ring-teal-500/10" : "border-slate-200"}`}
+        className={`flex ${compact ? "h-10" : "h-12"} w-full min-w-0 items-center gap-2 rounded-lg border bg-white px-3 text-left shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${disabled ? "cursor-not-allowed opacity-50" : ""} ${open ? "border-teal-400 ring-2 ring-teal-500/10" : "border-slate-200"}`}
       >
         {icon && <span className="shrink-0 text-teal-600">{icon}</span>}
         <span className="min-w-0 flex-1">

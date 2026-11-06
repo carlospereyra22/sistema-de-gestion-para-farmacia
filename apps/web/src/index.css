@@ -33,6 +33,24 @@
   background-color: #e8faf5;
   color: #087f70;
 }
+/* Misma altura con la caja abierta o cerrada: la pantalla no salta al cambiar. */
+.cash-status,
+.cash-summary,
+.cash-close,
+.cash-manual,
+.cash-movements {
+  min-height: 300px;
+}
+.cash-movements {
+  display: flex;
+  flex-direction: column;
+}
+/* La lista no empuja la tarjeta: con más movimientos, se desplaza por dentro. */
+.cash-movements-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
 .cash-status {
   display: flex;
   flex-direction: column;

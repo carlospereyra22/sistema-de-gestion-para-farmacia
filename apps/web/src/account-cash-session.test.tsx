@@ -21,6 +21,20 @@ it("warns when no cash session is open", () => {
   expect(html).toContain("No hay una caja abierta");
   expect(html).not.toContain("<select");
 });
+it("identifica cada caja por su nombre cuando lo recibe", () => {
+  const html = renderToStaticMarkup(
+    <AccountCashSession
+      sessions={[
+        { ...session, label: "Mostrador · 05/11" },
+        { ...session, id: "two", label: "Perfumería · 05/11" },
+      ]}
+      value=""
+      onChange={() => {}}
+    />,
+  );
+  expect(html).toContain("Mostrador · 05/11");
+  expect(html).toContain("Perfumería · 05/11");
+});
 it("keeps the choice when multiple sessions are open", () => {
   const html = renderToStaticMarkup(
     <AccountCashSession

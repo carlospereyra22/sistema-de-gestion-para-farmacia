@@ -6,7 +6,7 @@ export function AccountCashSession({
   onChange,
   allowWithoutSession = true,
 }: {
-  sessions: { id: string; openedAt: string }[];
+  sessions: { id: string; openedAt: string; label?: string }[];
   value: string;
   onChange: (id: string) => void;
   allowWithoutSession?: boolean;
@@ -38,7 +38,8 @@ export function AccountCashSession({
         <option value="">Seleccionar caja</option>
         {sessions.map((session) => (
           <option key={session.id} value={session.id}>
-            Caja · {new Date(session.openedAt).toLocaleString("es-AR")}
+            {session.label ??
+              `Caja · ${new Date(session.openedAt).toLocaleString("es-AR")}`}
           </option>
         ))}
       </select>

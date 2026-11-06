@@ -19,10 +19,12 @@ const amount = (value: string) =>
 export function CashOverview({
   session,
   registerName,
+  registerPicker,
   closedDetails,
 }: {
   session?: CashSession;
   registerName?: string;
+  registerPicker?: ReactNode;
   closedDetails?: ReactNode;
 }) {
   return (
@@ -37,9 +39,11 @@ export function CashOverview({
             {session ? "Abierta" : "Sin sesión"}
           </span>
         </div>
-        <p className="cash-register-name">
-          {registerName ?? "Sin caja seleccionada"}
-        </p>
+        {registerPicker ?? (
+          <p className="cash-register-name">
+            {registerName ?? "Sin caja seleccionada"}
+          </p>
+        )}
         <p className="cash-opened-at">
           <CalendarDays size={14} aria-hidden="true" />
           {session
@@ -158,7 +162,7 @@ export function CashMovements({ session }: { session?: CashSession }) {
         Entradas y salidas de la sesión. Los ingresos del resumen también
         incluyen los cobros de ventas.
       </p>
-      <div className="mt-3 max-h-72 overflow-auto">
+      <div className="cash-movements-list mt-3">
         {rows.length ? (
           <table className="w-full min-w-[430px] text-left text-xs">
             <thead>

@@ -6,6 +6,10 @@ import {
   type FiscalTrial,
   type CashSession,
 } from "./lib/api";
+import {
+  cashSessionLabel,
+  preferredCashSessionId,
+} from "./lib/active-cash-register";
 import { trialTicket } from "./lib/fiscal-trial-ticket";
 import { printTicketFrame } from "./lib/browser-ticket-print";
 const money = (minor: number) =>
@@ -45,7 +49,9 @@ export function SaleCreditNotes({
   const [reference, setReference] = useState("");
   const [received, setReceived] = useState(false);
   const [settleConfirmed, setSettleConfirmed] = useState(false);
-  const [sessions, setSessions] = useState<CashSession[]>([]);
+  const [sessions, setSessions] = useState<(CashSession & { label: string })[]>(
+    [],
+  );
   const [sessionId, setSessionId] = useState("");
   const frame = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
@@ -116,7 +122,14 @@ export function SaleCreditNotes({
       );
       try {
         const cash = await getCash(token, organizationId, branchId);
-        setSessions(cash.sessions.filter((s) => !s.closedAt));
+        const open = cash.sessions.filter((s) => !s.closedAt);
+        setSessions(
+          open.map((s) => ({
+            ...s,
+            label: cashSessionLabel(s, cash.registers),
+          })),
+        );
+        setSessionId(preferredCashSessionId(open, organizationId, branchId));
       } catch {
         setSessions([]);
       }
@@ -394,7 +407,7 @@ export function SaleCreditNotes({
                         <option value="">Elegí una caja abierta</option>
                         {sessions.map((s) => (
                           <option key={s.id} value={s.id}>
-                            Caja · {s.id.slice(0, 8)}
+                            {s.label}
                           </option>
                         ))}
                       </select>
