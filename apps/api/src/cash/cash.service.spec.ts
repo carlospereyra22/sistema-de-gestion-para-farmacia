@@ -55,7 +55,49 @@ describe("CashService", () => {
         groupBy: jest.fn().mockResolvedValue([
           {
             cashSessionId: "session-1",
+            method: "CASH",
             _sum: { amountMinor: 15000n },
+          },
+          {
+            cashSessionId: "session-1",
+            method: "CARD",
+            _sum: { amountMinor: 700n },
+          },
+        ]),
+      },
+      cashPendingCollection: {
+        groupBy: jest.fn().mockResolvedValue([
+          {
+            assignedSessionId: "session-1",
+            _sum: { cardMinor: 100n, transferMinor: 40n },
+          },
+        ]),
+      },
+      customerAccountMovement: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            cashSessionId: "session-1",
+            paymentMethod: "TRANSFER",
+            amountMinor: 60n,
+            allocations: null,
+          },
+          {
+            cashSessionId: "session-1",
+            paymentMethod: "CASH",
+            amountMinor: 999n,
+            allocations: null,
+          },
+          {
+            cashSessionId: "session-1",
+            paymentMethod: "OTHER",
+            amountMinor: 500n,
+            allocations: {
+              kind: "MIXED_RECEIPT",
+              payments: [
+                { method: "CARD", amountMinor: 200 },
+                { method: "CASH", amountMinor: 300 },
+              ],
+            },
           },
         ]),
       },
@@ -69,6 +111,9 @@ describe("CashService", () => {
         {
           openingAmountMinor: "10000",
           cashSalesMinor: "15000",
+          cardMinor: "1000",
+          transferMinor: "100",
+          cashPayments: [],
           manualInMinor: "5000",
           manualOutMinor: "1000",
           expectedAmountMinor: "29000",

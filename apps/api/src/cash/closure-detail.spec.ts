@@ -49,12 +49,16 @@ function setup(admin = false) {
         ],
       }),
     },
+    cashPendingCollection: { groupBy: jest.fn().mockResolvedValue([]) },
+    customerAccountMovement: { findMany: jest.fn().mockResolvedValue([]) },
     salePayment: {
-      groupBy: jest
-        .fn()
-        .mockResolvedValue([
-          { cashSessionId: "session", _sum: { amountMinor: 4000n } },
-        ]),
+      groupBy: jest.fn().mockResolvedValue([
+        {
+          cashSessionId: "session",
+          method: "CASH",
+          _sum: { amountMinor: 4000n },
+        },
+      ]),
       findMany: jest.fn().mockResolvedValue([
         {
           id: "payment",

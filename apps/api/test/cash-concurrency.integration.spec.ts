@@ -195,6 +195,23 @@ describe("cash concurrency on an isolated synthetic schema", () => {
       await first.cashMovement.count({ where: { cashSessionId: session.id } }),
     ).toBe(1);
   });
+  it("dos egresos simultáneos no superan juntos el efectivo", async () => {
+    const f = await fixture();
+    const session = await f.open();
+    const results = await Promise.allSettled(
+      f.services.map((service) =>
+        service.movement(...f.args, session.id, {
+          type: "OUT",
+          amountMinor: 7000,
+          reason: "Retiro simultáneo",
+        }),
+      ),
+    );
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(
+      await first.cashMovement.count({ where: { cashSessionId: session.id } }),
+    ).toBe(1);
+  });
   it("never accepts both a stale close and a concurrent movement", async () => {
     const f = await fixture();
     const session = await f.open();

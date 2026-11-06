@@ -11,6 +11,12 @@ import { AuditService } from "../audit/audit.service";
 import { CashMovementType, Prisma } from "@prisma/client";
 import { lockCashSession } from "./lock-cash-session";
 import { randomUUID } from "node:crypto";
+import { readReceiptPayments } from "../accounts/receipt-payments";
+import {
+  cashMovementCategory,
+  formatCashMinor,
+  saleChangeMinor,
+} from "./cash-movement-category";
 import {
   readCashSettings,
   defaultCashSettings,
@@ -518,11 +524,37 @@ export class CashService {
     const memberNames = new Map(
       members.map((member) => [member.userId, member.displayName]),
     );
+    // La línea de tiempo sólo se arma para las sesiones que se están operando.
+    const openPayments = openSessions.length
+      ? await this.prisma.salePayment.findMany({
+          where: {
+            cashSessionId: { in: openSessions.map((session) => session.id) },
+            method: "CASH",
+            sale: { status: "COMPLETED" },
+          },
+          select: {
+            id: true,
+            saleId: true,
+            cashSessionId: true,
+            amountMinor: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : [];
     return {
       registers,
       settings: await readCashSettings(this.prisma, branchId),
       sessions: (await this.summarizeSessions(sessions)).map((session) => ({
         ...session,
+        cashPayments: openPayments
+          .filter((payment) => payment.cashSessionId === session.id)
+          .map((payment) => ({
+            id: payment.id,
+            saleId: payment.saleId,
+            amountMinor: payment.amountMinor.toString(),
+            createdAt: payment.createdAt,
+          })),
         openedBy:
           memberNames.get(
             sessions.find((row) => row.id === session.id)!.openedById,
@@ -873,30 +905,7 @@ export class CashService {
         throw new NotFoundException(
           "La sesión ya está cerrada o no está disponible en esta sucursal.",
         );
-      const cash = await tx.salePayment.aggregate({
-        where: {
-          cashSessionId: sessionId,
-          method: "CASH",
-          sale: { status: "COMPLETED" },
-        },
-        _sum: { amountMinor: true },
-      });
-      const movements = await tx.cashMovement.groupBy({
-        by: ["type"],
-        where: { cashSessionId: sessionId },
-        _sum: { amountMinor: true },
-      });
-      const movementTotal = movements.reduce(
-        (sum, movement) =>
-          sum +
-          (movement.type === CashMovementType.IN ? 1n : -1n) *
-            (movement._sum.amountMinor ?? 0n),
-        0n,
-      );
-      const expected =
-        session.openingAmountMinor +
-        (cash._sum.amountMinor ?? 0n) +
-        movementTotal;
+      const expected = await this.expectedCash(tx, session);
       if (
         !Number.isSafeInteger(input.closingAmountMinor) ||
         input.closingAmountMinor < 0
@@ -1028,6 +1037,13 @@ export class CashService {
           return { ...previous, amountMinor: previous.amountMinor.toString() };
         }
       }
+      if (input.type === CashMovementType.OUT) {
+        const available = await this.expectedCash(tx, session);
+        if (BigInt(input.amountMinor) > available)
+          throw new BadRequestException(
+            `El egreso supera el efectivo disponible en caja (${formatCashMinor(available)}).`,
+          );
+      }
       const movement = await tx.cashMovement.create({
         data: {
           id: input.clientOperationId,
@@ -1100,23 +1116,76 @@ export class CashService {
     }>,
   ) {
     const sessionIds = sessions.map((session) => session.id);
-    const payments = sessionIds.length
-      ? await this.prisma.salePayment.groupBy({
-          by: ["cashSessionId"],
-          where: {
-            cashSessionId: { in: sessionIds },
-            method: "CASH",
-            sale: { status: "COMPLETED" },
-          },
-          _sum: { amountMinor: true },
-        })
-      : [];
+    const [payments, incorporated, receipts] = sessionIds.length
+      ? await Promise.all([
+          this.prisma.salePayment.groupBy({
+            by: ["cashSessionId", "method"],
+            where: {
+              cashSessionId: { in: sessionIds },
+              method: { in: ["CASH", "CARD", "TRANSFER"] },
+              sale: { status: "COMPLETED" },
+            },
+            _sum: { amountMinor: true },
+          }),
+          this.prisma.cashPendingCollection.groupBy({
+            by: ["assignedSessionId"],
+            where: { assignedSessionId: { in: sessionIds }, voidedAt: null },
+            _sum: { cardMinor: true, transferMinor: true },
+          }),
+          this.prisma.customerAccountMovement.findMany({
+            where: { cashSessionId: { in: sessionIds }, type: "CREDIT" },
+            select: {
+              cashSessionId: true,
+              paymentMethod: true,
+              amountMinor: true,
+              allocations: true,
+            },
+          }),
+        ])
+      : [[], [], []];
     const cashBySession = new Map(
-      payments.map((payment) => [
-        payment.cashSessionId,
-        payment._sum.amountMinor ?? 0n,
-      ]),
+      payments
+        .filter((payment) => payment.method === "CASH")
+        .map((payment) => [
+          payment.cashSessionId,
+          payment._sum.amountMinor ?? 0n,
+        ]),
     );
+    // Tarjeta y transferencia se informan aparte: nunca entran al efectivo.
+    const collected = new Map<string, { card: bigint; transfer: bigint }>();
+    const collect = (
+      sessionId: string | null,
+      method: string | null,
+      amount: bigint,
+    ) => {
+      if (!sessionId || (method !== "CARD" && method !== "TRANSFER")) return;
+      const total = collected.get(sessionId) ?? { card: 0n, transfer: 0n };
+      if (method === "CARD") total.card += amount;
+      else total.transfer += amount;
+      collected.set(sessionId, total);
+    };
+    for (const payment of payments)
+      collect(
+        payment.cashSessionId,
+        payment.method,
+        payment._sum.amountMinor ?? 0n,
+      );
+    for (const row of incorporated) {
+      collect(row.assignedSessionId, "CARD", row._sum.cardMinor ?? 0n);
+      collect(row.assignedSessionId, "TRANSFER", row._sum.transferMinor ?? 0n);
+    }
+    for (const receipt of receipts) {
+      const parts = readReceiptPayments(receipt.allocations);
+      if (parts)
+        for (const part of parts)
+          collect(receipt.cashSessionId, part.method, BigInt(part.amountMinor));
+      else
+        collect(
+          receipt.cashSessionId,
+          receipt.paymentMethod,
+          receipt.amountMinor,
+        );
+    }
     return sessions.map((session) => {
       const manualInMinor = session.movements.reduce(
         (sum, movement) =>
@@ -1141,6 +1210,9 @@ export class CashService {
         openingAmountMinor: session.openingAmountMinor.toString(),
         closingAmountMinor: session.closingAmountMinor?.toString() ?? null,
         cashSalesMinor: cashSalesMinor.toString(),
+        saleChangeMinor: saleChangeMinor(session.movements).toString(),
+        cardMinor: (collected.get(session.id)?.card ?? 0n).toString(),
+        transferMinor: (collected.get(session.id)?.transfer ?? 0n).toString(),
         manualInMinor: manualInMinor.toString(),
         manualOutMinor: manualOutMinor.toString(),
         expectedAmountMinor: expectedAmountMinor.toString(),
@@ -1151,9 +1223,39 @@ export class CashService {
         movements: session.movements.map((movement) => ({
           ...movement,
           amountMinor: movement.amountMinor.toString(),
+          category: cashMovementCategory(movement.reason),
         })),
       };
     });
+  }
+  /** Efectivo que debería haber en la sesión. Llamar con la sesión bloqueada. */
+  private async expectedCash(
+    tx: Prisma.TransactionClient,
+    session: { id: string; openingAmountMinor: bigint },
+  ) {
+    const cash = await tx.salePayment.aggregate({
+      where: {
+        cashSessionId: session.id,
+        method: "CASH",
+        sale: { status: "COMPLETED" },
+      },
+      _sum: { amountMinor: true },
+    });
+    const movements = await tx.cashMovement.groupBy({
+      by: ["type"],
+      where: { cashSessionId: session.id },
+      _sum: { amountMinor: true },
+    });
+    const movementTotal = movements.reduce(
+      (sum, movement) =>
+        sum +
+        (movement.type === CashMovementType.IN ? 1n : -1n) *
+          (movement._sum.amountMinor ?? 0n),
+      0n,
+    );
+    return (
+      session.openingAmountMinor + (cash._sum.amountMinor ?? 0n) + movementTotal
+    );
   }
   private async assert(actorId: string, organizationId: string, code: string) {
     const membership = await this.prisma.userOrganization.findUnique({

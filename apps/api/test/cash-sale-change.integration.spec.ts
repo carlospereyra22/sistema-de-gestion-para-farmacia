@@ -29,7 +29,17 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
     run: (fixture: {
       tx: Prisma.TransactionClient;
       sell: (paidMinor: number) => ReturnType<SalesService["complete"]>;
+      sellWith: (
+        payments: {
+          method: "CASH" | "CARD" | "TRANSFER";
+          amountMinor: number;
+        }[],
+      ) => ReturnType<SalesService["complete"]>;
       cancel: (saleId: string) => Promise<unknown>;
+      current: () => Promise<
+        Awaited<ReturnType<CashService["list"]>>["sessions"][number]
+      >;
+      withdraw: (amountMinor: number) => ReturnType<CashService["movement"]>;
       expected: () => Promise<string>;
       movements: () => Promise<
         { type: string; amountMinor: bigint; reason: string }[]
@@ -53,7 +63,11 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
             },
           });
           const permissions = await tx.permission.findMany({
-            where: { code: { in: ["SALE_MANAGE", "SALE_READ", "CASH_READ"] } },
+            where: {
+              code: {
+                in: ["SALE_MANAGE", "SALE_READ", "CASH_READ", "CASH_MANAGE"],
+              },
+            },
           });
           const role = await tx.role.create({
             data: {
@@ -97,25 +111,41 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
           const audit = new AuditService(scoped);
           const sales = new SalesService(scoped, audit);
           const cash = new CashService(scoped, audit);
+          const sellWith = (
+            payments: {
+              method: "CASH" | "CARD" | "TRANSFER";
+              amountMinor: number;
+            }[],
+          ) =>
+            sales.complete(user.id, org.id, branch.id, {
+              clientOperationId: randomUUID(),
+              items: [
+                {
+                  description: "Cobro puntual",
+                  quantity: 1,
+                  unitPriceMinor: 800,
+                },
+              ],
+              payments: payments.map((payment) => ({
+                ...payment,
+                cashSessionId: session.id,
+              })),
+            });
+          const current = async () =>
+            (await cash.list(user.id, org.id, branch.id)).sessions.find(
+              (row) => row.id === session.id,
+            )!;
           await run({
             tx,
+            sellWith,
+            current,
             sell: (paidMinor) =>
-              sales.complete(user.id, org.id, branch.id, {
-                clientOperationId: randomUUID(),
-                items: [
-                  {
-                    description: "Cobro puntual",
-                    quantity: 1,
-                    unitPriceMinor: 800,
-                  },
-                ],
-                payments: [
-                  {
-                    method: "CASH" as const,
-                    amountMinor: paidMinor,
-                    cashSessionId: session.id,
-                  },
-                ],
+              sellWith([{ method: "CASH", amountMinor: paidMinor }]),
+            withdraw: (amountMinor) =>
+              cash.movement(user.id, org.id, branch.id, session.id, {
+                type: "OUT",
+                amountMinor,
+                reason: "Retiro",
               }),
             cancel: (saleId) =>
               sales.cancel(
@@ -125,10 +155,7 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
                 saleId,
                 "Error de carga",
               ),
-            expected: async () =>
-              (await cash.list(user.id, org.id, branch.id)).sessions.find(
-                (row) => row.id === session.id,
-              )!.expectedAmountMinor,
+            expected: async () => (await current()).expectedAmountMinor,
             movements: () =>
               tx.cashMovement.findMany({
                 where: { cashSessionId: session.id },
@@ -172,6 +199,70 @@ describe("vuelto de ventas anuladas (base local, fixtures con rollback)", () => 
       });
       await cancel(sale.id);
       expect(await expected()).toBe("1000");
+    });
+  });
+
+  it("separa los medios de pago sin sumarlos al efectivo", async () => {
+    await withFixture(async ({ sellWith, current }) => {
+      await sellWith([
+        { method: "CASH", amountMinor: 300 },
+        { method: "CARD", amountMinor: 300 },
+        { method: "TRANSFER", amountMinor: 200 },
+      ]);
+      expect(await current()).toMatchObject({
+        expectedAmountMinor: "1300",
+        cashSalesMinor: "300",
+        cardMinor: "300",
+        transferMinor: "200",
+        saleChangeMinor: "0",
+      });
+    });
+  });
+
+  it("la línea de tiempo explica el saldo y refleja la anulación", async () => {
+    await withFixture(async ({ sell, cancel, current }) => {
+      const kept = await sell(800);
+      const cancelled = await sell(1000);
+      const before = await current();
+      expect(before.saleChangeMinor).toBe("200");
+      expect(before.cashPayments.map((row) => row.saleId).sort()).toEqual(
+        [kept.id, cancelled.id].sort(),
+      );
+      expect(before.movements).toEqual([
+        expect.objectContaining({ category: "SALE_CHANGE" }),
+      ]);
+      const entries =
+        BigInt(before.openingAmountMinor) +
+        before.cashPayments.reduce(
+          (sum, row) => sum + BigInt(row.amountMinor),
+          0n,
+        ) -
+        BigInt(before.movements[0]!.amountMinor);
+      expect(entries.toString()).toBe(before.expectedAmountMinor);
+      await cancel(cancelled.id);
+      const after = await current();
+      expect(after.saleChangeMinor).toBe("0");
+      expect(after.cashPayments.map((row) => row.saleId)).toEqual([kept.id]);
+    });
+  });
+
+  it("rechaza el egreso que supera el efectivo y permite retirarlo todo", async () => {
+    await withFixture(async ({ sell, withdraw, expected }) => {
+      await sell(800);
+      await expect(withdraw(1801)).rejects.toThrow(
+        "El egreso supera el efectivo disponible en caja ($ 18,00).",
+      );
+      expect(await expected()).toBe("1800");
+      await withdraw(1800);
+      expect(await expected()).toBe("0");
+    });
+  });
+
+  it("el vuelto puede salir aunque no haya fondo suficiente", async () => {
+    await withFixture(async ({ withdraw, sell, expected }) => {
+      await withdraw(1000);
+      await sell(1000);
+      expect(await expected()).toBe("800");
     });
   });
 
