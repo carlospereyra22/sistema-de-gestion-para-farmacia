@@ -8,7 +8,11 @@ import {
   Min,
 } from "class-validator";
 export class PrepareCredentialDto {
-  @IsString() @Matches(/^\d{11}$/) holderCuit!: string;
+  @IsString()
+  @Matches(/^\d{11}$/, {
+    message: "Revisá el CUIT del titular: deben ser 11 números, sin guiones.",
+  })
+  holderCuit!: string;
   @IsInt() @Min(0) expectedVersion!: number;
   @IsOptional() @IsBoolean() replace?: boolean;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Circle, Plus, RefreshCw } from "lucide-react";
 import { getFiscalSetup, saveFiscalPoint, type FiscalSetup } from "./lib/api";
+import { ProductFilterSelect } from "./product-filter-select";
 
 export function FiscalSetupPanel({
   token,
@@ -138,23 +139,24 @@ export function FiscalSetupPanel({
                     void save({ branchId, number: Number(number) });
                   }}
                 >
-                  <label className="min-w-48 flex-1 text-xs">
-                    Sucursal
-                    <select
-                      required
+                  <div className="min-w-48 flex-1 text-xs">
+                    <p className="mb-1">Sucursal</p>
+                    <ProductFilterSelect
+                      compact
+                      label="Sucursal"
+                      icon={null}
                       disabled={busy}
                       value={branchId}
-                      onChange={(e) => setBranchId(e.target.value)}
-                      className="mt-1 block h-10 w-full rounded-lg border bg-white px-3"
-                    >
-                      <option value="">Seleccionar sucursal</option>
-                      {data.branches.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      options={[
+                        { value: "", label: "Seleccionar sucursal" },
+                        ...data.branches.map((branch) => ({
+                          value: branch.id,
+                          label: branch.name,
+                        })),
+                      ]}
+                      onChange={setBranchId}
+                    />
+                  </div>
                   <label className="text-xs">
                     Punto de venta
                     <input
@@ -171,7 +173,7 @@ export function FiscalSetupPanel({
                     />
                   </label>
                   <button
-                    disabled={busy || !data.branches.length}
+                    disabled={busy || !data.branches.length || !branchId}
                     className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 text-xs text-white disabled:opacity-50"
                   >
                     <Plus size={16} />

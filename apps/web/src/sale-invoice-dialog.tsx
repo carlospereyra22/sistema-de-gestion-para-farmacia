@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { saleInvoice, type FiscalTrial } from "./lib/api";
+import { requeueSaleInvoice, saleInvoice, type FiscalTrial } from "./lib/api";
 import { trialTicket } from "./lib/fiscal-trial-ticket";
 import { printTicketFrame } from "./lib/browser-ticket-print";
 import { SaleCreditNotes } from "./sale-credit-notes";
@@ -22,6 +22,7 @@ export function SaleInvoiceDialog({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
+  const [confirmRequeue, setConfirmRequeue] = useState(false);
   const pending = useRef(false);
   const frame = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
@@ -40,14 +41,17 @@ export function SaleInvoiceDialog({
       active = false;
     };
   }, [token, organizationId, branchId, saleId]);
-  async function refresh(process: boolean) {
+  async function refresh(process: boolean | "requeue") {
     if (pending.current) return;
     pending.current = true;
     setBusy(true);
     setError("");
+    setConfirmRequeue(false);
     try {
       setTrial(
-        await saleInvoice(token, organizationId, branchId, saleId, process),
+        process === "requeue"
+          ? await requeueSaleInvoice(token, organizationId, branchId, saleId)
+          : await saleInvoice(token, organizationId, branchId, saleId, process),
       );
     } catch (cause) {
       setError(
@@ -151,6 +155,42 @@ export function SaleInvoiceDialog({
                 : "Consultar resultado"}
           </button>
         )}
+        {trial?.status === "REJECTED" &&
+          (confirmRequeue ? (
+            <div className="mt-3 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
+              <p>
+                Se pide un número nuevo a ARCA para esta misma venta. No se
+                registra otra venta ni otro cobro.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void refresh("requeue")}
+                  className="rounded-lg bg-teal-700 px-4 py-2 text-white disabled:opacity-50"
+                >
+                  Sí, volver a emitir
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setConfirmRequeue(false)}
+                  className="rounded-lg border px-4 py-2"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmRequeue(true)}
+              className="mt-3 ml-2 rounded-lg bg-teal-700 px-4 py-2 text-white disabled:opacity-50"
+            >
+              Volver a emitir factura
+            </button>
+          ))}
         {trial?.environment === "PRODUCTION" &&
           trial.status === "AUTHORIZED" && (
             <>

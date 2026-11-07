@@ -20,6 +20,13 @@ import {
   matchesProduction,
 } from "./production-document";
 import { fiscalQrUrl } from "./fiscal-qr";
+import {
+  ESPERA_PARA_LIBERAR_MS,
+  comprobanteInexistente,
+  decidirIncierto,
+  minutosRestantes,
+  ultimoAutorizado,
+} from "./resolucion-incierta";
 
 @Injectable()
 export class ProductionSalesService {
@@ -311,12 +318,16 @@ export class ProductionSalesService {
                 "ARCA rechazó el comprobante. La venta permanece registrada.",
             ),
           );
+        // Una respuesta sólo con errores tampoco libera el número: se confirma
+        // con FECompConsultar y FECompUltimoAutorizado al conciliar.
         return this.present(
           await this.finish(
             actor,
             numbered,
             "UNCERTAIN",
-            "Respuesta no confirmada. Consultá el resultado; no repitas la venta.",
+            arcaMessages(response)
+              ? `ARCA respondió: ${arcaMessages(response).slice(0, 700)}. Consultá el resultado en 10 minutos; no repitas la venta.`
+              : "Respuesta no confirmada. Consultá el resultado; no repitas la venta.",
           ),
         );
       } catch {
@@ -326,8 +337,8 @@ export class ProductionSalesService {
             numbered,
             numbered.number ? "UNCERTAIN" : "REJECTED",
             numbered.number
-              ? "Se interrumpió el envío o su confirmación. Sólo se permite consultar ARCA; no se reenvía."
-              : "Se interrumpió la preparación antes de asignar número. No se envió el comprobante.",
+              ? "Se interrumpió el envío o su confirmación. Consultá el resultado en ARCA; si no llegó, en 10 minutos se libera para volver a emitir."
+              : "Se interrumpió la preparación antes de asignar número. No se envió el comprobante: podés volver a emitirlo.",
           ),
         );
       }
@@ -434,11 +445,100 @@ export class ProductionSalesService {
         str(result.CodAutorizacion),
         str(result.FchVto),
       );
-    return this.finish(
-      actor,
-      doc,
-      "UNCERTAIN",
-      "ARCA no confirmó una coincidencia exacta. El número sigue reservado; requiere revisión, no otra venta.",
-    );
+    const esperaMs = Date.now() - doc.updatedAt.getTime();
+    const consultaInexistente = comprobanteInexistente(response);
+    const ultimo =
+      consultaInexistente && esperaMs >= ESPERA_PARA_LIBERAR_MS
+        ? ultimoAutorizado(
+            await this.soap.call(
+              "wsfe",
+              "FECompUltimoAutorizado",
+              `${authXml(access)}<PtoVta>${doc.point}</PtoVta><CbteTipo>${doc.voucherType}</CbteTipo>`,
+              "PRODUCTION",
+            ),
+            doc.point,
+            doc.voucherType,
+          )
+        : null;
+    if (
+      decidirIncierto({
+        esperaMs,
+        consultaInexistente,
+        ultimoAutorizado: ultimo,
+        numeroReservado: doc.number,
+      }) === "NO_EMITIDO"
+    )
+      return this.finish(
+        actor,
+        doc,
+        "REJECTED",
+        doc.kind === "INVOICE"
+          ? `No llegó a ARCA: el número ${doc.number} no se usó. Podés volver a emitir la factura.`
+          : `No llegó a ARCA: el número ${doc.number} no se usó. Podés generar la nota de crédito otra vez.`,
+      );
+    const detail = consultaInexistente
+      ? `ARCA todavía no muestra el comprobante ${doc.number}. Volvé a consultar en ${minutosRestantes(esperaMs)} min; si sigue sin aparecer, se libera el número para volver a emitir.`
+      : "ARCA no confirmó una coincidencia exacta. El número sigue reservado; requiere revisión, no otra venta.";
+    // Sin novedades no se toca el registro: así no se reinicia la espera.
+    if (doc.status === "UNCERTAIN") return { ...doc, detail };
+    return this.finish(actor, doc, "UNCERTAIN", detail);
+  }
+  /**
+   * Vuelve a poner en cola una factura rechazada (por ARCA o porque no llegó),
+   * en el mismo registro: la venta conserva una sola factura.
+   */
+  async requeue(actor: string, org: string, branch: string, saleId: string) {
+    await this.organizations.authorizeFiscalSale(actor, org);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${saleId}::uuid FOR UPDATE`;
+      const sale = await tx.sale.findFirst({
+        where: { id: saleId, organizationId: org, branchId: branch },
+      });
+      if (!sale) throw new BadRequestException("Venta no encontrada.");
+      if (sale.status !== "COMPLETED")
+        throw new BadRequestException(
+          "La venta está anulada; no se vuelve a emitir su factura.",
+        );
+      const doc = await tx.fiscalDocument.findFirst({
+        where: {
+          organizationId: org,
+          branchId: branch,
+          sourceSaleId: saleId,
+          kind: "INVOICE",
+        },
+      });
+      if (!doc)
+        throw new BadRequestException("Comprobante productivo no encontrado.");
+      if (doc.status !== "REJECTED")
+        throw new ConflictException(
+          "Sólo se puede volver a emitir una factura rechazada o que no llegó a ARCA.",
+        );
+      await tx.fiscalDocument.update({
+        where: { id: doc.id },
+        data: {
+          status: "QUEUED",
+          number: null,
+          cae: null,
+          caeExpires: null,
+          detail: null,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: org,
+          branchId: branch,
+          actorId: actor,
+          entityType: "FISCAL_DOCUMENT",
+          entityId: doc.id,
+          action: "REENCOLADO",
+          before: {
+            status: doc.status,
+            number: doc.number,
+            detail: doc.detail,
+          },
+          after: { status: "QUEUED", environment: "PRODUCTION" },
+        },
+      });
+    });
   }
 }

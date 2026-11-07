@@ -6,6 +6,7 @@ import {
   type FiscalCredentialStatus,
 } from "./lib/api";
 import { readFiscalFile } from "./lib/fiscal-file";
+import { avisoCuit, digitosCuit, formatearCuit } from "./lib/cuit";
 
 const control =
   "mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm";
@@ -194,17 +195,20 @@ export function FiscalCertificateSetup({
               : "CUIT de la persona que ingresa a WSASS"}
             <input
               disabled={busy}
-              value={holderCuit}
+              value={formatearCuit(holderCuit)}
               onChange={(event) =>
-                setHolderCuit(
-                  event.target.value.replace(/\D/g, "").slice(0, 11),
-                )
+                setHolderCuit(digitosCuit(event.target.value))
               }
               inputMode="numeric"
-              maxLength={11}
-              placeholder="11 dígitos, sin guiones"
+              maxLength={13}
+              placeholder="20-12345678-9"
               className={control}
             />
+            {avisoCuit(holderCuit) && (
+              <span className="mt-1 block text-xs text-amber-700">
+                {avisoCuit(holderCuit)}
+              </span>
+            )}
           </label>
           <p className="mt-1 text-xs leading-5 text-slate-500">
             Es el titular del certificado. Puede ser distinto del CUIT de la

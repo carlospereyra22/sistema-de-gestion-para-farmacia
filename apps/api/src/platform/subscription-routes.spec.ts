@@ -81,6 +81,8 @@ const EXCEPTIONS = [
   `READ_ONLY POST ${sales}/:saleId/credits/:documentId/process`,
   `READ_ONLY POST ${sales}/:saleId/credits/:documentId/settlement`,
   `READ_ONLY POST ${sales}/:saleId/invoice/process`,
+  // Volver a emitir la factura de una venta ya hecha, igual que invoice/process (07/11/2026).
+  `READ_ONLY POST ${sales}/:saleId/invoice/reencolar`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/printing/jobs/:id/retry`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/transfers/:id/receive`,
   `READ_ONLY POST organizations/:organizationId/catalog/default-categories`,

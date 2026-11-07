@@ -11,12 +11,14 @@ import { FiscalChecklist, FiscalSetupPanel } from "./fiscal-setup";
 import { FiscalArcaGuide, FiscalWizardSteps } from "./fiscal-wizard-guide";
 import { resumeFiscalStep, type FiscalStep } from "./lib/fiscal-wizard";
 import { FiscalProductionSetup } from "./fiscal-production-setup";
+import { ProductFilterSelect } from "./product-filter-select";
+import { avisoCuit, digitosCuit, formatearCuit } from "./lib/cuit";
 
 const field =
   "mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm";
 const fields = [
   ["legalName", "Razón social", 160],
-  ["cuit", "CUIT (11 dígitos)", 11],
+  ["cuit", "CUIT", 13],
   ["address", "Domicilio fiscal", 200],
   ["city", "Localidad", 100],
   ["province", "Provincia", 100],
@@ -24,6 +26,12 @@ const fields = [
   ["grossIncomeId", "Ingresos brutos / inscripción", 60],
   ["activityStart", "Inicio de actividades", 10],
 ] as const;
+const vatConditions = [
+  { value: "", label: "Sin definir" },
+  { value: "REGISTERED", label: "Responsable inscripto" },
+  { value: "MONOTAX", label: "Monotributista" },
+  { value: "EXEMPT", label: "Exento" },
+];
 
 export function FiscalSettingsPanel(props: {
   token: string;
@@ -209,42 +217,49 @@ function FiscalSettingsContent({
                       maxLength={max}
                       type={key === "activityStart" ? "date" : "text"}
                       inputMode={key === "cuit" ? "numeric" : undefined}
-                      value={profile[key]}
+                      placeholder={key === "cuit" ? "20-12345678-9" : undefined}
+                      value={
+                        key === "cuit"
+                          ? formatearCuit(profile.cuit)
+                          : profile[key]
+                      }
                       onChange={(event) => {
                         dirty.current = true;
                         setProfile({
                           ...profile,
                           [key]:
                             key === "cuit"
-                              ? event.target.value.replace(/\D/g, "")
+                              ? digitosCuit(event.target.value)
                               : event.target.value,
                         });
                         setMessage("");
                       }}
                     />
+                    {key === "cuit" && avisoCuit(profile.cuit) && (
+                      <span className="mt-1 block font-normal text-amber-700">
+                        {avisoCuit(profile.cuit)}
+                      </span>
+                    )}
                   </label>
                 ))}
-                <label className="text-xs font-medium text-slate-600">
-                  Condición frente al IVA
-                  <select
-                    className={field}
-                    disabled={busy}
-                    value={profile.vatCondition}
-                    onChange={(event) => {
-                      dirty.current = true;
-                      setProfile({
-                        ...profile,
-                        vatCondition: event.target.value,
-                      });
-                      setMessage("");
-                    }}
-                  >
-                    <option value="">Sin definir</option>
-                    <option value="REGISTERED">Responsable inscripto</option>
-                    <option value="MONOTAX">Monotributista</option>
-                    <option value="EXEMPT">Exento</option>
-                  </select>
-                </label>
+                <div className="text-xs text-slate-600">
+                  <p className="font-medium">Condición frente al IVA</p>
+                  <div className="mt-1.5">
+                    <ProductFilterSelect
+                      compact
+                      label="Condición frente al IVA"
+                      icon={null}
+                      disabled={busy}
+                      value={profile.vatCondition}
+                      options={vatConditions}
+                      onChange={(value) => {
+                        dirty.current = true;
+                        setProfile({ ...profile, vatCondition: value });
+                        setMessage("");
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
               <p className="mt-4 text-xs text-slate-500">
                 Podés guardar un borrador incompleto. Los datos y el régimen
@@ -395,7 +410,7 @@ export function InvoiceDesignPreview({
           {profile.legalName || "Razón social del emisor"}
         </h4>
         <p className="text-center break-words">
-          CUIT: {profile.cuit || "Sin configurar"}
+          CUIT: {formatearCuit(profile.cuit) || "Sin configurar"}
         </p>
         <p className="text-center break-words">
           {profile.address || "Domicilio fiscal"}

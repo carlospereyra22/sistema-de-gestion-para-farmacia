@@ -77,6 +77,14 @@ export function arcaMessages(result: Record<string, unknown>): string {
     .join(" · ")
     .slice(0, 1000);
 }
+/** Qué decirle al usuario cuando se corta la comunicación, según la operación. */
+export function communicationHint(operation: string) {
+  if (operation === "FECAESolicitar")
+    return "No repitas la venta: consultá el resultado de la factura.";
+  if (operation === "FECompConsultar")
+    return "No se emitió nada en esta consulta. Volvé a consultar en unos minutos.";
+  return "No se emitió ningún comprobante en este paso. Volvé a intentarlo.";
+}
 @Injectable()
 export class ArcaSoap {
   async call(
@@ -94,18 +102,24 @@ export class ArcaSoap {
         "El entorno local de pruebas no puede conectarse a ARCA producción. Usá homologación.",
       );
     }
-    // Queries used for recovery remain available with issuance disabled.
+    // Las consultas de recuperación siguen disponibles con la emisión apagada:
+    // sirven para confirmar si un comprobante incierto llegó o no a ARCA.
+    // FECAESolicitar es la única operación que emite.
     if (
       environment === "PRODUCTION" &&
       !(kind === "wsaa" && operation === "loginCms") &&
       !(
         kind === "wsfe" &&
-        ["FEParamGetPtosVenta", "FECompConsultar"].includes(operation)
+        [
+          "FEParamGetPtosVenta",
+          "FECompConsultar",
+          "FECompUltimoAutorizado",
+        ].includes(operation)
       ) &&
       !(
         kind === "wsfe" &&
         productionIssuanceAvailable() &&
-        ["FECompUltimoAutorizado", "FECAESolicitar"].includes(operation)
+        operation === "FECAESolicitar"
       )
     )
       throw new BadGatewayException(
@@ -155,7 +169,7 @@ export class ArcaSoap {
       }
     } catch {
       throw new BadGatewayException(
-        `No se pudo completar la comunicación con ARCA ${environment === "PRODUCTION" ? "producción" : "homologación"}. ${operation === "loginCms" || operation === "FEParamGetPtosVenta" ? "No se emitió ningún comprobante en esta verificación. Volvé a verificar la conexión." : "No repitas una emisión: consultá su resultado."}`,
+        `No se pudo completar la comunicación con ARCA ${environment === "PRODUCTION" ? "producción" : "homologación"}. ${communicationHint(operation)}`,
       );
     }
     const envelope = obj(parseXml(xml).Envelope);

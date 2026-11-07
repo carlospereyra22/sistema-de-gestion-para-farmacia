@@ -2465,6 +2465,25 @@ export async function saleInvoice(
   return response.json();
 }
 
+/** Vuelve a emitir una factura rechazada o que no llegó a ARCA. */
+export async function requeueSaleInvoice(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  saleId: string,
+): Promise<FiscalTrial> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/${saleId}/invoice/reencolar`,
+    { method: "POST", headers: authJson(token) },
+  );
+  if (!response.ok)
+    throw await responseError(
+      response,
+      "No se pudo volver a emitir la factura. La venta sigue registrada.",
+    );
+  return response.json();
+}
+
 export async function getSaleTicket(
   token: string,
   organizationId: string,

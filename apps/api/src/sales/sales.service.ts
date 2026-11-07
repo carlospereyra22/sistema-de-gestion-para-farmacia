@@ -211,6 +211,41 @@ export class SalesService {
     };
   }
 
+  /**
+   * Vuelve a emitir la factura rechazada de una venta (o la que no llegó a
+   * ARCA): la pone en cola en el mismo registro y la envía.
+   */
+  async requeueInvoice(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    saleId: string,
+  ) {
+    await this.assert(actorId, organizationId, "SALE_MANAGE");
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, organizationId, branchId },
+      include: { fiscalTrial: true },
+    });
+    if (!sale) throw new NotFoundException("Venta no encontrada.");
+    const document = this.production
+      ? await this.prisma.fiscalDocument.findFirst({
+          where: {
+            sourceSaleId: saleId,
+            organizationId,
+            branchId,
+            kind: "INVOICE",
+          },
+          select: { id: true },
+        })
+      : null;
+    if (document && this.production)
+      await this.production.requeue(actorId, organizationId, branchId, saleId);
+    else if (sale.fiscalTrial && this.fiscal)
+      await this.fiscal.requeue(actorId, organizationId, branchId, saleId);
+    else throw new NotFoundException("La venta no tiene factura.");
+    return this.invoice(actorId, organizationId, branchId, saleId, true);
+  }
+
   async ticket(
     actorId: string,
     organizationId: string,
