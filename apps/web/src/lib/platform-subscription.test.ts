@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coveredUntilLabel,
   filterOrganizations,
+  quotaFull,
   stageFilterOptions,
   stageLabel,
   stageTone,
@@ -13,6 +14,18 @@ import {
 const row = (name: string, stage: SubscriptionStage, feeMinor = "6500000") => ({
   name,
   subscription: { stage, feeMinor },
+});
+
+describe("cupo completo", () => {
+  it("se llena al llegar al límite, y también si lo supera", () => {
+    expect(quotaFull(1, 2, false)).toBe(false);
+    expect(quotaFull(2, 2, false)).toBe(true);
+    expect(quotaFull(3, 2, false)).toBe(true);
+  });
+
+  it("una exenta nunca se llena", () => {
+    expect(quotaFull(9, 1, true)).toBe(false);
+  });
 });
 
 describe("estado de una farmacia", () => {

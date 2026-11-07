@@ -113,8 +113,8 @@ Hoy no corta nada. Se prepara así:
 | 4   | Panel base               | Hecho      |
 | 5   | Rol Empleado y permisos  | Hecho      |
 | 6   | Modelo comercial y alta  | Hecho      |
-| 7   | Cargos, pagos y prórroga | SISTEMA-56 |
-| 8   | Cupos y catálogo         | Pendiente  |
+| 7   | Cargos, pagos y prórroga | Hecho      |
+| 8   | Cupos y catálogo         | SISTEMA-57 |
 | 9   | Corte                    | Pendiente  |
 | 10  | Límite de sesiones       | Pendiente  |
 | 11  | Módulos                  | Pendiente  |
@@ -160,6 +160,21 @@ cobrado en el mes y los últimos 200 pagos de todas las farmacias.
 
 Falta: el pago anual (paga 10, lleva 12) y prorratear una ampliación a mitad de mes. Reactivar
 una farmacia suspendida genera los meses que pasó suspendida: hay que condonarlos a mano.
+
+## Cupos
+
+Una farmacia no puede tener más usuarios ni sucursales activos que los que paga. Se controla en
+`subscription-quota.ts`, dentro de la transacción, al crear y al reactivar, tanto desde la
+farmacia como desde el panel. El panel también lo respeta para que nadie se olvide de cobrar la
+ampliación: primero se amplía el plan contratado y después se da el alta.
+
+- Cuentan los usuarios y las sucursales activos. Dar de baja libera el lugar.
+- Las exentas no tienen límite, y sin fila de suscripción tampoco: un dato faltante no frena a nadie.
+- Bajar el cupo no desactiva a nadie, solo impide altas nuevas.
+- El bloqueo va sobre la suscripción, no sobre `Organization`, que frenaría toda escritura con
+  clave foránea a la farmacia. Quien además bloquee `Organization` toma primero la suscripción.
+
+La farmacia recibe el motivo en el mensaje de error. La pantalla de uso del plan es otra tarea.
 
 ## Alta de una farmacia
 

@@ -32,7 +32,6 @@ const primary =
   "inline-flex items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50";
 const emptyBranch = {
   name: "",
-  code: "",
   address: "",
   city: "",
   province: "",
@@ -40,7 +39,6 @@ const emptyBranch = {
 };
 const fields = [
   ["name", "Nombre", 120],
-  ["code", "Código", 32],
   ["address", "Dirección", 160],
   ["city", "Ciudad", 100],
   ["province", "Provincia", 100],
@@ -297,7 +295,7 @@ function OrganizationBranches({
                 <thead className="bg-slate-50 text-xs text-slate-500">
                   <tr>
                     {[
-                      "Nombre / Código",
+                      "Nombre",
                       "Dirección",
                       "Ciudad / Provincia",
                       "Teléfono",
@@ -316,12 +314,7 @@ function OrganizationBranches({
                       key={branch.id}
                       className={`border-t border-slate-100 ${editing === branch.id ? "bg-teal-50/60" : "hover:bg-slate-50/50"}`}
                     >
-                      <td className="px-3 py-4">
-                        <span className="block font-medium">{branch.name}</span>
-                        <span className="mt-1 block text-xs text-slate-500">
-                          {branch.code}
-                        </span>
-                      </td>
+                      <td className="px-3 py-4 font-medium">{branch.name}</td>
                       <td className="px-3 py-4">{branch.address || "—"}</td>
                       <td className="px-3 py-4">
                         {branch.city || "—"}
@@ -350,7 +343,6 @@ function OrganizationBranches({
                               setEditing(branch.id);
                               setData({
                                 name: branch.name,
-                                code: branch.code,
                                 address: branch.address ?? "",
                                 city: branch.city ?? "",
                                 province: branch.province ?? "",
@@ -421,20 +413,13 @@ function OrganizationBranches({
               {label}
               <input
                 ref={key === "name" ? nameInput : undefined}
-                required={key === "name" || key === "code"}
-                minLength={key === "name" || key === "code" ? 2 : undefined}
-                pattern={key === "code" ? "[A-Za-z0-9-]{2,32}" : undefined}
+                required={key === "name"}
+                minLength={key === "name" ? 2 : undefined}
                 maxLength={max}
                 disabled={busy}
                 value={data[key] ?? ""}
                 onChange={(event) =>
-                  setData({
-                    ...data,
-                    [key]:
-                      key === "code"
-                        ? event.target.value.toUpperCase()
-                        : event.target.value,
-                  })
+                  setData({ ...data, [key]: event.target.value })
                 }
                 className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-100"
               />

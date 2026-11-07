@@ -9,9 +9,10 @@ import { randomBytes } from "node:crypto";
 
 import { provisionOrganizationGraph } from "../organizations/organization-provisioning";
 import { PrismaService } from "../prisma/prisma.service";
-import { uniqueBranchCode } from "./branch-code";
+import { generateBranchCode } from "../organizations/branch-code";
 import { recordPlatformAudit } from "./platform-audit";
 import { PlatformBillingService } from "./platform-billing.service";
+import { assertQuotaAvailable } from "./subscription-quota";
 import {
   commercialToday,
   resolveSubscriptionAccess,
@@ -232,6 +233,7 @@ export class PlatformOrganizationsService {
     const passwordHash = await hash(password);
     return this.prisma.$transaction(async (tx) => {
       await this.assertEmailAvailable(tx, email);
+      await assertQuotaAvailable(tx, organizationId, "users");
       const role = await tx.role.findUnique({
         where: {
           organizationId_code: { organizationId, code: input.roleCode },
@@ -299,20 +301,13 @@ export class PlatformOrganizationsService {
         });
         if (!organization)
           throw new NotFoundException("Farmacia no encontrada.");
-        // Las eliminadas también cuentan: la base no admite el código repetido.
-        const existing = await tx.branch.findMany({
-          where: { organizationId },
-          select: { code: true },
-        });
+        await assertQuotaAvailable(tx, organizationId, "branches");
         const name = input.name.trim();
         const branch = await tx.branch.create({
           data: {
             organizationId,
             name,
-            code: uniqueBranchCode(
-              name,
-              new Set(existing.map(({ code }) => code)),
-            ),
+            code: await generateBranchCode(tx, organizationId, name),
           },
           select: { id: true, name: true, code: true },
         });

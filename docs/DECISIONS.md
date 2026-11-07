@@ -2,6 +2,15 @@
 
 ## DECIDED
 
+- 07/11/2026 (SISTEMA-57): El cupo se valida dentro de la transacción con un bloqueo sobre
+  la suscripción, también desde el panel, para que una ampliación no quede sin cobrar. El
+  código de sucursal deja de pedirse: se genera del nombre y la API sigue aceptándolo
+  porque la web se publica a mano y puede quedar atrás. El catálogo externo se habilita por
+  una lista separada por comas en la variable que ya existía: el valor actual de producción
+  sigue siendo válido y no hace falta migrar nada. Sumar una farmacia es un cambio de
+  configuración en el servidor, a propósito: hoy el catálogo es de Juncos y darlo a otra
+  farmacia es una decisión comercial, no algo automático del alta.
+
 - 07/11/2026 (SISTEMA-56): Las suscripciones se cobran mes adelantado. Los pagos no se
   imputan en una tabla: una función pura los reparte del cargo más viejo al más nuevo
   cada vez que hace falta, porque así anular un pago no tiene nada que deshacer y

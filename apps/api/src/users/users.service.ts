@@ -6,6 +6,7 @@ import {
 import { hash } from "@node-rs/argon2";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { assertQuotaAvailable } from "../platform/subscription-quota";
 
 @Injectable()
 export class UsersService {
@@ -139,6 +140,8 @@ export class UsersService {
         );
     }
     await this.prisma.$transaction(async (tx) => {
+      if (active && !membership.active)
+        await assertQuotaAvailable(tx, organizationId, "users");
       await tx.userOrganization.update({
         where: { id: membership.id },
         data: { active },
@@ -186,9 +189,11 @@ export class UsersService {
       throw new ForbiddenException(
         "Branch or role is outside the organization.",
       );
+    const passwordHash = await hash(password);
     return this.prisma.$transaction(async (tx) => {
+      await assertQuotaAvailable(tx, organizationId, "users");
       const user = await tx.user.create({
-        data: { email: normalizedEmail, passwordHash: await hash(password) },
+        data: { email: normalizedEmail, passwordHash },
       });
       const membership = await tx.userOrganization.create({
         data: {
