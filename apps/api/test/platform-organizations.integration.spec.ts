@@ -348,6 +348,7 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
       const text = await response.text();
       const body = JSON.parse(text) as Record<string, unknown>;
       expect(Object.keys(body).sort()).toEqual([
+        "billing",
         "branches",
         "createdAt",
         "id",

@@ -12,6 +12,7 @@ const subscription = {
   trialEndsAt: "2026-11-21",
   paidThrough: null,
   extendedUntil: null,
+  extendedReason: null,
   extraUsers: 1,
   extraBranches: 0,
   agreedPriceMinor: null,
@@ -26,6 +27,7 @@ const row = (index: number): PlatformOrganization => ({
   id: String(index),
   name: `Farmacia ${index}`,
   createdAt: "2026-11-07T00:00:00.000Z",
+  balanceMinor: "0",
   activeUsers: 2,
   activeBranches: 1,
   subscription,
@@ -46,6 +48,13 @@ describe("PlatformOrganizationsTable", () => {
     expect(html).toContain("2 / 2");
     expect(html).toContain("1 / 1");
     expect(html).toContain("65.000,00");
+  });
+
+  it("muestra el saldo solo cuando debe", () => {
+    expect(render([{ ...row(1), balanceMinor: "2500000" }])).toContain(
+      "$ 25.000,00",
+    );
+    expect(render([row(1)])).toContain("—");
   });
 
   it("una farmacia exenta muestra lo que usa, sin cupo", () => {

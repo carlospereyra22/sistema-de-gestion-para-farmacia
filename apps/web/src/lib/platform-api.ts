@@ -28,6 +28,7 @@ export type PlatformSubscription = {
   trialEndsAt: string | null;
   paidThrough: string | null;
   extendedUntil: string | null;
+  extendedReason: string | null;
   extraUsers: number;
   extraBranches: number;
   agreedPriceMinor: string | null;
@@ -41,14 +42,57 @@ export type PlatformOrganization = {
   id: string;
   name: string;
   createdAt: string;
+  balanceMinor: string;
   activeBranches: number;
   activeUsers: number;
   subscription: PlatformSubscription | null;
+};
+export type PlatformCharge = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  amountMinor: string;
+  paidMinor: string;
+  balanceMinor: string;
+  waived: boolean;
+  waiveReason: string | null;
+};
+export type PlatformPayment = {
+  id: string;
+  amountMinor: string;
+  paidOn: string;
+  method: string;
+  reference: string | null;
+  voided: boolean;
+  voidReason: string | null;
+};
+export type PlatformBilling = {
+  today: string;
+  balanceMinor: string;
+  creditMinor: string;
+  charges: PlatformCharge[];
+  payments: PlatformPayment[];
+};
+export type PlatformPaymentInput = {
+  operationId: string;
+  amountMinor: string;
+  paidOn: string;
+  method: string;
+  reference: string;
+};
+export type PlatformRecentPayment = PlatformPayment & {
+  organizationId: string;
+  organizationName: string;
+};
+export type PlatformPaymentsOverview = {
+  collectedThisMonthMinor: string;
+  payments: PlatformRecentPayment[];
 };
 export type PlatformOrganizationDetail = {
   id: string;
   name: string;
   createdAt: string;
+  billing: PlatformBilling;
   subscription: PlatformSubscription | null;
   branches: { id: string; name: string; code: string; active: boolean }[];
   roles: { code: string; name: string }[];
@@ -93,6 +137,8 @@ async function platformRequest<T>(
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
+  }).catch(() => {
+    throw new Error("No hubo respuesta del servidor. Revisá la conexión.");
   });
   if (response.ok) return (await response.json()) as T;
   const result = (await response.json().catch(() => ({}))) as {
@@ -103,9 +149,11 @@ async function platformRequest<T>(
   const message =
     response.status === 404
       ? "Tu acceso a la plataforma ya no está disponible. Volvé a iniciar sesión."
-      : Array.isArray(result.message)
-        ? result.message.join(", ")
-        : (result.message ?? "No se pudo completar la operación.");
+      : response.status >= 500
+        ? "El servidor no pudo completar la operación."
+        : Array.isArray(result.message)
+          ? result.message.join(", ")
+          : (result.message ?? "No se pudo completar la operación.");
   throw new PlatformApiError(message, response.status, result.code);
 }
 
@@ -193,6 +241,55 @@ export const updatePlatformSubscription = (
     `/organizations/${organizationId}/subscription`,
     input,
     "PATCH",
+  );
+
+export const getPlatformPayments = (token: string) =>
+  platformRequest<PlatformPaymentsOverview>(token, "/payments");
+
+export const registerPlatformPayment = (
+  token: string,
+  organizationId: string,
+  input: PlatformPaymentInput,
+) =>
+  platformRequest<{ id: string }>(
+    token,
+    `/organizations/${organizationId}/payments`,
+    input,
+  );
+
+export const voidPlatformPayment = (
+  token: string,
+  organizationId: string,
+  paymentId: string,
+  reason: string,
+) =>
+  platformRequest<{ id: string }>(
+    token,
+    `/organizations/${organizationId}/payments/${paymentId}/void`,
+    { reason },
+  );
+
+export const waivePlatformCharge = (
+  token: string,
+  organizationId: string,
+  chargeId: string,
+  reason: string,
+) =>
+  platformRequest<{ id: string }>(
+    token,
+    `/organizations/${organizationId}/charges/${chargeId}/waive`,
+    { reason },
+  );
+
+export const extendPlatformSubscription = (
+  token: string,
+  organizationId: string,
+  input: { until: string | null; reason: string },
+) =>
+  platformRequest<{ extendedUntil: string | null }>(
+    token,
+    `/organizations/${organizationId}/extension`,
+    input,
   );
 
 export const getPlatformPlans = (token: string) =>

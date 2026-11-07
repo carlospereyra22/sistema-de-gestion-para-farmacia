@@ -5,12 +5,14 @@ export function OperationConfirmDialog({
   title,
   description,
   requireReason = false,
+  reasonPlaceholder = "Por ejemplo: el proveedor no realizará la entrega",
   onConfirm,
   onClose,
 }: {
   title: string;
   description: string;
   requireReason?: boolean;
+  reasonPlaceholder?: string;
   onConfirm: (reason: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -34,7 +36,7 @@ export function OperationConfirmDialog({
             maxLength={300}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Por ejemplo: el proveedor no realizará la entrega"
+            placeholder={reasonPlaceholder}
           />
         </label>
       )}

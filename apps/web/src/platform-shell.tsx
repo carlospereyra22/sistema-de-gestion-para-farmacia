@@ -4,11 +4,13 @@ import { getPlatformSession, type PlatformSession } from "./lib/platform-api";
 import { PlatformAccess } from "./platform-access";
 import { PlatformAuditPanel } from "./platform-audit-panel";
 import { PlatformOrganizations } from "./platform-organizations";
+import { PlatformPayments } from "./platform-payments";
 import { PlatformPlans } from "./platform-plans";
 import { SessionStartup } from "./session-startup";
 
 const sections = [
   ["farmacias", "Farmacias"],
+  ["pagos", "Pagos"],
   ["planes", "Planes"],
   ["auditoria", "Auditoría"],
 ] as const;
@@ -123,6 +125,12 @@ export default function PlatformShell({
       <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
         {section === "farmacias" && (
           <PlatformOrganizations
+            token={token}
+            onVerificationExpired={verificationExpired}
+          />
+        )}
+        {section === "pagos" && (
+          <PlatformPayments
             token={token}
             onVerificationExpired={verificationExpired}
           />

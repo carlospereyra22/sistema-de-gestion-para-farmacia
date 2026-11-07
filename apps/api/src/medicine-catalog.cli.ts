@@ -15,6 +15,7 @@ const USO =
 async function main(): Promise<void> {
   // Sin temporizador: este proceso sólo ejecuta el comando y termina.
   process.env.PRICE_REFRESH_SCHEDULER = "off";
+  process.env.SUBSCRIPTION_SCHEDULER = "off";
   const [command, argument] = process.argv.slice(2);
   if (!command) throw new Error(USO);
   const { AppModule } = await import("./app.module");

@@ -12,10 +12,13 @@ import {
 } from "@nestjs/common";
 import { Type } from "class-transformer";
 import {
+  IsDateString,
   IsEmail,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -26,9 +29,11 @@ import {
 
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { PlatformAdminGuard } from "./platform-admin.guard";
+import { PlatformBillingService } from "./platform-billing.service";
 import { PlatformOrganizationsService } from "./platform-organizations.service";
 
 const MINOR = /^\d{1,14}$/;
+const CIVIL_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 class NewOrganizationDto {
   @IsString() @MinLength(2) @MaxLength(200) organizationName!: string;
@@ -61,6 +66,25 @@ class SubscriptionDto {
   @IsOptional() @IsString() @MaxLength(200) contactEmail?: string;
 }
 
+class PaymentDto {
+  @IsUUID() operationId!: string;
+  @IsString() @Matches(MINOR) amountMinor!: string;
+  @Matches(CIVIL_DATE) @IsDateString({ strict: true }) paidOn!: string;
+  @IsIn(["TRANSFER", "CASH", "CHECK", "OTHER"]) method!: string;
+  @IsOptional() @IsString() @MaxLength(160) reference?: string;
+}
+
+class ReasonDto {
+  @IsString() @MinLength(3) @MaxLength(300) @Matches(/\S/) reason!: string;
+}
+
+class ExtensionDto extends ReasonDto {
+  @ValidateIf((_, value) => value !== null)
+  @Matches(CIVIL_DATE)
+  @IsDateString({ strict: true })
+  until!: string | null;
+}
+
 class PlanPricesDto {
   @IsString() @Matches(MINOR) baseMinor!: string;
   @IsString() @Matches(MINOR) extraUserMinor!: string;
@@ -70,7 +94,10 @@ class PlanPricesDto {
 @Controller("platform")
 @UseGuards(PlatformAdminGuard)
 export class PlatformOrganizationsController {
-  constructor(private readonly organizations: PlatformOrganizationsService) {}
+  constructor(
+    private readonly organizations: PlatformOrganizationsService,
+    private readonly billing: PlatformBillingService,
+  ) {}
 
   @Get("organizations")
   list() {
@@ -125,6 +152,62 @@ export class PlatformOrganizationsController {
     @Body() body: SubscriptionDto,
   ) {
     return this.organizations.updateSubscription(request.auth!.sub, id, body);
+  }
+
+  @Get("payments")
+  recentPayments() {
+    return this.billing.recentPayments();
+  }
+
+  @Post("organizations/:id/payments")
+  registerPayment(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: PaymentDto,
+  ) {
+    return this.billing.registerPayment(request.auth!.sub, id, body);
+  }
+
+  @Post("organizations/:id/payments/:paymentId/void")
+  @HttpCode(200)
+  voidPayment(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("paymentId", ParseUUIDPipe) paymentId: string,
+    @Body() body: ReasonDto,
+  ) {
+    return this.billing.voidPayment(
+      request.auth!.sub,
+      id,
+      paymentId,
+      body.reason,
+    );
+  }
+
+  @Post("organizations/:id/charges/:chargeId/waive")
+  @HttpCode(200)
+  waiveCharge(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("chargeId", ParseUUIDPipe) chargeId: string,
+    @Body() body: ReasonDto,
+  ) {
+    return this.billing.waiveCharge(
+      request.auth!.sub,
+      id,
+      chargeId,
+      body.reason,
+    );
+  }
+
+  @Post("organizations/:id/extension")
+  @HttpCode(200)
+  extend(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: ExtensionDto,
+  ) {
+    return this.billing.extend(request.auth!.sub, id, body);
   }
 
   @Get("plans")

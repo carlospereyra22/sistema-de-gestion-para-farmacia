@@ -2,6 +2,15 @@
 
 ## DECIDED
 
+- 07/11/2026 (SISTEMA-56): Las suscripciones se cobran mes adelantado. Los pagos no se
+  imputan en una tabla: una función pura los reparte del cargo más viejo al más nuevo
+  cada vez que hace falta, porque así anular un pago no tiene nada que deshacer y
+  `paidThrough` no puede desincronizarse. Esto reemplaza a la tabla de imputaciones
+  prevista en el plan. El cálculo corre en la misma transacción que el pago y también
+  genera lo que falte, para que un pago reactive al instante y no dependa del proceso
+  programado. Una farmacia bloqueada que salda su deuda recibe condonados los meses que
+  pasó sin servicio, porque si no quedaría bloqueada sin nada que pagar.
+
 - 07/11/2026 (SISTEMA-55): El estado comercial de una farmacia se calcula por fechas y no
   se guarda, para que el corte no dependa de un proceso programado y un pago reactive al
   instante. El día comercial cambia a las 06:00 de Argentina. El plan nace sin importes:
