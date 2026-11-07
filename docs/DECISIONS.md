@@ -2,6 +2,14 @@
 
 ## DECIDED
 
+- 06/11/2026 (SISTEMA-50): El superusuario de plataforma es una tabla propia
+  (`PlatformAdmin`), no un `Permission`, porque `roles.service.ts` acepta cualquier
+  código y una farmacia podría asignárselo. Se otorga solo por comando en el servidor,
+  sin endpoint. Las rutas `/platform` responden igual que una ruta inexistente a
+  cualquiera que no sea administrador, también sin sesión. El segundo factor es TOTP
+  con `node:crypto`, sin dependencia nueva, y el bloqueo por intentos va en el paso del
+  código: en la clave, cualquiera con el correo podría dejarnos afuera del panel.
+
 - 06/11/2026 (SISTEMA-49): El cambio obligatorio de contraseña se controla en
   `JwtAccessGuard` y no solo en la web: al consultar la sesión en cada pedido ya tiene
   el dato, y cubre todas las rutas sin marcar cada controller. Solo las rutas con

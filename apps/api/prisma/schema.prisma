@@ -457,6 +457,35 @@ model PlatformSetting {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 }
 
+model PlatformAdmin {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @unique @db.Uuid
+  active          Boolean   @default(true)
+  totpSecret      String?
+  totpConfirmedAt DateTime? @db.Timestamptz(6)
+  totpLastStep    Int?
+  failedAttempts  Int       @default(0)
+  lockedUntil     DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+model PlatformAuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorId        String?  @db.Uuid
+  action         String
+  entityType     String?
+  entityId       String?  @db.Uuid
+  organizationId String?  @db.Uuid
+  before         Json?
+  after          Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([organizationId, createdAt])
+}
+
 model ProductImage {
   productId      String   @id @db.Uuid
   organizationId String   @db.Uuid
@@ -555,6 +584,7 @@ model User {
   organizations UserOrganization[]
   branches      UserBranch[]
   sessions      AuthSession[]
+  platformAdmin PlatformAdmin?
 }
 
 model UserOrganization {
@@ -628,6 +658,7 @@ model AuthSession {
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @db.Uuid
   tokenHash String    @unique
+  platformVerifiedAt DateTime? @db.Timestamptz(6)
   expiresAt DateTime? @db.Timestamptz(6)
   revokedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)

@@ -14,6 +14,7 @@ import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { OrganizationsModule } from "./organizations/organizations.module";
 import { PartiesModule } from "./parties/parties.module";
+import { PlatformModule } from "./platform/platform.module";
 import { PurchasesModule } from "./purchases/purchases.module";
 import { SupplierPayablesModule } from "./supplier-payables/supplier-payables.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -46,6 +47,7 @@ import { UsersModule } from "./users/users.module";
     OrganizationsModule,
     FiscalModule,
     PartiesModule,
+    PlatformModule,
     PurchasesModule,
     SupplierPayablesModule,
   ],

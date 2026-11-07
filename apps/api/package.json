@@ -8,6 +8,7 @@
     "start": "node dist/src/main.js",
     "precios": "node dist/src/price-refresh.cli.js",
     "catalogo-medicamentos": "node dist/src/medicine-catalog.cli.js",
+    "plataforma": "node dist/src/platform/platform-admin.cli.js",
     "lint": "eslint src --ext .ts --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",

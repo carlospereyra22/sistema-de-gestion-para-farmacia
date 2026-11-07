@@ -38,6 +38,7 @@ export class AuthService {
         email: true,
         active: true,
         mustChangePassword: true,
+        platformAdmin: { select: { active: true } },
         organizations: {
           include: {
             organization: true,

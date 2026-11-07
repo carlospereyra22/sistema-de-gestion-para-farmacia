@@ -1,101 +1,25 @@
 import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
-import { type INestApplication, ValidationPipe } from "@nestjs/common";
-import { Test, type TestingModule } from "@nestjs/testing";
 import { hash } from "@node-rs/argon2";
-import * as cookieParser from "cookie-parser";
-import { AppModule } from "../src/app.module";
-import { ApiExceptionFilter } from "../src/common/http/api-exception.filter";
-import { requestIdMiddleware } from "../src/common/http/request-id.middleware";
-import type { EnvironmentService } from "../src/config/environment.service";
-import { PrismaService } from "../src/prisma/prisma.service";
+import { startHttpApp, type HttpApp } from "./support/http-app";
 
 describe("cambio de contraseña por HTTP (esquema aislado)", () => {
-  const schema = `change_password_${randomUUID().replaceAll("-", "")}`;
   const temporary = "clave-temporal-12345";
   const chosen = "clave-elegida-678901";
-  let moduleRef: TestingModule;
-  let main: TestingModule;
-  let app: INestApplication;
-  let db: PrismaService;
-  let base: string;
+  let http: HttpApp;
+  let db: HttpApp["db"];
+  let request: HttpApp["request"];
 
   beforeAll(async () => {
-    process.env.PRICE_REFRESH_SCHEDULER = "off";
-    main = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    const url = new URL(process.env.DATABASE_URL!);
-    if (
-      !["localhost", "127.0.0.1"].includes(url.hostname) ||
-      url.pathname !== "/gestion_dev"
-    )
-      throw new Error("Solo base local de desarrollo");
-    url.searchParams.set("schema", schema);
-    const result = spawnSync(
-      process.execPath,
-      [require.resolve("prisma/build/index.js"), "migrate", "deploy"],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        timeout: 90000,
-        stdio: "pipe",
-      },
-    );
-    if (result.status !== 0)
-      throw new Error(
-        "No se pudo preparar el esquema aislado: " +
-          String(result.stderr).replaceAll(url.toString(), "[database]"),
-      );
-    db = new PrismaService({
-      databaseUrl: url.toString(),
-    } as EnvironmentService);
-    await db.$connect();
-    moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(db)
-      .compile();
-    app = moduleRef.createNestApplication();
-    app.setGlobalPrefix("api/v1");
-    app.use(cookieParser());
-    app.use(requestIdMiddleware);
-    app.useGlobalFilters(new ApiExceptionFilter());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
-    await app.listen(0, "127.0.0.1");
-    base = (await app.getUrl()).replace("[::1]", "127.0.0.1");
+    http = await startHttpApp("change_password");
+    ({ db, request } = http);
   }, 100000);
 
   afterAll(async () => {
-    await app?.close();
-    await db?.$disconnect();
-    if (main && /^change_password_[a-f0-9]{32}$/.test(schema))
-      await main
-        .get(PrismaService)
-        .$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await main?.close();
+    await http?.close();
   });
 
-  const request = (path: string, token?: string, body?: object) =>
-    fetch(`${base}/api/v1${path}`, {
-      method: body ? "POST" : "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-  const login = async (email: string, password: string) => {
-    const response = await request("/auth/login", undefined, {
-      email,
-      password,
-    });
-    expect(response.status).toBe(200);
-    return ((await response.json()) as { accessToken: string }).accessToken;
-  };
+  const login = (email: string, password: string) =>
+    http.login(email, password);
 
   /** Usuario con clave temporal; con farmacia salvo que se pida lo contrario. */
   async function account(mustChangePassword: boolean, withOrganization = true) {
