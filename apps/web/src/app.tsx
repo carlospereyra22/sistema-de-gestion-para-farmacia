@@ -104,6 +104,7 @@ export function App(): ReactElement {
   const [showLegacyWorkspace, setShowLegacyWorkspace] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [permissionCodes, setPermissionCodes] = useState<string[]>([]);
 
   const startSession = async (token: string): Promise<void> => {
     const profile = await getCurrentUser(token);
@@ -111,6 +112,11 @@ export function App(): ReactElement {
     setIsPlatformAdmin(profile.isPlatformAdmin ?? false);
     setUser(profile.email);
     const membership = profile.organizations[0];
+    setPermissionCodes(
+      membership?.roles?.flatMap(({ role }) =>
+        role.permissions.map(({ permission }) => permission.code),
+      ) ?? [],
+    );
     setAccountName(membership?.displayName || undefined);
     setOrganizationName(
       membership?.organization?.ticketHeader?.name ||
@@ -229,6 +235,8 @@ export function App(): ReactElement {
   }, [accessToken]);
 
   useEffect(() => {
+    // Solo lo usa la vista anterior: si no, pide datos de administración a cualquier rol.
+    if (!showLegacyWorkspace) return;
     if (!accessToken || !organizationId || mustChangePassword) return;
     void Promise.all([
       getUsers(accessToken, organizationId),
@@ -253,7 +261,7 @@ export function App(): ReactElement {
       .catch(() =>
         setMessage("No se pudo cargar la administracion de usuarios."),
       );
-  }, [accessToken, organizationId, mustChangePassword]);
+  }, [accessToken, organizationId, mustChangePassword, showLegacyWorkspace]);
 
   const submitNewUser = async (
     event: FormEvent<HTMLFormElement>,
@@ -381,6 +389,7 @@ export function App(): ReactElement {
           organizationName={organizationName}
           accessToken={accessToken}
           organizationId={organizationId}
+          permissionCodes={permissionCodes}
           onLogout={endSession}
         />
       </ProductImageSession>

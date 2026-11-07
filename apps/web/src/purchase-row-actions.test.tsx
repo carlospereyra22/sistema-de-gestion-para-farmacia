@@ -16,6 +16,7 @@ function render(
   status: Purchase["status"],
   continuing = false,
   closedAt?: string,
+  mayReceive = true,
 ) {
   return renderToStaticMarkup(
     <PurchaseRowActions
@@ -25,6 +26,7 @@ function render(
       onReceive={() => undefined}
       onDetail={() => undefined}
       onCancel={() => undefined}
+      mayReceive={mayReceive}
     />,
   );
 }
@@ -38,6 +40,14 @@ it("ofrece recepción y un menú de acciones para compras pendientes", () => {
 
 it("continúa el borrador de recepción desde la acción principal", () => {
   expect(render("PARTIALLY_RECEIVED", true)).toContain("Continuar recepción");
+});
+
+it("sin permiso de recibir abre el detalle y conserva el menú para cancelar", () => {
+  const html = render("ORDERED", false, undefined, false);
+
+  expect(html).toContain("Ver detalle");
+  expect(html).not.toContain(">Recibir<");
+  expect(html).toContain("Más acciones de la compra");
 });
 
 it("muestra sólo el detalle cuando la compra ya no admite recepción", () => {

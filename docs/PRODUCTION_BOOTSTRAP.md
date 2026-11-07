@@ -12,7 +12,7 @@ BOOTSTRAP_BRANCH, BOOTSTRAP_EMAIL, BOOTSTRAP_PASSWORD y DATABASE_URL del entorno
 No usa el seed de desarrollo, IDs demo ni credenciales predeterminadas.
 
 Crea una organizacion, una sucursal (codigo interno PRINCIPAL), un usuario con
-Argon2 y rol OWNER, sus membresias, los roles OWNER/ADMIN/USER, los permisos
+Argon2 y rol OWNER, sus membresias, los roles OWNER/ADMIN/EMPLEADO/USER, los permisos
 existentes del sistema y una auditoria sin secretos. No crea productos, listas de
 precios, clientes, cajas ni operaciones comerciales. La creacion vive en
 `apps/api/src/organizations/organization-provisioning.ts`, junto con la lista unica

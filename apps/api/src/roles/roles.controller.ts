@@ -3,11 +3,14 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
 } from "@nestjs/common";
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsString,
@@ -24,6 +27,13 @@ class CreateRoleDto {
   @IsString() @Matches(/^[A-Z][A-Z0-9_]{1,31}$/) code!: string;
   @IsArray()
   @ArrayMinSize(1)
+  @IsString({ each: true })
+  permissionCodes!: string[];
+}
+
+class UpdateRolePermissionsDto {
+  @IsArray()
+  @ArrayMaxSize(100)
   @IsString({ each: true })
   permissionCodes!: string[];
 }
@@ -52,6 +62,21 @@ export class RolesController {
       organizationId,
       body.name,
       body.code,
+      body.permissionCodes,
+    );
+  }
+
+  @Patch(":roleId/permissions")
+  updatePermissions(
+    @Param("organizationId") organizationId: string,
+    @Param("roleId", ParseUUIDPipe) roleId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: UpdateRolePermissionsDto,
+  ) {
+    return this.roles.updatePermissions(
+      request.auth!.sub,
+      organizationId,
+      roleId,
       body.permissionCodes,
     );
   }

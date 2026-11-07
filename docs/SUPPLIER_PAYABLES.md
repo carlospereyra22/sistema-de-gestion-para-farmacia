@@ -7,7 +7,7 @@ Estado: etapa 1 implementada el 20/10/2026, tras aprobar la propuesta. El docume
 - Compras V2 está integrada: Purchase/PurchaseItem, PurchaseReceipt/PurchaseReceiptItem; no hay una migración pendiente. `prisma migrate status` informa 54 migraciones aplicadas.
 - No se encontraron modelos/servicios equivalentes a facturas, pagos o cuenta corriente de proveedores. SupplierReturn es una devolución física, no un crédito administrativo.
 - Supplier es un catálogo por organización con UUID y estado activo. PartiesService aplica PARTY_READ/PARTY_MANAGE. La pantalla Proveedores usa el componente Parties de workspace-shell y no tiene un estado de cuenta financiero.
-- Compras usa PURCHASE_READ/PURCHASE_MANAGE y acceso de UserBranch; pagos y deudas requieren permisos separados para no otorgar capacidades financieras por poder recibir mercadería.
+- Compras usa PURCHASE_READ/PURCHASE_MANAGE/PURCHASE_RECEIVE y acceso de UserBranch; pagos y deudas requieren permisos separados para no otorgar capacidades financieras por poder recibir mercadería.
 - Los importes existentes usan BigInt en centavos y respuestas JSON en texto. Se conserva ARS; no se introduce moneda extranjera.
 - Caja usa CashSession/CashMovement y cuentas de clientes tienen servicios propios: ninguno se debe importar para escribir desde Cuentas por pagar.
 - Las fechas civiles de cuentas de clientes usan America/Argentina/Buenos_Aires. Se puede reutilizar el criterio de calendario, sin reutilizar sus registros ni saldos.
@@ -28,7 +28,7 @@ Antes de cada etapa siguiente: informar pruebas y solicitar aprobación, según 
 - Modelos nuevos en `apps/api/prisma/schema.prisma`: SupplierPayableInvoice, SupplierPayableDue y, en etapa 2, SupplierPayablePayment y asignaciones a vencimientos.
 - Migraciones nuevas, aditivas, con claves foráneas y controles de pertenencia a organización/sucursal/proveedor/compra; no editar migraciones ejecutadas ni transformar compras antiguas. Si hacen falta índices compuestos en entidades existentes para las referencias seguras, agregarlos sin cambiar sus datos.
 - Restricción única de comprobante por organización/proveedor/tipo/punto/número normalizado, conservando número original y ceros. Idempotencia por solicitud. Tipos de factura y Otro documento de deuda; ningún remito genera deuda automáticamente.
-- Permisos propuestos PAYABLE_READ/PAYABLE_MANAGE y PAYABLE_PAYMENT_MANAGE, registrados en migración/seed y etiquetas de roles. Asignación inicial sólo a administradores; los roles personalizados se habilitan explícitamente.
+- Permisos PAYABLE_READ, PAYABLE_MANAGE (cargar facturas) y PAYABLE_PAY (registrar y anular pagos, SISTEMA-54), registrados en migración/seed y etiquetas de roles. Asignación inicial sólo a administradores; los roles personalizados se habilitan explícitamente.
 - Frontend nuevo `apps/web/src/supplier-payables/` y cliente API propio. Cambios acotados en purchases-workspace y workspace-shell para accesos, no para recalcular recepción ni stock.
 - Tests unitarios y de integración en esquema PostgreSQL sintético; documentación de reglas y arquitectura cuando se apruebe la implementación.
 

@@ -5,6 +5,7 @@ import {
   parseBootstrapSettings,
   productionPermissions,
 } from "../prisma/bootstrap-production";
+import { employeePermissions } from "../src/organizations/organization-provisioning";
 
 const input = {
   organizationName: "Farmacia de prueba",
@@ -120,7 +121,7 @@ describe("Production bootstrap", () => {
     expect(call.data.email).toBe("owner@example.com");
     expect(await verify(call.data.passwordHash, input.password)).toBe(true);
     expect(tx.rolePermission.create).toHaveBeenCalledTimes(
-      productionPermissions.length * 2,
+      productionPermissions.length * 2 + employeePermissions.length,
     );
     expect(tx.userBranch.create).toHaveBeenCalledWith({
       data: { userId: "owner", branchId: "branch" },

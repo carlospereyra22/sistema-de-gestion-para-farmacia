@@ -67,6 +67,7 @@ describe("purchase receipts on an isolated synthetic schema", () => {
       [
         "PURCHASE_READ",
         "PURCHASE_MANAGE",
+        "PURCHASE_RECEIVE",
         "PAYABLE_MANAGE",
         "PARTY_MANAGE",
         "INVENTORY_READ",

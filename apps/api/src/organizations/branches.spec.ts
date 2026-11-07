@@ -86,6 +86,47 @@ it("reports which branches the actor may operate without hiding destinations", a
   );
 });
 
+it("sin ORGANIZATION_READ solo lista las sucursales propias", async () => {
+  const f = fixture();
+  f.member.mockResolvedValue({ active: true, roles: [] });
+  f.listBranches.mockResolvedValue([
+    { ...branch, userMemberships: [{ userId: "actor" }] },
+  ]);
+
+  await expect(f.service.listBranches("actor", "org")).resolves.toEqual([
+    { ...branch, canAccess: true },
+  ]);
+  expect(f.listBranches).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({
+        userMemberships: { some: { userId: "actor" } },
+      }),
+    }),
+  );
+});
+
+it("con ORGANIZATION_READ no filtra por sucursal propia", async () => {
+  const f = fixture();
+  f.listBranches.mockResolvedValue([]);
+
+  await f.service.listBranches("actor", "org");
+
+  expect(f.listBranches.mock.calls[0]![0].where).not.toHaveProperty(
+    "userMemberships",
+  );
+});
+
+it.each([
+  ["no pertenece a la farmacia", null],
+  ["tiene la membresía inactiva", { active: false, roles: [] }],
+])("rechaza listar sucursales si %s", async (_name, membership) => {
+  const f = fixture();
+  f.member.mockResolvedValue(membership);
+
+  await expect(f.service.listBranches("actor", "org")).rejects.toThrow();
+  expect(f.listBranches).not.toHaveBeenCalled();
+});
+
 it("normalizes and validates branch fields without example defaults", () => {
   const input = plainToInstance(BranchDto, {
     name: " Centro ",

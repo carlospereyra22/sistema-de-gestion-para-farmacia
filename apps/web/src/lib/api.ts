@@ -129,6 +129,7 @@ export type CurrentUserProfile = {
   organizations: {
     organizationId: string;
     displayName?: string | null;
+    roles?: { role: { permissions: { permission: { code: string } }[] } }[];
     organization?: { name: string; ticketHeader?: { name?: string } | null };
   }[];
 };
@@ -369,6 +370,24 @@ export async function createRole(
     },
   );
   if (!response.ok) throw new Error("No se pudo crear el rol.");
+}
+
+export async function updateRolePermissions(
+  accessToken: string,
+  organizationId: string,
+  roleId: string,
+  permissionCodes: string[],
+): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/roles/${roleId}/permissions`,
+    {
+      method: "PATCH",
+      headers: authJson(accessToken),
+      body: JSON.stringify({ permissionCodes }),
+    },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo actualizar el rol.");
 }
 
 export async function getBranches(
@@ -2636,6 +2655,7 @@ async function responseError(
 }
 
 export type Purchase = {
+  canRegisterDebt?: boolean;
   hasRegisteredDebt?: boolean;
   clientOperationId?: string | null;
   reference?: string | null;
@@ -2654,7 +2674,7 @@ export type Purchase = {
     cancelledQuantity?: number;
     orderedQuantity: number;
     receivedQuantity: number;
-    unitCostMinor: string;
+    unitCostMinor?: string;
   }[];
 };
 export type InventoryHistoryEntry = {

@@ -62,7 +62,9 @@ describe("supplier invoices isolated schema", () => {
       },
     });
     const permissions = await db.permission.findMany({
-      where: { code: { in: ["PAYABLE_READ", "PAYABLE_MANAGE"] } },
+      where: {
+        code: { in: ["PAYABLE_READ", "PAYABLE_MANAGE", "PAYABLE_PAY"] },
+      },
     });
     const role = await db.role.create({
       data: {
@@ -519,7 +521,7 @@ describe("supplier invoices isolated schema", () => {
     await db.rolePermission.deleteMany({
       where: {
         role: { organizationId: f.org.id },
-        permission: { code: "PAYABLE_MANAGE" },
+        permission: { code: "PAYABLE_PAY" },
       },
     });
     await expect(

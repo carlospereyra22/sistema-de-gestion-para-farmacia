@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { AppModule } from "../src/app.module";
 import { changeBranchProduct } from "../src/catalog/branch-product-lifecycle";
 import {
+  employeePermissions,
   organizationPermissions,
   provisionOrganizationGraph,
 } from "../src/organizations/organization-provisioning";
@@ -70,6 +71,7 @@ describe("alta de farmacias con datos existentes (fixtures con rollback)", () =>
       ).toEqual({
         OWNER: organizationPermissions.length,
         ADMIN: organizationPermissions.length,
+        EMPLEADO: employeePermissions.length,
         USER: 0,
       });
     });

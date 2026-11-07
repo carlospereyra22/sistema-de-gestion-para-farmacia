@@ -8,6 +8,7 @@ it("opens from a purchase with its amount and supplier term already filled", () 
       options={{
         today: "2026-10-20",
         canCreate: true,
+        canPay: true,
         suppliers: [
           {
             id: "supplier",

@@ -8,6 +8,7 @@ import { createProductsFromBase } from "./lib/purchase-bulk-products";
 import { useEffect, useRef, useState, type ReactNode, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { PurchaseHelp, PurchaseExitDialog } from "./purchase-dialog-extras";
+import { purchaseCostLabel, purchaseTotalLabel } from "./lib/purchase-cost";
 import { ReceiptDebtFields } from "./supplier-payables/receipt-debt";
 import {
   suggestedDebt,
@@ -106,6 +107,8 @@ export function PurchasesWorkspace({
   onInitialConsumed,
   onCreateProduct,
   onRegisterDebt,
+  canBuy = true,
+  canReceiveGoods = true,
 }: {
   token: string;
   organizationId: string;
@@ -125,6 +128,9 @@ export function PurchasesWorkspace({
   }) => Promise<string | undefined>;
   /** Abre Cuentas por pagar con la deuda de esa compra. */
   onRegisterDebt: (purchaseId: string) => void;
+  /** Comprar y recibir son tareas separadas: cada rol ve solo la suya. */
+  canBuy?: boolean;
+  canReceiveGoods?: boolean;
 }) {
   const packActions = useMemo(
     () => ({
@@ -302,9 +308,11 @@ export function PurchasesWorkspace({
         step: "receive",
         purchase: p,
         supplierId: p.supplierId,
-        debt: p.hasRegisteredDebt
-          ? { enabled: false, dueOn: "" }
-          : suggestedDebt(suppliers.find((s) => s.id === p.supplierId)),
+        // Sin permiso no se precarga: se enviaría una deuda que no ve y la API la rechaza.
+        debt:
+          p.hasRegisteredDebt || p.canRegisterDebt === false
+            ? { enabled: false, dueOn: "" }
+            : suggestedDebt(suppliers.find((s) => s.id === p.supplierId)),
         lots: p.items
           .filter((i) => purchasePending(i) > 0)
           .map((i) => lotRow(i.id)),
@@ -396,12 +404,11 @@ export function PurchasesWorkspace({
   const receiptEstimate = `${receiptEstimateMinor / 100n},${String(receiptEstimateMinor % 100n).padStart(2, "0")}`;
   const pendingEstimateMinor = currentItems.reduce((sum, i) => {
     const quantity = purchasePending(i);
+    const cost = i.unitCostMinor ?? "0";
     return (
       sum +
-      (Number.isSafeInteger(quantity) &&
-      quantity > 0 &&
-      /^\d+$/.test(i.unitCostMinor)
-        ? BigInt(quantity) * BigInt(i.unitCostMinor)
+      (Number.isSafeInteger(quantity) && quantity > 0 && /^\d+$/.test(cost)
+        ? BigInt(quantity) * BigInt(cost)
         : 0n)
     );
   }, 0n);
@@ -529,7 +536,8 @@ export function PurchasesWorkspace({
                     ...current,
                     purchase: latest,
                     locked: undefined,
-                    ...(latest.hasRegisteredDebt
+                    ...(latest.hasRegisteredDebt ||
+                    latest.canRegisterDebt === false
                       ? { debt: { enabled: false, dueOn: "" } }
                       : {}),
                   }
@@ -874,13 +882,15 @@ export function PurchasesWorkspace({
                 onChange={(e) => setTo(e.target.value)}
               />
             </label>
-            <button
-              className={`${button} whitespace-nowrap bg-teal-700 text-white`}
-              onClick={newPurchase}
-            >
-              <Plus size={16} />
-              Nueva compra
-            </button>
+            {canBuy && (
+              <button
+                className={`${button} whitespace-nowrap bg-teal-700 text-white`}
+                onClick={newPurchase}
+              >
+                <Plus size={16} />
+                Nueva compra
+              </button>
+            )}
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full min-w-[1120px] table-fixed text-left text-[15px]">
@@ -932,13 +942,7 @@ export function PurchasesWorkspace({
                       <PurchaseReceptionProgress purchase={p} />
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
-                      {money(
-                        p.items.reduce(
-                          (n, i) =>
-                            n + i.orderedQuantity * Number(i.unitCostMinor),
-                          0,
-                        ),
-                      )}
+                      {purchaseTotalLabel(p.items, money)}
                     </td>
                     <td className="px-4 py-4">
                       <span
@@ -967,6 +971,8 @@ export function PurchasesWorkspace({
                         onReceive={() => void receive(p)}
                         onDetail={() => void openDetail(p.id)}
                         onCancel={() => setCancelPurchase(p)}
+                        mayReceive={canReceiveGoods}
+                        mayCancel={canBuy}
                       />
                     </td>
                   </tr>
@@ -1089,26 +1095,32 @@ export function PurchasesWorkspace({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={button}
-                    onClick={() => {
-                      setDetail(undefined);
-                      setOpen(false);
-                      onRegisterDebt(detail.id);
-                    }}
-                  >
-                    <FileText size={16} />
-                    Registrar deuda
-                  </button>
-                  {["ORDERED", "PARTIALLY_RECEIVED"].includes(
-                    detail.status,
-                  ) && (
-                    <button className={button} onClick={() => receive(detail)}>
-                      <PackageCheck size={16} />
-                      Recibir mercadería
+                  {detail.canRegisterDebt !== false && (
+                    <button
+                      type="button"
+                      className={button}
+                      onClick={() => {
+                        setDetail(undefined);
+                        setOpen(false);
+                        onRegisterDebt(detail.id);
+                      }}
+                    >
+                      <FileText size={16} />
+                      Registrar deuda
                     </button>
                   )}
+                  {canReceiveGoods &&
+                    ["ORDERED", "PARTIALLY_RECEIVED"].includes(
+                      detail.status,
+                    ) && (
+                      <button
+                        className={button}
+                        onClick={() => receive(detail)}
+                      >
+                        <PackageCheck size={16} />
+                        Recibir mercadería
+                      </button>
+                    )}
                 </div>
               </div>
               <div className="overflow-auto">
@@ -1137,7 +1149,7 @@ export function PurchasesWorkspace({
                         <td>{i.receivedQuantity}</td>
                         <td>{purchasePending(i)}</td>
                         <td>{i.cancelledQuantity ?? 0}</td>
-                        <td>{money(Number(i.unitCostMinor))}</td>
+                        <td>{purchaseCostLabel(i.unitCostMinor, money)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1168,8 +1180,9 @@ export function PurchasesWorkspace({
                       {i.productName} · {i.quantity} un. · Lote {i.lotNumber} ·{" "}
                       {i.expiresAt
                         ? i.expiresAt.slice(0, 10)
-                        : "Sin vencimiento"}{" "}
-                      · Costo {money(Number(i.unitCostMinor))}
+                        : "Sin vencimiento"}
+                      {i.unitCostMinor !== undefined &&
+                        ` · Costo ${money(Number(i.unitCostMinor))}`}
                     </p>
                   ))}
                 </section>
@@ -1306,7 +1319,9 @@ export function PurchasesWorkspace({
                           }
                         >
                           <option value="order">Pedido pendiente</option>
-                          <option value="direct">Compra directa</option>
+                          {canReceiveGoods && (
+                            <option value="direct">Compra directa</option>
+                          )}
                         </select>
                       </div>
                       <div className="text-sm">
@@ -1604,17 +1619,18 @@ export function PurchasesWorkspace({
                     />
                   </>
                 )}
-                {draft.step === "receive" && (
-                  <ReceiptDebtFields
-                    registered={draft.purchase?.hasRegisteredDebt}
-                    value={draft.debt ?? { enabled: false, dueOn: "" }}
-                    estimated={receiptEstimate}
-                    pendingEstimate={
-                      selectedQuantity === 0 ? pendingEstimate : undefined
-                    }
-                    onChange={(debt) => patch({ debt })}
-                  />
-                )}
+                {draft.step === "receive" &&
+                  draft.purchase?.canRegisterDebt !== false && (
+                    <ReceiptDebtFields
+                      registered={draft.purchase?.hasRegisteredDebt}
+                      value={draft.debt ?? { enabled: false, dueOn: "" }}
+                      estimated={receiptEstimate}
+                      pendingEstimate={
+                        selectedQuantity === 0 ? pendingEstimate : undefined
+                      }
+                      onChange={(debt) => patch({ debt })}
+                    />
+                  )}
                 <label className="mt-4 block text-sm">
                   Observaciones
                   <input

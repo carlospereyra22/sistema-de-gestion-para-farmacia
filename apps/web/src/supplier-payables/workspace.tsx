@@ -386,7 +386,7 @@ export function SupplierPayablesWorkspace({
                   </td>
                   <td className="px-5 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                      {options?.canCreate &&
+                      {options?.canPay &&
                         (invoice.balanceMinor !== "0" ||
                           sessionStorage.getItem(paymentKey(invoice.id))) && (
                           <button
@@ -518,7 +518,7 @@ export function SupplierPayablesWorkspace({
             <p className="text-sm text-slate-500">
               Importe original {ars(detail.amountMinor)}
             </p>
-            {options?.canCreate &&
+            {options?.canPay &&
               (detail.balanceMinor !== "0" ||
                 sessionStorage.getItem(paymentKey(detail.id))) && (
                 <button
@@ -574,7 +574,7 @@ export function SupplierPayablesWorkspace({
                       <span className="text-sm text-slate-500">
                         {dateLabel(p.paidOn)} · {paymentMethods[p.method]}
                       </span>
-                      {options?.canCreate && !p.voidedAt && (
+                      {options?.canPay && !p.voidedAt && (
                         <button
                           className="text-sm text-slate-400 hover:text-rose-600"
                           onClick={() => setVoiding(p.id)}
