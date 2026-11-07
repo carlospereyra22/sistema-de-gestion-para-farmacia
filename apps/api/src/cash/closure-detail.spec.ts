@@ -1,12 +1,12 @@
 import { CashService } from "./cash.service";
 
-function setup(admin = false) {
+function setup(roleCode = "CASHIER") {
   const member = {
     active: true,
     roles: [
       {
         role: {
-          code: admin ? "ADMIN" : "CASHIER",
+          code: roleCode,
           permissions: [{ permission: { code: "CASH_READ" } }],
         },
       },
@@ -155,11 +155,14 @@ describe("closure detail", () => {
     ).rejects.toThrow();
     expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
   });
-  it("allows an administrator to consult archived closures", async () => {
-    const { prisma, service } = setup(true);
-    await service.closureDetail("user", "org", "branch", "session");
-    expect(
-      prisma.cashSession.findFirst.mock.calls[0]![0].where,
-    ).not.toHaveProperty("archivedAt");
-  });
+  it.each(["ADMIN", "OWNER"])(
+    "permite consultar cierres archivados al rol %s",
+    async (roleCode) => {
+      const { prisma, service } = setup(roleCode);
+      await service.closureDetail("user", "org", "branch", "session");
+      expect(
+        prisma.cashSession.findFirst.mock.calls[0]![0].where,
+      ).not.toHaveProperty("archivedAt");
+    },
+  );
 });

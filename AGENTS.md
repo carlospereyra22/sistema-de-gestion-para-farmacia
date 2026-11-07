@@ -48,6 +48,7 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
 - Impresion: `THERMAL_TICKETS.md`, `LOCAL_PRINT_AGENT.md`, `PRODUCTION_PRINTING.md`.
 - Reportes: `REPORTS_PLAN.md`, `REPORTS_INTERACTIVE_SPEC.md`.
 - Landing comercial: `LANDING.md`.
+- Plataforma y cobro a farmacias: `PLATFORM.md`.
 - Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`.
 - Operacion: `INICIAR_PRUEBAS.md`, `PUBLICAR_PRODUCCION.md`,
   `LOCAL_PRODUCTION_PARITY.md`, `NETLIFY.md`, `PRODUCTION_BOOTSTRAP.md`.

@@ -2,6 +2,8 @@ import { hash } from "@node-rs/argon2";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
+import { provisionOrganizationGraph } from "../src/organizations/organization-provisioning";
+
 const settingsSchema = z.object({
   organizationName: z.string().trim().min(1).max(200),
   branchName: z.string().trim().min(1).max(200),
@@ -21,33 +23,7 @@ export function parseBootstrapSettings(input: unknown) {
   return result.data;
 }
 
-export const productionPermissions = [
-  ["USER_READ", "Read users"],
-  ["USER_MANAGE", "Manage users"],
-  ["ROLE_READ", "Read roles"],
-  ["ROLE_MANAGE", "Manage roles"],
-  ["ORGANIZATION_READ", "Read organization settings"],
-  ["ORGANIZATION_MANAGE", "Manage branches"],
-  ["CATALOG_READ", "Read catalog"],
-  ["CATALOG_MANAGE", "Manage catalog"],
-  ["PARTY_READ", "Read customers and suppliers"],
-  ["PARTY_MANAGE", "Manage customers and suppliers"],
-  ["ACCOUNT_READ", "Read customer current accounts"],
-  ["ACCOUNT_MANAGE", "Manage customer current accounts"],
-  ["INVENTORY_READ", "Read inventory"],
-  ["INVENTORY_MANAGE", "Receive and adjust inventory"],
-  ["SALE_READ", "Read sales"],
-  ["SALE_MANAGE", "Complete sales"],
-  ["CASH_READ", "Read cash registers and sessions"],
-  ["CASH_MANAGE", "Manage cash registers and sessions"],
-  ["PURCHASE_READ", "Read purchases"],
-  ["PURCHASE_MANAGE", "Manage purchases and receipts"],
-  ["PAYABLE_READ", "Consultar facturas y vencimientos de proveedores"],
-  ["PAYABLE_MANAGE", "Registrar facturas de proveedores"],
-  ["REPORT_READ", "Read operational reports"],
-  ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
-  ["REPORT_EXPORT", "Exportar reportes"],
-] as const;
+export { organizationPermissions as productionPermissions } from "../src/organizations/organization-provisioning";
 
 /** One-shot setup for a freshly migrated database, never a password reset. */
 export async function bootstrapProduction(
@@ -69,54 +45,15 @@ export async function bootstrapProduction(
           "La base ya tiene organizaciones, sucursales o usuarios. No se modifico nada. No repitas el seed.",
         );
       }
-      const organization = await tx.organization.create({
-        data: { name: settings.organizationName },
-      });
-      const branch = await tx.branch.create({
-        data: {
-          organizationId: organization.id,
-          name: settings.branchName,
-          code: "PRINCIPAL",
+      const { organization, branch, owner } = await provisionOrganizationGraph(
+        tx,
+        {
+          organizationName: settings.organizationName,
+          branchName: settings.branchName,
+          ownerEmail: settings.email,
+          ownerPasswordHash: passwordHash,
         },
-      });
-      const roles = [];
-      for (const [code, name] of [
-        ["OWNER", "Owner"],
-        ["ADMIN", "Administrator"],
-        ["USER", "User"],
-      ] as const) {
-        roles.push(
-          await tx.role.create({
-            data: { organizationId: organization.id, code, name },
-          }),
-        );
-      }
-      for (const [code, description] of productionPermissions) {
-        const permission = await tx.permission.upsert({
-          where: { code },
-          update: {},
-          create: { code, description },
-        });
-        for (const role of roles.filter((item) => item.code !== "USER")) {
-          await tx.rolePermission.create({
-            data: { roleId: role.id, permissionId: permission.id },
-          });
-        }
-      }
-      const ownerRole = roles.find((role) => role.code === "OWNER");
-      if (!ownerRole) throw new Error("Owner role missing");
-      const owner = await tx.user.create({
-        data: { email: settings.email, passwordHash },
-      });
-      const membership = await tx.userOrganization.create({
-        data: { userId: owner.id, organizationId: organization.id },
-      });
-      await tx.userBranch.create({
-        data: { userId: owner.id, branchId: branch.id },
-      });
-      await tx.userOrganizationRole.create({
-        data: { membershipId: membership.id, roleId: ownerRole.id },
-      });
+      );
       await tx.auditLog.create({
         data: {
           organizationId: organization.id,

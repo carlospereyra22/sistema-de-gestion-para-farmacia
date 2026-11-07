@@ -1,6 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import { hash } from "@node-rs/argon2";
 
+import { organizationPermissions } from "../src/organizations/organization-provisioning";
+
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
@@ -35,34 +37,7 @@ async function main(): Promise<void> {
     },
   });
 
-  const permissions = [
-    ["USER_READ", "Read users"],
-    ["USER_MANAGE", "Manage users"],
-    ["ROLE_READ", "Read roles"],
-    ["ROLE_MANAGE", "Manage roles"],
-    ["ORGANIZATION_READ", "Read organization settings"],
-    ["ORGANIZATION_MANAGE", "Manage branches"],
-    ["CATALOG_READ", "Read catalog"],
-    ["CATALOG_MANAGE", "Manage catalog"],
-    ["PARTY_READ", "Read customers and suppliers"],
-    ["PARTY_MANAGE", "Manage customers and suppliers"],
-    ["ACCOUNT_READ", "Read customer current accounts"],
-    ["ACCOUNT_MANAGE", "Manage customer current accounts"],
-    ["INVENTORY_READ", "Read inventory"],
-    ["INVENTORY_MANAGE", "Receive and adjust inventory"],
-    ["SALE_READ", "Read sales"],
-    ["SALE_MANAGE", "Complete sales"],
-    ["CASH_READ", "Read cash registers and sessions"],
-    ["CASH_MANAGE", "Manage cash registers and sessions"],
-    ["PURCHASE_READ", "Read purchases"],
-    ["PAYABLE_READ", "Consultar facturas y vencimientos de proveedores"],
-    ["PAYABLE_MANAGE", "Registrar facturas de proveedores"],
-    ["PURCHASE_MANAGE", "Manage purchases and receipts"],
-    ["REPORT_READ", "Read operational reports"],
-    ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
-    ["REPORT_EXPORT", "Exportar reportes"],
-  ] as const;
-  for (const [code, description] of permissions) {
+  for (const [code, description] of organizationPermissions) {
     await prisma.permission.upsert({
       where: { code },
       update: { description },
@@ -96,7 +71,7 @@ async function main(): Promise<void> {
     create: { organizationId: organization.id, code: "USER", name: "User" },
   });
   const allPermissions = await prisma.permission.findMany({
-    where: { code: { in: permissions.map(([code]) => code) } },
+    where: { code: { in: organizationPermissions.map(([code]) => code) } },
   });
   for (const permission of allPermissions) {
     for (const assignedRole of [role, adminRole]) {
