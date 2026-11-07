@@ -55,6 +55,8 @@ export type OrganizationGraphInput = {
   branchName: string;
   ownerEmail: string;
   ownerPasswordHash: string;
+  /** El alta desde el panel usa una clave temporal que el dueño debe cambiar. */
+  ownerMustChangePassword?: boolean;
 };
 
 /**
@@ -103,7 +105,11 @@ export async function provisionOrganizationGraph(
   const ownerRole = roles.find((role) => role.code === "OWNER");
   if (!ownerRole) throw new Error("Owner role missing");
   const owner = await tx.user.create({
-    data: { email: input.ownerEmail, passwordHash: input.ownerPasswordHash },
+    data: {
+      email: input.ownerEmail,
+      passwordHash: input.ownerPasswordHash,
+      mustChangePassword: input.ownerMustChangePassword ?? false,
+    },
   });
   const membership = await tx.userOrganization.create({
     data: { userId: owner.id, organizationId: organization.id },

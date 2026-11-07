@@ -28,6 +28,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261106070000_platform_identity` (SISTEMA-50): `PlatformAdmin` marca las cuentas de plataforma, sin `organizationId`: guarda el secreto del codigo cifrado, el ultimo paso usado y los intentos fallidos. `AuthSession.platformVerifiedAt` registra cuando la sesion paso el codigo. `PlatformAuditLog` es la auditoria del panel, con `actorId` y `organizationId` opcionales: los comandos de servidor no tienen actor y muchas acciones no tienen farmacia.
 
+`20261107000000_subscription_model` (SISTEMA-55): `SubscriptionPlan` guarda la formula del abono en centavos y `OrganizationSubscription` una fila por farmacia, con fechas civiles (`trialEndsAt`, `paidThrough`, `extendedUntil`), cupos adicionales y precio acordado. Un CHECK exige una fecha base salvo que la farmacia este exenta. El estado no se guarda: se calcula por fechas. La migracion crea el plan sin importes y deja exentas a las organizaciones existentes.
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

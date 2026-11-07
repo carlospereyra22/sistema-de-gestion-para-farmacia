@@ -107,6 +107,7 @@ model Organization {
   products        Product[]
   priceLists      PriceList[]
   auditLogs       AuditLog[]
+  subscription    OrganizationSubscription?
 }
 
 model FiscalCredential {
@@ -455,6 +456,45 @@ model PlatformSetting {
   key       String   @id @db.VarChar(80)
   value     Json
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
+}
+
+model SubscriptionPlan {
+  id               String                     @id @default(uuid()) @db.Uuid
+  code             String                     @unique
+  name             String
+  baseMinor        BigInt                     @default(0)
+  extraUserMinor   BigInt                     @default(0)
+  extraBranchMinor BigInt                     @default(0)
+  includedUsers    Int                        @default(1)
+  includedBranches Int                        @default(1)
+  createdAt        DateTime                   @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                   @updatedAt @db.Timestamptz(6)
+  subscriptions    OrganizationSubscription[]
+}
+
+model OrganizationSubscription {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizationId   String           @unique @db.Uuid
+  planId           String           @db.Uuid
+  exempt           Boolean          @default(false)
+  trialEndsAt      DateTime?        @db.Date
+  paidThrough      DateTime?        @db.Date
+  extendedUntil    DateTime?        @db.Date
+  extendedReason   String?
+  suspendedAt      DateTime?        @db.Timestamptz(6)
+  cancelledAt      DateTime?        @db.Timestamptz(6)
+  extraUsers       Int              @default(0)
+  extraBranches    Int              @default(0)
+  agreedPriceMinor BigInt?
+  contactName      String?
+  contactPhone     String?
+  contactEmail     String?
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(6)
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plan             SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId])
 }
 
 model PlatformAdmin {
