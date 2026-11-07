@@ -93,6 +93,15 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
   revisaron 873 enlaces de Remedios y 9 de AlfaBeta en 1578 s, sin enlaces fallidos;
   las 227 fichas nuevas se actualizaron. Tres fichas anteriores no tuvieron fila
   coincidente y conservaron su precio.
+- **Xolair y Centrum Silver (07/11/2026):** se revisaron los once GTIN indicados
+  contra el archivo y las fuentes. Siete ya estaban vinculados; se agregaron
+  Xolair jeringa NSD x1, Centrum Silver x60 y Silver Hombre/Mujer x30. Los dos
+  Silver x30 se actualizan por filas distintas de Precios de Remedios; Silver
+  común x60 no figura en esa fuente ni en el padrón consultado y se actualiza
+  mediante su ficha de AlfaBeta. La jeringa NSD de Xolair conserva el nombre y
+  GTIN del catálogo original; la fila correspondiente de Precios de Remedios
+  dice «MSD» en lugar de «NSD». Esa fuente no publica GTIN: verificar el envase
+  antes de usar la vinculación y revisar la variante si el rótulo cambia.
 - **Productos vinculados:** toman el precio de la base por código o por nombre y
   presentación exactos, con las reglas de siempre (divisor, recargo, unidad de venta,
   pausa e historial). Lo que no está en la base sigue con su fuente anterior.
