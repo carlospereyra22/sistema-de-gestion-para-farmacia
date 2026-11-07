@@ -281,6 +281,7 @@ import {
 import {
   createCatalogProduct,
   createRole,
+  updateRolePermissions,
   createUser,
   createSale,
   cancelSale,
@@ -391,13 +392,22 @@ const permissionGroups: {
       ["SALE_MANAGE", "Registrar ventas, anulaciones y devoluciones"],
       ["CASH_READ", "Ver caja y movimientos"],
       ["CASH_MANAGE", "Abrir, cerrar y operar la caja"],
-      ["PURCHASE_READ", "Ver compras"],
-      ["PAYABLE_READ", "Ver cuentas por pagar"],
-      ["PAYABLE_MANAGE", "Registrar facturas de proveedores"],
-      ["PURCHASE_MANAGE", "Crear y recibir compras"],
+      ["ACCOUNT_READ", "Ver cuentas corrientes"],
+      ["ACCOUNT_MANAGE", "Administrar cuentas corrientes"],
       ["REPORT_READ", "Ver reportes"],
       ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
       ["REPORT_EXPORT", "Exportar reportes"],
+    ],
+  },
+  {
+    title: "Mercadería y proveedores",
+    permissions: [
+      ["PURCHASE_RECEIVE", "Recibir mercadería"],
+      ["PURCHASE_READ", "Ver compras y sus costos"],
+      ["PURCHASE_MANAGE", "Crear y editar compras"],
+      ["PAYABLE_READ", "Ver cuentas por pagar"],
+      ["PAYABLE_MANAGE", "Cargar facturas y tickets de proveedores"],
+      ["PAYABLE_PAY", "Registrar pagos a proveedores"],
     ],
   },
 ];
@@ -440,6 +450,7 @@ export function WorkspaceShell({
   organizationName,
   accessToken,
   organizationId,
+  permissionCodes,
   onLogout,
 }: {
   email: string;
@@ -447,6 +458,7 @@ export function WorkspaceShell({
   organizationName?: string;
   accessToken?: string;
   organizationId?: string;
+  permissionCodes: readonly string[];
   onLogout: () => void;
 }): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -600,10 +612,15 @@ export function WorkspaceShell({
   const refresh = async () => {
     if (!accessToken || !organizationId || !branchId) return;
     const revision = ++refreshRevision.current;
+    // Se piden juntos: un rechazo por falta de permiso se llevaría también el catálogo.
     const [catalog, lots, cash, sharedCatalog] = await Promise.all([
       getCatalogProducts(accessToken, organizationId, branchId),
-      getStock(accessToken, organizationId, branchId),
-      getCash(accessToken, organizationId, branchId),
+      permissionCodes.includes("INVENTORY_READ")
+        ? getStock(accessToken, organizationId, branchId)
+        : [],
+      permissionCodes.includes("CASH_READ")
+        ? getCash(accessToken, organizationId, branchId)
+        : { registers: [], sessions: [], settings: undefined },
       getCatalogProducts(accessToken, organizationId),
     ]);
     if (revision !== refreshRevision.current) return;
@@ -987,6 +1004,7 @@ export function WorkspaceShell({
           {ready && (view === "Inicio" || homeVisited) ? (
             <div hidden={view !== "Inicio"}>
               <Home
+                canReadReports={permissionCodes.includes("REPORT_READ")}
                 key={`home:${organizationId}:${branchId}`}
                 active={view === "Inicio"}
                 branchName={
@@ -1214,6 +1232,8 @@ export function WorkspaceShell({
               }
               branches={branches}
               userKey={email}
+              canBuy={permissionCodes.includes("PURCHASE_MANAGE")}
+              canReceiveGoods={permissionCodes.includes("PURCHASE_RECEIVE")}
               onChanged={() => void refresh()}
               initialPurchaseId={initialPurchaseId}
               onInitialConsumed={consumeInitialPurchase}
@@ -1304,6 +1324,7 @@ export function WorkspaceShell({
 
 function Home({
   active,
+  canReadReports,
   branchName,
   onOpenSalesHistory,
   token,
@@ -1315,6 +1336,7 @@ function Home({
   onNavigate,
 }: {
   active: boolean;
+  canReadReports: boolean;
   branchName: string;
   onOpenSalesHistory: () => void;
   token: string;
@@ -1328,7 +1350,7 @@ function Home({
   const [summary, setSummary] = useState<ReportSummary>();
   const [summaryError, setSummaryError] = useState("");
   useEffect(() => {
-    if (!active) return;
+    if (!active || !canReadReports) return;
     let current = true;
     void getReportSummary(token, organizationId, branchId)
       .then((result) => {
@@ -1346,7 +1368,7 @@ function Home({
     return () => {
       current = false;
     };
-  }, [active, branchId, organizationId, token]);
+  }, [active, branchId, canReadReports, organizationId, token]);
   const expiring = stock.filter(
     (lot) =>
       lot.expiresAt &&
@@ -7483,21 +7505,34 @@ function RolesPanel({
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [permissionCodes, setPermissionCodes] = useState<string[]>([]);
+  const [editing, setEditing] = useState<RoleListItem>();
+  const reset = () => {
+    setEditing(undefined);
+    setName("");
+    setCode("");
+    setPermissionCodes([]);
+  };
   const save = async (event: FormEvent) => {
     event.preventDefault();
     try {
-      await createRole(token, organizationId, {
-        name,
-        code: code.toUpperCase(),
-        permissionCodes,
-      });
-      setName("");
-      setCode("");
-      setPermissionCodes([]);
+      if (editing)
+        await updateRolePermissions(
+          token,
+          organizationId,
+          editing.id,
+          permissionCodes,
+        );
+      else
+        await createRole(token, organizationId, {
+          name,
+          code: code.toUpperCase(),
+          permissionCodes,
+        });
+      reset();
       onDone();
     } catch (cause) {
       onError(
-        cause instanceof Error ? cause.message : "No se pudo crear el rol.",
+        cause instanceof Error ? cause.message : "No se pudo guardar el rol.",
       );
     }
   };
@@ -7512,6 +7547,20 @@ function RolesPanel({
                 {role.code}
               </span>
             </div>
+            {role.code !== "OWNER" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(role);
+                  setPermissionCodes(
+                    role.permissions.map(({ permission }) => permission.code),
+                  );
+                }}
+                className="mt-2 text-sm font-medium text-teal-700 hover:text-teal-900"
+              >
+                Editar permisos
+              </button>
+            )}
             {role.permissions.length ? (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {role.permissions.map(({ permission }) => (
@@ -7535,9 +7584,15 @@ function RolesPanel({
         onSubmit={(event) => void save(event)}
         className="inventory-side-form border bg-white p-5"
       >
-        <h2 className="font-semibold">Nuevo rol</h2>
-        <Input label="Nombre" value={name} onChange={setName} />
-        <Input label="Código" value={code} onChange={setCode} />
+        <h2 className="font-semibold">
+          {editing ? `Permisos de ${editing.name}` : "Nuevo rol"}
+        </h2>
+        {!editing && (
+          <>
+            <Input label="Nombre" value={name} onChange={setName} />
+            <Input label="Código" value={code} onChange={setCode} />
+          </>
+        )}
         <fieldset className="mt-5">
           <legend className="text-sm font-semibold">
             Qué puede hacer este rol
@@ -7578,8 +7633,17 @@ function RolesPanel({
           </div>
         </fieldset>
         <button className="mt-5 w-full bg-teal-700 py-2 text-sm text-white">
-          Crear rol
+          {editing ? "Guardar permisos" : "Crear rol"}
         </button>
+        {editing && (
+          <button
+            type="button"
+            onClick={reset}
+            className="mt-2 w-full border py-2 text-sm"
+          >
+            Cancelar
+          </button>
+        )}
       </form>
     </div>
   );

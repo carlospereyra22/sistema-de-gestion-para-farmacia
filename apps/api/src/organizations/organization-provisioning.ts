@@ -21,9 +21,11 @@ export const organizationPermissions = [
   ["CASH_READ", "Read cash registers and sessions"],
   ["CASH_MANAGE", "Manage cash registers and sessions"],
   ["PURCHASE_READ", "Read purchases"],
-  ["PURCHASE_MANAGE", "Manage purchases and receipts"],
+  ["PURCHASE_MANAGE", "Crear y editar compras"],
+  ["PURCHASE_RECEIVE", "Recibir mercaderia"],
   ["PAYABLE_READ", "Consultar facturas y vencimientos de proveedores"],
   ["PAYABLE_MANAGE", "Registrar facturas de proveedores"],
+  ["PAYABLE_PAY", "Registrar pagos a proveedores"],
   ["REPORT_READ", "Read operational reports"],
   ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
   ["REPORT_EXPORT", "Exportar reportes"],
@@ -32,8 +34,21 @@ export const organizationPermissions = [
 const initialRoles = [
   ["OWNER", "Owner"],
   ["ADMIN", "Administrator"],
+  ["EMPLEADO", "Empleado"],
   ["USER", "User"],
 ] as const;
+
+/** Lo mínimo para atender el mostrador; el dueño suma el resto desde Administración. */
+export const employeePermissions: readonly string[] = [
+  "SALE_READ",
+  "SALE_MANAGE",
+  "CASH_READ",
+  "CASH_MANAGE",
+  "CATALOG_READ",
+  "INVENTORY_READ",
+  "PARTY_READ",
+  "ACCOUNT_READ",
+];
 
 export type OrganizationGraphInput = {
   organizationName: string;
@@ -74,7 +89,12 @@ export async function provisionOrganizationGraph(
       update: {},
       create: { code, description },
     });
-    for (const role of roles.filter((item) => item.code !== "USER")) {
+    for (const role of roles.filter(
+      ({ code: roleCode }) =>
+        roleCode === "OWNER" ||
+        roleCode === "ADMIN" ||
+        (roleCode === "EMPLEADO" && employeePermissions.includes(code)),
+    )) {
       await tx.rolePermission.create({
         data: { roleId: role.id, permissionId: permission.id },
       });

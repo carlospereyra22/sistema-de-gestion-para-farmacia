@@ -233,8 +233,9 @@ export class OrganizationsService {
     return { profile, issuanceEnabled: false, status: "NOT_CONNECTED" };
   }
 
+  /** Nombre y datos que salen en cada ticket: los ve cualquier miembro activo. */
   async ticketHeader(actorId: string, organizationId: string) {
-    await this.assertPermission(actorId, organizationId, "ORGANIZATION_READ");
+    await this.activePermissionCodes(actorId, organizationId);
     return readTicketHeader(
       await this.prisma.organization.findUniqueOrThrow({
         where: { id: organizationId },
@@ -410,10 +411,23 @@ export class OrganizationsService {
     });
   }
 
+  /**
+   * Toda la web depende de conocer las sucursales propias: sin ellas un rol de mostrador
+   * no puede operar. Ver las de toda la organización sí exige ORGANIZATION_READ.
+   */
   async listBranches(actorId: string, organizationId: string) {
-    await this.assertPermission(actorId, organizationId, "ORGANIZATION_READ");
+    const permissions = await this.activePermissionCodes(
+      actorId,
+      organizationId,
+    );
     const branches = await this.prisma.branch.findMany({
-      where: { organizationId, deletedAt: null },
+      where: {
+        organizationId,
+        deletedAt: null,
+        ...(permissions.has("ORGANIZATION_READ")
+          ? {}
+          : { userMemberships: { some: { userId: actorId } } }),
+      },
       select: {
         id: true,
         code: true,
@@ -645,6 +659,18 @@ export class OrganizationsService {
   ): Promise<void> {
     const codes =
       typeof permissionCode === "string" ? [permissionCode] : permissionCode;
+    const permissions = await this.activePermissionCodes(
+      actorId,
+      organizationId,
+    );
+    if (!codes.some((code) => permissions.has(code)))
+      throw new ForbiddenException("You do not have the required permission.");
+  }
+
+  private async activePermissionCodes(
+    actorId: string,
+    organizationId: string,
+  ): Promise<Set<string>> {
     const membership = await this.prisma.userOrganization.findUnique({
       where: { userId_organizationId: { userId: actorId, organizationId } },
       include: {
@@ -657,15 +683,13 @@ export class OrganizationsService {
         },
       },
     });
-    const allowed =
-      membership?.active &&
-      membership.roles.some(({ role }) =>
-        role.permissions.some(({ permission }) =>
-          codes.includes(permission.code),
-        ),
-      );
-    if (!allowed)
+    if (!membership?.active)
       throw new ForbiddenException("You do not have the required permission.");
+    return new Set(
+      membership.roles.flatMap(({ role }) =>
+        role.permissions.map(({ permission }) => permission.code),
+      ),
+    );
   }
 
   private isUniqueViolation(error: unknown): boolean {

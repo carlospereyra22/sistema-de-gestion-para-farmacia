@@ -63,9 +63,14 @@ export async function startHttpApp(prefix: string) {
   await app.listen(0, "127.0.0.1");
   const base = (await app.getUrl()).replace("[::1]", "127.0.0.1");
 
-  const request = (path: string, token?: string, body?: object) =>
+  const request = (
+    path: string,
+    token?: string,
+    body?: object,
+    method = body ? "POST" : "GET",
+  ) =>
     fetch(`${base}/api/v1${path}`, {
-      method: body ? "POST" : "GET",
+      method,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),

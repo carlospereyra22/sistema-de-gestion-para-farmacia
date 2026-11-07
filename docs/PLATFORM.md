@@ -108,8 +108,8 @@ Hoy no corta nada. Se prepara así:
 | 1   | Alta reutilizable       | Hecho      |
 | 2   | Cambio de clave propio  | Hecho      |
 | 3   | Identidad de plataforma | Hecho      |
-| 4   | Panel base              | SISTEMA-53 |
-| 5   | Rol Empleado y permisos | Pendiente  |
+| 4   | Panel base              | Hecho      |
+| 5   | Rol Empleado y permisos | SISTEMA-54 |
 | 6   | Modelo comercial y alta | Pendiente  |
 | 7   | Cargos y pagos manuales | Pendiente  |
 | 8   | Corte                   | Pendiente  |
@@ -131,26 +131,32 @@ El dueño recibe solo el rol OWNER, que cuenta como administrador
 
 ### Rol Empleado
 
-El alta de farmacias nuevas crea un rol Empleado con venta y caja, porque el rol `USER` no tiene
-permisos. El dueño decide por rol quién hace cada parte del circuito de mercadería, y las cuatro
+El alta de farmacias nuevas crea un rol Empleado para el mostrador, porque el rol `USER` no tiene
+permisos: ventas, caja, y lectura de catálogo, stock, clientes y cuentas corrientes. El dueño decide por rol quién hace cada parte del circuito de mercadería, y las cuatro
 tareas quedan separadas:
 
-| Tarea                   | Permiso            | Hoy                                     |
-| ----------------------- | ------------------ | --------------------------------------- |
-| Recibir mercadería      | `PURCHASE_RECEIVE` | Nuevo: está dentro de `PURCHASE_MANAGE` |
-| Comprar mercadería      | `PURCHASE_MANAGE`  | Existe                                  |
-| Cargar factura o ticket | `PAYABLE_MANAGE`   | Existe                                  |
-| Registrar el pago       | `PAYABLE_PAY`      | Nuevo: está dentro de `PAYABLE_MANAGE`  |
+| Tarea                   | Permiso            |
+| ----------------------- | ------------------ |
+| Recibir mercadería      | `PURCHASE_RECEIVE` |
+| Comprar mercadería      | `PURCHASE_MANAGE`  |
+| Cargar factura o ticket | `PAYABLE_MANAGE`   |
+| Registrar el pago       | `PAYABLE_PAY`      |
 
 - **Sin perder acceso:** la migración da `PURCHASE_RECEIVE` a todo rol con `PURCHASE_MANAGE` y
   `PAYABLE_PAY` a todo rol con `PAYABLE_MANAGE`. Farmacia Juncos sigue igual.
 - **Recepción con deuda:** recibir acepta `debt`, que crea la factura. Quien solo recibe carga
   el stock; para cargar la deuda necesita `PAYABLE_MANAGE`. La web oculta esos campos.
-- **Editar permisos de un rol:** `RolesController` solo lista y crea. Se agrega la edición con
-  auditoría, y el dueño activa o desactiva cada tarea desde Administración.
-
-A definir en el PR: si quien solo recibe ve los costos de la compra, y qué exige la compra
-directa, que compra y recibe en un solo paso.
+- **Costos:** quien solo recibe ve qué llega y cuánto, pero no cuánto costó: la API no envía
+  los costos. Si el dueño le suma `PURCHASE_READ`, los ve.
+- **Compra directa:** exige comprar y recibir, porque hace las dos cosas en un paso.
+- **Sucursales y encabezado del ticket:** cualquier miembro activo ve sus sucursales y el nombre
+  de la farmacia. Sin eso un rol de mostrador queda trabado en "Cargando permisos". Ver las
+  sucursales de toda la organización sigue exigiendo `ORGANIZATION_READ`.
+- **Un rol solo para recibir** necesita además `CATALOG_READ` y `PARTY_READ`, para ver los
+  productos y el proveedor.
+- **Editar permisos de un rol:** `PATCH roles/:roleId/permissions`, con auditoría. El dueño
+  activa o desactiva cada tarea desde Administración. El rol `OWNER` no se edita: una farmacia
+  nunca debe quedarse sin quien la administre.
 
 ## Producción
 

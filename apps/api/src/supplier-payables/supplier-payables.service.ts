@@ -173,7 +173,7 @@ export class SupplierPayablesService {
     input: PaymentInput,
   ) {
     const { codes, member } = await this.access(actor, org, branch);
-    if (!codes.has("PAYABLE_MANAGE"))
+    if (!codes.has("PAYABLE_PAY"))
       throw new ForbiddenException("No tenés permiso para registrar pagos.");
     const amount = payableAmount(input.amountMinor),
       expected = payableAmount(input.expectedBalanceMinor),
@@ -285,7 +285,7 @@ export class SupplierPayablesService {
     reason: string,
   ) {
     const { codes, member } = await this.access(actor, org, branch);
-    if (!codes.has("PAYABLE_MANAGE"))
+    if (!codes.has("PAYABLE_PAY"))
       throw new ForbiddenException("No tenés permiso para anular pagos.");
     if (reason.trim().length < 3 || reason.length > 300)
       throw new BadRequestException("Indicá un motivo de 3 a 300 caracteres.");
@@ -351,6 +351,7 @@ export class SupplierPayablesService {
     ]);
     return {
       canCreate: codes.has("PAYABLE_MANAGE"),
+      canPay: codes.has("PAYABLE_PAY"),
       today: payableToday(),
       suppliers,
       purchases: purchases.map((p) => ({
@@ -443,6 +444,7 @@ export class SupplierPayablesService {
       page,
       pages,
       canCreate: codes.has("PAYABLE_MANAGE"),
+      canPay: codes.has("PAYABLE_PAY"),
       totalMinor: filtered
         .reduce((sum, i) => sum + BigInt(i.balanceMinor), 0n)
         .toString(),

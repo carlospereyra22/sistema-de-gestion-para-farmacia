@@ -10,6 +10,9 @@ type Props = {
   onReceive: () => void;
   onDetail: () => void;
   onCancel: () => void;
+  /** Recibir y cancelar son tareas distintas: cada rol ve solo la suya. */
+  mayReceive?: boolean;
+  mayCancel?: boolean;
 };
 
 export function PurchaseRowActions({
@@ -19,22 +22,25 @@ export function PurchaseRowActions({
   onReceive,
   onDetail,
   onCancel,
+  mayReceive = true,
+  mayCancel = true,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const menuId = useId();
-  const canReceive =
+  const pending =
     !purchase.closedAt &&
     (purchase.status === "ORDERED" || purchase.status === "PARTIALLY_RECEIVED");
+  const canReceive = pending && mayReceive;
 
   useEffect(() => {
     if (busy) setOpen(false);
   }, [busy]);
 
   useLayoutEffect(() => {
-    if (!open || !canReceive || busy) return;
+    if (!open || !pending || busy) return;
     const place = () => {
       const rect = trigger.current?.getBoundingClientRect();
       if (!rect) return;
@@ -74,7 +80,7 @@ export function PurchaseRowActions({
       document.removeEventListener("pointerdown", dismiss);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, canReceive, busy]);
+  }, [open, pending, busy]);
 
   const actionStyle = !canReceive
     ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -104,7 +110,7 @@ export function PurchaseRowActions({
         )}
         {mainLabel}
       </button>
-      {canReceive && (
+      {pending && (
         <button
           ref={trigger}
           type="button"
@@ -119,7 +125,7 @@ export function PurchaseRowActions({
         </button>
       )}
       {open &&
-        canReceive &&
+        pending &&
         !busy &&
         typeof document !== "undefined" &&
         createPortal(
@@ -140,20 +146,24 @@ export function PurchaseRowActions({
               <Eye size={15} aria-hidden="true" />
               Ver detalle
             </button>
-            <div className="my-1 border-t border-slate-100" />
-            <button
-              type="button"
-              className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-slate-600 hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-2 focus-visible:outline-rose-500"
-              onClick={() => {
-                setOpen(false);
-                onCancel();
-              }}
-            >
-              <Ban size={15} aria-hidden="true" />
-              {purchase.status === "PARTIALLY_RECEIVED"
-                ? "Cancelar pendiente"
-                : "Cancelar compra"}
-            </button>
+            {mayCancel && (
+              <>
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  type="button"
+                  className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-slate-600 hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-2 focus-visible:outline-rose-500"
+                  onClick={() => {
+                    setOpen(false);
+                    onCancel();
+                  }}
+                >
+                  <Ban size={15} aria-hidden="true" />
+                  {purchase.status === "PARTIALLY_RECEIVED"
+                    ? "Cancelar pendiente"
+                    : "Cancelar compra"}
+                </button>
+              </>
+            )}
           </div>,
           document.body,
         )}

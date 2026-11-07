@@ -75,12 +75,14 @@ export type InvoicePage = {
   page: number;
   pages: number;
   canCreate: boolean;
+  canPay: boolean;
   totalMinor: string;
   overdueMinor: string;
 };
 export type PayableOptions = {
   today: string;
   canCreate: boolean;
+  canPay: boolean;
   suppliers: {
     id: string;
     name: string;

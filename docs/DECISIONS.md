@@ -2,6 +2,16 @@
 
 ## DECIDED
 
+- 06/11/2026 (SISTEMA-54): Recibir mercadería y pagar a proveedores tienen permisos
+  propios (`PURCHASE_RECEIVE`, `PAYABLE_PAY`). Antes venían junto con comprar y con
+  cargar facturas, así que no se podía delegar una tarea sin dar la otra. La migración
+  se los da a quienes ya tenían el permiso anterior, para que nadie pierda acceso.
+  Quien solo recibe no ve costos: se quitan en la API, no en la pantalla. Las farmacias
+  nuevas arrancan con un rol `EMPLEADO` de mostrador porque `USER` no tiene permisos.
+  Listar las sucursales propias y leer el encabezado del ticket ya no exigen
+  `ORGANIZATION_READ`: toda la web depende de eso y sin ello un rol de mostrador no
+  podía entrar.
+
 - 06/11/2026 (SISTEMA-50): El superusuario de plataforma es una tabla propia
   (`PlatformAdmin`), no un `Permission`, porque `roles.service.ts` acepta cualquier
   código y una farmacia podría asignárselo. Se otorga solo por comando en el servidor,

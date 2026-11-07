@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { SupplierPayablesService } from "../supplier-payables/supplier-payables.service";
+import { hidePurchaseCosts } from "./purchase-cost-visibility";
 import { payableToday } from "../supplier-payables/payable-rules";
 import type {
   PurchaseInput,
@@ -38,7 +39,11 @@ export class PurchasesService {
     ),
   ) {}
   async list(actorId: string, organizationId: string, branchId: string) {
-    await this.assert(actorId, organizationId, branchId, "PURCHASE_READ");
+    const { seesCosts, canRegisterDebt } = await this.viewAccess(
+      actorId,
+      organizationId,
+      branchId,
+    );
     const purchases = await this.prisma.purchase.findMany({
       where: { organizationId, branchId },
       include: {
@@ -50,20 +55,22 @@ export class PurchasesService {
     const suppliers = await this.prisma.supplier.findMany({
       where: { organizationId, id: { in: purchases.map((p) => p.supplierId) } },
     });
-    return serializable(
+    const rows = serializable(
       purchases.map((p) => ({
         ...p,
+        canRegisterDebt,
         hasRegisteredDebt: p._count.payableInvoices > 0,
         supplierName:
           suppliers.find((s) => s.id === p.supplierId)?.name ??
           "Proveedor histórico",
       })),
     );
+    return seesCosts ? rows : hidePurchaseCosts(rows);
   }
   // Lotes de la sucursal para recibir sobre ellos. Incluye los agotados: su
   // número sigue ocupado y conserva su vencimiento.
   async lots(actorId: string, organizationId: string, branchId: string) {
-    await this.assert(actorId, organizationId, branchId, "PURCHASE_READ");
+    await this.viewAccess(actorId, organizationId, branchId);
     const lots = await this.prisma.productLot.findMany({
       where: { organizationId, branchId },
       orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
@@ -87,7 +94,11 @@ export class PurchasesService {
     branchId: string,
     id: string,
   ) {
-    await this.assert(actorId, organizationId, branchId, "PURCHASE_READ");
+    const { seesCosts, canRegisterDebt } = await this.viewAccess(
+      actorId,
+      organizationId,
+      branchId,
+    );
     const purchase = await this.prisma.purchase.findFirst({
       where: { id, organizationId, branchId },
       include: {
@@ -120,8 +131,9 @@ export class PurchasesService {
     const supplier = await this.prisma.supplier.findFirst({
       where: { id: purchase.supplierId, organizationId },
     });
-    return serializable({
+    const result = serializable({
       ...purchase,
+      canRegisterDebt,
       hasRegisteredDebt: purchase._count.payableInvoices > 0,
       supplierName: supplier?.name ?? "Proveedor histórico",
       legacyMovements: legacy.map((m) => ({
@@ -130,6 +142,7 @@ export class PurchasesService {
           lots.find((l) => l.id === m.lotId)?.number ?? "No disponible",
       })),
     });
+    return seesCosts ? result : hidePurchaseCosts(result);
   }
   async create(
     actorId: string,
@@ -160,6 +173,7 @@ export class PurchasesService {
     input: DirectPurchaseInput,
   ) {
     await this.assert(actorId, organizationId, branchId, "PURCHASE_MANAGE");
+    await this.assert(actorId, organizationId, branchId, "PURCHASE_RECEIVE");
     if (!input.clientOperationId)
       throw new BadRequestException(
         "La compra directa necesita una clave de operación.",
@@ -310,7 +324,7 @@ export class PurchasesService {
     purchaseId: string,
     input: ReceiptInput | (ReceiptLineInput & { operationId?: string }),
   ) {
-    await this.assert(actorId, organizationId, branchId, "PURCHASE_MANAGE");
+    await this.assert(actorId, organizationId, branchId, "PURCHASE_RECEIVE");
     const batch: ReceiptInput =
       "items" in input
         ? input
@@ -651,11 +665,34 @@ export class PurchasesService {
       return { id: p.id, status: "CANCELLED" };
     });
   }
+  // Quien solo recibe ve las compras para controlar lo que llega, pero no sus costos.
+  private async viewAccess(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+  ) {
+    const codes = await this.permissionCodes(actorId, organizationId, branchId);
+    if (!codes.has("PURCHASE_READ") && !codes.has("PURCHASE_RECEIVE"))
+      throw new ForbiddenException("No tenés permiso para esta operación.");
+    return {
+      seesCosts: codes.has("PURCHASE_READ"),
+      canRegisterDebt: codes.has("PAYABLE_MANAGE"),
+    };
+  }
   private async assert(
     actorId: string,
     organizationId: string,
     branchId: string,
     code: string,
+  ) {
+    const codes = await this.permissionCodes(actorId, organizationId, branchId);
+    if (!codes.has(code))
+      throw new ForbiddenException("No tenés permiso para esta operación.");
+  }
+  private async permissionCodes(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
   ) {
     const membership = await this.prisma.userOrganization.findUnique({
       where: { userId_organizationId: { userId: actorId, organizationId } },
@@ -669,12 +706,7 @@ export class PurchasesService {
         },
       },
     });
-    if (
-      !membership?.active ||
-      !membership.roles.some(({ role }) =>
-        role.permissions.some(({ permission }) => permission.code === code),
-      )
-    )
+    if (!membership?.active)
       throw new ForbiddenException("No tenés permiso para esta operación.");
     if (
       !(await this.prisma.userBranch.findFirst({
@@ -686,5 +718,10 @@ export class PurchasesService {
       }))
     )
       throw new ForbiddenException("No tenés acceso a esta sucursal.");
+    return new Set(
+      membership.roles.flatMap(({ role }) =>
+        role.permissions.map(({ permission }) => permission.code),
+      ),
+    );
   }
 }

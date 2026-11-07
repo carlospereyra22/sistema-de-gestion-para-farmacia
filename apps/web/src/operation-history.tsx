@@ -9,6 +9,7 @@ import {
 } from "./lib/api";
 import { isOutsideDialog } from "./lib/dialog-bounds";
 import { filterHistory } from "./lib/filter-operation-history";
+import { purchaseCostLabel } from "./lib/purchase-cost";
 
 type Kind = "Compras" | "Transferencias" | "Inventario";
 type HistoryFilters = {
@@ -165,11 +166,13 @@ function HistoryDialog({
               ?.name ??
             `Proveedor ${item.supplierId}`,
           status: item.closedAt ? "BALANCE_CLOSED" : item.status,
-          amount: item.items.reduce(
-            (sum, line) =>
-              sum + Number(line.unitCostMinor) * line.orderedQuantity,
-            0,
-          ),
+          amount: item.items.some((line) => line.unitCostMinor === undefined)
+            ? undefined
+            : item.items.reduce(
+                (sum, line) =>
+                  sum + Number(line.unitCostMinor) * line.orderedQuantity,
+                0,
+              ),
           detail: item.items.map(
             (line) =>
               `${productName(line.productId)} · ${
@@ -177,7 +180,7 @@ function HistoryDialog({
                   .find((p) => p.id === line.productId)
                   ?.barcodes.map((b) => b.code)
                   .join(" ") ?? ""
-              } · ${line.receivedQuantity}/${line.orderedQuantity} recibidas · ${line.cancelledQuantity ?? 0} no entregadas · Costo unitario ${money(Number(line.unitCostMinor))} · ${item.reference ?? ""}`,
+              } · ${line.receivedQuantity}/${line.orderedQuantity} recibidas · ${line.cancelledQuantity ?? 0} no entregadas · Costo unitario ${purchaseCostLabel(line.unitCostMinor, money)} · ${item.reference ?? ""}`,
           ),
         }));
       }
