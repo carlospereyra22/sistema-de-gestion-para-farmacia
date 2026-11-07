@@ -33,7 +33,9 @@ export class UsersService {
         ),
       );
     if (!allowed)
-      throw new ForbiddenException("You do not have permission to read users.");
+      throw new ForbiddenException(
+        "No tenés permiso para ver los usuarios. Pedíselo al dueño de la farmacia.",
+      );
     const memberships = await this.prisma.userOrganization.findMany({
       where: { organizationId },
       select: {
@@ -320,6 +322,8 @@ export class UsersService {
         ),
       );
     if (!allowed)
-      throw new ForbiddenException("You do not have the required permission.");
+      throw new ForbiddenException(
+        "No tenés permiso para esta operación. Pedíselo al dueño de la farmacia.",
+      );
   }
 }

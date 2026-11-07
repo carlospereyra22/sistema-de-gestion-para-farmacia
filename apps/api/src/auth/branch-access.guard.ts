@@ -22,7 +22,7 @@ export class BranchAccessGuard implements CanActivate {
       typeof organizationId !== "string" ||
       typeof branchId !== "string"
     )
-      throw new ForbiddenException("Branch access is required.");
+      throw new ForbiddenException("No tenés acceso a esta sucursal.");
     const assignment = await this.prisma.userBranch.findFirst({
       where: {
         userId,

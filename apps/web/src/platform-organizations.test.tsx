@@ -7,6 +7,7 @@ import { PlatformOrganizationsTable } from "./platform-organizations";
 const subscription = {
   stage: "TRIAL",
   access: "FULL",
+  nextCut: null,
   daysOverdue: 0,
   exempt: false,
   trialEndsAt: "2026-11-21",

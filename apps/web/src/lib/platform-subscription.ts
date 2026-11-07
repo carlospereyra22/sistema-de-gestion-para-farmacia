@@ -79,6 +79,15 @@ export function usageLabel(
   return exempt ? String(used) : `${used}${separator}${quota}`;
 }
 
+/** Cuándo se le corta algo más a una farmacia que debe. */
+export function nextCutLabel(
+  cut: { access: "READ_ONLY" | "BLOCKED"; on: string } | null,
+): string {
+  if (!cut) return "—";
+  const [year, month, day] = cut.on.split("-");
+  return `${cut.access === "READ_ONLY" ? "Solo lectura" : "Se bloquea"} el ${day}/${month}/${year}`;
+}
+
 /** Una farmacia exenta no tiene cupo: nunca se llena. */
 export const quotaFull = (used: number, quota: number, exempt: boolean) =>
   !exempt && used >= quota;

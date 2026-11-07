@@ -1,5 +1,7 @@
 import {
   commercialToday,
+  coveredUntil,
+  nextCut,
   resolveSubscriptionAccess,
   type SubscriptionDates,
 } from "./subscription-access";
@@ -94,13 +96,32 @@ describe("resolveSubscriptionAccess", () => {
     );
   });
 
-  it("al terminar la prórroga los días se cuentan desde ella", () => {
+  it("al terminar la prórroga vuelve a la etapa de su deuda real", () => {
+    // Pagado hasta el 01/11: el 12/11 lleva 11 días de atraso, con o sin prórroga.
+    const extended = { ...base, extendedUntil: date("2026-11-10") };
+    expect(resolveSubscriptionAccess(extended, noon("2026-11-12"))).toEqual({
+      stage: "READ_ONLY",
+      access: "READ_ONLY",
+      daysOverdue: 11,
+    });
+  });
+
+  it("una prórroga larga no regala días de gracia al terminar", () => {
     const extended = { ...base, extendedUntil: date("2026-12-15") };
     expect(resolveSubscriptionAccess(extended, noon("2026-12-20"))).toEqual({
-      stage: "GRACE",
-      access: "FULL",
-      daysOverdue: 5,
+      stage: "BLOCKED",
+      access: "BLOCKED",
+      daysOverdue: 49,
     });
+  });
+
+  it("si pagó durante la prórroga, cuenta desde lo pagado", () => {
+    const paidDuring = {
+      ...base,
+      paidThrough: date("2026-12-31"),
+      extendedUntil: date("2026-11-20"),
+    };
+    expect(stage(paidDuring, "2026-11-25")).toBe("ACTIVE");
   });
 
   it("suspender y dar de baja cortan, aunque esté al día", () => {
@@ -110,5 +131,59 @@ describe("resolveSubscriptionAccess", () => {
     expect(stage({ ...base, cancelledAt: new Date() }, "2026-11-01")).toBe(
       "CANCELLED",
     );
+  });
+});
+
+describe("coveredUntil", () => {
+  it("toma la fecha más lejana entre pago, prueba y prórroga", () => {
+    expect(
+      coveredUntil({
+        paidThrough: date("2026-11-01"),
+        trialEndsAt: date("2026-10-15"),
+        extendedUntil: date("2026-11-20"),
+      }),
+    ).toBe("2026-11-20");
+  });
+
+  it("sin fechas no hay cobertura", () => {
+    expect(
+      coveredUntil({
+        paidThrough: null,
+        trialEndsAt: null,
+        extendedUntil: null,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("nextCut", () => {
+  const at = (day: string) =>
+    nextCut(resolveSubscriptionAccess(base, noon(day)), noon(day));
+
+  it("en gracia avisa cuándo pasa a solo lectura", () => {
+    // Pagado hasta el 01/11: el 06/11 lleva 5 días; el día 11 de atraso es el 12/11.
+    expect(at("2026-11-06")).toEqual({
+      access: "READ_ONLY",
+      on: "2026-11-12",
+      inDays: 6,
+    });
+  });
+
+  it("en solo lectura avisa cuándo se bloquea", () => {
+    expect(at("2026-11-21")).toEqual({
+      access: "BLOCKED",
+      on: "2026-12-01",
+      inDays: 10,
+    });
+  });
+
+  it("el día exacto coincide con el cambio de etapa", () => {
+    expect(stage(base, "2026-11-12")).toBe("READ_ONLY");
+    expect(stage(base, "2026-12-01")).toBe("BLOCKED");
+  });
+
+  it("al día o bloqueada no hay próximo corte", () => {
+    expect(at("2026-10-20")).toBeNull();
+    expect(at("2026-12-15")).toBeNull();
   });
 });

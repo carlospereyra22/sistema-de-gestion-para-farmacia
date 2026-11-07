@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "./api-fetch";
 import type { PurchasePack } from "./purchase-pack";
 import type { HealthResponse } from "@gestion/contracts";
 import { categoryPath } from "./category-tree";
@@ -55,7 +56,7 @@ export async function distributionRequest<T>(
       response,
       "No se pudo confirmar el resultado. Reintentá la misma salida sin cambiarla o consultá su historial.",
     );
-    if (response.status === 400 || response.status === 409)
+    if ([400, 402, 409].includes(response.status))
       throw new DistributionRejected(error.message);
     throw error;
   }
@@ -1623,7 +1624,8 @@ export type StockLot = {
   number: string;
   quantity: number;
   expiresAt: string | null;
-  unitCostMinor: string;
+  /** Solo llega con permiso para ver costos. */
+  unitCostMinor?: string;
   packFactor?: number | null;
   packCount?: number;
   // quantity: lo que le queda en el lote, gastando primero lo más viejo. En 0
@@ -2134,7 +2136,7 @@ export async function closeCashSession(
   );
   if (!response.ok) {
     const error = await responseError(response, "No se pudo cerrar la caja.");
-    if (response.status === 404 || response.status === 409)
+    if ([402, 404, 409].includes(response.status))
       throw new CashCloseRejected(error.message);
     throw error;
   }

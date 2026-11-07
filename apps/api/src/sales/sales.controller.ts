@@ -32,6 +32,10 @@ import { SalesService } from "./sales.service";
 import { SaleFiscalOptionsDto } from "../fiscal/sale-fiscal-options";
 import { ProductionCreditService } from "../fiscal/production-credit.service";
 import { ProductionSalesService } from "../fiscal/production-sales.service";
+import {
+  AllowOwnerWhenBlocked,
+  AllowWhenReadOnly,
+} from "../platform/subscription-gate";
 
 class SaleLineDto {
   @IsOptional()
@@ -111,7 +115,9 @@ export class SalesController {
     private readonly credits: ProductionCreditService,
     private readonly production: ProductionSalesService,
   ) {}
-  @Get(":saleId/credits") creditsDetail(
+  @AllowOwnerWhenBlocked()
+  @Get(":saleId/credits")
+  creditsDetail(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
@@ -128,7 +134,9 @@ export class SalesController {
   ) {
     return this.credits.create(req.auth!.sub, org, branch, saleId, input);
   }
-  @Post(":saleId/credits/:documentId/process") processCredit(
+  @AllowWhenReadOnly()
+  @Post(":saleId/credits/:documentId/process")
+  processCredit(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
@@ -143,7 +151,9 @@ export class SalesController {
       documentId,
     );
   }
-  @Get(":saleId/credits/:documentId/settlement") creditSettlement(
+  @AllowOwnerWhenBlocked()
+  @Get(":saleId/credits/:documentId/settlement")
+  creditSettlement(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
@@ -158,7 +168,9 @@ export class SalesController {
       documentId,
     );
   }
-  @Post(":saleId/credits/:documentId/settlement") settleCredit(
+  @AllowWhenReadOnly()
+  @Post(":saleId/credits/:documentId/settlement")
+  settleCredit(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
@@ -182,7 +194,9 @@ export class SalesController {
   ) {
     return this.sales.fiscalOptions(req.auth!.sub, org, branch);
   }
-  @Get(":saleId/invoice") invoice(
+  @AllowOwnerWhenBlocked()
+  @Get(":saleId/invoice")
+  invoice(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
@@ -190,7 +204,9 @@ export class SalesController {
   ) {
     return this.sales.invoice(req.auth!.sub, org, branch, id);
   }
-  @Post(":saleId/invoice/process") processInvoice(
+  @AllowWhenReadOnly()
+  @Post(":saleId/invoice/process")
+  processInvoice(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
@@ -198,7 +214,9 @@ export class SalesController {
   ) {
     return this.sales.invoice(req.auth!.sub, org, branch, id, true);
   }
-  @Get(":saleId/ticket") ticket(
+  @AllowOwnerWhenBlocked()
+  @Get(":saleId/ticket")
+  ticket(
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,
@@ -211,7 +229,9 @@ export class SalesController {
       saleId,
     );
   }
-  @Get() list(
+  @AllowOwnerWhenBlocked()
+  @Get()
+  list(
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,

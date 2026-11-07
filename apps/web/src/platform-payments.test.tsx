@@ -13,6 +13,7 @@ import {
 const subscription: PlatformSubscription = {
   stage: "READ_ONLY",
   access: "READ_ONLY",
+  nextCut: null,
   daysOverdue: 15,
   exempt: false,
   trialEndsAt: "2026-10-23",
@@ -73,6 +74,7 @@ describe("PlatformDebtorsTable", () => {
     expect(html).toContain("Solo lectura");
     expect(html).toContain("23/10/2026");
     expect(html).toContain("351 555 0000");
+    expect(html).toContain("Próximo corte");
     expect(html).toContain("$ 55.000,00");
   });
 

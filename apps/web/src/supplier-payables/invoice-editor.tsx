@@ -197,6 +197,7 @@ export function InvoiceEditor({
       if (
         e instanceof PayableError &&
         (e.status === 400 ||
+          e.status === 402 ||
           e.status === 403 ||
           e.code === "DUPLICATE_DOCUMENT")
       )

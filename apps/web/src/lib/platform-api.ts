@@ -24,6 +24,11 @@ export type PlatformSubscription = {
   stage: SubscriptionStage;
   access: "FULL" | "READ_ONLY" | "BLOCKED";
   daysOverdue: number;
+  nextCut: {
+    access: "READ_ONLY" | "BLOCKED";
+    on: string;
+    inDays: number;
+  } | null;
   exempt: boolean;
   trialEndsAt: string | null;
   paidThrough: string | null;

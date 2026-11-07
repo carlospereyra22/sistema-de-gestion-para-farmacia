@@ -361,6 +361,8 @@ export class PartiesService {
         role.permissions.some(({ permission }) => permission.code === code),
       )
     )
-      throw new ForbiddenException("You do not have the required permission.");
+      throw new ForbiddenException(
+        "No tenés permiso para esta operación. Pedíselo al dueño de la farmacia.",
+      );
   }
 }

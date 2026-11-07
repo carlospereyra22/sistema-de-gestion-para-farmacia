@@ -15,6 +15,7 @@ import {
 import { debtors, totalDebtMinor } from "./lib/platform-billing";
 import {
   coveredUntilLabel,
+  nextCutLabel,
   stageLabel,
   stageTone,
 } from "./lib/platform-subscription";
@@ -45,11 +46,12 @@ export function PlatformDebtorsTable({
   return (
     <DataTable
       label="Farmacias con deuda"
-      minWidthClass="min-w-190"
+      minWidthClass="min-w-220"
       columns={[
         { label: "Farmacia" },
         { label: "Estado" },
         { label: "Cubierta hasta" },
+        { label: "Próximo corte" },
         { label: "Contacto" },
         { label: "Debe", align: "right" },
       ]}
@@ -68,7 +70,7 @@ export function PlatformDebtorsTable({
       }
     >
       {visible.length === 0 ? (
-        <DataTableEmpty colSpan={5}>Ninguna farmacia debe.</DataTableEmpty>
+        <DataTableEmpty colSpan={6}>Ninguna farmacia debe.</DataTableEmpty>
       ) : (
         visible.map((row) => (
           <DataTableRow key={row.id} onToggle={() => onOpen(row.id)}>
@@ -86,6 +88,9 @@ export function PlatformDebtorsTable({
             </DataTableCell>
             <DataTableCell>
               {row.subscription ? coveredUntilLabel(row.subscription) : "—"}
+            </DataTableCell>
+            <DataTableCell>
+              {nextCutLabel(row.subscription?.nextCut ?? null)}
             </DataTableCell>
             <DataTableCell>{contactLabel(row)}</DataTableCell>
             <DataTableCell align="right" numeric>

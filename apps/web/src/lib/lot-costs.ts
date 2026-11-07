@@ -98,7 +98,7 @@ const signedUnits = (quantity: number) =>
 // recepciones registradas (por ejemplo, transferencias) queda el costo del lote.
 export function lotReceiptRows(
   receipts: LotCostReceipt[] = [],
-  lotCostMinor: string,
+  lotCostMinor: string | undefined,
   adjustments: LotAdjustment[] = [],
   supplierNames: ReadonlyMap<string, string> = new Map(),
 ): LotReceiptRow[] {
@@ -133,5 +133,11 @@ export function lotReceiptRows(
   const rows = dated.map((item) => item.row);
   return receipts.length
     ? rows
-    : [...rows, { received: "—", cost: money(lotCostMinor) }];
+    : [
+        ...rows,
+        {
+          received: "—",
+          cost: lotCostMinor ? money(lotCostMinor) : "Sin dato",
+        },
+      ];
 }

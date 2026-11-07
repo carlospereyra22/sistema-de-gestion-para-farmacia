@@ -16,6 +16,7 @@ export const organizationPermissions = [
   ["ACCOUNT_MANAGE", "Manage customer current accounts"],
   ["INVENTORY_READ", "Read inventory"],
   ["INVENTORY_MANAGE", "Receive and adjust inventory"],
+  ["COST_READ", "Ver costos de los productos"],
   ["SALE_READ", "Read sales"],
   ["SALE_MANAGE", "Complete sales"],
   ["CASH_READ", "Read cash registers and sessions"],

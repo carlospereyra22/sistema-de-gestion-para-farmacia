@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "./api-fetch";
 import { apiBaseUrl } from "./api";
 
 // Comprobante A4 y formato de impresión (SISTEMA-17). Aparte de api.ts para no

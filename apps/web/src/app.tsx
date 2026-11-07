@@ -39,6 +39,8 @@ import { WorkspaceShell } from "./workspace-shell";
 
 const PlatformShell = lazy(() => import("./platform-shell"));
 import { LoginScreen } from "./login-screen";
+import { SubscriptionGate } from "./subscription-gate";
+import { useNavigate } from "react-router-dom";
 
 const permissionGroups = [
   {
@@ -105,6 +107,7 @@ export function App(): ReactElement {
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [permissionCodes, setPermissionCodes] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   const startSession = async (token: string): Promise<void> => {
     const profile = await getCurrentUser(token);
@@ -157,6 +160,8 @@ export function App(): ReactElement {
     setMessage(undefined);
     try {
       const result = await login(email, password);
+      // La dirección conserva la pantalla de la sesión anterior: se empieza por Inicio.
+      navigate("/", { replace: true });
       await startSession(result.accessToken);
     } catch (error) {
       setMessage(
@@ -383,15 +388,22 @@ export function App(): ReactElement {
   if (user)
     return (
       <ProductImageSession key={user}>
-        <WorkspaceShell
-          email={user}
-          displayName={accountName}
-          organizationName={organizationName}
-          accessToken={accessToken}
+        <SubscriptionGate
+          token={accessToken}
           organizationId={organizationId}
-          permissionCodes={permissionCodes}
+          email={user}
           onLogout={endSession}
-        />
+        >
+          <WorkspaceShell
+            email={user}
+            displayName={accountName}
+            organizationName={organizationName}
+            accessToken={accessToken}
+            organizationId={organizationId}
+            permissionCodes={permissionCodes}
+            onLogout={endSession}
+          />
+        </SubscriptionGate>
       </ProductImageSession>
     );
   if (showLegacyWorkspace && user)

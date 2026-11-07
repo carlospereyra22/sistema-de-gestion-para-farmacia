@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "./lib/api-fetch";
 import { useEffect, useState } from "react";
 import { apiBaseUrl, type CashClosure } from "./lib/api";
 import { CashDialog } from "./cash-dialog";
