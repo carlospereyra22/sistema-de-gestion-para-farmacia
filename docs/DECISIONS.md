@@ -2,6 +2,13 @@
 
 ## DECIDED
 
+- 06/11/2026 (SISTEMA-48): El rol OWNER cuenta como administrador de su farmacia,
+  igual que ADMIN, para archivar cierres de caja y cambiar el estado de productos por
+  sucursal. Antes esos puntos exigían ADMIN y el dueño creado por el alta, que solo
+  recibe OWNER, quedaba sin esas capacidades. Se corrige en el chequeo y no asignando
+  ADMIN en el alta, porque eso no arreglaría a los dueños que ya existen. El panel de
+  plataforma y el cobro a farmacias se planifican en `docs/PLATFORM.md`.
+
 - 06/11/2026 (SISTEMA-42): El servicio se cobra por usuario activo y por sucursal.
   La caja no es unidad de cobro. Para que compartir un usuario no reemplace pagar
   otro, cada usuario tiene una sola caja abierta por organización. No se vincula un

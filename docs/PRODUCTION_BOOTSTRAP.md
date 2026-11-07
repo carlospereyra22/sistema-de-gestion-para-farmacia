@@ -14,7 +14,9 @@ No usa el seed de desarrollo, IDs demo ni credenciales predeterminadas.
 Crea una organizacion, una sucursal (codigo interno PRINCIPAL), un usuario con
 Argon2 y rol OWNER, sus membresias, los roles OWNER/ADMIN/USER, los permisos
 existentes del sistema y una auditoria sin secretos. No crea productos, listas de
-precios, clientes, cajas ni operaciones comerciales.
+precios, clientes, cajas ni operaciones comerciales. La creacion vive en
+`apps/api/src/organizations/organization-provisioning.ts`, junto con la lista unica
+de permisos; este script agrega el chequeo de base vacia y la auditoria.
 
 Todo se realiza en una transaccion. Un bloqueo asesor serializa ejecuciones de
 este script. Se rechaza la ejecucion si existen organizaciones, sucursales o

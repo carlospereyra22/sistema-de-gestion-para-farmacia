@@ -46,7 +46,7 @@
 ## Consulta de cierres y selector (18/10/2026)
 
 - El destino reutiliza SearchableSaleSelect con búsqueda, navegación por teclado y lista flotante. No se escribe hasta confirmar, no se apilan ventanas y no se abren sesiones automáticamente.
-- Historial agrega Ver cierre, conservando Eliminar/Restaurar. Endpoint de sólo lectura `GET cash/closures/:sessionId`: exige CASH_READ, sucursal y sesión cerrada; cierres archivados sólo para ADMIN. Muestra apertura/cierre, responsables disponibles, motivo, importes y registros de efectivo. Tarjeta/transferencia no se suman al efectivo.
+- Historial agrega Ver cierre, conservando Eliminar/Restaurar. Endpoint de sólo lectura `GET cash/closures/:sessionId`: exige CASH_READ, sucursal y sesión cerrada; cierres archivados sólo para OWNER o ADMIN. Muestra apertura/cierre, responsables disponibles, motivo, importes y registros de efectivo. Tarjeta/transferencia no se suman al efectivo.
 - El esperado guardado en auditoría CLOSED tiene prioridad en el detalle. Si falta, se indica explícitamente que se reconstruyó con los registros disponibles. El responsable de cierre ausente se muestra como no registrado, sin deducirlo del usuario actual. No modifica documentos históricos ni requiere migración.
 - La tabla general y el detalle priorizan el esperado auditado; los datos antiguos sin instantánea se reconstruyen con los registros disponibles.
 

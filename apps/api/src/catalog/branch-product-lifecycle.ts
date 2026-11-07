@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
+import { isOrganizationAdministrator } from "../roles/administrator-role";
+
 export type BranchProductStatus = "ACTIVE" | "ARCHIVED" | "DELETED";
 export type BranchProductChange = {
   status: BranchProductStatus;
@@ -39,7 +41,7 @@ export async function branchProductAccess(
   if (
     !member?.active ||
     !assignment ||
-    (manage && !member.roles.some(({ role }) => role.code === "ADMIN"))
+    (manage && !isOrganizationAdministrator(member.roles))
   )
     throw new ForbiddenException(
       "Necesitás ser administrador y tener acceso a esta sucursal para cambiar el estado del producto.",

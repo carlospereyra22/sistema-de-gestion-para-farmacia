@@ -13,6 +13,7 @@ import { lockCashSession } from "./lock-cash-session";
 import { findOwnOpenSession } from "./own-open-session";
 import { randomUUID } from "node:crypto";
 import { readReceiptPayments } from "../accounts/receipt-payments";
+import { isOrganizationAdministrator } from "../roles/administrator-role";
 import {
   cashMovementCategory,
   formatCashMinor,
@@ -103,7 +104,7 @@ export class CashService {
       },
     });
     return {
-      canArchive: membership.roles.some(({ role }) => role.code === "ADMIN"),
+      canArchive: isOrganizationAdministrator(membership.roles),
       canManage: membership.roles.some(({ role }) =>
         role.permissions.some(
           ({ permission }) => permission.code === "CASH_MANAGE",
