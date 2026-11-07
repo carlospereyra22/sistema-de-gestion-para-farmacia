@@ -73,7 +73,8 @@ export class AuthController {
   async me(@Req() request: AuthenticatedRequest) {
     const profile = await this.auth.getProfile(request.auth!.sub);
     if (!profile) throw new UnauthorizedException("User is unavailable.");
-    return profile;
+    const { platformAdmin, ...user } = profile;
+    return { ...user, isPlatformAdmin: platformAdmin?.active ?? false };
   }
 
   @Post("change-password")

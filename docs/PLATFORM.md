@@ -42,6 +42,28 @@ y qué tiene cada una, y cortar a quien no paga, con posibilidad de postergar.
 - El panel muestra solo datos comerciales: sin ventas, clientes ni stock, y sin entrar como
   una farmacia. La landing promete "Cada farmacia ve solo sus datos".
 
+### Comandos
+
+Las cuentas se manejan solo desde el servidor. En el VPS:
+
+```bash
+sudo bash deploy/oracle/platform-admin.sh <preprod|prod> crear <correo>
+sudo bash deploy/oracle/platform-admin.sh <preprod|prod> revocar <correo>
+sudo bash deploy/oracle/platform-admin.sh <preprod|prod> resetear-codigo <correo>
+sudo bash deploy/oracle/platform-admin.sh <preprod|prod> listar
+```
+
+- `crear` pide la clave sin mostrarla y entra por stdin: un argumento o una variable quedarían
+  a la vista en la lista de procesos. Rechaza un correo que ya pertenece a una farmacia.
+- `resetear-codigo` es para un celular perdido: no hay códigos de recuperación.
+- En local, con la API compilada: `pnpm --filter @gestion/api plataforma listar`. Para crear,
+  la clave se pasa por stdin.
+- El secreto del código se cifra con `credential-vault.ts`. En producción necesita la clave de
+  la bóveda: sin ella el panel queda inaccesible.
+
+La verificación con el código vale 12 horas por sesión. Tras 5 intentos fallidos el código se
+bloquea 15 minutos. Un código no se puede usar dos veces.
+
 ## Ciclo de cobro y corte
 
 | Etapa        | Cuándo          | Qué pasa                                        |
@@ -85,7 +107,7 @@ Hoy no corta nada. Se prepara así:
 | --- | ----------------------- | ---------- |
 | 1   | Alta reutilizable       | Hecho      |
 | 2   | Cambio de clave propio  | SISTEMA-49 |
-| 3   | Identidad de plataforma | Pendiente  |
+| 3   | Identidad de plataforma | SISTEMA-50 |
 | 4   | Panel base              | Pendiente  |
 | 5   | Rol Empleado y permisos | Pendiente  |
 | 6   | Modelo comercial y alta | Pendiente  |
