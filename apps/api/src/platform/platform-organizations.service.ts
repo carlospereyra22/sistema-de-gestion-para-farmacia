@@ -11,6 +11,7 @@ import { provisionOrganizationGraph } from "../organizations/organization-provis
 import { PrismaService } from "../prisma/prisma.service";
 import { uniqueBranchCode } from "./branch-code";
 import { recordPlatformAudit } from "./platform-audit";
+import { PlatformBillingService } from "./platform-billing.service";
 import {
   commercialToday,
   resolveSubscriptionAccess,
@@ -63,6 +64,7 @@ function subscriptionView(subscription: SubscriptionWithPlan, now: Date) {
     trialEndsAt: civilDate(subscription.trialEndsAt),
     paidThrough: civilDate(subscription.paidThrough),
     extendedUntil: civilDate(subscription.extendedUntil),
+    extendedReason: subscription.extendedReason,
     extraUsers: subscription.extraUsers,
     extraBranches: subscription.extraBranches,
     agreedPriceMinor: subscription.agreedPriceMinor?.toString() ?? null,
@@ -77,10 +79,14 @@ function subscriptionView(subscription: SubscriptionWithPlan, now: Date) {
 /** Solo datos comerciales: el panel nunca lee ventas, clientes ni stock de una farmacia. */
 @Injectable()
 export class PlatformOrganizationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billing: PlatformBillingService,
+  ) {}
 
   async list() {
     const now = new Date();
+    const balances = await this.billing.balances();
     const organizations = await this.prisma.organization.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -98,6 +104,7 @@ export class PlatformOrganizationsService {
     });
     return organizations.map(({ subscription, _count, ...organization }) => ({
       ...organization,
+      balanceMinor: (balances.get(organization.id) ?? 0n).toString(),
       activeBranches: _count.branches,
       activeUsers: _count.userMemberships,
       subscription: subscription ? subscriptionView(subscription, now) : null,
@@ -138,6 +145,7 @@ export class PlatformOrganizationsService {
     const { subscription, userMemberships, ...rest } = organization;
     return {
       ...rest,
+      billing: await this.billing.ledger(organizationId),
       subscription: subscription
         ? subscriptionView(subscription, new Date())
         : null,

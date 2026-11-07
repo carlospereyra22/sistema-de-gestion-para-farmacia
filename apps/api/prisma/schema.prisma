@@ -108,6 +108,8 @@ model Organization {
   priceLists      PriceList[]
   auditLogs       AuditLog[]
   subscription    OrganizationSubscription?
+  subscriptionCharges  SubscriptionCharge[]
+  subscriptionPayments SubscriptionPayment[]
 }
 
 model FiscalCredential {
@@ -495,6 +497,42 @@ model OrganizationSubscription {
   plan             SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
 
   @@index([planId])
+}
+
+model SubscriptionCharge {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  periodStart    DateTime     @db.Date
+  periodEnd      DateTime     @db.Date
+  amountMinor    BigInt
+  breakdown      Json
+  waivedAt       DateTime?    @db.Timestamptz(6)
+  waivedById     String?      @db.Uuid
+  waiveReason    String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, periodStart])
+}
+
+model SubscriptionPayment {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  operationId    String       @db.Uuid
+  requestHash    String
+  amountMinor    BigInt
+  paidOn         DateTime     @db.Date
+  method         String
+  reference      String?
+  createdById    String       @db.Uuid
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  voidedAt       DateTime?    @db.Timestamptz(6)
+  voidedById     String?      @db.Uuid
+  voidReason     String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, operationId])
+  @@index([organizationId, paidOn])
 }
 
 model PlatformAdmin {

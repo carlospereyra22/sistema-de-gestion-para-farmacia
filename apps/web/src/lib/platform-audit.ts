@@ -12,6 +12,11 @@ const actionLabels: Record<string, string> = {
   PLATFORM_PASSWORD_RESET: "Clave reseteada",
   PLATFORM_SUBSCRIPTION_UPDATED: "Plan de una farmacia actualizado",
   PLATFORM_PLAN_UPDATED: "Precios actualizados",
+  PLATFORM_PAYMENT_REGISTERED: "Pago registrado",
+  PLATFORM_PAYMENT_VOIDED: "Pago anulado",
+  PLATFORM_CHARGE_WAIVED: "Cargo condonado",
+  PLATFORM_EXTENSION_GRANTED: "Prórroga otorgada",
+  PLATFORM_EXTENSION_REMOVED: "Prórroga quitada",
 };
 
 export function platformActionLabel(action: string): string {

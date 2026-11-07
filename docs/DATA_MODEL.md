@@ -30,6 +30,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261107000000_subscription_model` (SISTEMA-55): `SubscriptionPlan` guarda la formula del abono en centavos y `OrganizationSubscription` una fila por farmacia, con fechas civiles (`trialEndsAt`, `paidThrough`, `extendedUntil`), cupos adicionales y precio acordado. Un CHECK exige una fecha base salvo que la farmacia este exenta. El estado no se guarda: se calcula por fechas. La migracion crea el plan sin importes y deja exentas a las organizaciones existentes.
 
+`20261107010000_subscription_billing` (SISTEMA-56): `SubscriptionCharge` guarda cada periodo cobrado, con importe y desglose congelados, y un indice unico por farmacia y fecha de inicio impide duplicarlo. `waivedAt` y `waiveReason` marcan la condonacion; `waivedById` queda vacio cuando la hace el proceso al reactivar una farmacia bloqueada. `SubscriptionPayment` guarda cada pago con `operationId` unico por farmacia y `requestHash` para los reintentos, y se anula con `voidedAt` sin borrarse. No hay tabla de imputaciones: la calcula `subscription-ledger.ts`, y `OrganizationSubscription.paidThrough` guarda el resultado.
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

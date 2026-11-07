@@ -25,6 +25,7 @@ run() {
     --property="WorkingDirectory=$api" \
     --property=EnvironmentFile="$environment" \
     --setenv=PRICE_REFRESH_SCHEDULER=off \
+    --setenv=SUBSCRIPTION_SCHEDULER=off \
     /usr/local/bin/node "$cli" "$@"
 }
 

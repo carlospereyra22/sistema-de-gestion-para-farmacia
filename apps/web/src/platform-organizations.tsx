@@ -21,6 +21,7 @@ import {
   summarizeOrganizations,
   usageLabel,
 } from "./lib/platform-subscription";
+import { usePage } from "./lib/use-page";
 import { usePlatformData } from "./lib/use-platform-data";
 import { Pagination } from "./pagination";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
@@ -32,7 +33,7 @@ import { primary } from "./supplier-payables/dialog";
 
 const PAGE_SIZE = 10;
 
-function Metric({ label, value }: { label: string; value: string }) {
+export function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
       <p className="text-sm text-slate-500">{label}</p>
@@ -48,14 +49,11 @@ export function PlatformOrganizationsTable({
   rows: readonly PlatformOrganization[];
   onOpen: (id: string) => void;
 }) {
-  const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const current = Math.min(page, totalPages);
-  const visible = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const { current, totalPages, setPage, visible } = usePage(rows, PAGE_SIZE);
   return (
     <DataTable
       label="Farmacias"
-      minWidthClass="min-w-230"
+      minWidthClass="min-w-260"
       columns={[
         { label: "Farmacia" },
         { label: "Estado" },
@@ -63,6 +61,7 @@ export function PlatformOrganizationsTable({
         { label: "Usuarios", align: "right" },
         { label: "Sucursales", align: "right" },
         { label: "Abono", align: "right" },
+        { label: "Saldo", align: "right" },
       ]}
       footer={
         rows.length > PAGE_SIZE ? (
@@ -79,7 +78,7 @@ export function PlatformOrganizationsTable({
       }
     >
       {visible.length === 0 ? (
-        <DataTableEmpty colSpan={6}>
+        <DataTableEmpty colSpan={7}>
           No hay farmacias para esta búsqueda.
         </DataTableEmpty>
       ) : (
@@ -120,6 +119,9 @@ export function PlatformOrganizationsTable({
             </DataTableCell>
             <DataTableCell align="right" numeric>
               {row.subscription ? ars(row.subscription.feeMinor) : "—"}
+            </DataTableCell>
+            <DataTableCell align="right" numeric>
+              {BigInt(row.balanceMinor) > 0n ? ars(row.balanceMinor) : "—"}
             </DataTableCell>
           </DataTableRow>
         ))

@@ -82,7 +82,9 @@ bloquea 15 minutos. Un código no se puede usar dos veces.
 - Prórroga manual con fecha y motivo, con auditoría.
 - Cuotas: pago parcial más prórroga hasta la próxima cuota. No hay un sistema de cuotas aparte.
 - Los datos nunca se borran. Al bloquearse dejan de generarse cargos; se cobra lo adeudado
-  hasta ese día y el resto se condona.
+  hasta ese día y el resto se condona. Si una bloqueada salda su deuda, los meses que pasó sin
+  servicio se generan ya condonados y se le cobra el mes en curso. Sin esto quedaría bloqueada
+  para siempre, con saldo cero y sin nada que pagar.
 
 En solo lectura siguen funcionando, además de las lecturas, las operaciones que evitan dejar
 algo colgado: procesar facturas y notas de crédito ya creadas (si no, una venta hecha justo
@@ -103,20 +105,20 @@ Hoy no corta nada. Se prepara así:
 
 ## Orden de los PRs
 
-| #   | PR                      | Estado     |
-| --- | ----------------------- | ---------- |
-| 1   | Alta reutilizable       | Hecho      |
-| 2   | Cambio de clave propio  | Hecho      |
-| 3   | Identidad de plataforma | Hecho      |
-| 4   | Panel base              | Hecho      |
-| 5   | Rol Empleado y permisos | Hecho      |
-| 6   | Modelo comercial y alta | SISTEMA-55 |
-| 7   | Cupos y catálogo        | Pendiente  |
-| 8   | Cargos y pagos manuales | Pendiente  |
-| 9   | Corte                   | Pendiente  |
-| 10  | Límite de sesiones      | Pendiente  |
-| 11  | Módulos                 | Pendiente  |
-| 12  | Mercado Pago            | Pendiente  |
+| #   | PR                       | Estado     |
+| --- | ------------------------ | ---------- |
+| 1   | Alta reutilizable        | Hecho      |
+| 2   | Cambio de clave propio   | Hecho      |
+| 3   | Identidad de plataforma  | Hecho      |
+| 4   | Panel base               | Hecho      |
+| 5   | Rol Empleado y permisos  | Hecho      |
+| 6   | Modelo comercial y alta  | Hecho      |
+| 7   | Cargos, pagos y prórroga | SISTEMA-56 |
+| 8   | Cupos y catálogo         | Pendiente  |
+| 9   | Corte                    | Pendiente  |
+| 10  | Límite de sesiones       | Pendiente  |
+| 11  | Módulos                  | Pendiente  |
+| 12  | Mercado Pago             | Pendiente  |
 
 El corte va después del cobro: primero se ve quién pagó y recién entonces se corta. El límite
 de sesiones es condición para cobrar por usuario: sin él, comparten la clave.
@@ -130,6 +132,34 @@ de sesiones es condición para cobrar por usuario: sin él, comparten la clave.
   que ya existían.
 - `subscription-fee.ts` y `subscription-access.ts`: funciones puras con el abono y el estado.
   Hoy el estado solo se muestra: ninguna ruta lo aplica todavía.
+
+## Cargos y pagos
+
+Se cobra mes adelantado: el primer cargo empieza al día siguiente de terminar la prueba y cada
+período dura un mes, siempre contado desde esa fecha. Un inicio el 31 cae el 28 en febrero y
+vuelve al 31 en marzo.
+
+- **Cargos:** `PlatformBillingService` los genera 5 días antes de que empiece el período. Corre
+  al arrancar la API y cada 6 horas, y no duplica. Los comandos de servidor lo apagan con
+  `SUBSCRIPTION_SCHEDULER=off`.
+- **Importe congelado:** cada cargo guarda su importe y su desglose. Subir precios o cambiar el
+  plan rige desde el próximo período, sin prorrateo.
+- **Imputación:** `subscription-ledger.ts` reparte los pagos vigentes del cargo más viejo al más
+  nuevo, calculando desde cero. No hay tabla de imputaciones: anular un pago no deshace nada.
+- **`paidThrough`:** nunca se le suma nada a mano. Se recalcula en la transacción de cada pago,
+  anulación o condonación, y también genera lo que falte: un pago reactiva al instante.
+- **Pago parcial:** baja el saldo y no adelanta la fecha. Un pago atrasado no reinicia el período.
+- **Excedente:** queda a favor y se aplica solo al próximo cargo.
+- **Reintentos:** `operationId` más hash. Un doble clic no registra dos pagos, y el mismo
+  `operationId` con otros datos da 409.
+- **Anular y condonar:** exigen motivo y no borran nada. Una farmacia exenta no registra pagos.
+- **Prórroga:** fecha y motivo. Mientras dure no corta, pero los cargos se siguen generando.
+
+En el panel, la ficha muestra cargos, pagos y saldo, y la solapa Pagos muestra quién debe, lo
+cobrado en el mes y los últimos 200 pagos de todas las farmacias.
+
+Falta: el pago anual (paga 10, lleva 12) y prorratear una ampliación a mitad de mes. Reactivar
+una farmacia suspendida genera los meses que pasó suspendida: hay que condonarlos a mano.
 
 ## Alta de una farmacia
 

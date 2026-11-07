@@ -27,6 +27,7 @@ import {
 import { usePlatformData } from "./lib/use-platform-data";
 import { MoneyInput } from "./money-input";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
+import { PlatformBillingSection } from "./platform-billing";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
 import { ProductFilterSelect } from "./product-filter-select";
@@ -113,17 +114,20 @@ function AddUserDialog({
               className={`${field} mt-1`}
             />
           </label>
-          <ProductFilterSelect
-            compact
-            label="Rol"
-            value={roleCode}
-            options={roles.map(({ code, name }) => ({
-              value: code,
-              label: name,
-            }))}
-            icon={<ShieldCheck size={16} />}
-            onChange={setRoleCode}
-          />
+          <div className="text-sm">
+            <p className="mb-1">Rol</p>
+            <ProductFilterSelect
+              compact
+              label="Rol"
+              value={roleCode}
+              options={roles.map(({ code, name }) => ({
+                value: code,
+                label: name,
+              }))}
+              icon={<ShieldCheck size={16} />}
+              onChange={setRoleCode}
+            />
+          </div>
         </div>
         {error && (
           <p role="alert" className="mt-4 text-sm text-red-700">
@@ -412,11 +416,13 @@ function SubscriptionForm({
 export function PlatformOrganizationDetail({
   token,
   organizationId,
+  backLabel = "Volver a Farmacias",
   onVerificationExpired,
   onBack,
 }: {
   token: string;
   organizationId: string;
+  backLabel?: string;
   onVerificationExpired: () => void;
   onBack: () => void;
 }) {
@@ -434,7 +440,7 @@ export function PlatformOrganizationDetail({
   const back = (
     <button type="button" className={secondary} onClick={onBack}>
       <ArrowLeft size={16} />
-      Volver a Farmacias
+      {backLabel}
     </button>
   );
   if (error)
@@ -503,8 +509,18 @@ export function PlatformOrganizationDetail({
           ))}
         </dl>
       )}
+      {subscription && !subscription.exempt && (
+        <PlatformBillingSection
+          token={token}
+          organization={{ ...data, subscription }}
+          onChanged={(message) => {
+            setNotice(message);
+            reload();
+          }}
+        />
+      )}
       <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <section>
+        <section className="min-w-0">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="font-semibold">Usuarios</h2>
             <button
