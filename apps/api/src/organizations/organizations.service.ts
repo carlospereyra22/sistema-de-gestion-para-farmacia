@@ -23,6 +23,8 @@ import {
   validateFiscalDraft,
   type FiscalProfileDto,
 } from "./fiscal-profile";
+import { assertQuotaAvailable } from "../platform/subscription-quota";
+import { generateBranchCode } from "./branch-code";
 
 @Injectable()
 export class OrganizationsService {
@@ -455,17 +457,20 @@ export class OrganizationsService {
     actorId: string,
     organizationId: string,
     name: string,
-    code: string,
+    code: string | undefined,
     details?: BranchDto,
   ) {
     await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await assertQuotaAvailable(tx, organizationId, "branches");
         const branch = await tx.branch.create({
           data: {
             organizationId,
             name: name.trim(),
-            code: code.trim().toUpperCase(),
+            code:
+              code?.trim().toUpperCase() ||
+              (await generateBranchCode(tx, organizationId, name.trim())),
             address: details?.address?.trim() ?? "",
             city: details?.city?.trim() ?? "",
             province: details?.province?.trim() ?? "",
@@ -520,7 +525,7 @@ export class OrganizationsService {
         if (!before) throw new NotFoundException("No se encontró la sucursal.");
         const data = {
           name: input.name.trim(),
-          code: input.code.trim().toUpperCase(),
+          code: input.code?.trim().toUpperCase() ?? before.code,
           address: input.address?.trim() ?? "",
           city: input.city?.trim() ?? "",
           province: input.province?.trim() ?? "",
@@ -566,6 +571,19 @@ export class OrganizationsService {
   ) {
     await this.assertPermission(actorId, organizationId, "ORGANIZATION_MANAGE");
     return this.prisma.$transaction(async (tx) => {
+      if (active && !remove) {
+        const inactive = await tx.branch.findFirst({
+          where: {
+            id: branchId,
+            organizationId,
+            active: false,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        if (inactive)
+          await assertQuotaAvailable(tx, organizationId, "branches");
+      }
       // Serialize changes so two requests cannot disable the last two branches.
       await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId}::uuid FOR UPDATE`;
       const before = await tx.branch.findFirst({

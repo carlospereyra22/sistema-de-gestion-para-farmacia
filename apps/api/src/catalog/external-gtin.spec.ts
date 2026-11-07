@@ -1,5 +1,31 @@
 import { canonicalGtin } from "./external-gtin";
-import { ExternalCatalogService } from "./external-catalog.service";
+import {
+  catalogAuthorized,
+  ExternalCatalogService,
+} from "./external-catalog.service";
+
+describe("farmacias autorizadas al catálogo externo", () => {
+  it("sigue aceptando una sola farmacia, como en producción", () => {
+    expect(catalogAuthorized("uno", "uno")).toBe(true);
+    expect(catalogAuthorized("dos", "uno")).toBe(false);
+  });
+
+  it("acepta varias, con o sin espacios", () => {
+    expect(catalogAuthorized("uno", "uno, dos")).toBe(true);
+    expect(catalogAuthorized("dos", "uno, dos")).toBe(true);
+    expect(catalogAuthorized("tres", "uno, dos")).toBe(false);
+  });
+
+  it("no acepta parte de un identificador", () => {
+    expect(catalogAuthorized("un", "uno,dos")).toBe(false);
+  });
+
+  it("sin configuración, o sin farmacia, no autoriza a nadie", () => {
+    expect(catalogAuthorized("uno")).toBe(false);
+    expect(catalogAuthorized("", "")).toBe(false);
+    expect(catalogAuthorized("", "uno,,dos")).toBe(false);
+  });
+});
 
 describe("external catalogue safety", () => {
   it("does not expose private catalogue inputs to another organization", async () => {

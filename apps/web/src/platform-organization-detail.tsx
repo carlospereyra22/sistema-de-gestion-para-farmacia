@@ -20,6 +20,7 @@ import {
 } from "./lib/platform-api";
 import {
   coveredUntilLabel,
+  quotaFull,
   stageLabel,
   stageTone,
   usageLabel,
@@ -462,6 +463,14 @@ export function PlatformOrganizationDetail({
       </>
     );
   const subscription = data.subscription;
+  const activeUsers = data.users.filter(({ active }) => active).length;
+  const activeBranches = data.branches.filter(({ active }) => active).length;
+  const usersFull =
+    !!subscription &&
+    quotaFull(activeUsers, subscription.quota.users, subscription.exempt);
+  const branchesFull =
+    !!subscription &&
+    quotaFull(activeBranches, subscription.quota.branches, subscription.exempt);
   return (
     <>
       {back}
@@ -483,7 +492,7 @@ export function PlatformOrganizationDetail({
             [
               "Usuarios",
               usageLabel(
-                data.users.filter(({ active }) => active).length,
+                activeUsers,
                 subscription.quota.users,
                 subscription.exempt,
                 " de ",
@@ -492,7 +501,7 @@ export function PlatformOrganizationDetail({
             [
               "Sucursales",
               usageLabel(
-                data.branches.filter(({ active }) => active).length,
+                activeBranches,
                 subscription.quota.branches,
                 subscription.exempt,
                 " de ",
@@ -525,6 +534,7 @@ export function PlatformOrganizationDetail({
             <h2 className="font-semibold">Usuarios</h2>
             <button
               type="button"
+              disabled={usersFull}
               className={secondary}
               onClick={() => setAdding(true)}
             >
@@ -532,6 +542,11 @@ export function PlatformOrganizationDetail({
               Nuevo usuario
             </button>
           </div>
+          {usersFull && (
+            <p className="mb-3 text-sm text-amber-700">
+              Cupo completo: sumá usuarios adicionales en el plan contratado.
+            </p>
+          )}
           <DataTable
             label="Usuarios de la farmacia"
             minWidthClass="min-w-160"
@@ -588,6 +603,7 @@ export function PlatformOrganizationDetail({
             <h2 className="font-semibold">Sucursales</h2>
             <button
               type="button"
+              disabled={branchesFull}
               className={secondary}
               onClick={() => setAddingBranch(true)}
             >
@@ -595,6 +611,11 @@ export function PlatformOrganizationDetail({
               Nueva sucursal
             </button>
           </div>
+          {branchesFull && (
+            <p className="mb-3 text-sm text-amber-700">
+              Cupo completo: sumá sucursales adicionales en el plan contratado.
+            </p>
+          )}
           <DataTable
             label="Sucursales de la farmacia"
             columns={[{ label: "Nombre" }, { label: "Estado" }]}

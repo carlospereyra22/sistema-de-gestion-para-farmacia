@@ -33,6 +33,12 @@ describe("organization workspace", () => {
       expect(nav.match(/aria-current="page"/g)).toHaveLength(1);
     },
   );
+  it("no pide el código de la sucursal: se genera solo", () => {
+    const html = render("branches");
+
+    expect(html).toContain("Nueva sucursal");
+    expect(html).not.toContain("Código");
+  });
   it("provides shortcuts from the summary without an active-branch KPI", () => {
     const html = render("general");
     expect(html).toContain("Datos de la organización");

@@ -177,7 +177,7 @@ export type BranchListItem = {
 
 export type BranchInput = {
   name: string;
-  code: string;
+  code?: string;
   address?: string;
   city?: string;
   province?: string;

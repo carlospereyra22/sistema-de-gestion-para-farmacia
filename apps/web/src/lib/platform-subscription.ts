@@ -79,6 +79,10 @@ export function usageLabel(
   return exempt ? String(used) : `${used}${separator}${quota}`;
 }
 
+/** Una farmacia exenta no tiene cupo: nunca se llena. */
+export const quotaFull = (used: number, quota: number, exempt: boolean) =>
+  !exempt && used >= quota;
+
 /** Hasta cuándo está cubierta, para ver de un vistazo a quién hay que contactar. */
 export function coveredUntilLabel(subscription: {
   exempt: boolean;

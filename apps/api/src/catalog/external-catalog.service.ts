@@ -47,6 +47,14 @@ type Candidate = {
   };
 };
 
+/** La variable admite varias farmacias separadas por coma. */
+export const catalogAuthorized = (organizationId: string, configured = "") =>
+  !!organizationId &&
+  configured
+    .split(",")
+    .map((id) => id.trim())
+    .includes(organizationId);
+
 @Injectable()
 export class ExternalCatalogService implements OnModuleDestroy {
   private client?: PrismaClient;
@@ -57,8 +65,10 @@ export class ExternalCatalogService implements OnModuleDestroy {
       : process.env.EXTERNAL_CATALOG_PREVIEW === "true";
     if (
       !enabled ||
-      !organizationId ||
-      process.env.EXTERNAL_CATALOG_ORGANIZATION_ID !== organizationId
+      !catalogAuthorized(
+        organizationId,
+        process.env.EXTERNAL_CATALOG_ORGANIZATION_ID,
+      )
     )
       throw new NotFoundException("Catálogo externo desactivado.");
     const raw = externalCatalogUrl(

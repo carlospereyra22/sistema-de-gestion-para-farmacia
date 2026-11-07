@@ -54,6 +54,16 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
     return (await response.json()) as Created;
   }
 
+  /** Con lugar de sobra: estos tests no son sobre el cupo. */
+  async function createdWithRoom() {
+    const body = await created();
+    await http.db.organizationSubscription.update({
+      where: { organizationId: body.id },
+      data: { extraUsers: 5, extraBranches: 5 },
+    });
+    return body;
+  }
+
   describe("acceso", () => {
     it.each(["/platform/organizations", "/platform/plans"])(
       "%s no existe para un usuario de farmacia ni sin sesión",
@@ -182,7 +192,7 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
 
   describe("usuarios de una farmacia", () => {
     it("agrega un empleado con acceso a las sucursales y clave temporal", async () => {
-      const { id } = await created();
+      const { id } = await createdWithRoom();
       const email = `${randomUUID()}@example.invalid`;
 
       const response = await http.request(
@@ -205,7 +215,7 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
     });
 
     it("rechaza un rol que no existe en esa farmacia", async () => {
-      const { id } = await created();
+      const { id } = await createdWithRoom();
 
       const response = await http.request(
         `/platform/organizations/${id}/users`,
@@ -256,7 +266,7 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
       http.request(`/platform/organizations/${id}/branches`, admin, { name });
 
     it("la asigna a los dueños, que si no no podrían operarla", async () => {
-      const { id, email, temporaryPassword } = await created();
+      const { id, email, temporaryPassword } = await createdWithRoom();
       const employee = `${randomUUID()}@example.invalid`;
       await http.request(`/platform/organizations/${id}/users`, admin, {
         email: employee,
@@ -290,7 +300,7 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
     });
 
     it("genera el código solo, aunque el nombre se repita", async () => {
-      const { id } = await created();
+      const { id } = await createdWithRoom();
 
       const first = await addBranch(id, "Sucursal Norte");
       const second = await addBranch(id, "Sucursal Norte");
@@ -300,8 +310,8 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
     });
 
     it("el mismo nombre sirve en otra farmacia", async () => {
-      const first = await created();
-      const second = await created();
+      const first = await createdWithRoom();
+      const second = await createdWithRoom();
       await addBranch(first.id, "Norte");
 
       const response = await addBranch(second.id, "Norte");
@@ -310,7 +320,7 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
     });
 
     it("no reutiliza el código de una sucursal eliminada", async () => {
-      const { id } = await created();
+      const { id } = await createdWithRoom();
       const first = (await (await addBranch(id, "Norte")).json()) as {
         id: string;
       };

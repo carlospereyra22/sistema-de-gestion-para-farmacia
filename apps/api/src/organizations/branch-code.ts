@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+
 const MAX_LENGTH = 32;
 const FALLBACK = "SUCURSAL";
 
@@ -28,4 +30,17 @@ export function uniqueBranchCode(
     const candidate = `${base.slice(0, MAX_LENGTH - suffix.length).replace(/-+$/, "")}${suffix}`;
     if (!taken.has(candidate)) return candidate;
   }
+}
+
+/** Las eliminadas también cuentan: la base no admite el código repetido. */
+export async function generateBranchCode(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  name: string,
+): Promise<string> {
+  const existing = await tx.branch.findMany({
+    where: { organizationId },
+    select: { code: true },
+  });
+  return uniqueBranchCode(name, new Set(existing.map(({ code }) => code)));
 }

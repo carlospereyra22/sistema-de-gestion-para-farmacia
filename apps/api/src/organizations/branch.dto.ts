@@ -20,9 +20,10 @@ export class BranchDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === "string" ? value.trim().toUpperCase() : value,
   )
+  @IsOptional()
   @IsString()
   @Matches(/^[A-Z0-9-]{2,32}$/)
-  code!: string;
+  code?: string;
   @IsOptional()
   @IsString()
   @MaxLength(160)
