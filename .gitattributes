@@ -1,3 +1,4 @@
 apps/api/prisma/migrations/20261106050000_focus_remedies_links/migration.sql text eol=lf
 apps/api/prisma/migrations/20261106070000_platform_identity/migration.sql text eol=lf
 deploy/oracle/platform-admin.sh text eol=lf
+apps/api/prisma/migrations/20261106060000_user_must_change_password/migration.sql text eol=lf

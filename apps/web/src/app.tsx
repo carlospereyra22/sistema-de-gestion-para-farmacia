@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { ProductImageSession } from "./product-image-session";
 import { SessionStartup } from "./session-startup";
 import { ForcedPasswordChange } from "./forced-password-change";
+import { NoOrganizationScreen } from "./no-organization-screen";
 import type { FormEvent, ReactElement } from "react";
 import {
   Building2,
@@ -35,6 +36,8 @@ import {
   type CatalogProduct,
 } from "./lib/api";
 import { WorkspaceShell } from "./workspace-shell";
+
+const PlatformShell = lazy(() => import("./platform-shell"));
 import { LoginScreen } from "./login-screen";
 
 const permissionGroups = [
@@ -100,10 +103,12 @@ export function App(): ReactElement {
   const [sessionRestoreFailed, setSessionRestoreFailed] = useState(false);
   const [showLegacyWorkspace, setShowLegacyWorkspace] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   const startSession = async (token: string): Promise<void> => {
     const profile = await getCurrentUser(token);
     setMustChangePassword(profile.mustChangePassword ?? false);
+    setIsPlatformAdmin(profile.isPlatformAdmin ?? false);
     setUser(profile.email);
     const membership = profile.organizations[0];
     setAccountName(membership?.displayName || undefined);
@@ -359,6 +364,14 @@ export function App(): ReactElement {
         onLogout={endSession}
       />
     );
+  if (user && accessToken && isPlatformAdmin)
+    return (
+      <Suspense fallback={<SessionStartup failed={false} />}>
+        <PlatformShell token={accessToken} email={user} onLogout={endSession} />
+      </Suspense>
+    );
+  if (user && accessToken && !organizationId)
+    return <NoOrganizationScreen email={user} onLogout={endSession} />;
   if (user)
     return (
       <ProductImageSession key={user}>

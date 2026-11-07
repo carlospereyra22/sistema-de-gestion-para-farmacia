@@ -106,9 +106,9 @@ Hoy no corta nada. Se prepara así:
 | #   | PR                      | Estado     |
 | --- | ----------------------- | ---------- |
 | 1   | Alta reutilizable       | Hecho      |
-| 2   | Cambio de clave propio  | SISTEMA-49 |
-| 3   | Identidad de plataforma | SISTEMA-50 |
-| 4   | Panel base              | Pendiente  |
+| 2   | Cambio de clave propio  | Hecho      |
+| 3   | Identidad de plataforma | Hecho      |
+| 4   | Panel base              | SISTEMA-53 |
 | 5   | Rol Empleado y permisos | Pendiente  |
 | 6   | Modelo comercial y alta | Pendiente  |
 | 7   | Cargos y pagos manuales | Pendiente  |

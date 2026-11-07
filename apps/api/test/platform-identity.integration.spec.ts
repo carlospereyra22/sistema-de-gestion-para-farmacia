@@ -239,10 +239,22 @@ describe("identidad de plataforma por HTTP (esquema aislado)", () => {
 
     const rows = (await response.json()) as {
       action: string;
+      actorEmail: string | null;
       after: { email?: string } | null;
     }[];
-    expect(rows.map((row) => row.action)).toContain("PLATFORM_TOTP_ENROLLED");
-    expect(rows.map((row) => row.after?.email)).toContain(email);
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        action: "PLATFORM_TOTP_ENROLLED",
+        actorEmail: email,
+      }),
+    );
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        action: "PLATFORM_ADMIN_GRANTED",
+        actorEmail: null,
+        after: { email },
+      }),
+    );
     expect(JSON.stringify(rows)).not.toContain(password);
   });
 });
