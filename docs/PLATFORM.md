@@ -83,8 +83,8 @@ Hoy no corta nada. Se prepara así:
 
 | #   | PR                      | Estado     |
 | --- | ----------------------- | ---------- |
-| 1   | Alta reutilizable       | SISTEMA-48 |
-| 2   | Cambio de clave propio  | Pendiente  |
+| 1   | Alta reutilizable       | Hecho      |
+| 2   | Cambio de clave propio  | SISTEMA-49 |
 | 3   | Identidad de plataforma | Pendiente  |
 | 4   | Panel base              | Pendiente  |
 | 5   | Rol Empleado y permisos | Pendiente  |

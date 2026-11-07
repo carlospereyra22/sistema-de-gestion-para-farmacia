@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { hash, verify } from "@node-rs/argon2";
 import { randomBytes } from "node:crypto";
@@ -33,6 +37,7 @@ export class AuthService {
         id: true,
         email: true,
         active: true,
+        mustChangePassword: true,
         organizations: {
           include: {
             organization: true,
@@ -102,6 +107,54 @@ export class AuthService {
     await this.prisma.authSession.update({
       where: { id: session.id },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  /**
+   * El usuario cambia su propia contraseña. Conserva la sesión desde la que lo hace y
+   * cierra las demás. La clave incorrecta responde 400: un 401 cerraría la sesión en la web.
+   */
+  async changePassword(
+    userId: string,
+    sessionId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        active: true,
+        passwordHash: true,
+        organizations: { select: { organizationId: true } },
+      },
+    });
+    if (!user?.active || !(await verify(user.passwordHash, currentPassword)))
+      throw new BadRequestException("La contraseña actual no es correcta.");
+    if (await verify(user.passwordHash, newPassword))
+      throw new BadRequestException(
+        "La contraseña nueva tiene que ser distinta de la actual.",
+      );
+    const passwordHash = await hash(newPassword);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, mustChangePassword: false },
+      });
+      const revoked = await tx.authSession.updateMany({
+        where: { userId, revokedAt: null, id: { not: sessionId } },
+        data: { revokedAt: new Date() },
+      });
+      await tx.auditLog.createMany({
+        data: user.organizations.map(({ organizationId }) => ({
+          organizationId,
+          actorId: userId,
+          entityType: "USER",
+          entityId: userId,
+          action: "PASSWORD_CHANGED_BY_USER",
+          after: { revokedSessions: revoked.count },
+        })),
+      });
+      return { revokedSessions: revoked.count };
     });
   }
 

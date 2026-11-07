@@ -832,6 +832,7 @@ export function WorkspaceShell({
             />
           )}
           <AccountMenu
+            accessToken={accessToken}
             branchSelector={branchSelector}
             email={email}
             displayName={displayName}

@@ -66,7 +66,7 @@ it("scopes compact header and sales layout below desktop width without zoom", ()
   expect(compact).toContain(".workspace-reference-action");
   expect(compact).toContain("min-height: 36px");
   expect(compact).toContain("flex-wrap: wrap");
-  expect(compact).toContain("width: 208px");
+  expect(compact).toContain("width: 240px");
   expect(compact).toMatch(
     /\.sales-layout\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/,
   );

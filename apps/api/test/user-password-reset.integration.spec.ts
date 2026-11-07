@@ -111,6 +111,7 @@ describe("admin password reset isolated schema", () => {
     ).resolves.toEqual({ revokedSessions: 2 });
     const user = await db.user.findUniqueOrThrow({ where: { id: cashier } });
     expect(await verify(user.passwordHash, newPassword)).toBe(true);
+    expect(user.mustChangePassword).toBe(true);
     expect(
       await db.authSession.count({
         where: { userId: cashier, revokedAt: null },

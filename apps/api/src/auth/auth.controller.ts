@@ -11,7 +11,8 @@ import {
 } from "@nestjs/common";
 import type { Response } from "express";
 
-import { LoginDto } from "./auth.dto";
+import { AllowPendingPasswordChange } from "./allow-pending-password-change.decorator";
+import { ChangePasswordDto, LoginDto } from "./auth.dto";
 import { AuthService } from "./auth.service";
 import { JwtAccessGuard } from "./jwt-access.guard";
 import type { AuthenticatedRequest } from "./auth.types";
@@ -68,9 +69,26 @@ export class AuthController {
 
   @Get("me")
   @UseGuards(JwtAccessGuard)
+  @AllowPendingPasswordChange()
   async me(@Req() request: AuthenticatedRequest) {
     const profile = await this.auth.getProfile(request.auth!.sub);
     if (!profile) throw new UnauthorizedException("User is unavailable.");
     return profile;
+  }
+
+  @Post("change-password")
+  @HttpCode(200)
+  @UseGuards(JwtAccessGuard)
+  @AllowPendingPasswordChange()
+  changePassword(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ChangePasswordDto,
+  ) {
+    return this.auth.changePassword(
+      request.auth!.sub,
+      request.auth!.sessionId,
+      body.currentPassword,
+      body.newPassword,
+    );
   }
 }

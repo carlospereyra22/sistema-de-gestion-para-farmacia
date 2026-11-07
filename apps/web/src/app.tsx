@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ProductImageSession } from "./product-image-session";
 import { SessionStartup } from "./session-startup";
+import { ForcedPasswordChange } from "./forced-password-change";
 import type { FormEvent, ReactElement } from "react";
 import {
   Building2,
@@ -98,9 +99,11 @@ export function App(): ReactElement {
   const [restoringSession, setRestoringSession] = useState(true);
   const [sessionRestoreFailed, setSessionRestoreFailed] = useState(false);
   const [showLegacyWorkspace, setShowLegacyWorkspace] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   const startSession = async (token: string): Promise<void> => {
     const profile = await getCurrentUser(token);
+    setMustChangePassword(profile.mustChangePassword ?? false);
     setUser(profile.email);
     const membership = profile.organizations[0];
     setAccountName(membership?.displayName || undefined);
@@ -221,7 +224,7 @@ export function App(): ReactElement {
   }, [accessToken]);
 
   useEffect(() => {
-    if (!accessToken || !organizationId) return;
+    if (!accessToken || !organizationId || mustChangePassword) return;
     void Promise.all([
       getUsers(accessToken, organizationId),
       getUserCreateOptions(accessToken, organizationId),
@@ -245,7 +248,7 @@ export function App(): ReactElement {
       .catch(() =>
         setMessage("No se pudo cargar la administracion de usuarios."),
       );
-  }, [accessToken, organizationId]);
+  }, [accessToken, organizationId, mustChangePassword]);
 
   const submitNewUser = async (
     event: FormEvent<HTMLFormElement>,
@@ -340,6 +343,22 @@ export function App(): ReactElement {
     }
   };
 
+  const endSession = () => {
+    void logout();
+    setUser(undefined);
+    setAccessToken(undefined);
+    setOrganizationId(undefined);
+  };
+
+  if (user && accessToken && mustChangePassword)
+    return (
+      <ForcedPasswordChange
+        token={accessToken}
+        email={user}
+        onDone={() => setMustChangePassword(false)}
+        onLogout={endSession}
+      />
+    );
   if (user)
     return (
       <ProductImageSession key={user}>
@@ -349,12 +368,7 @@ export function App(): ReactElement {
           organizationName={organizationName}
           accessToken={accessToken}
           organizationId={organizationId}
-          onLogout={() => {
-            void logout();
-            setUser(undefined);
-            setAccessToken(undefined);
-            setOrganizationId(undefined);
-          }}
+          onLogout={endSession}
         />
       </ProductImageSession>
     );

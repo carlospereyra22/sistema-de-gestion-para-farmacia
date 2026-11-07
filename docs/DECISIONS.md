@@ -2,6 +2,12 @@
 
 ## DECIDED
 
+- 06/11/2026 (SISTEMA-49): El cambio obligatorio de contraseña se controla en
+  `JwtAccessGuard` y no solo en la web: al consultar la sesión en cada pedido ya tiene
+  el dato, y cubre todas las rutas sin marcar cada controller. Solo las rutas con
+  `@AllowPendingPasswordChange` pasan. Restablecer la clave de otro usuario desde
+  Administración activa el cambio obligatorio, porque quien la restablece la conoce.
+
 - 06/11/2026 (SISTEMA-48): El rol OWNER cuenta como administrador de su farmacia,
   igual que ADMIN, para archivar cierres de caja y cambiar el estado de productos por
   sucursal. Antes esos puntos exigían ADMIN y el dueño creado por el alta, que solo

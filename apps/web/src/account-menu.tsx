@@ -7,10 +7,12 @@ import {
   type ReactNode,
 } from "react";
 import { saleCostTooltipController } from "./lib/sale-cost-tooltip";
-import { ChevronDown, LogOut, MapPin, UserRound } from "lucide-react";
+import { ChevronDown, KeyRound, LogOut, MapPin, UserRound } from "lucide-react";
 import { FullscreenMenuButton } from "./fullscreen-menu-button";
 import { StatusToast } from "./status-toast";
 import { InstallMenuButton } from "./install-menu-button";
+import { passwordChangedMessage } from "./lib/password-change";
+import { OwnPasswordDialog } from "./own-password-dialog";
 
 export function AccountMenu({
   email,
@@ -18,6 +20,7 @@ export function AccountMenu({
   organizationName,
   branchName,
   branchSelector,
+  accessToken,
   onLogout,
 }: {
   email: string;
@@ -25,10 +28,13 @@ export function AccountMenu({
   organizationName?: string;
   branchName: string;
   branchSelector?: ReactNode;
+  accessToken?: string;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [notice, setNotice] = useState("");
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -118,7 +124,7 @@ export function AccountMenu({
       {open && (
         <div
           id={panelId}
-          className="workspace-account-panel absolute right-0 top-full z-40 mt-2 w-52 max-w-[calc(100vw-24px)] rounded-xl border border-slate-200 bg-white shadow-[0_12px_40px_rgb(25_56_74_/_12%)]"
+          className="workspace-account-panel absolute right-0 top-full z-40 mt-2 w-60 max-w-[calc(100vw-24px)] rounded-xl border border-slate-200 bg-white shadow-[0_12px_40px_rgb(25_56_74_/_12%)]"
         >
           <div className="rounded-t-xl border-b border-slate-100 bg-slate-50/70 px-4 py-4">
             <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -169,6 +175,19 @@ export function AccountMenu({
                 trigger.current?.focus();
               }}
             />
+            {accessToken && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setChangingPassword(true);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-600"
+              >
+                <KeyRound size={17} />
+                Cambiar contraseña
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -188,6 +207,24 @@ export function AccountMenu({
           variant="error"
           message={fullscreenError}
           onClose={() => setFullscreenError("")}
+        />
+      )}
+      {changingPassword && accessToken && (
+        <OwnPasswordDialog
+          token={accessToken}
+          email={email}
+          onClose={() => setChangingPassword(false)}
+          onDone={(revokedSessions) => {
+            setChangingPassword(false);
+            setNotice(passwordChangedMessage(revokedSessions));
+          }}
+        />
+      )}
+      {notice && (
+        <StatusToast
+          variant="success"
+          message={notice}
+          onClose={() => setNotice("")}
         />
       )}
     </div>
