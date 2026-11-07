@@ -77,6 +77,22 @@ AlfaBeta 9), 109 dados de baja en el padrón y 141 laboratorios.
   vitamina C. Las tres páginas nuevas cubren las 11 fichas, incluida la segunda
   página de vitamina C. La importación inicial aplica la misma corrección al
   archivo de catálogo anterior, aunque la migración haya corrido con la base vacía.
+- **Nuevas referencias revisadas (06/11/2026):** el archivo versionado incorpora
+  227 fichas que estaban pendientes. Se eligió una sola fila con precio por clave,
+  conservando la presentación, laboratorio y códigos del catálogo de origen y la
+  fila exacta de Precios de Remedios para la actualización. Las 257 opciones de la
+  revisión correspondían a 241 claves; 14 no se incorporaron porque faltaba el
+  precio publicado o había una diferencia de variante, forma o envase. Ninguna de
+  esas 241 claves coincidía por GTIN con el padrón oficial consultado; las
+  referencias oficiales con otra clave o código no se asocian por semejanza.
+  `importar` agrega las 227 fichas a cada ambiente sin reemplazar precios ya
+  actualizados. Los enlaces que apuntan a una página concreta se consultan primero
+  allí; si la fila cambió de página, se recorre desde la primera hasta encontrarla.
+  Ocho trabajadores procesan enlaces continuamente, manteniendo la pausa de 1,5 s
+  entre solicitudes al sitio. En una corrida local completa del 06/11/2026 se
+  revisaron 873 enlaces de Remedios y 9 de AlfaBeta en 1578 s, sin enlaces fallidos;
+  las 227 fichas nuevas se actualizaron. Tres fichas anteriores no tuvieron fila
+  coincidente y conservaron su precio.
 - **Productos vinculados:** toman el precio de la base por código o por nombre y
   presentación exactos, con las reglas de siempre (divisor, recargo, unidad de venta,
   pausa e historial). Lo que no está en la base sigue con su fuente anterior.

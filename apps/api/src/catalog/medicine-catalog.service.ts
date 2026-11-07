@@ -42,7 +42,7 @@ const REMEDIES_LINK_CORRECTIONS = new Map([
 const REQUEST_PAUSE_MS = 1500;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_PAGES = 40;
-const SOURCE_CONCURRENCY = 4;
+const SOURCE_CONCURRENCY = 8;
 // Tantos links seguidos sin respuesta: la fuente está caída, no se insiste.
 const MAX_CONSECUTIVE_FAILURES = 5;
 const WRITE_CHUNK = 2000;
@@ -322,50 +322,40 @@ export class MedicineCatalogService {
         ]);
     let failures = 0;
     const entries = [...links];
-    for (let start = 0; start < entries.length && !result.stopped;) {
-      const batchSize = Math.min(
-        SOURCE_CONCURRENCY,
-        MAX_CONSECUTIVE_FAILURES - failures,
-      );
-      const batch = await Promise.all(
-        entries.slice(start, start + batchSize).map(async ([url, group]) => {
+    let next = 0;
+    const worker = async () => {
+      while (next < entries.length && !result.stopped) {
+        const entry = entries[next++];
+        if (!entry) break;
+        const [url, group] = entry;
+        let rows: SourceRow[] | null = null;
+        let error: unknown = null;
+        try {
+          const wanted = new Set(group.map((item) => item.sourceRowKey));
           try {
-            const wanted = new Set(group.map((item) => item.sourceRowKey));
-            let rows: SourceRow[];
-            try {
-              rows = await read(url, wanted);
-            } catch (cause) {
-              if (!transientSourceError(cause)) throw cause;
-              if (recover && sourceTimedOut(cause)) {
+            rows = await read(url, wanted);
+          } catch (cause) {
+            if (!transientSourceError(cause)) throw cause;
+            if (recover && sourceTimedOut(cause)) {
+              this.logger.warn(
+                `El enlace de medicamentos agotó el tiempo; se buscan sus productos por nombre: ${url}`,
+              );
+              try {
+                rows = await recover(url, group);
+              } catch (recoveryCause) {
                 this.logger.warn(
-                  `El enlace de medicamentos agotó el tiempo; se buscan sus productos por nombre: ${url}`,
+                  `Falló la búsqueda por nombre (${recoveryCause instanceof Error ? recoveryCause.message : "error desconocido"}); se reintenta el enlace: ${url}`,
                 );
-                try {
-                  rows = await recover(url, group);
-                } catch (recoveryCause) {
-                  this.logger.warn(
-                    `Falló la búsqueda por nombre (${recoveryCause instanceof Error ? recoveryCause.message : "error desconocido"}); se reintenta el enlace: ${url}`,
-                  );
-                  rows = await read(url, wanted);
-                }
-              } else {
-                this.logger.warn(`Reintentando enlace de medicamentos: ${url}`);
                 rows = await read(url, wanted);
               }
+            } else {
+              this.logger.warn(`Reintentando enlace de medicamentos: ${url}`);
+              rows = await read(url, wanted);
             }
-            return {
-              url,
-              group,
-              rows,
-              error: null,
-            };
-          } catch (cause) {
-            return { url, group, rows: null, error: cause };
           }
-        }),
-      );
-      start += batchSize;
-      for (const { url, group, rows, error } of batch) {
+        } catch (cause) {
+          error = cause;
+        }
         result.links += 1;
         if (error !== null || rows === null) {
           result.failedLinks += 1;
@@ -375,7 +365,7 @@ export class MedicineCatalogService {
           );
           if (failures >= MAX_CONSECUTIVE_FAILURES) {
             result.stopped = true;
-            break;
+            return;
           }
         } else {
           failures = 0;
@@ -386,7 +376,12 @@ export class MedicineCatalogService {
             `Base de medicamentos: ${result.links}/${entries.length} enlaces revisados, ${result.failedLinks} fallidos.`,
           );
       }
-    }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(SOURCE_CONCURRENCY, entries.length) }, () =>
+        worker(),
+      ),
+    );
     return result;
   }
 
@@ -427,9 +422,19 @@ export class MedicineCatalogService {
     if (!url.startsWith(REMEDIES_URL))
       throw new Error("Link de Precios de Remedios inválido.");
     const rows: SourceRow[] = [];
-    for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const found = new Set<string>();
+    const visited = new Map<number, boolean>();
+    const configuredPage = Number(new URL(url).searchParams.get("pagina"));
+    const firstPage =
+      Number.isInteger(configuredPage) &&
+      configuredPage >= 1 &&
+      configuredPage <= MAX_PAGES
+        ? configuredPage
+        : 1;
+    const readPage = async (page: number) => {
       const target = new URL(url);
-      if (page > 1) target.searchParams.set("pagina", String(page));
+      if (page === 1) target.searchParams.delete("pagina");
+      else target.searchParams.set("pagina", String(page));
       await this.waitForSourceRequest();
       const response = await fetch(target, {
         headers: { Accept: "text/html,application/xhtml+xml" },
@@ -437,11 +442,21 @@ export class MedicineCatalogService {
       });
       if (!response.ok) throw new Error(`Respondió ${response.status}.`);
       const html = await response.text();
-      rows.push(...parseRemediesRows(html));
-      const pending = [...wanted].some(
-        (key) => !rows.some((row) => row.rowKey === key),
-      );
-      if (!pending || !remediesHasMorePages(html)) break;
+      for (const row of parseRemediesRows(html)) {
+        rows.push(row);
+        found.add(row.rowKey);
+      }
+      visited.set(page, remediesHasMorePages(html));
+    };
+    const complete = () => [...wanted].every((key) => found.has(key));
+
+    // Un enlace a página 2 o 3 suele resolverse con una sola solicitud. Si la
+    // paginación cambió, se vuelve al inicio y se busca la fila exacta.
+    await readPage(firstPage);
+    if (complete()) return rows;
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      if (!visited.has(page)) await readPage(page);
+      if (complete() || visited.get(page) === false) break;
     }
     return rows;
   }

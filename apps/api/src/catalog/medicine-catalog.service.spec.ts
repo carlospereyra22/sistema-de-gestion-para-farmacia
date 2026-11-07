@@ -1,9 +1,74 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import type { AlfaBetaService } from "./alfabeta.service";
-import type { CatalogItemForRefresh } from "./medicine-catalog";
+import type { CatalogItemForRefresh, SourceRow } from "./medicine-catalog";
 import { MedicineCatalogService } from "./medicine-catalog.service";
 
 describe("actualización de fuentes de medicamentos", () => {
+  const pagina = (nombre: string, paginacion: string) => `
+    <table><tr data-price="1250.50">
+      <td class="product-text"><span class="font-bold">${nombre}</span>
+      <span class="font-normal">Comp. x 20</span></td>
+      <td><div class="laboratorio-text">LABORATORIO</div></td>
+    </tr></table><div>Mostrando ${paginacion}</div>`;
+
+  it("lee primero la página indicada y evita recorrer las anteriores si encuentra la fila", async () => {
+    const service = new MedicineCatalogService(
+      {} as PrismaService,
+      {} as AlfaBetaService,
+    );
+    service.pause = jest.fn().mockResolvedValue(undefined);
+    const request = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(pagina("MEDICAMENTO", "16-20 de 20")));
+    try {
+      const rows = await service["remediesRows"](
+        "https://preciosderemedios.com.ar/result/?busqueda=medicamento&pagina=2",
+        new Set(["medicamentocompx20"]),
+      );
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(String(request.mock.calls[0]?.[0])).toContain("pagina=2");
+      expect(rows).toEqual([
+        {
+          rowKey: "medicamentocompx20",
+          laboratory: "LABORATORIO",
+          priceMinor: 125050,
+        },
+      ]);
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it("vuelve a la primera página si el resultado dejó de estar en la indicada", async () => {
+    const service = new MedicineCatalogService(
+      {} as PrismaService,
+      {} as AlfaBetaService,
+    );
+    service.pause = jest.fn().mockResolvedValue(undefined);
+    const request = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        new Response(pagina("OTRO MEDICAMENTO", "16-20 de 20")),
+      )
+      .mockResolvedValueOnce(new Response(pagina("MEDICAMENTO", "1-15 de 20")));
+    try {
+      const rows = await service["remediesRows"](
+        "https://preciosderemedios.com.ar/result/?busqueda=medicamento&pagina=2",
+        new Set(["medicamentocompx20"]),
+      );
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(String(request.mock.calls[0]?.[0])).toContain("pagina=2");
+      expect(
+        new URL(String(request.mock.calls[1]?.[0])).searchParams.has("pagina"),
+      ).toBe(false);
+      expect(rows.some((row) => row.rowKey === "medicamentocompx20")).toBe(
+        true,
+      );
+    } finally {
+      request.mockRestore();
+    }
+  });
+
   it("reintenta una vez cuando una solicitud agota el tiempo de espera", async () => {
     const service = new MedicineCatalogService(
       {} as PrismaService,
@@ -168,7 +233,7 @@ describe("actualización de fuentes de medicamentos", () => {
     }
   });
 
-  it("consulta hasta cuatro enlaces a la vez y completa todos los resultados", async () => {
+  it("consulta hasta ocho enlaces a la vez y completa todos los resultados", async () => {
     const service = new MedicineCatalogService(
       {} as PrismaService,
       {} as AlfaBetaService,
@@ -191,9 +256,6 @@ describe("actualización de fuentes de medicamentos", () => {
 
     const resultPromise = service["refreshSource"](items, new Map(), read);
     await new Promise((resolve) => setImmediate(resolve));
-    expect(read).toHaveBeenCalledTimes(4);
-    releases.splice(0).forEach((release) => release());
-    await new Promise((resolve) => setImmediate(resolve));
     expect(read).toHaveBeenCalledTimes(8);
     releases.splice(0).forEach((release) => release());
     await new Promise((resolve) => setImmediate(resolve));
@@ -201,10 +263,36 @@ describe("actualización de fuentes de medicamentos", () => {
     releases.splice(0).forEach((release) => release());
 
     const result = await resultPromise;
-    expect(maximum).toBe(4);
+    expect(maximum).toBe(8);
     expect(result.links).toBe(9);
     expect(result.missing).toBe(9);
     expect(result.failedLinks).toBe(0);
+  });
+
+  it("no espera al enlace lento para consultar el siguiente", async () => {
+    const service = new MedicineCatalogService(
+      {} as PrismaService,
+      {} as AlfaBetaService,
+    );
+    const items = Array.from({ length: 9 }, (_, index) => ({
+      id: String(index),
+      referenceUrl: `https://preciosderemedios.com.ar/result/${index}`,
+      sourceRowKey: String(index),
+    })) as CatalogItemForRefresh[];
+    let liberarPrimero: (() => void) | undefined;
+    const read = jest.fn((url: string) =>
+      url.endsWith("/0")
+        ? new Promise<SourceRow[]>((resolve) => {
+            liberarPrimero = () => resolve([]);
+          })
+        : Promise.resolve([]),
+    );
+
+    const resultPromise = service["refreshSource"](items, new Map(), read);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(read).toHaveBeenCalledTimes(9);
+    liberarPrimero?.();
+    expect((await resultPromise).links).toBe(9);
   });
 });
 
