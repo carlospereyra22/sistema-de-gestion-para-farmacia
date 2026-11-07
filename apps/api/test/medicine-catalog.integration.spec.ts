@@ -311,9 +311,10 @@ describe("base de medicamentos en esquema aislado", () => {
     const fetchMock = jest.fn().mockRejectedValue(new Error("caída"));
     global.fetch = fetchMock as unknown as typeof fetch;
     const { remedies: result } = await service.refreshLinkedSources();
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    // Los enlaces ya iniciados terminan aunque el quinto fallo detenga nuevas consultas.
+    expect(fetchMock).toHaveBeenCalledTimes(7);
     expect(result).toEqual(
-      expect.objectContaining({ failedLinks: 5, stopped: true, updated: 0 }),
+      expect.objectContaining({ failedLinks: 7, stopped: true, updated: 0 }),
     );
     expect(
       await db.medicineCatalogItem.count({ where: { priceMinor: 900000n } }),
