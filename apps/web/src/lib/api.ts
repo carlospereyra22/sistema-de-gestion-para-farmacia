@@ -108,8 +108,23 @@ export async function logout(): Promise<void> {
   });
 }
 
+export async function changeOwnPassword(
+  token: string,
+  input: { currentPassword: string; newPassword: string },
+): Promise<{ revokedSessions: number }> {
+  const response = await fetch(`${apiBaseUrl}/auth/change-password`, {
+    method: "POST",
+    headers: authJson(token),
+    body: JSON.stringify(input),
+  });
+  if (!response.ok)
+    throw await responseError(response, "No se pudo cambiar la contraseña.");
+  return (await response.json()) as { revokedSessions: number };
+}
+
 export type CurrentUserProfile = {
   email: string;
+  mustChangePassword?: boolean;
   organizations: {
     organizationId: string;
     displayName?: string | null;

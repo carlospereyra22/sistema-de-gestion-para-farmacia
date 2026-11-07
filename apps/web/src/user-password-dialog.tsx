@@ -44,7 +44,7 @@ export function UserPasswordDialog({
     try {
       await resetUserPassword(token, organizationId, user.user.id, password);
       onDone(
-        `Contraseña restablecida para ${user.user.email}. Sus sesiones abiertas se cerraron.`,
+        `Contraseña restablecida para ${user.user.email}. Sus sesiones abiertas se cerraron y va a tener que cambiarla al entrar.`,
       );
       onClose();
     } catch (cause) {
@@ -139,7 +139,7 @@ export function UserPasswordDialog({
           <p className="mt-3 text-xs text-slate-500">
             Mínimo {MIN_LENGTH} caracteres. Al guardar se cierran las sesiones
             abiertas de este usuario. Pasale la contraseña en persona o por un
-            medio seguro.
+            medio seguro: al entrar va a tener que cambiarla por una propia.
           </p>
           {error && (
             <p role="alert" className="mt-3 text-sm text-red-700">

@@ -251,7 +251,10 @@ export class UsersService {
           "Este usuario también ingresa a otra farmacia. Pedí el cambio a soporte.",
         );
       const now = new Date();
-      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, mustChangePassword: true },
+      });
       const revoked = await tx.authSession.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: now },

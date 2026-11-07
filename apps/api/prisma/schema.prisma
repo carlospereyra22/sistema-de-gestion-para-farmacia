@@ -549,6 +549,7 @@ model User {
   email         String             @unique
   passwordHash  String
   active        Boolean            @default(true)
+  mustChangePassword Boolean       @default(false)
   createdAt     DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime           @updatedAt @db.Timestamptz(6)
   organizations UserOrganization[]

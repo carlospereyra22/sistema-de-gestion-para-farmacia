@@ -6,7 +6,7 @@
 
 Una organizacion tiene muchas sucursales. La base impone unicidad de `(organizationId, code)` e indice sobre `organizationId`; por lo tanto el mismo codigo puede existir en organizaciones distintas.
 
-Fase 1 agrega `User`, `UserOrganization`, `UserBranch`, `Role`, `Permission`, `RolePermission`, `UserOrganizationRole` y `AuthSession`. Un usuario puede pertenecer a varias organizaciones y tener varias sucursales dentro de ellas. Los roles se asignan a su membership organizacional, nunca de forma global.
+Fase 1 agrega `User`, `UserOrganization`, `UserBranch`, `Role`, `Permission`, `RolePermission`, `UserOrganizationRole` y `AuthSession`. Un usuario puede pertenecer a varias organizaciones y tener varias sucursales dentro de ellas. Los roles se asignan a su membership organizacional, nunca de forma global. `User.mustChangePassword` (por defecto falso) obliga a cambiar la contraseña antes de operar.
 
 `AuthSession` conserva solamente el hash del refresh token, su vencimiento y la revocacion. Las contrasenas se almacenan como hashes Argon2id. La definicion esta en `apps/api/prisma/schema.prisma`; las migraciones `20260817193337_init_organization_branch` y `20260817200151_add_authentication_authorization` estan aplicadas en PostgreSQL local.
 
