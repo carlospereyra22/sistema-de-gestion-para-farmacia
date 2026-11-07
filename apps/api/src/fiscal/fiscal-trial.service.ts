@@ -14,6 +14,13 @@ import {
   type ArcaAccess,
 } from "./arca-connection.service";
 import { ArcaSoap, arcaMessages, obj, str } from "./arca-soap";
+import {
+  ESPERA_PARA_LIBERAR_MS,
+  comprobanteInexistente,
+  decidirIncierto,
+  minutosRestantes,
+  ultimoAutorizado,
+} from "./resolucion-incierta";
 
 export function argentinaDate(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -207,7 +214,9 @@ export class FiscalTrialService {
         actor,
         numbered,
         "UNCERTAIN",
-        "No se confirmó el resultado. Consultá ARCA antes de intentar otra prueba.",
+        arcaMessages(response)
+          ? `ARCA respondió: ${arcaMessages(response).slice(0, 700)}. Consultá el resultado en 10 minutos antes de intentar otra prueba.`
+          : "No se confirmó el resultado. Consultá ARCA antes de intentar otra prueba.",
       );
     } catch (error) {
       return this.finish(
@@ -313,12 +322,92 @@ export class FiscalTrialService {
         str(result.CodAutorizacion),
         str(result.FchVto),
       );
-    return this.finish(
-      actor,
-      trial,
-      "UNCERTAIN",
-      arcaMessages(response) ||
-        "ARCA no confirmó una coincidencia. No se reenvía ni se libera la numeración automáticamente; requiere revisión.",
-    );
+    const esperaMs = Date.now() - trial.updatedAt.getTime();
+    const consultaInexistente = comprobanteInexistente(response);
+    const ultimo =
+      consultaInexistente && esperaMs >= ESPERA_PARA_LIBERAR_MS
+        ? ultimoAutorizado(
+            await this.soap.call(
+              "wsfe",
+              "FECompUltimoAutorizado",
+              `${authXml(access)}<PtoVta>${trial.point}</PtoVta><CbteTipo>${trial.voucherType}</CbteTipo>`,
+            ),
+            trial.point,
+            trial.voucherType,
+          )
+        : null;
+    if (
+      decidirIncierto({
+        esperaMs,
+        consultaInexistente,
+        ultimoAutorizado: ultimo,
+        numeroReservado: trial.number,
+      }) === "NO_EMITIDO"
+    )
+      return this.finish(
+        actor,
+        trial,
+        "REJECTED",
+        trial.sourceSaleId
+          ? `No llegó a ARCA: el número ${trial.number} no se usó. Podés volver a emitir la factura.`
+          : `No llegó a ARCA: el número ${trial.number} no se usó. Podés emitir otra prueba.`,
+      );
+    const detail = consultaInexistente
+      ? `ARCA todavía no muestra el comprobante ${trial.number}. Volvé a consultar en ${minutosRestantes(esperaMs)} min; si sigue sin aparecer, se libera el número.`
+      : arcaMessages(response) ||
+        "ARCA no confirmó una coincidencia. No se reenvía ni se libera la numeración automáticamente; requiere revisión.";
+    // Sin novedades no se toca el registro: así no se reinicia la espera.
+    if (trial.status === "UNCERTAIN") return { ...trial, detail };
+    return this.finish(actor, trial, "UNCERTAIN", detail);
+  }
+  /** Vuelve a poner en cola la factura de prueba rechazada de una venta. */
+  async requeue(actor: string, org: string, branch: string, saleId: string) {
+    await this.organizations.authorizeFiscalSale(actor, org);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${saleId}::uuid FOR UPDATE`;
+      const sale = await tx.sale.findFirst({
+        where: { id: saleId, organizationId: org, branchId: branch },
+        include: { fiscalTrial: true },
+      });
+      if (!sale?.fiscalTrial)
+        throw new BadRequestException(
+          "La venta no tiene una factura de homologación.",
+        );
+      if (sale.status !== "COMPLETED")
+        throw new BadRequestException(
+          "La venta está anulada; no se vuelve a emitir su factura.",
+        );
+      const trial = sale.fiscalTrial;
+      if (trial.status !== "REJECTED")
+        throw new ConflictException(
+          "Sólo se puede volver a emitir una factura rechazada o que no llegó a ARCA.",
+        );
+      await tx.fiscalTrial.update({
+        where: { id: trial.id },
+        data: {
+          status: "QUEUED",
+          number: null,
+          cae: null,
+          caeExpires: null,
+          detail: null,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: org,
+          branchId: branch,
+          actorId: actor,
+          entityType: "FISCAL_TRIAL",
+          entityId: trial.id,
+          action: "REENCOLADO",
+          before: {
+            status: trial.status,
+            number: trial.number,
+            detail: trial.detail,
+          },
+          after: { status: "QUEUED", environment: "HOMOLOGATION" },
+        },
+      });
+    });
   }
 }

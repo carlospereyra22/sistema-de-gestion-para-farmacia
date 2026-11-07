@@ -1,4 +1,10 @@
-import { ArcaSoap, parseXml, escapeXml, signedLogin } from "./arca-soap";
+import {
+  ArcaSoap,
+  communicationHint,
+  parseXml,
+  escapeXml,
+  signedLogin,
+} from "./arca-soap";
 import { argentinaDate, trialBody } from "./fiscal-trial.service";
 import { createCertificateRequest } from "./certificate-files";
 import * as forge from "node-forge";
@@ -48,6 +54,39 @@ describe("ARCA homologation transport", () => {
         "PRODUCTION",
       ),
     ).rejects.toThrow("ARCA producción. No se emitió ningún comprobante");
+  });
+  it("con la emisión apagada permite consultar el último número, pero nunca emitir", async () => {
+    const previous = process.env.FISCAL_PRODUCTION_ISSUANCE;
+    delete process.env.FISCAL_PRODUCTION_ISSUANCE;
+    try {
+      const production = jest
+        .spyOn(productionTransport, "postProductionWsfe")
+        .mockResolvedValue(
+          '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><FECompUltimoAutorizadoResponse><FECompUltimoAutorizadoResult><PtoVta>3</PtoVta><CbteTipo>11</CbteTipo><CbteNro>41</CbteNro></FECompUltimoAutorizadoResult></FECompUltimoAutorizadoResponse></soap:Body></soap:Envelope>',
+        );
+      await expect(
+        new ArcaSoap().call(
+          "wsfe",
+          "FECompUltimoAutorizado",
+          "<Auth/>",
+          "PRODUCTION",
+        ),
+      ).resolves.toMatchObject({ CbteNro: "41" });
+      await expect(
+        new ArcaSoap().call("wsfe", "FECAESolicitar", "<Auth/>", "PRODUCTION"),
+      ).rejects.toThrow("no está habilitada");
+      expect(production).toHaveBeenCalledTimes(1);
+    } finally {
+      if (previous === undefined) delete process.env.FISCAL_PRODUCTION_ISSUANCE;
+      else process.env.FISCAL_PRODUCTION_ISSUANCE = previous;
+    }
+  });
+  it("sólo pide no repetir cuando se cortó el envío de la factura", () => {
+    expect(communicationHint("FECAESolicitar")).toContain("No repitas");
+    expect(communicationHint("FECompUltimoAutorizado")).toContain(
+      "No se emitió ningún comprobante",
+    );
+    expect(communicationHint("FECompConsultar")).toContain("Volvé a consultar");
   });
   it("rejects entities/DTD and malformed XML, keeps numbers as strings", () => {
     expect(() =>

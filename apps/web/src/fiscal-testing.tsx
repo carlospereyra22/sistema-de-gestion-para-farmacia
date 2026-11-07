@@ -6,6 +6,7 @@ import {
   type FiscalTrial,
 } from "./lib/api";
 import { printTicketFrame } from "./lib/browser-ticket-print";
+import { ProductFilterSelect } from "./product-filter-select";
 
 const money = (minor: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
@@ -109,26 +110,28 @@ export function FiscalTesting({
       {connection && (
         <div className="mt-4 rounded-xl border bg-white p-4">
           {connection.points.length > 0 ? (
-            <label className="block text-sm">
-              Punto de venta habilitado por ARCA
-              <select
+            <div className="text-sm">
+              <p className="mb-1">Punto de venta habilitado por ARCA</p>
+              <ProductFilterSelect
+                compact
+                label="Punto de venta habilitado por ARCA"
+                icon={null}
                 disabled={busy}
                 value={point}
-                onChange={(e) => {
-                  setPoint(e.target.value);
+                options={[
+                  { value: "", label: "Seleccionar punto de venta" },
+                  ...connection.points.map((p) => ({
+                    value: String(p.number),
+                    label: String(p.number).padStart(5, "0"),
+                  })),
+                ]}
+                onChange={(value) => {
+                  setPoint(value);
                   setConfirmed(false);
                   requestId.current = undefined;
                 }}
-                className="mt-1 block w-full rounded-lg border p-3"
-              >
-                <option value="">Seleccionar punto de venta</option>
-                {connection.points.map((p) => (
-                  <option key={p.number} value={p.number}>
-                    {String(p.number).padStart(5, "0")}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
           ) : (
             <label className="block text-sm">
               Número de punto para la prueba (no crea un punto real)

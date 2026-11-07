@@ -3,14 +3,22 @@ import { IsIn, IsString, Matches, MaxLength } from "class-validator";
 
 export class FiscalProfileDto {
   @IsString() @MaxLength(160) legalName!: string;
-  @IsString() @Matches(/^(?:\d{11})?$/) cuit!: string;
+  @IsString()
+  @Matches(/^(?:\d{11})?$/, {
+    message: "Revisá el CUIT: deben ser 11 números, sin guiones.",
+  })
+  cuit!: string;
   @IsIn(["", "REGISTERED", "MONOTAX", "EXEMPT"]) vatCondition!: string;
   @IsString() @MaxLength(200) address!: string;
   @IsString() @MaxLength(100) city!: string;
   @IsString() @MaxLength(100) province!: string;
   @IsString() @MaxLength(20) postalCode!: string;
   @IsString() @MaxLength(60) grossIncomeId!: string;
-  @IsString() @Matches(/^(?:\d{4}-\d{2}-\d{2})?$/) activityStart!: string;
+  @IsString()
+  @Matches(/^(?:\d{4}-\d{2}-\d{2})?$/, {
+    message: "La fecha de inicio de actividades no es válida.",
+  })
+  activityStart!: string;
 }
 
 export function readFiscalProfile(value: unknown): FiscalProfileDto {

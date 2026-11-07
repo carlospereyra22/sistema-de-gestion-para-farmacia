@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FiscalCertificateSetup } from "./fiscal-certificate-setup";
+import { ProductFilterSelect } from "./product-filter-select";
 import {
   checkProductionConnection,
   getBranches,
@@ -166,40 +167,41 @@ export function FiscalProductionSetup({
               }}
             >
               <h4 className="font-semibold">5. Activar facturación real</h4>
-              <label className="mt-3 block text-sm">
-                Sucursal
-                <select
-                  required
+              <div className="mt-3 text-sm">
+                <p className="mb-1">Sucursal</p>
+                <ProductFilterSelect
+                  compact
+                  label="Sucursal"
+                  icon={null}
+                  disabled={busy}
                   value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  className="mt-1 block w-full rounded border p-2"
-                >
-                  <option value="">Elegí una sucursal</option>
-                  {branches
-                    .filter((b) => b.active)
-                    .map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="mt-3 block text-sm">
-                Punto de venta productivo
-                <select
-                  required
+                  options={[
+                    { value: "", label: "Elegí una sucursal" },
+                    ...branches
+                      .filter((b) => b.active)
+                      .map((b) => ({ value: b.id, label: b.name })),
+                  ]}
+                  onChange={setBranch}
+                />
+              </div>
+              <div className="mt-3 text-sm">
+                <p className="mb-1">Punto de venta productivo</p>
+                <ProductFilterSelect
+                  compact
+                  label="Punto de venta productivo"
+                  icon={null}
+                  disabled={busy}
                   value={point}
-                  onChange={(e) => setPoint(e.target.value)}
-                  className="mt-1 block w-full rounded border p-2"
-                >
-                  <option value="">Elegí un punto verificado</option>
-                  {points.map((p) => (
-                    <option key={p.number} value={p.number}>
-                      {String(p.number).padStart(5, "0")}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  options={[
+                    { value: "", label: "Elegí un punto verificado" },
+                    ...points.map((p) => ({
+                      value: String(p.number),
+                      label: String(p.number).padStart(5, "0"),
+                    })),
+                  ]}
+                  onChange={setPoint}
+                />
+              </div>
               <label className="mt-3 flex gap-2 text-sm">
                 <input
                   required
@@ -212,7 +214,7 @@ export function FiscalProductionSetup({
               </label>
               <button
                 type="submit"
-                disabled={busy || !exclusive}
+                disabled={busy || !exclusive || !branch || !point}
                 className="mt-3 rounded bg-teal-700 px-4 py-2 text-white disabled:opacity-50"
               >
                 Activar producción

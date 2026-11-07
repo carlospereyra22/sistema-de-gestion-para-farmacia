@@ -214,6 +214,16 @@ export class SalesController {
   ) {
     return this.sales.invoice(req.auth!.sub, org, branch, id, true);
   }
+  @AllowWhenReadOnly()
+  @Post(":saleId/invoice/reencolar")
+  requeueInvoice(
+    @Req() req: AuthenticatedRequest,
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Param("saleId", ParseUUIDPipe) id: string,
+  ) {
+    return this.sales.requeueInvoice(req.auth!.sub, org, branch, id);
+  }
   @AllowOwnerWhenBlocked()
   @Get(":saleId/ticket")
   ticket(
