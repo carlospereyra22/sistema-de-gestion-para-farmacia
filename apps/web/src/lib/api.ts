@@ -125,6 +125,7 @@ export async function changeOwnPassword(
 export type CurrentUserProfile = {
   email: string;
   mustChangePassword?: boolean;
+  isPlatformAdmin?: boolean;
   organizations: {
     organizationId: string;
     displayName?: string | null;

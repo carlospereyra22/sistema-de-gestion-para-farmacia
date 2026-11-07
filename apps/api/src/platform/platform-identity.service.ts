@@ -75,11 +75,20 @@ export class PlatformIdentityService {
     return this.verifyCode(userId, sessionId, code, false);
   }
 
-  audit() {
-    return this.prisma.platformAuditLog.findMany({
+  async audit() {
+    const rows = await this.prisma.platformAuditLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
     });
+    const actors = await this.prisma.user.findMany({
+      where: { id: { in: rows.flatMap(({ actorId }) => actorId ?? []) } },
+      select: { id: true, email: true },
+    });
+    const emails = new Map(actors.map(({ id, email }) => [id, email]));
+    return rows.map((row) => ({
+      ...row,
+      actorEmail: row.actorId ? (emails.get(row.actorId) ?? null) : null,
+    }));
   }
 
   private async verifyCode(
