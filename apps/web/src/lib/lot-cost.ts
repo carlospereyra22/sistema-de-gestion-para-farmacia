@@ -1,4 +1,6 @@
-export function lotCostInput(minor: string): string {
+/** Sin costo (sin permiso para verlo) el campo arranca vacío. */
+export function lotCostInput(minor: string | undefined): string {
+  if (minor === undefined) return "";
   const amount = BigInt(minor);
   return `${amount / 100n},${String(amount % 100n).padStart(2, "0")}`;
 }

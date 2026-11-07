@@ -72,6 +72,8 @@ describe("purchase receipts on an isolated synthetic schema", () => {
         "PARTY_MANAGE",
         "INVENTORY_READ",
         "INVENTORY_MANAGE",
+        // Revisa los costos de cada recepción.
+        "COST_READ",
       ].map((code) =>
         first.permission.upsert({
           where: { code },

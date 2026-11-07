@@ -68,7 +68,7 @@ describe("dashboard summary series", () => {
         "org",
         "branch",
       ),
-    ).rejects.toThrow("permission");
+    ).rejects.toThrow("No tenés permiso");
     expect(aggregate).not.toHaveBeenCalled();
   });
 });

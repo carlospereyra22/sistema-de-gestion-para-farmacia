@@ -180,6 +180,10 @@ export class InventoryService {
 
   async stock(actorId: string, organizationId: string, branchId: string) {
     await this.assert(actorId, organizationId, "INVENTORY_READ");
+    // El costo lo ve solo quien tiene permiso: el mostrador consulta stock sin costos.
+    const seesCosts = (await this.permissionCodes(actorId, organizationId)).has(
+      "COST_READ",
+    );
     await this.branch(organizationId, branchId);
     const lots = await this.prisma.productLot.findMany({
       where: { organizationId, branchId, quantity: { gt: 0 } },
@@ -219,11 +223,11 @@ export class InventoryService {
       suppliers.map((supplier) => [supplier.id, supplier.name]),
     );
     const activeSuppliers = new Set(supplierNames.keys());
-    return lots.map((lot) => ({
+    return lots.map(({ unitCostMinor, ...lot }) => ({
       ...lot,
       ...stockAvailability(lot),
       productName: names.get(lot.productId) ?? "Producto eliminado",
-      unitCostMinor: lot.unitCostMinor.toString(),
+      ...(seesCosts ? { unitCostMinor: unitCostMinor.toString() } : {}),
       ...lotSupplierStock(
         lotReturnableStock(breakdowns.get(lot.id)!, activeSuppliers),
         supplierNames,
@@ -234,7 +238,7 @@ export class InventoryService {
   // Sólo lectura de costos: lo que se pagó en cada recepción y el último costo
   // de cada producto en la sucursal.
   async costs(actorId: string, organizationId: string, branchId: string) {
-    await this.assert(actorId, organizationId, "INVENTORY_READ");
+    await this.assert(actorId, organizationId, "COST_READ");
     await this.branch(organizationId, branchId);
     const [movements, lots] = await Promise.all([
       this.prisma.inventoryMovement.findMany({
@@ -746,7 +750,7 @@ export class InventoryService {
     if (!branch) throw new NotFoundException("Branch is unavailable.");
   }
 
-  private async assert(actorId: string, organizationId: string, code: string) {
+  private async permissionCodes(actorId: string, organizationId: string) {
     const membership = await this.prisma.userOrganization.findUnique({
       where: { userId_organizationId: { userId: actorId, organizationId } },
       include: {
@@ -759,12 +763,18 @@ export class InventoryService {
         },
       },
     });
-    if (
-      !membership?.active ||
-      !membership.roles.some(({ role }) =>
-        role.permissions.some(({ permission }) => permission.code === code),
-      )
-    )
-      throw new ForbiddenException("You do not have the required permission.");
+    if (!membership?.active) return new Set<string>();
+    return new Set(
+      membership.roles.flatMap(({ role }) =>
+        role.permissions.map(({ permission }) => permission.code),
+      ),
+    );
+  }
+
+  private async assert(actorId: string, organizationId: string, code: string) {
+    if (!(await this.permissionCodes(actorId, organizationId)).has(code))
+      throw new ForbiddenException(
+        "No tenés permiso para esta operación. Pedíselo al dueño de la farmacia.",
+      );
   }
 }

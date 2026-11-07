@@ -207,6 +207,10 @@ import { ProductFormSection } from "./product-form-section";
 import { StatusToast } from "./status-toast";
 import { UserPasswordDialog } from "./user-password-dialog";
 import { OperationHistory } from "./operation-history";
+import {
+  canOpenAdministrationTab,
+  canOpenView,
+} from "./lib/workspace-permissions";
 import { SubscriptionNoticeChip } from "./subscription-gate";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
 import { salesShortcut, type SalesShortcut } from "./lib/sales-shortcuts";
@@ -389,6 +393,7 @@ const permissionGroups: {
     permissions: [
       ["INVENTORY_READ", "Ver inventario"],
       ["INVENTORY_MANAGE", "Recibir y ajustar stock"],
+      ["COST_READ", "Ver costos de los productos"],
       ["SALE_READ", "Ver ventas e historial"],
       ["SALE_MANAGE", "Registrar ventas, anulaciones y devoluciones"],
       ["CASH_READ", "Ver caja y movimientos"],
@@ -464,8 +469,12 @@ export function WorkspaceShell({
 }): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const sidebar = useWorkspaceSidebar();
-  const { view, administrationTab, organizationTab, salesScreen } =
-    readWorkspaceLocation(searchParams);
+  const location = readWorkspaceLocation(searchParams);
+  // Una pantalla sin permiso se reemplaza por Inicio, también si llega por la dirección.
+  const view = canOpenView(location.view, permissionCodes)
+    ? location.view
+    : "Inicio";
+  const { administrationTab, organizationTab, salesScreen } = location;
   useLayoutEffect(() => {
     const previous = window.history.scrollRestoration;
     window.history.scrollRestoration = "manual";
@@ -889,62 +898,73 @@ export function WorkspaceShell({
             OPERACIÓN
           </p>
           <nav aria-label="Operación de farmacia" className="space-y-1">
-            {views.map(({ name, icon: Icon }) => {
-              const active = view === name;
-              return (
-                <button
-                  key={name}
-                  aria-label={name}
-                  onClick={() => setPage(name)}
-                  className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-[#cce8de] bg-[#e9f8f3] font-semibold text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-[#f5f8fa] hover:text-slate-800"}`}
-                >
-                  <span
-                    className={`grid size-6 shrink-0 place-items-center rounded-md ${active ? "bg-white text-[#087f70] shadow-sm" : "text-slate-500"}`}
+            {views
+              .filter(({ name }) => canOpenView(name, permissionCodes))
+              .map(({ name, icon: Icon }) => {
+                const active = view === name;
+                return (
+                  <button
+                    key={name}
+                    aria-label={name}
+                    onClick={() => setPage(name)}
+                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-[#cce8de] bg-[#e9f8f3] font-semibold text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-[#f5f8fa] hover:text-slate-800"}`}
                   >
-                    <Icon className="size-4" />
-                  </span>
-                  <span>{name}</span>
-                </button>
-              );
-            })}
+                    <span
+                      className={`grid size-6 shrink-0 place-items-center rounded-md ${active ? "bg-white text-[#087f70] shadow-sm" : "text-slate-500"}`}
+                    >
+                      <Icon className="size-4" />
+                    </span>
+                    <span>{name}</span>
+                  </button>
+                );
+              })}
           </nav>
-          <p className="mt-8 px-3 pb-3 text-xs font-semibold tracking-wide text-slate-600">
-            ADMINISTRACIÓN
-          </p>
+          {(canOpenView("Administración", permissionCodes) ||
+            canOpenView("Organización", permissionCodes)) && (
+            <p className="mt-8 px-3 pb-3 text-xs font-semibold tracking-wide text-slate-600">
+              ADMINISTRACIÓN
+            </p>
+          )}
           <nav aria-label="Administración" className="space-y-1">
-            <button
-              type="button"
-              onClick={() => openAdministration("users")}
-              aria-label="Usuarios"
-              className={administrationButtonClass("users")}
-            >
-              <span className="grid size-6 shrink-0 place-items-center text-current">
-                <Users className="size-4" />
-              </span>
-              <span>Usuarios</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => openAdministration("roles")}
-              aria-label="Roles y permisos"
-              className={administrationButtonClass("roles")}
-            >
-              <span className="grid size-6 shrink-0 place-items-center text-current">
-                <ShieldCheck className="size-4" />
-              </span>
-              <span>Roles y permisos</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage("Organización")}
-              aria-label="Organización"
-              className={administrationButtonClass("branches")}
-            >
-              <span className="grid size-6 shrink-0 place-items-center text-current">
-                <Settings className="size-4" />
-              </span>
-              <span>Organización</span>
-            </button>
+            {canOpenAdministrationTab("users", permissionCodes) && (
+              <button
+                type="button"
+                onClick={() => openAdministration("users")}
+                aria-label="Usuarios"
+                className={administrationButtonClass("users")}
+              >
+                <span className="grid size-6 shrink-0 place-items-center text-current">
+                  <Users className="size-4" />
+                </span>
+                <span>Usuarios</span>
+              </button>
+            )}
+            {canOpenAdministrationTab("roles", permissionCodes) && (
+              <button
+                type="button"
+                onClick={() => openAdministration("roles")}
+                aria-label="Roles y permisos"
+                className={administrationButtonClass("roles")}
+              >
+                <span className="grid size-6 shrink-0 place-items-center text-current">
+                  <ShieldCheck className="size-4" />
+                </span>
+                <span>Roles y permisos</span>
+              </button>
+            )}
+            {canOpenView("Organización", permissionCodes) && (
+              <button
+                type="button"
+                onClick={() => setPage("Organización")}
+                aria-label="Organización"
+                className={administrationButtonClass("branches")}
+              >
+                <span className="grid size-6 shrink-0 place-items-center text-current">
+                  <Settings className="size-4" />
+                </span>
+                <span>Organización</span>
+              </button>
+            )}
           </nav>
         </NavigationRail>
         <section
@@ -1040,6 +1060,8 @@ export function WorkspaceShell({
               organizationId={organizationId!}
               products={products}
               stock={stock}
+              canManage={permissionCodes.includes("CATALOG_MANAGE")}
+              canSeeCosts={permissionCodes.includes("COST_READ")}
               done={() => void refresh()}
               error={setMessage}
             />
@@ -1113,6 +1135,7 @@ export function WorkspaceShell({
               cashChoiceRequired={openSessions.length > 1 && !saleSession}
               salesScreen={salesScreen}
               onSalesScreenChange={setSalesScreen}
+              canSeeCosts={permissionCodes.includes("COST_READ")}
               done={() => void refresh()}
               error={setMessage}
             />
@@ -1625,11 +1648,17 @@ function Products({
   initialNewProduct,
   onSaved,
   onEditorClose,
+  canManage = true,
+  canSeeCosts = true,
 }: {
   token: string;
   organizationId: string;
   products: CatalogProduct[];
   knownProducts?: CatalogProduct[];
+  /** Sin permiso de catálogo no se ofrecen alta, edición ni bajas. */
+  canManage?: boolean;
+  /** Sin permiso para ver costos no se pide ni se muestra el costo. */
+  canSeeCosts?: boolean;
   stock: StockLot[];
   done: () => void;
   error: (value: string) => void;
@@ -1763,6 +1792,7 @@ function Products({
     };
   }, [token, organizationId, priceListFilter, products]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (!canSeeCosts) return;
     let current = true;
     void getInventoryCosts(token, organizationId, branchId)
       .then((next) => {
@@ -1773,7 +1803,9 @@ function Products({
     return () => {
       current = false;
     };
-  }, [token, organizationId, branchId, stock]);
+  }, [token, organizationId, branchId, stock, canSeeCosts]);
+  // Columnas de la tabla: las de costo y acciones dependen del permiso.
+  const productColumns = 9 + (canSeeCosts ? 1 : 0) + (canManage ? 1 : 0);
   const [additionalFilters, setAdditionalFilters] = useState(
     emptyCatalogAdditionalFilters,
   );
@@ -1897,7 +1929,13 @@ function Products({
     [token, organizationId],
   );
   useEffect(() => {
-    void ensureDefaultCatalogCategories(token, organizationId)
+    // Preparar las categorías por defecto es administrar el catálogo: quien solo
+    // consulta carga las opciones existentes.
+    void (
+      canManage
+        ? ensureDefaultCatalogCategories(token, organizationId)
+        : Promise.resolve()
+    )
       .then(() => getCatalogOptions(token, organizationId))
       .then(setOptions)
       .catch((cause: unknown) =>
@@ -1907,7 +1945,7 @@ function Products({
             : "No se pudieron cargar las opciones.",
         ),
       );
-  }, [organizationId, token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [organizationId, token, canManage]); // eslint-disable-line react-hooks/exhaustive-deps
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (imageBusy || productSaveLock.current || optionCreateLock.current)
@@ -2722,17 +2760,19 @@ function Products({
                   setExpiryFilter(next.expiry);
                 }}
               />
-              <button
-                type="button"
-                onClick={() => {
-                  clearForm();
-                  setFormOpen(true);
-                }}
-                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-b from-teal-600 to-teal-700 px-4 text-xs font-semibold text-white shadow-sm hover:from-teal-700 hover:to-teal-800"
-              >
-                <Plus size={17} />
-                Nuevo producto
-              </button>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearForm();
+                    setFormOpen(true);
+                  }}
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-b from-teal-600 to-teal-700 px-4 text-xs font-semibold text-white shadow-sm hover:from-teal-700 hover:to-teal-800"
+                >
+                  <Plus size={17} />
+                  Nuevo producto
+                </button>
+              )}
             </div>
             <ProductCatalogToolbar
               priceLists={selectablePriceLists}
@@ -2780,14 +2820,18 @@ function Products({
                 { label: "Producto" },
                 { label: "Código de barras" },
                 { label: "Laboratorio" },
-                {
-                  label: "Costo",
-                  align: "right",
-                  hint: {
-                    title: "Costo",
-                    text: "Lo que se pagó en la última recepción del producto, sea del lote que sea.",
-                  },
-                },
+                ...(canSeeCosts
+                  ? [
+                      {
+                        label: "Costo",
+                        align: "right" as const,
+                        hint: {
+                          title: "Costo",
+                          text: "Lo que se pagó en la última recepción del producto, sea del lote que sea.",
+                        },
+                      },
+                    ]
+                  : []),
                 {
                   label: `VNT (${selectedPriceList?.name ?? "Público"})`,
                   align: "right",
@@ -2803,7 +2847,9 @@ function Products({
                 },
                 { label: "Próx. venc." },
                 { label: "Estado" },
-                { label: "Acciones", align: "right" },
+                ...(canManage
+                  ? [{ label: "Acciones", align: "right" as const }]
+                  : []),
               ]}
               footer={
                 <Pagination
@@ -2927,11 +2973,13 @@ function Products({
                       <DataTableCell>
                         {product.laboratory?.name ?? "—"}
                       </DataTableCell>
-                      <DataTableCell align="right" numeric>
-                        {lastCosts.has(product.id)
-                          ? money(lastCosts.get(product.id)!)
-                          : "—"}
-                      </DataTableCell>
+                      {canSeeCosts && (
+                        <DataTableCell align="right" numeric>
+                          {lastCosts.has(product.id)
+                            ? money(lastCosts.get(product.id)!)
+                            : "—"}
+                        </DataTableCell>
+                      )}
                       <DataTableCell align="right" numeric>
                         {!priceListFilter
                           ? money(product.prices[0]?.amountMinor ?? 0)
@@ -3009,56 +3057,61 @@ function Products({
                           </span>
                         ) : null}
                       </DataTableCell>
-                      <DataTableCell align="right">
-                        <span className="inline-flex gap-1.5">
-                          <RowIconAction
-                            tone="edit"
-                            label={`Editar ${product.name}`}
-                            title="Editar producto"
-                            onClick={() => edit(product)}
-                          >
-                            <Pencil size={16} />
-                          </RowIconAction>
-                          <RowIconAction
-                            tone="neutral"
-                            label={`${product.active ? "Archivar" : "Restaurar"} ${product.name}`}
-                            title={product.active ? "Archivar" : "Restaurar"}
-                            onClick={() => toggleProductActive(product)}
-                          >
-                            {product.active ? (
-                              <Archive size={16} />
-                            ) : (
-                              <ArchiveRestore size={16} />
-                            )}
-                          </RowIconAction>
-                          <RowIconAction
-                            tone="danger"
-                            label={`${product.active ? "Eliminar definitivamente" : "Eliminar de esta sucursal"} ${product.name}`}
-                            title={
-                              product.active
-                                ? "Eliminar definitivamente"
-                                : "Eliminar de esta sucursal"
-                            }
-                            onClick={() => remove(product)}
-                          >
-                            <Trash2 size={16} />
-                          </RowIconAction>
-                        </span>
-                      </DataTableCell>
+                      {canManage && (
+                        <DataTableCell align="right">
+                          <span className="inline-flex gap-1.5">
+                            <RowIconAction
+                              tone="edit"
+                              label={`Editar ${product.name}`}
+                              title="Editar producto"
+                              onClick={() => edit(product)}
+                            >
+                              <Pencil size={16} />
+                            </RowIconAction>
+                            <RowIconAction
+                              tone="neutral"
+                              label={`${product.active ? "Archivar" : "Restaurar"} ${product.name}`}
+                              title={product.active ? "Archivar" : "Restaurar"}
+                              onClick={() => toggleProductActive(product)}
+                            >
+                              {product.active ? (
+                                <Archive size={16} />
+                              ) : (
+                                <ArchiveRestore size={16} />
+                              )}
+                            </RowIconAction>
+                            <RowIconAction
+                              tone="danger"
+                              label={`${product.active ? "Eliminar definitivamente" : "Eliminar de esta sucursal"} ${product.name}`}
+                              title={
+                                product.active
+                                  ? "Eliminar definitivamente"
+                                  : "Eliminar de esta sucursal"
+                              }
+                              onClick={() => remove(product)}
+                            >
+                              <Trash2 size={16} />
+                            </RowIconAction>
+                          </span>
+                        </DataTableCell>
+                      )}
                     </DataTableRow>
                     {lotsOpen ? (
-                      <DataTableDetailRow id={lotsId} colSpan={11}>
+                      <DataTableDetailRow id={lotsId} colSpan={productColumns}>
                         <ProductLotsDetail
                           productName={product.name}
                           lots={shownLots}
                           hidden={hiddenLots}
-                          receipts={(lot) =>
-                            lotReceiptRows(
-                              lotCosts.get(lot.id),
-                              lot.unitCostMinor,
-                              lotAdjustments.get(lot.id),
-                              lotSupplierNames,
-                            )
+                          receipts={
+                            canSeeCosts
+                              ? (lot) =>
+                                  lotReceiptRows(
+                                    lotCosts.get(lot.id),
+                                    lot.unitCostMinor,
+                                    lotAdjustments.get(lot.id),
+                                    lotSupplierNames,
+                                  )
+                              : undefined
                           }
                         />
                       </DataTableDetailRow>
@@ -3067,7 +3120,7 @@ function Products({
                 );
               })}
               {!filteredProducts.length ? (
-                <DataTableEmpty colSpan={11}>
+                <DataTableEmpty colSpan={productColumns}>
                   No hay productos para los filtros seleccionados.
                 </DataTableEmpty>
               ) : null}
@@ -4904,6 +4957,7 @@ function Sales({
   onSalesScreenChange,
   done,
   error,
+  canSeeCosts = true,
 }: {
   active: boolean;
   onPendingChange: (pending: boolean) => void;
@@ -4920,6 +4974,7 @@ function Sales({
   onSalesScreenChange: (screen: "pos" | "history") => void;
   done: () => void;
   error: (value: string) => void;
+  canSeeCosts?: boolean;
 }): ReactElement {
   type ReceiptLine = {
     name: string;
@@ -6308,6 +6363,7 @@ function Sales({
                               lot.productId === line.productId &&
                               lot.sellableQuantity > 0,
                           )}
+                          showCosts={canSeeCosts}
                           price={unitPrice}
                           maximum={Number(product?.prices[0]?.amountMinor ?? 0)}
                           name={product?.name ?? "Producto"}

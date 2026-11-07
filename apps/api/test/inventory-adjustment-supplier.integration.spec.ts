@@ -61,7 +61,8 @@ describe("ajustes por proveedor en un esquema sintético aislado", () => {
       },
     });
     const permissions = await Promise.all(
-      ["INVENTORY_READ", "INVENTORY_MANAGE"].map((code) =>
+      // Revisa el historial de costos: necesita el permiso para verlos.
+      ["INVENTORY_READ", "INVENTORY_MANAGE", "COST_READ"].map((code) =>
         first.permission.upsert({
           where: { code },
           update: {},

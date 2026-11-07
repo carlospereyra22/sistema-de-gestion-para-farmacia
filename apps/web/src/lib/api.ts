@@ -1624,7 +1624,8 @@ export type StockLot = {
   number: string;
   quantity: number;
   expiresAt: string | null;
-  unitCostMinor: string;
+  /** Solo llega con permiso para ver costos. */
+  unitCostMinor?: string;
   packFactor?: number | null;
   packCount?: number;
   // quantity: lo que le queda en el lote, gastando primero lo más viejo. En 0

@@ -682,7 +682,9 @@ export class OrganizationsService {
       organizationId,
     );
     if (!codes.some((code) => permissions.has(code)))
-      throw new ForbiddenException("You do not have the required permission.");
+      throw new ForbiddenException(
+        "No tenés permiso para esta operación. Pedíselo al dueño de la farmacia.",
+      );
   }
 
   private async activePermissionCodes(
@@ -702,7 +704,9 @@ export class OrganizationsService {
       },
     });
     if (!membership?.active)
-      throw new ForbiddenException("You do not have the required permission.");
+      throw new ForbiddenException(
+        "No tenés permiso para esta operación. Pedíselo al dueño de la farmacia.",
+      );
     return new Set(
       membership.roles.flatMap(({ role }) =>
         role.permissions.map(({ permission }) => permission.code),

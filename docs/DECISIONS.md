@@ -2,6 +2,18 @@
 
 ## DECIDED
 
+- 07/11/2026 (SISTEMA-58, arreglos de la prueba): El menú muestra solo las pantallas cuyo
+  permiso de lectura tiene el rol, con el mismo permiso que pide la API al cargarlas
+  (`lib/workspace-permissions.ts`). Categorías y Listas de precios piden administrar el
+  catálogo, y Transferencias, administrar inventario. Una pantalla sin permiso pedida por la
+  dirección muestra Inicio. La API sigue siendo la autoridad: esto evita ofrecer lo que después
+  se rechaza. Al iniciar sesión con usuario y clave se entra siempre a Inicio; recargar la
+  página conserva la pantalla. Los costos de los productos tienen permiso propio
+  (`COST_READ`), controlado en la API: la consulta de stock no manda el costo y la de costos
+  se rechaza. Antes los veía cualquiera que consultaba stock; la migración se lo da a esos
+  roles, menos al Empleado, para que nadie pierda lo que veía. Las ganancias ya tenían el suyo
+  (`REPORT_PROFIT_READ`) y solo aparecen en Reportes.
+
 - 07/11/2026 (SISTEMA-58): El corte se aplica con un interceptor global y no con un guard por
   controller, para que ninguna ruta nueva quede afuera por olvido: lo exceptuado se marca, y un
   test fija la lista completa. Ante cualquier duda deja pasar, porque cortar a quien pagó es

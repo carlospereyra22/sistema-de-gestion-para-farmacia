@@ -265,6 +265,8 @@ export class TransfersService {
         ),
       )
     )
-      throw new ForbiddenException("You do not have permission.");
+      throw new ForbiddenException(
+        "No tenés permiso para esta operación. Pedíselo al dueño de la farmacia.",
+      );
   }
 }

@@ -4,7 +4,7 @@ import { parseDiscountDraft } from "./lib/discount-editor";
 import { isQuantityScannerBurst } from "./lib/sale-quantity";
 import { saleCostTooltipController } from "./lib/sale-cost-tooltip";
 
-type CostLot = { id: string; number: string; unitCostMinor: string };
+type CostLot = { id: string; number: string; unitCostMinor?: string };
 
 export function SaleUnitCostDetails({ costs }: { costs: CostLot[] }) {
   return (
@@ -15,11 +15,15 @@ export function SaleUnitCostDetails({ costs }: { costs: CostLot[] }) {
           <span className="sale-unit-price-cost" key={lot.id}>
             <span>Lote {lot.number}</span>
             <b>
-              ${" "}
-              {(Number(lot.unitCostMinor) / 100).toLocaleString("es-AR", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              {lot.unitCostMinor === undefined
+                ? "Sin dato"
+                : `$ ${(Number(lot.unitCostMinor) / 100).toLocaleString(
+                    "es-AR",
+                    {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    },
+                  )}`}
             </b>
           </span>
         ))
@@ -39,6 +43,7 @@ export function SaleUnitPriceInput({
   name,
   disabled,
   costs = [],
+  showCosts = true,
   onCommit,
   onInvalid,
   onFinished,
@@ -49,6 +54,8 @@ export function SaleUnitPriceInput({
   name: string;
   disabled: boolean;
   costs?: CostLot[];
+  /** Sin permiso para ver costos no se abre el detalle de costo. */
+  showCosts?: boolean;
   onCommit: (price: number) => boolean;
   onInvalid: (message: string) => void;
   onFinished: () => void;
@@ -61,6 +68,7 @@ export function SaleUnitPriceInput({
     null,
   );
   const showCost = (element: HTMLElement) => {
+    if (!showCosts) return;
     releaseTooltip.current?.();
     releaseTooltip.current = saleCostTooltipController.show(() =>
       setTooltip(null),
