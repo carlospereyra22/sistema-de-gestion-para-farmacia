@@ -15,6 +15,7 @@ import { PlatformBillingService } from "./platform-billing.service";
 import { assertQuotaAvailable } from "./subscription-quota";
 import {
   commercialToday,
+  nextCut,
   resolveSubscriptionAccess,
 } from "./subscription-access";
 import { contractedQuota, monthlyFeeMinor } from "./subscription-fee";
@@ -59,8 +60,10 @@ const civilDate = (value: Date | null) =>
 const temporaryPassword = () => randomBytes(12).toString("base64url");
 
 function subscriptionView(subscription: SubscriptionWithPlan, now: Date) {
+  const access = resolveSubscriptionAccess(subscription, now);
   return {
-    ...resolveSubscriptionAccess(subscription, now),
+    ...access,
+    nextCut: nextCut(access, now),
     exempt: subscription.exempt,
     trialEndsAt: civilDate(subscription.trialEndsAt),
     paidThrough: civilDate(subscription.paidThrough),

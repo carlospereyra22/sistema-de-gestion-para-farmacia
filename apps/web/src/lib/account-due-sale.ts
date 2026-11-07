@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "./api-fetch";
 import { apiBaseUrl } from "./api";
 
 export type DueSaleDetail = {

@@ -113,7 +113,8 @@ export function PaymentEditor({
     } catch (e) {
       if (
         e instanceof PayableError &&
-        ([400, 403, 404].includes(e.status) || e.code === "BALANCE_CHANGED")
+        ([400, 402, 403, 404].includes(e.status) ||
+          e.code === "BALANCE_CHANGED")
       ) {
         sessionStorage.removeItem(storageKey);
         setLocked(undefined);

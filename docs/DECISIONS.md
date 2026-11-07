@@ -2,6 +2,15 @@
 
 ## DECIDED
 
+- 07/11/2026 (SISTEMA-58): El corte se aplica con un interceptor global y no con un guard por
+  controller, para que ninguna ruta nueva quede afuera por olvido: lo exceptuado se marca, y un
+  test fija la lista completa. Ante cualquier duda deja pasar, porque cortar a quien pagó es
+  peor que dejar pasar a quien debe. Responde 402 con código, que la web distingue de un error
+  común. El aviso va en el encabezado y no en una franja arriba del sistema: la franja empujaba
+  el punto de venta y escondía el botón Cobrar. Al terminar una prórroga, el atraso se cuenta
+  desde la deuda real y no desde la prórroga, a pedido del usuario: si no, cada prórroga
+  regalaba otros 10 días de gracia y corría todo el corte.
+
 - 07/11/2026 (SISTEMA-57): El cupo se valida dentro de la transacción con un bloqueo sobre
   la suscripción, también desde el panel, para que una ampliación no quede sin cobrar. El
   código de sucursal deja de pedirse: se genera del nombre y la API sigue aceptándolo

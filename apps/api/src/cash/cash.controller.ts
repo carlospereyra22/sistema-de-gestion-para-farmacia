@@ -30,6 +30,7 @@ import type { AuthenticatedRequest } from "../auth/auth.types";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { CashService } from "./cash.service";
+import { AllowWhenReadOnly } from "../platform/subscription-gate";
 
 class CreateRegisterDto {
   @IsOptional() @IsString() @MaxLength(100) responsibleName?: string | null;
@@ -152,7 +153,9 @@ export class CashController {
       defaultRegisterId: body.defaultRegisterId ?? null,
     });
   }
-  @Post("pending-collections/:collectionId/destination") collectionDestination(
+  @AllowWhenReadOnly()
+  @Post("pending-collections/:collectionId/destination")
+  collectionDestination(
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,
@@ -167,6 +170,7 @@ export class CashController {
       body.cashRegisterId,
     );
   }
+  @AllowWhenReadOnly()
   @Post("pending-collections/:collectionId/destination/clear")
   clearCollectionDestination(
     @Req() request: AuthenticatedRequest,
@@ -195,7 +199,9 @@ export class CashController {
     );
   }
 
-  @Post("pending-collections/:collectionId/assign") assignCollection(
+  @AllowWhenReadOnly()
+  @Post("pending-collections/:collectionId/assign")
+  assignCollection(
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,
@@ -306,7 +312,9 @@ export class CashController {
   ) {
     return this.cash.open(request.auth!.sub, organizationId, branchId, body);
   }
-  @Post("sessions/:sessionId/close") close(
+  @AllowWhenReadOnly()
+  @Post("sessions/:sessionId/close")
+  close(
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,

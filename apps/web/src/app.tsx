@@ -39,6 +39,7 @@ import { WorkspaceShell } from "./workspace-shell";
 
 const PlatformShell = lazy(() => import("./platform-shell"));
 import { LoginScreen } from "./login-screen";
+import { SubscriptionGate } from "./subscription-gate";
 
 const permissionGroups = [
   {
@@ -383,15 +384,22 @@ export function App(): ReactElement {
   if (user)
     return (
       <ProductImageSession key={user}>
-        <WorkspaceShell
-          email={user}
-          displayName={accountName}
-          organizationName={organizationName}
-          accessToken={accessToken}
+        <SubscriptionGate
+          token={accessToken}
           organizationId={organizationId}
-          permissionCodes={permissionCodes}
+          email={user}
           onLogout={endSession}
-        />
+        >
+          <WorkspaceShell
+            email={user}
+            displayName={accountName}
+            organizationName={organizationName}
+            accessToken={accessToken}
+            organizationId={organizationId}
+            permissionCodes={permissionCodes}
+            onLogout={endSession}
+          />
+        </SubscriptionGate>
       </ProductImageSession>
     );
   if (showLegacyWorkspace && user)

@@ -20,6 +20,7 @@ import type { AuthenticatedRequest } from "../auth/auth.types";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { TransfersService } from "./transfers.service";
+import { AllowWhenReadOnly } from "../platform/subscription-gate";
 class ItemDto {
   @IsString() lotId!: string;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
@@ -60,7 +61,9 @@ export class TransfersController {
   ) {
     return this.transfers.dispatch(req.auth!.sub, organizationId, branchId, id);
   }
-  @Post(":id/receive") receive(
+  @AllowWhenReadOnly()
+  @Post(":id/receive")
+  receive(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coveredUntilLabel,
   filterOrganizations,
+  nextCutLabel,
   quotaFull,
   stageFilterOptions,
   stageLabel,
@@ -14,6 +15,21 @@ import {
 const row = (name: string, stage: SubscriptionStage, feeMinor = "6500000") => ({
   name,
   subscription: { stage, feeMinor },
+});
+
+describe("próximo corte", () => {
+  it("dice qué pasa y cuándo", () => {
+    expect(nextCutLabel({ access: "READ_ONLY", on: "2026-11-12" })).toBe(
+      "Solo lectura el 12/11/2026",
+    );
+    expect(nextCutLabel({ access: "BLOCKED", on: "2026-12-01" })).toBe(
+      "Se bloquea el 01/12/2026",
+    );
+  });
+
+  it("sin corte próximo no muestra nada", () => {
+    expect(nextCutLabel(null)).toBe("—");
+  });
 });
 
 describe("cupo completo", () => {

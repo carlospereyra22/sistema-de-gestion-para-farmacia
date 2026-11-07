@@ -26,6 +26,7 @@ class DocumentLogoDto {
 }
 import { FiscalProfileDto } from "./fiscal-profile";
 import { FiscalPointDto, FiscalPointStatusDto } from "./fiscal-point.dto";
+import { AllowOwnerWhenBlocked } from "../platform/subscription-gate";
 
 @Controller("organizations/:organizationId")
 @UseGuards(JwtAccessGuard)
@@ -157,6 +158,7 @@ export class OrganizationsController {
     );
   }
 
+  @AllowOwnerWhenBlocked()
   @Get("branches")
   listBranches(
     @Param("organizationId") organizationId: string,

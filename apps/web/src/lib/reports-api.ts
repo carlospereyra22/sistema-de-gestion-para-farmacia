@@ -1,7 +1,8 @@
+import { apiFetch as fetch } from "./api-fetch";
 import type { ReportFilterOptions, ReportOverview } from "@gestion/contracts";
 import { apiBaseUrl } from "./api";
 
-/** Mensaje de la API (400/403 en espanol) o uno generico. */
+/** Mensaje de la API (400/402/403 en español) o uno genérico. */
 async function reportError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
     message?: string | string[];
@@ -10,7 +11,7 @@ async function reportError(response: Response, fallback: string) {
     ? body.message[0]
     : body?.message;
   return new Error(
-    response.status === 403 || response.status === 400
+    [400, 402, 403].includes(response.status)
       ? (message ?? fallback)
       : fallback,
   );

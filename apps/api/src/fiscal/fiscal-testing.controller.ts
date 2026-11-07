@@ -14,6 +14,7 @@ import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { ArcaConnectionService } from "./arca-connection.service";
 import { FiscalTrialService } from "./fiscal-trial.service";
+import { AllowWhenReadOnly } from "../platform/subscription-gate";
 class TrialDto {
   @IsUUID() requestId!: string;
   @IsInt() @Min(1) @Max(99999) point!: number;
@@ -45,7 +46,10 @@ export class FiscalTestingController {
   ) {
     return this.trials.issue(req.auth!.sub, org, input.requestId, input.point);
   }
-  @Post("trials/:id/reconcile") @Header("Cache-Control", "no-store") reconcile(
+  @AllowWhenReadOnly()
+  @Post("trials/:id/reconcile")
+  @Header("Cache-Control", "no-store")
+  reconcile(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId", ParseUUIDPipe) org: string,
     @Param("id", ParseUUIDPipe) id: string,

@@ -11,6 +11,7 @@ import { PlatformBillingSection } from "./platform-billing";
 const subscription: PlatformSubscription = {
   stage: "GRACE",
   access: "FULL",
+  nextCut: null,
   daysOverdue: 3,
   exempt: false,
   trialEndsAt: "2026-11-04",

@@ -510,7 +510,7 @@ export function PurchasesWorkspace({
     } catch (e) {
       if (
         e instanceof PurchaseRequestError &&
-        [400, 403, 404].includes(e.status)
+        [400, 402, 403, 404].includes(e.status)
       )
         setDraft((current) =>
           current ? { ...current, locked: undefined } : current,

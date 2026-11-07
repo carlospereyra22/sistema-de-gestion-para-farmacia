@@ -207,6 +207,7 @@ import { ProductFormSection } from "./product-form-section";
 import { StatusToast } from "./status-toast";
 import { UserPasswordDialog } from "./user-password-dialog";
 import { OperationHistory } from "./operation-history";
+import { SubscriptionNoticeChip } from "./subscription-gate";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
 import { salesShortcut, type SalesShortcut } from "./lib/sales-shortcuts";
 import { cashAmountDraft } from "./lib/sale-quick-amounts";
@@ -834,6 +835,7 @@ export function WorkspaceShell({
               ) : null}
             </div>
           )}
+          <SubscriptionNoticeChip />
           {accessToken && organizationId && branchId && (
             <NotificationBell
               userKey={email}

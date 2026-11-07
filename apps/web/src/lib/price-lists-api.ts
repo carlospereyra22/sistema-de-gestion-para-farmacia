@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "./api-fetch";
 const base = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
 export type PriceChange = {
   productId: string;

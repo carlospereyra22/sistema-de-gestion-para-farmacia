@@ -79,7 +79,9 @@ bloquea 15 minutos. Un código no se puede usar dos veces.
   y un pago reactiva al instante.
 - El día comercial cambia a las 06:00 de Argentina, para no cortar a medianoche.
 - La gracia no puede bajar de 10 días: Mercado Pago reintenta 4 veces en ese plazo.
-- Prórroga manual con fecha y motivo, con auditoría.
+- Prórroga manual con fecha y motivo, con auditoría. Solo pausa el corte: al terminar, la
+  farmacia vuelve a la etapa que le corresponde por lo que debe, contando desde lo pagado o
+  desde el fin de la prueba. No regala días de gracia.
 - Cuotas: pago parcial más prórroga hasta la próxima cuota. No hay un sistema de cuotas aparte.
 - Los datos nunca se borran. Al bloquearse dejan de generarse cargos; se cobra lo adeudado
   hasta ese día y el resto se condona. Si una bloqueada salda su deuda, los meses que pasó sin
@@ -115,7 +117,7 @@ Hoy no corta nada. Se prepara así:
 | 6   | Modelo comercial y alta  | Hecho      |
 | 7   | Cargos, pagos y prórroga | Hecho      |
 | 8   | Cupos y catálogo         | SISTEMA-57 |
-| 9   | Corte                    | Pendiente  |
+| 9   | Corte                    | SISTEMA-58 |
 | 10  | Límite de sesiones       | Pendiente  |
 | 11  | Módulos                  | Pendiente  |
 | 12  | Mercado Pago             | Pendiente  |
@@ -175,6 +177,41 @@ ampliación: primero se amplía el plan contratado y después se da el alta.
   clave foránea a la farmacia. Quien además bloquee `Organization` toma primero la suscripción.
 
 La farmacia recibe el motivo en el mensaje de error. La pantalla de uso del plan es otra tarea.
+
+## Corte
+
+`SubscriptionAccessInterceptor` es global y corre después de los guards. A toda ruta con
+`:organizationId` le aplica el estado de la farmacia: en solo lectura frena las escrituras y en
+bloqueo frena todo, con 402 y código `SUBSCRIPTION_READ_ONLY` o `SUBSCRIPTION_BLOCKED`.
+
+- **Ante la duda deja pasar:** sin suscripción, para quien no es de la farmacia (recibe su error
+  de siempre, sin enterarse del estado) y si el chequeo falla. Un error nuestro nunca puede
+  cortar a una farmacia que pagó. Las exentas, como Juncos, nunca se cortan.
+- **Excepciones marcadas en el código:** `@AllowWhenReadOnly` en lo que termina algo pendiente,
+  `@AllowOwnerWhenBlocked` en las ventas y facturas que el dueño sigue viendo, y
+  `@AlwaysAvailable` en la consulta del estado. `subscription-routes.spec.ts` fija la lista
+  completa y falla si una ruta nueva no lleva `:organizationId` ni está entre las globales.
+- **Reactivar:** un pago o una prórroga reactivan al instante, porque el estado se calcula en
+  cada pedido.
+
+En la web, `SubscriptionGate` consulta `GET organizations/:id/subscription/status` al entrar,
+al renovar la sesión, al volver a la pestaña y cuando una respuesta trae 402 (`apiFetch`
+dispara un evento). Si no contesta, deja usar el sistema.
+
+- **Aviso:** un chip en el encabezado, como el de caja, para no cambiar la altura del punto de
+  venta. El dueño lo ve desde 5 días antes de vencer y en gracia; en solo lectura lo ven todos y
+  no se puede ocultar.
+- **Bloqueo:** pantalla con el saldo para el dueño, "Ya pagué, verificar" y sus facturas. El
+  empleado solo ve que tiene que avisarle al dueño.
+- **Contacto:** `VITE_SUPPORT_WHATSAPP` agrega el enlace de WhatsApp. Sin configurar, no se
+  muestra: el dato de contacto todavía no está definido.
+- **402 como rechazo:** las pantallas que conservan una solicitud ante un resultado incierto
+  tratan el 402 como un rechazo claro, para poder corregirla y reintentarla.
+
+En el panel, la solapa Pagos muestra el próximo corte de cada farmacia que debe.
+
+Falta: suspender o dar de baja a mano desde el panel, avisos por mail y un resumen de lo que
+vence en el panel.
 
 ## Alta de una farmacia
 

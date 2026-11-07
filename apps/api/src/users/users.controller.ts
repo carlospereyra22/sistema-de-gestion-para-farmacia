@@ -23,6 +23,7 @@ import {
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { UsersService } from "./users.service";
+import { AllowWhenReadOnly } from "../platform/subscription-gate";
 
 class CreateUserDto {
   @IsOptional()
@@ -101,6 +102,7 @@ export class UsersController {
     );
   }
 
+  @AllowWhenReadOnly()
   @Patch(":userId/password")
   resetPassword(
     @Param("organizationId") organizationId: string,
@@ -115,6 +117,7 @@ export class UsersController {
       body.password,
     );
   }
+  @AllowWhenReadOnly()
   @Patch(":userId")
   update(
     @Param("organizationId") organizationId: string,

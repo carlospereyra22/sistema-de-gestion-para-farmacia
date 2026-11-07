@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "../lib/api-fetch";
 import { formatAmountTyping } from "../lib/amount-typing";
 import { apiBaseUrl } from "../lib/api";
 

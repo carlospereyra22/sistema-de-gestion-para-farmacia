@@ -23,6 +23,7 @@ import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { PrintQueueService } from "./print-queue.service";
+import { AllowWhenReadOnly } from "../platform/subscription-gate";
 
 class GatewayDto {
   @IsString()
@@ -114,7 +115,9 @@ export class PrintingController {
       id,
     );
   }
-  @Post("jobs/:id/retry") retry(
+  @AllowWhenReadOnly()
+  @Post("jobs/:id/retry")
+  retry(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId", ParseUUIDPipe) organizationId: string,
     @Param("branchId", ParseUUIDPipe) branchId: string,

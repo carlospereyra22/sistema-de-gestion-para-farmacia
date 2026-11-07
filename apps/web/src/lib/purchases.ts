@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "./api-fetch";
 import { apiBaseUrl, type Purchase } from "./api";
 export const purchaseStatus = (p: Pick<Purchase, "status" | "closedAt">) =>
   p.closedAt

@@ -42,6 +42,7 @@ import {
   PriceChangesDto,
   PricePreviewDto,
 } from "./price-list-updates";
+import { AllowWhenReadOnly } from "../platform/subscription-gate";
 type SaleUnitValue = "BOX" | "BLISTER" | "UNIT";
 class EquivalentBarcodeDto {
   @IsString() @MinLength(8) @MaxLength(14) code!: string;
@@ -242,7 +243,9 @@ export class CatalogController {
       productId,
     );
   }
-  @Post("default-categories") ensureDefaultCategories(
+  @AllowWhenReadOnly()
+  @Post("default-categories")
+  ensureDefaultCategories(
     @Param("organizationId") id: string,
     @Req() request: AuthenticatedRequest,
   ) {
@@ -285,7 +288,9 @@ export class CatalogController {
       priceListId,
     );
   }
-  @Post("price-lists/:priceListId/preview") previewPrices(
+  @AllowWhenReadOnly()
+  @Post("price-lists/:priceListId/preview")
+  previewPrices(
     @Param("organizationId") id: string,
     @Param("priceListId") listId: string,
     @Req() request: AuthenticatedRequest,
