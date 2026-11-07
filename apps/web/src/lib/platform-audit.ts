@@ -6,6 +6,12 @@ const actionLabels: Record<string, string> = {
   PLATFORM_TOTP_FAILED: "Código incorrecto",
   PLATFORM_TOTP_LOCKED: "Código bloqueado por intentos",
   PLATFORM_TOTP_RESET: "Código reseteado",
+  PLATFORM_ORGANIZATION_CREATED: "Farmacia creada",
+  PLATFORM_USER_CREATED: "Usuario creado",
+  PLATFORM_BRANCH_CREATED: "Sucursal creada",
+  PLATFORM_PASSWORD_RESET: "Clave reseteada",
+  PLATFORM_SUBSCRIPTION_UPDATED: "Plan de una farmacia actualizado",
+  PLATFORM_PLAN_UPDATED: "Precios actualizados",
 };
 
 export function platformActionLabel(action: string): string {

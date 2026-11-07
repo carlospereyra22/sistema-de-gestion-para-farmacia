@@ -109,18 +109,36 @@ Hoy no corta nada. Se prepara así:
 | 2   | Cambio de clave propio  | Hecho      |
 | 3   | Identidad de plataforma | Hecho      |
 | 4   | Panel base              | Hecho      |
-| 5   | Rol Empleado y permisos | SISTEMA-54 |
-| 6   | Modelo comercial y alta | Pendiente  |
-| 7   | Cargos y pagos manuales | Pendiente  |
-| 8   | Corte                   | Pendiente  |
-| 9   | Límite de sesiones      | Pendiente  |
-| 10  | Módulos                 | Pendiente  |
-| 11  | Mercado Pago            | Pendiente  |
+| 5   | Rol Empleado y permisos | Hecho      |
+| 6   | Modelo comercial y alta | SISTEMA-55 |
+| 7   | Cupos y catálogo        | Pendiente  |
+| 8   | Cargos y pagos manuales | Pendiente  |
+| 9   | Corte                   | Pendiente  |
+| 10  | Límite de sesiones      | Pendiente  |
+| 11  | Módulos                 | Pendiente  |
+| 12  | Mercado Pago            | Pendiente  |
 
 El corte va después del cobro: primero se ve quién pagó y recién entonces se corta. El límite
 de sesiones es condición para cobrar por usuario: sin él, comparten la clave.
 
+## Modelo comercial
+
+- `SubscriptionPlan`: fórmula del abono. La migración crea el plan `ESTANDAR` sin importes;
+  los precios se cargan desde el panel, en Planes.
+- `OrganizationSubscription`: una fila por farmacia, en una tabla aparte porque `/auth/me`
+  devuelve `Organization` entera a cualquier usuario. La migración deja exentas a las farmacias
+  que ya existían.
+- `subscription-fee.ts` y `subscription-access.ts`: funciones puras con el abono y el estado.
+  Hoy el estado solo se muestra: ninguna ruta lo aplica todavía.
+
 ## Alta de una farmacia
+
+El panel crea la farmacia y su dueño en una transacción, con una clave temporal que se muestra
+una sola vez y obliga a cambiarla al entrar. Lo mismo al agregar un usuario o resetear una clave.
+Una sucursal creada desde el panel se asigna a los dueños de la farmacia: quien la crea no
+pertenece a ella, y sin eso nadie podría operarla. Su código se genera solo: es un identificador
+interno que no sale en tickets, reportes ni facturas.
+Una cuenta pertenece a una sola farmacia: un correo que ya existe se rechaza.
 
 `apps/api/src/organizations/organization-provisioning.ts` crea la farmacia con su sucursal
 principal, roles, permisos y dueño. Lo usa `bootstrap-production.ts` y lo va a usar el panel.

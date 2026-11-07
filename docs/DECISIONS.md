@@ -2,6 +2,11 @@
 
 ## DECIDED
 
+- 07/11/2026 (SISTEMA-55): El estado comercial de una farmacia se calcula por fechas y no
+  se guarda, para que el corte no dependa de un proceso programado y un pago reactive al
+  instante. El día comercial cambia a las 06:00 de Argentina. El plan nace sin importes:
+  los precios se cargan desde el panel y no quedan escritos en el repositorio.
+
 - 06/11/2026 (SISTEMA-54): Recibir mercadería y pagar a proveedores tienen permisos
   propios (`PURCHASE_RECEIVE`, `PAYABLE_PAY`). Antes venían junto con comprar y con
   cargar facturas, así que no se podía delegar una tarea sin dar la otra. La migración

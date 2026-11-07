@@ -3,7 +3,16 @@ import { LogOut } from "lucide-react";
 import { getPlatformSession, type PlatformSession } from "./lib/platform-api";
 import { PlatformAccess } from "./platform-access";
 import { PlatformAuditPanel } from "./platform-audit-panel";
+import { PlatformOrganizations } from "./platform-organizations";
+import { PlatformPlans } from "./platform-plans";
 import { SessionStartup } from "./session-startup";
+
+const sections = [
+  ["farmacias", "Farmacias"],
+  ["planes", "Planes"],
+  ["auditoria", "Auditoría"],
+] as const;
+type Section = (typeof sections)[number][0];
 
 /** Panel de los dueños de la SaaS. Se carga aparte: una farmacia nunca lo descarga. */
 export default function PlatformShell({
@@ -17,6 +26,7 @@ export default function PlatformShell({
 }) {
   const [session, setSession] = useState<PlatformSession>();
   const [error, setError] = useState("");
+  const [section, setSection] = useState<Section>("farmacias");
   useEffect(() => {
     if (window.location.pathname !== "/plataforma")
       window.history.replaceState(null, "", "/plataforma");
@@ -94,11 +104,41 @@ export default function PlatformShell({
           </button>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl p-4 sm:p-6">
-        <PlatformAuditPanel
-          token={token}
-          onVerificationExpired={verificationExpired}
-        />
+      <nav
+        aria-label="Secciones de la plataforma"
+        className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 sm:px-6"
+      >
+        {sections.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-current={section === value ? "page" : undefined}
+            onClick={() => setSection(value)}
+            className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium ${section === value ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
+        {section === "farmacias" && (
+          <PlatformOrganizations
+            token={token}
+            onVerificationExpired={verificationExpired}
+          />
+        )}
+        {section === "planes" && (
+          <PlatformPlans
+            token={token}
+            onVerificationExpired={verificationExpired}
+          />
+        )}
+        {section === "auditoria" && (
+          <PlatformAuditPanel
+            token={token}
+            onVerificationExpired={verificationExpired}
+          />
+        )}
       </main>
     </div>
   );
