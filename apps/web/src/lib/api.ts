@@ -1968,6 +1968,8 @@ export type CashPendingCollection = {
   cardMinor: string;
   transferMinor: string;
   destinationRegisterId: string | null;
+  /** La venta tiene una factura esperando este cobro: al incorporarlo se emite. */
+  facturaEnEspera?: boolean;
 };
 
 export type CashRecentActivity = Pick<
@@ -2236,7 +2238,12 @@ export type FiscalTrial = {
   number: number | null;
   date: string;
   totalMinor: number;
-  status: "QUEUED" | "PENDING" | "AUTHORIZED" | "REJECTED" | "UNCERTAIN";
+  /** HELD: espera a que el cobro entre a una caja (SISTEMA-65). */
+  status:
+    "HELD" | "QUEUED" | "PENDING" | "AUTHORIZED" | "REJECTED" | "UNCERTAIN";
+  /** Facturada después de la venta: CAJA_CERRADA o COMPROBANTE_INTERNO. */
+  deferredReason?: string | null;
+  releasedAt?: string | null;
   sourceSaleId?: string | null;
   saleSnapshot?: {
     store?: {
@@ -2430,6 +2437,8 @@ export type Sale = {
   id: string;
   documentType?: "INTERNAL" | "INVOICE";
   fiscalTrial?: FiscalTrial | null;
+  /** Factura de producción que devuelve la venta recién confirmada. */
+  fiscalDocument?: Pick<FiscalTrial, "status"> | null;
   customerId?: string | null;
   status: "COMPLETED" | "CANCELLED";
   totalMinor: string;
@@ -2454,6 +2463,8 @@ export type Sale = {
     point: number;
     number: number | null;
     voucherType: number;
+    /** Facturada después de la venta: CAJA_CERRADA o COMPROBANTE_INTERNO. */
+    deferredReason?: string | null;
   }[];
 };
 
@@ -2492,6 +2503,40 @@ export async function requeueSaleInvoice(
       response,
       "No se pudo volver a emitir la factura. La venta sigue registrada.",
     );
+  return response.json();
+}
+
+/**
+ * Manda a ARCA una venta hecha con comprobante interno (SISTEMA-65). Sale con
+ * la fecha de hoy y queda marcada como facturada después.
+ */
+export async function invoiceInternalSale(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  saleId: string,
+  input: {
+    fiscalEnvironment: "HOMOLOGATION" | "PRODUCTION";
+    fiscalOptions: SaleFiscalOptions;
+  },
+): Promise<FiscalTrial> {
+  const production = input.fiscalEnvironment === "PRODUCTION";
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/${saleId}/invoice/emitir`,
+    {
+      method: "POST",
+      headers: authJson(token),
+      body: JSON.stringify({
+        fiscalEnvironment: input.fiscalEnvironment,
+        fiscalOptions: input.fiscalOptions,
+        ...(production
+          ? { confirmProduction: true }
+          : { confirmHomologation: true }),
+      }),
+    },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo enviar la venta a ARCA.");
   return response.json();
 }
 

@@ -36,7 +36,7 @@ describe("fiscal first stage", () => {
           disabled={false}
         />,
       );
-      expect(html).toContain("Ticket</button>");
+      expect(html).toContain("Comprobante interno</button>");
       expect(html).toContain('aria-pressed="true"');
       expect(html).toContain("Factura</button>");
       expect(html).not.toContain('type="checkbox"');

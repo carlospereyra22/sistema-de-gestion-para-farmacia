@@ -27,6 +27,15 @@ export function CashPendingConfirmation({
     <CashDialog title={copy.title} busy={busy} onClose={onCancel}>
       <p className="text-sm font-medium">{copy.question}</p>
       <p className="mt-2 text-sm text-slate-500">{copy.detail}</p>
+      {action === "incorporate" && row.facturaEnEspera && (
+        <p
+          role="status"
+          className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800"
+        >
+          Esta venta tiene una factura en espera de caja. Al incorporar el cobro
+          se emite la factura C en ARCA, con la fecha de hoy.
+        </p>
+      )}
       <p className="mt-3 text-xs text-slate-500">
         {row.sourceType === "SALE" ? "Venta" : "Recibo"}{" "}
         {row.sourceId.slice(0, 8)} ·{" "}

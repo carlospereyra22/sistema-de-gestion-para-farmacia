@@ -86,6 +86,17 @@ class CompleteSaleDto {
   @Type(() => PaymentDto)
   payments!: PaymentDto[];
 }
+/** Mandar a ARCA una venta hecha con comprobante interno (SISTEMA-65). */
+class InvoiceInternalDto {
+  @IsOptional() @IsIn(["HOMOLOGATION", "PRODUCTION"]) fiscalEnvironment?:
+    "HOMOLOGATION" | "PRODUCTION";
+  @IsOptional() @IsBoolean() confirmProduction?: boolean;
+  @IsOptional() @IsBoolean() confirmHomologation?: boolean;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SaleFiscalOptionsDto)
+  fiscalOptions?: SaleFiscalOptionsDto;
+}
 /** Venta hecha sin conexión (SISTEMA-63): la de siempre, más cuándo y dónde. */
 class OfflineSaleDto extends CompleteSaleDto {
   @IsISO8601({ strict: true }) occurredAt!: string;
@@ -237,6 +248,17 @@ export class SalesController {
     @Param("saleId", ParseUUIDPipe) id: string,
   ) {
     return this.sales.requeueInvoice(req.auth!.sub, org, branch, id);
+  }
+  /** Comprobante interno → factura C, a mano y hasta 30 días después. */
+  @Post(":saleId/invoice/emitir")
+  invoiceInternal(
+    @Req() req: AuthenticatedRequest,
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Param("saleId", ParseUUIDPipe) id: string,
+    @Body() body: InvoiceInternalDto,
+  ) {
+    return this.sales.invoiceInternal(req.auth!.sub, org, branch, id, body);
   }
   @AllowOwnerWhenBlocked()
   @Get(":saleId/ticket")

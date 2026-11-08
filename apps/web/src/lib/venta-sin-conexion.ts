@@ -78,7 +78,8 @@ export function encabezadoGuardado(organizationId: string, branchId: string) {
   );
 }
 
-export const LEYENDA_PROVISORIO = "COMPROBANTE PROVISORIO · SIN CONEXIÓN";
+export const LEYENDA_PROVISORIO =
+  "COMPROBANTE PROVISORIO · SIN CONEXIÓN · NO VÁLIDO COMO FACTURA";
 
 /** Ticket que se imprime al cobrar sin conexión, igual al del servidor. */
 export function ticketProvisorio(datos: {

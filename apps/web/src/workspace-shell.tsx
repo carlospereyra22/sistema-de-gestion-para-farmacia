@@ -98,6 +98,7 @@ import type {
   ThermalTicket,
 } from "@gestion/contracts";
 import { SaleInvoiceDialog } from "./sale-invoice-dialog";
+import { EnviarAArca } from "./enviar-a-arca";
 import { getSubscriptionStatus } from "./lib/subscription-status";
 import { SinConexionError } from "./lib/api-fetch";
 import { alcanceDe, horaUltimaSincronizacion } from "./lib/cache-local";
@@ -232,7 +233,11 @@ import {
 } from "./lib/workspace-permissions";
 import { SubscriptionNoticeChip } from "./subscription-gate";
 import { ConexionChip } from "./conexion-chip";
-import { facturaEnEspera, numeroDeVenta } from "./lib/numero-venta";
+import {
+  facturaEnEspera,
+  facturaEsperaCaja,
+  numeroDeVenta,
+} from "./lib/numero-venta";
 import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { useConectividad } from "./lib/conectividad";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
@@ -5989,7 +5994,12 @@ function Sales({
         await cobrarSinConexion(cuerpo, finalPayments);
         return;
       }
-      if (completedSale.documentType === "INVOICE")
+      // Con la caja cerrada la factura espera: la venta termina como cualquier
+      // otra y se imprime el comprobante (SISTEMA-65).
+      if (
+        completedSale.documentType === "INVOICE" &&
+        !facturaEsperaCaja(completedSale)
+      )
         setInvoiceSaleId(completedSale.id);
       else
         setReceipt({
@@ -6120,6 +6130,20 @@ function Sales({
     organizationId,
     branchId,
   ]);
+  // Al volver a Ventas: una factura en espera pudo liberarse desde Caja al
+  // incorporar su cobro (SISTEMA-65).
+  const volvioAVentas = useRef(false);
+  useEffect(() => {
+    if (!active) {
+      volvioAVentas.current = true;
+      return;
+    }
+    if (!volvioAVentas.current || !historialEnLinea) return;
+    volvioAVentas.current = false;
+    void getSales(token, organizationId, branchId)
+      .then(setHistory)
+      .catch(() => {});
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!active) return <></>;
   if (resumeNeeded && submitting) {
     return (
@@ -6176,6 +6200,11 @@ function Sales({
               ? setInvoiceSaleId(sale.id)
               : setTicketSaleId(sale.id)
           }
+          fiscalCapabilities={fiscalCapabilities}
+          onInvoiced={(sale) => {
+            setInvoiceSaleId(sale.id);
+            void loadHistory();
+          }}
         />
       </>
     );
@@ -6767,6 +6796,7 @@ function Sales({
                 "No se pudo verificar la configuración fiscal."
               }
               summary={`${fiscalOptions.recipient === "CUSTOMER" ? customers.find((customer) => customer.id === customerId)?.name || "Cliente no seleccionado" : fiscalOptions.consumerName || "Consumidor final"} · Factura C`}
+              sinCaja={!session && allowWithoutSession}
             />
           }
         />
@@ -6861,6 +6891,8 @@ function SalesHistory({
   onCancel,
   onReturn,
   onPrint,
+  fiscalCapabilities,
+  onInvoiced,
 }: {
   token: string;
   organizationId: string;
@@ -6874,6 +6906,9 @@ function SalesHistory({
   onCancel: (sale: Sale) => Promise<string>;
   onReturn: (sale: Sale) => Promise<string>;
   onPrint: (sale: Sale) => void;
+  /** Para "Enviar a ARCA" un comprobante interno (SISTEMA-65). */
+  fiscalCapabilities?: SaleFiscalCapabilities | null;
+  onInvoiced: (sale: Sale) => void;
 }): ReactElement {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -6944,7 +6979,13 @@ function SalesHistory({
     const rows = filteredSales.map((sale) => {
       const numero = numeroDeVenta(sale);
       return [
-        numero.prueba ? `${numero.texto} (prueba)` : numero.texto,
+        [
+          numero.texto,
+          numero.prueba ? "(prueba)" : "",
+          numero.despues ? "(facturada después)" : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
         numero.interno,
         sale.completedAt
           ? new Date(sale.completedAt).toLocaleString("es-AR")
@@ -7101,6 +7142,11 @@ function SalesHistory({
                             {numero.prueba ? " · prueba" : ""}
                           </span>
                         )}
+                        {numero.despues && (
+                          <span className="mt-0.5 block text-[10px] font-medium text-amber-700">
+                            Facturada después
+                          </span>
+                        )}
                       </button>
                     </td>
                     <td className="px-4 py-3">
@@ -7249,12 +7295,12 @@ function SalesHistory({
                   <button
                     type="button"
                     onClick={() => onPrint(selectedSale)}
-                    className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50"
+                    className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50"
                   >
                     <ReceiptText size={17} aria-hidden="true" />
                     {selectedSale.documentType === "INVOICE"
                       ? "Ver / imprimir factura"
-                      : "Imprimir ticket"}
+                      : "Imprimir comprobante"}
                   </button>
                   {selectedSale.documentType === "INVOICE" && (
                     <SaleCreditActions
@@ -7266,6 +7312,20 @@ function SalesHistory({
                     />
                   )}
                 </div>
+                <EnviarAArca
+                  key={`arca:${selectedSale.id}`}
+                  token={token}
+                  organizationId={organizationId}
+                  branchId={branchId}
+                  sale={selectedSale}
+                  capabilities={fiscalCapabilities}
+                  customerName={
+                    customers.find(
+                      (customer) => customer.id === selectedSale.customerId,
+                    )?.name
+                  }
+                  onSent={() => onInvoiced(selectedSale)}
+                />
                 {selectedSale.status === "COMPLETED" ? (
                   <details className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                     <summary className="cursor-pointer text-sm font-medium text-slate-600 focus-visible:outline-2 focus-visible:outline-teal-700">

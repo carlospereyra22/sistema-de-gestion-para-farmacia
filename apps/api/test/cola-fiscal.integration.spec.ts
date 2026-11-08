@@ -207,6 +207,18 @@ describe("cola fiscal (base local con rollback, ARCA simulada)", () => {
                 ahora: () => reloj,
               });
             };
+            // Con la caja abierta la factura va a la cola en el momento (sin
+            // caja espera a que se incorpore el cobro: SISTEMA-65).
+            const caja = await tx.cashRegister.create({
+              data: { branchId: branch.id, name: "Caja" },
+            });
+            const sesion = await tx.cashSession.create({
+              data: {
+                cashRegisterId: caja.id,
+                openedById: user.id,
+                openingAmountMinor: 0n,
+              },
+            });
             const vender = () =>
               sales.complete(user.id, org.id, branch.id, {
                 documentType: "INVOICE",
@@ -217,7 +229,13 @@ describe("cola fiscal (base local con rollback, ARCA simulada)", () => {
                 items: [
                   { productId: product.id, quantity: 1, discountMinor: 0 },
                 ],
-                payments: [{ method: "CASH", amountMinor: 10000 }],
+                payments: [
+                  {
+                    method: "CASH",
+                    amountMinor: 10000,
+                    cashSessionId: sesion.id,
+                  },
+                ],
               });
             const factura = (saleId: string) =>
               tx.fiscalDocument.findFirstOrThrow({

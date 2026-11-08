@@ -22,6 +22,18 @@ export function pendingAmounts(
   };
 }
 
+/**
+ * ¿Sin caja, este cobro queda pendiente de asignar? Sí, salvo que todo sea a
+ * cuenta corriente (o el efectivo se vaya entero en vuelto).
+ */
+export function cobroQuedaPendiente(
+  payments: readonly { method: string; amountMinor: number | bigint }[],
+  changeMinor: bigint = 0n,
+) {
+  const totals = pendingAmounts(payments, changeMinor);
+  return totals.cashMinor + totals.cardMinor + totals.transferMinor > 0n;
+}
+
 export async function recordPendingCollection(
   tx: Prisma.TransactionClient,
   scope: {
@@ -36,7 +48,8 @@ export async function recordPendingCollection(
   payments: readonly { method: string; amountMinor: number | bigint }[],
   changeMinor = 0n,
 ) {
-  const totals = pendingAmounts(payments, changeMinor);
-  if (totals.cashMinor + totals.cardMinor + totals.transferMinor === 0n) return;
-  await tx.cashPendingCollection.create({ data: { ...scope, ...totals } });
+  if (!cobroQuedaPendiente(payments, changeMinor)) return;
+  await tx.cashPendingCollection.create({
+    data: { ...scope, ...pendingAmounts(payments, changeMinor) },
+  });
 }

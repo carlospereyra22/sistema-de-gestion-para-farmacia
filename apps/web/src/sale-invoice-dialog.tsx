@@ -3,9 +3,20 @@ import { createPortal } from "react-dom";
 import { requeueSaleInvoice, saleInvoice, type FiscalTrial } from "./lib/api";
 import { trialTicket } from "./lib/fiscal-trial-ticket";
 import { printTicketFrame } from "./lib/browser-ticket-print";
+import { thermalTicketHtml } from "./lib/thermal-ticket";
 import { SaleCreditNotes } from "./sale-credit-notes";
 
 const INVOICE_REFRESH_MS = 20_000;
+
+const fechaVenta = (iso: string) =>
+  new Date(iso).toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
 
 export function SaleInvoiceDialog({
   token,
@@ -121,11 +132,25 @@ export function SaleInvoiceDialog({
               ? "Autorizada por ARCA · Producción"
               : "Homologación · Sin validez fiscal"}
           </p>
+        ) : trial?.status === "HELD" ? (
+          <div className="my-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">Factura en espera de caja</p>
+            <p className="mt-1">
+              La venta se cobró sin caja abierta. La factura se emite cuando
+              incorpores el cobro a una caja, en Caja → Cobros pendientes.
+              Todavía no se envió nada a ARCA; no repitas la venta.
+            </p>
+          </div>
         ) : (
           <p className="my-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
             Venta registrada. La factura está pendiente; no repitas la venta.
             {waiting &&
               " Se envía sola cuando ARCA responde; esta ventana se actualiza sola."}
+          </p>
+        )}
+        {trial?.deferredReason && trial.ticket && (
+          <p className="text-xs text-slate-500">
+            Facturada después · venta del {fechaVenta(trial.ticket.date)}
           </p>
         )}
         {!trial && !error && <p role="status">Consultando comprobante…</p>}
@@ -134,7 +159,7 @@ export function SaleInvoiceDialog({
             {error}
           </p>
         )}
-        {trial && trial.status !== "AUTHORIZED" && (
+        {trial && trial.status !== "AUTHORIZED" && trial.status !== "HELD" && (
           <>
             <p className="font-semibold">
               {
@@ -173,6 +198,47 @@ export function SaleInvoiceDialog({
               srcDoc={trialTicket(trial)}
               className="h-[60vh] w-full rounded-lg border border-slate-200 bg-white"
             />
+          </>
+        ) : trial?.status === "HELD" ? (
+          // Mientras espera, el cliente se lleva el comprobante interno con la
+          // leyenda "no válido como factura" y el aviso de que se emite luego.
+          <>
+            <div className="my-3 flex flex-wrap gap-2">
+              {trial.ticket && (
+                <button
+                  type="button"
+                  className="rounded-lg bg-teal-700 px-4 py-2 text-white"
+                  onClick={() => {
+                    if (frame.current)
+                      void printTicketFrame(frame.current).catch((cause) =>
+                        setError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "No se pudo imprimir.",
+                        ),
+                      );
+                  }}
+                >
+                  Imprimir comprobante · 80 mm
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void refresh(false)}
+                className="rounded-lg border border-teal-700 px-4 py-2 text-teal-800 disabled:opacity-50"
+              >
+                {busy ? "Consultando…" : "Actualizar"}
+              </button>
+            </div>
+            {trial.ticket && (
+              <iframe
+                ref={frame}
+                title="Comprobante de la venta"
+                srcDoc={thermalTicketHtml(trial.ticket, "")}
+                className="h-[50vh] w-full rounded-lg border border-slate-200 bg-white"
+              />
+            )}
           </>
         ) : (
           <button

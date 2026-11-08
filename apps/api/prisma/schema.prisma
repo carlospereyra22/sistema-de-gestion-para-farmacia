@@ -154,6 +154,10 @@ model FiscalTrial {
   cae String?
   caeExpires String?
   detail String?
+  /// Por qué se facturó después de la venta: CAJA_CERRADA o COMPROBANTE_INTERNO (SISTEMA-65).
+  deferredReason String? @db.VarChar(20)
+  /// Cuándo una factura en espera (HELD) pasó a la cola al incorporar el cobro.
+  releasedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -1275,6 +1279,10 @@ model FiscalDocument {
   cae String?
   caeExpires String?
   detail String?
+  /// Por qué se facturó después de la venta: CAJA_CERRADA o COMPROBANTE_INTERNO (SISTEMA-65).
+  deferredReason String? @db.VarChar(20)
+  /// Cuándo una factura en espera (HELD) pasó a la cola al incorporar el cobro.
+  releasedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)

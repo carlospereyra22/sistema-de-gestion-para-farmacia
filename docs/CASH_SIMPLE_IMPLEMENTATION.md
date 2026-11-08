@@ -99,3 +99,10 @@
 
 - `GET organizations/:id/cash/registers` exige CASH_READ y devuelve sólo las sucursales activas asignadas al usuario, las mismas que permite `BranchAccessGuard`. Un administrador sin una sucursal asignada no la ve.
 - La consulta de caja y la actividad reciente muestran el email cuando el usuario no tiene nombre cargado. Los detalles de cierre conservan su formato.
+
+## Factura en espera de caja (08/11/2026, SISTEMA-65)
+
+- Una venta con Factura cobrada sin caja deja su factura en espera (`HELD`). `GET cash/pending-collections` marca esas filas con `facturaEnEspera` y la pantalla muestra "Factura en espera".
+- Incorporar el cobro (`POST .../assign`) libera la factura en la misma transacción: Caja llama a `liberarFacturaEnEspera` del módulo Fiscal con su `TransactionClient`, que la pasa a la cola y audita. La respuesta y la auditoría `ASSIGNED` llevan `facturaLiberada`.
+- La confirmación avisa que se emite la factura C con la fecha de hoy. Después, la web pide el envío de esa factura. Si no puede, por permisos o porque ARCA no responde, la cola fiscal la envía en su próxima vuelta.
+- Asignar o quitar la caja de destino no toca la factura.

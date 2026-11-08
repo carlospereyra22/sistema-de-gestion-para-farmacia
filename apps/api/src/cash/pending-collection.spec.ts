@@ -33,6 +33,16 @@ function setup() {
       findFirst: jest.fn().mockResolvedValue({ id: "register" }),
     },
     cashMovement: { create: jest.fn().mockResolvedValue({}) },
+    // Factura en espera de la venta (SISTEMA-65): por defecto no hay.
+    fiscalDocument: {
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findFirstOrThrow: jest.fn().mockResolvedValue({ id: "doc" }),
+    },
+    fiscalTrial: {
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findFirstOrThrow: jest.fn().mockResolvedValue({ id: "trial" }),
+    },
+    auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
   const prisma = {
     userOrganization: {
@@ -188,6 +198,32 @@ describe("pending collections", () => {
     expect(tx.$queryRaw.mock.invocationCallOrder[2]!).toBeLessThan(
       tx.cashMovement.create.mock.invocationCallOrder[0]!,
     );
+  });
+  it("al incorporar el cobro libera la factura que esperaba la caja", async () => {
+    const { tx, audit, assign } = setup();
+    tx.fiscalTrial.updateMany.mockResolvedValue({ count: 1 });
+    await expect(assign()).resolves.toMatchObject({ facturaLiberada: true });
+    expect(tx.fiscalTrial.updateMany).toHaveBeenCalledWith({
+      where: { organizationId: "org", sourceSaleId: "sale", status: "HELD" },
+      data: expect.objectContaining({ status: "QUEUED" }),
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        entityType: "FISCAL_TRIAL",
+        action: "LIBERADA",
+      }),
+    });
+    expect(audit.recordInTransaction).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        after: expect.objectContaining({ facturaLiberada: true }),
+      }),
+    );
+  });
+  it("sin factura en espera no toca nada fiscal", async () => {
+    const { tx, assign } = setup();
+    await expect(assign()).resolves.toMatchObject({ facturaLiberada: false });
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
   });
   it("assigns electronic-only collections without a cash movement", async () => {
     const { tx, assign } = setup();

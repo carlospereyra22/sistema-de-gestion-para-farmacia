@@ -537,6 +537,26 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
                 ],
               },
             );
+            // Sin caja la factura espera a que se incorpore el cobro
+            // (SISTEMA-65). Este caso es el de una venta anterior a esa regla:
+            // la factura salió con el cobro todavía pendiente de caja.
+            expect(
+              (
+                await tx.fiscalDocument.findFirstOrThrow({
+                  where: { sourceSaleId: pendingSale.id, kind: "INVOICE" },
+                })
+              ).status,
+            ).toBe("HELD");
+            await tx.fiscalDocument.updateMany({
+              where: { sourceSaleId: pendingSale.id, kind: "INVOICE" },
+              data: { status: "QUEUED", deferredReason: null },
+            });
+            await production.process(
+              user.id,
+              org.id,
+              branch.id,
+              pendingSale.id,
+            );
             const pendingItem = await tx.saleItem.findFirstOrThrow({
               where: { saleId: pendingSale.id },
             });

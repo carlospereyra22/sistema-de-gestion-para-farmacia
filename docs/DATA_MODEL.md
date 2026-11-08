@@ -36,6 +36,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261107020000_cost_read_permission` (SISTEMA-58): solo datos. Crea el permiso `COST_READ` (ver costos de los productos) y se lo da a los roles que tenian `INVENTORY_READ`, que hasta entonces veian los costos, salvo a los de codigo `EMPLEADO`.
 
+`20261108060000_factura_en_espera` (SISTEMA-65): `FiscalDocument` y `FiscalTrial` admiten el estado `HELD`, una factura en espera de que su cobro entre a una caja. Suman `deferredReason` (`CAJA_CERRADA` o `COMPROBANTE_INTERNO`: por qué se facturó después de la venta) y `releasedAt` (cuándo pasó a la cola). Dos CHECK aseguran que sólo una factura diferida espere y que mientras espera no tenga número. Ver FISCAL_BILLING.md.
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

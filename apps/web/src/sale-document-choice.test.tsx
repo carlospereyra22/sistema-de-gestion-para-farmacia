@@ -74,10 +74,27 @@ it("keeps the internal ticket compact and defaults new fiscal options to final c
     />,
   );
   expect(html).not.toContain("Consumidor final · Factura C");
-  expect(html).toContain("Ticket</button>");
-  expect(html).not.toContain("Ticket interno");
+  expect(html).toContain("Comprobante interno</button>");
+  expect(html).not.toContain(">Ticket<");
   expect(defaultSaleFiscalOptions).toEqual({
     recipient: "FINAL_CONSUMER",
     voucherType: 11,
   });
+});
+it("avisa que la factura espera la caja si no hay una abierta", () => {
+  const conCaja = renderToStaticMarkup(
+    <SaleDocumentChoice value="INVOICE" disabled={false} onChange={vi.fn()} />,
+  );
+  expect(conCaja).not.toContain("Sin caja abierta");
+  const sinCaja = renderToStaticMarkup(
+    <SaleDocumentChoice
+      value="INVOICE"
+      disabled={false}
+      sinCaja
+      onChange={vi.fn()}
+    />,
+  );
+  expect(sinCaja).toContain(
+    "Sin caja abierta: la factura se emite al incorporar el cobro a una",
+  );
 });

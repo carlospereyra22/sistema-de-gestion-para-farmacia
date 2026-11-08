@@ -13,6 +13,7 @@ import { ArcaConnectionService } from "./arca-connection.service";
 import { argentinaDate, FiscalTrialService } from "./fiscal-trial.service";
 import { organizationTicketStore } from "../organizations/ticket-header";
 import type { FiscalActor } from "./actor-fiscal";
+import { estadoInicial, type FacturaDiferida } from "./factura-diferida";
 
 export { fiscalRecipient } from "./fiscal-recipient";
 
@@ -39,6 +40,8 @@ export class FiscalSalesService {
       discountMinor: bigint;
     }[],
     options?: SaleFiscalOptions,
+    /** Factura que no sale en el momento de la venta (SISTEMA-65). */
+    diferida?: FacturaDiferida,
   ) {
     const organization = await tx.organization.findUniqueOrThrow({
       where: { id: org },
@@ -96,7 +99,12 @@ export class FiscalSalesService {
       where: { id: branch, organizationId: org },
     });
     const cashier = await tx.userOrganization.findUnique({
-      where: { userId_organizationId: { userId: actor, organizationId: org } },
+      where: {
+        userId_organizationId: {
+          userId: diferida?.cajeroId ?? actor,
+          organizationId: org,
+        },
+      },
       select: { displayName: true },
     });
     const products = await tx.product.findMany({
@@ -111,7 +119,8 @@ export class FiscalSalesService {
         organizationId: org,
         sourceSaleId: saleId,
         requestId: saleId,
-        status: "QUEUED",
+        status: estadoInicial(diferida),
+        deferredReason: diferida?.motivo ?? null,
         point: points[0]!.number,
         voucherType: 11,
         date: argentinaDate(),
@@ -149,11 +158,12 @@ export class FiscalSalesService {
         actorId: actor,
         entityType: "FISCAL_TRIAL",
         entityId: trial.id,
-        action: "SALE_QUEUED",
+        action: diferida?.enEspera ? "SALE_HELD" : "SALE_QUEUED",
         after: {
           saleId,
           environment: "HOMOLOGATION",
           totalMinor: total.toString(),
+          ...(diferida ? { deferredReason: diferida.motivo } : {}),
         },
       },
     });
@@ -180,6 +190,8 @@ export class FiscalSalesService {
         "La venta está anulada; no se envía una factura nueva.",
       );
     const current = sale.fiscalTrial;
+    // En espera de caja: no se envía ni se consulta en ARCA.
+    if (current.status === "HELD") return current;
     if (current.status !== "QUEUED")
       return this.trials.reconcile(actor, org, current.id, sale.id);
     try {

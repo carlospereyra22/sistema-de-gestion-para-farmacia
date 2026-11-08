@@ -295,7 +295,8 @@ export class FiscalTrialService {
       },
     });
     if (!trial) throw new BadRequestException("No se encontró la prueba.");
-    if (["AUTHORIZED", "REJECTED"].includes(trial.status)) return trial;
+    // HELD: espera a que el cobro entre a una caja; no hay nada en ARCA.
+    if (["AUTHORIZED", "REJECTED", "HELD"].includes(trial.status)) return trial;
     if (
       trial.status === "PENDING" &&
       Date.now() - trial.updatedAt.getTime() < 120000

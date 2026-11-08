@@ -108,7 +108,7 @@ export function SaleCheckoutDialog({
         aria-modal="true"
         aria-labelledby="sale-checkout-title"
         // Alto fijo: la ventana no cambia de tamaño al sumar pagos o avisos; el cuerpo hace scroll.
-        className="sale-checkout-dialog flex h-[min(580px,calc(100dvh-2rem))] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className="sale-checkout-dialog flex h-[min(660px,calc(100dvh-2rem))] w-full max-w-[780px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
@@ -192,10 +192,6 @@ export function SaleCheckoutDialog({
                 Cuenta corriente: elegí un cliente con cuenta habilitada.
               </p>
             )}
-            <p className="mt-5 text-sm font-semibold text-slate-700">
-              Comprobante
-            </p>
-            <div className="mt-1">{documentChoice}</div>
           </div>
           <div className="min-w-0">
             <div className="rounded-xl bg-slate-50 px-4 py-3">
@@ -386,6 +382,14 @@ export function SaleCheckoutDialog({
                 </p>
               </div>
             ) : null}
+            {/* En la columna ancha: "Comprobante interno" y sus avisos entran
+                en una línea y la ventana no necesita desplazarse. */}
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-slate-700">
+                Comprobante
+              </p>
+              <div className="mt-1">{documentChoice}</div>
+            </div>
             {errorMessage ? (
               <p
                 role="alert"

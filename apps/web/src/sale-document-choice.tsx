@@ -9,6 +9,7 @@ export function SaleDocumentChoice({
   environment = "HOMOLOGATION",
   invoiceDisabled = false,
   unavailableReason,
+  sinCaja = false,
 }: {
   value: "INTERNAL" | "INVOICE";
   onChange: (value: "INTERNAL" | "INVOICE") => void;
@@ -18,6 +19,8 @@ export function SaleDocumentChoice({
   environment?: "HOMOLOGATION" | "PRODUCTION";
   invoiceDisabled?: boolean;
   unavailableReason?: string;
+  /** No hay caja abierta: la factura espera a que se incorpore el cobro. */
+  sinCaja?: boolean;
 }) {
   return (
     <fieldset className="mt-3">
@@ -25,7 +28,7 @@ export function SaleDocumentChoice({
       <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
         {(
           [
-            ["INTERNAL", "Ticket", ReceiptText],
+            ["INTERNAL", "Comprobante interno", ReceiptText],
             ["INVOICE", "Factura", FileCheck2],
           ] as const
         ).map(([id, label, Icon]) => (
@@ -42,7 +45,7 @@ export function SaleDocumentChoice({
                   : environment === "PRODUCTION"
                     ? "Factura real con autorización de ARCA"
                     : "Homologación sin validez fiscal; registra stock y cobros."
-                : "Comprobante interno"
+                : "No va a ARCA. Se puede enviar después desde el historial."
             }
             onClick={() => onChange(id)}
             className={`flex min-h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 ${id === "INVOICE" && invoiceDisabled ? "text-slate-400" : value === id ? "bg-white font-semibold text-teal-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
@@ -65,21 +68,31 @@ export function SaleDocumentChoice({
           </button>
         )}
       </div>
-      {value === "INVOICE" &&
-        !invoiceDisabled &&
-        environment === "HOMOLOGATION" && (
+      {/* Lugar fijo para los avisos: cambiar de comprobante no mueve la
+          ventana de cobro. */}
+      <div className="min-h-[52px]">
+        {value === "INVOICE" &&
+          !invoiceDisabled &&
+          environment === "HOMOLOGATION" && (
+            <p className="mt-1 text-right text-[11px] text-amber-700">
+              Homologación · Sin validez fiscal
+            </p>
+          )}
+        {value === "INVOICE" && !invoiceDisabled && sinCaja && (
           <p className="mt-1 text-right text-[11px] text-amber-700">
-            Homologación · Sin validez fiscal
+            Sin caja abierta: la factura se emite al incorporar el cobro a una
+            caja.
           </p>
         )}
-      {value === "INVOICE" && !invoiceDisabled && summary && (
-        <p
-          className="mt-1 truncate text-right text-[11px] text-slate-500"
-          title={summary}
-        >
-          {summary}
-        </p>
-      )}
+        {value === "INVOICE" && !invoiceDisabled && summary && (
+          <p
+            className="mt-1 truncate text-right text-[11px] text-slate-500"
+            title={summary}
+          >
+            {summary}
+          </p>
+        )}
+      </div>
     </fieldset>
   );
 }
