@@ -212,6 +212,9 @@ import {
   canOpenView,
 } from "./lib/workspace-permissions";
 import { SubscriptionNoticeChip } from "./subscription-gate";
+import { ConexionChip } from "./conexion-chip";
+import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
+import { useConectividad } from "./lib/conectividad";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
 import { salesShortcut, type SalesShortcut } from "./lib/sales-shortcuts";
 import { cashAmountDraft } from "./lib/sale-quick-amounts";
@@ -661,6 +664,21 @@ export function WorkspaceShell({
       ),
     );
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Copia local al día (SISTEMA-62): al volver la conexión, al recuperar la
+  // sesión real y cada 10 minutos (así entran los precios de las 9 y las 17).
+  const { enLinea } = useConectividad();
+  const sesionReal = Boolean(accessToken && accessToken !== TOKEN_SIN_CONEXION);
+  const latestRefresh = useRef(refresh);
+  latestRefresh.current = refresh;
+  useEffect(() => {
+    if (!enLinea || !sesionReal) return;
+    void latestRefresh.current().catch(() => {});
+    const timer = window.setInterval(
+      () => void latestRefresh.current().catch(() => {}),
+      10 * 60_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [enLinea, sesionReal]);
   const setPage = (next: View) => {
     setSearchParams(
       workspaceLocation(
@@ -844,6 +862,7 @@ export function WorkspaceShell({
               ) : null}
             </div>
           )}
+          <ConexionChip token={accessToken} />
           <SubscriptionNoticeChip />
           {accessToken && organizationId && branchId && (
             <NotificationBell
