@@ -413,3 +413,82 @@ describe("carga de productos pendientes", () => {
     });
   });
 });
+
+describe("base de medicamentos para la PC (SISTEMA-69)", () => {
+  const actualizado = new Date("2026-11-08T12:00:00.000Z");
+  const prisma = () => {
+    const findMany = jest.fn().mockResolvedValue([
+      {
+        name: "Sertal Compuesto",
+        presentation: "comp. x 10",
+        laboratory: "Roemmers",
+        activeIngredient: "Propinox",
+        pharmaceuticalForm: "comprimido",
+        saleCondition: "Venta libre",
+        troquel: "123",
+        priceSource: "official",
+        priceMinor: 150000n,
+        priceUpdatedAt: actualizado,
+        officialDelisted: false,
+        barcodes: [{ barcode: "7795345124001" }, { barcode: "7795345124001" }],
+      },
+    ]);
+    return {
+      findMany,
+      service: new MedicineCatalogService(
+        {
+          medicineCatalogItem: {
+            aggregate: jest.fn().mockResolvedValue({
+              _count: { _all: 1 },
+              _max: { updatedAt: actualizado, priceUpdatedAt: actualizado },
+            }),
+            findMany,
+          },
+          medicineCatalogPack: {
+            findMany: jest.fn().mockResolvedValue([
+              {
+                barcode: "7795345124247",
+                baseBarcode: "7795345124001",
+                factor: 20,
+              },
+            ]),
+          },
+        } as unknown as PrismaService,
+        {} as AlfaBetaService,
+      ),
+    };
+  };
+
+  it("manda toda la base con claves cortas y los exhibidores", async () => {
+    const { service } = prisma();
+    const base = await service.baseLocal();
+    expect(base.items).toEqual([
+      {
+        n: "Sertal Compuesto",
+        p: "comp. x 10",
+        l: "Roemmers",
+        d: "Propinox",
+        f: "comprimido",
+        s: "Venta libre",
+        t: "123",
+        o: "official",
+        pr: "150000",
+        u: actualizado.toISOString(),
+        b: ["7795345124001"],
+      },
+    ]);
+    expect(base.packs).toHaveLength(1);
+  });
+
+  it("si la PC ya tiene esa versión no vuelve a mandar la base", async () => {
+    const { service, findMany } = prisma();
+    const { version } = await service.baseLocal();
+    findMany.mockClear();
+    expect(await service.baseLocal(version)).toEqual({
+      version,
+      items: null,
+      packs: null,
+    });
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});

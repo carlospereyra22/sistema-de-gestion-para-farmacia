@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import {
   sendOfflineCash,
+  sendOfflinePurchase,
   sendOfflineSale,
   sendSignedOfflineCash,
+  sendSignedOfflinePurchase,
   sendSignedOfflineSale,
 } from "./api";
 import {
@@ -46,19 +48,26 @@ export function useSincronizarVentas(
           alcance,
           // Ventas y operaciones de caja, en el orden en que pasaron.
           enviar: (venta) =>
-            venta.operacion === "CAJA"
-              ? sendOfflineCash(
+            venta.operacion === "COMPRA"
+              ? sendOfflinePurchase(
                   token,
                   venta.organizationId,
                   venta.branchId,
                   venta.cuerpo,
                 )
-              : sendOfflineSale(
-                  token,
-                  venta.organizationId,
-                  venta.branchId,
-                  venta.cuerpo,
-                ),
+              : venta.operacion === "CAJA"
+                ? sendOfflineCash(
+                    token,
+                    venta.organizationId,
+                    venta.branchId,
+                    venta.cuerpo,
+                  )
+                : sendOfflineSale(
+                    token,
+                    venta.organizationId,
+                    venta.branchId,
+                    venta.cuerpo,
+                  ),
           // Las de otros usuarios de la PC van firmadas por ellos (SISTEMA-66).
           enviarDeOtro: (venta) => {
             const firmada = {
@@ -66,6 +75,13 @@ export function useSincronizarVentas(
               payload: venta.payload!,
               signature: venta.firma!,
             };
+            if (venta.operacion === "COMPRA")
+              return sendSignedOfflinePurchase(
+                token,
+                venta.organizationId,
+                venta.branchId,
+                { ...firmada, actorId: venta.vendedorId! },
+              );
             return venta.operacion === "CAJA"
               ? sendSignedOfflineCash(
                   token,

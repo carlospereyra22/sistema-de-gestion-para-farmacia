@@ -1,4 +1,4 @@
-import { apiFetch as fetch } from "./api-fetch";
+import { apiFetch as fetch, SinConexionError } from "./api-fetch";
 import type { PurchasePack } from "./purchase-pack";
 import type { HealthResponse } from "@gestion/contracts";
 import { categoryPath } from "./category-tree";
@@ -9,6 +9,17 @@ import type {
 import { withStockAvailability } from "./stock-availability";
 import { recordarEncabezado } from "./venta-sin-conexion";
 import { EnvioRechazado } from "./sincronizacion-ventas";
+import { TOKEN_SIN_CONEXION } from "./cache-local";
+import { conectividad } from "./conectividad";
+import {
+  buscarMedicamentosEnLaPc,
+  exhibidoresEnLaPc,
+  guardarBaseMedicamentos,
+  guardarExhibidorPendiente,
+  medicamentosPorCodigo,
+  versionBaseMedicamentos,
+  type MedicamentoBase,
+} from "./base-medicamentos-local";
 
 export const apiBaseUrl =
   import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
@@ -704,6 +715,23 @@ export function getAlfaBetaDetail(
   );
 }
 
+/** Sin conexión ahora: la consulta se resuelve con la base de la PC (SISTEMA-69). */
+const usarBaseDeLaPc = (token: string) =>
+  token === TOKEN_SIN_CONEXION || !conectividad().enLinea;
+/** Con conexión y, si se corta en el momento, con la base de la PC. */
+async function conBaseDeLaPc<T>(
+  token: string,
+  conServidor: () => Promise<T>,
+  enLaPc: () => Promise<T>,
+): Promise<T> {
+  if (usarBaseDeLaPc(token)) return enLaPc();
+  try {
+    return await conServidor();
+  } catch (error) {
+    if (error instanceof SinConexionError) return enLaPc();
+    throw error;
+  }
+}
 export async function searchMedicineReferences(
   token: string,
   organizationId: string,
@@ -711,33 +739,51 @@ export async function searchMedicineReferences(
   source: MedicineReference["source"],
   signal?: AbortSignal,
 ): Promise<MedicineReference[]> {
-  const search = new URLSearchParams({ q: query, source });
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references?${search.toString()}`,
-    { headers: { Authorization: `Bearer ${token}` }, signal },
+  return conBaseDeLaPc(
+    token,
+    async () => {
+      const search = new URLSearchParams({ q: query, source });
+      const response = await fetch(
+        `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references?${search.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` }, signal },
+      );
+      if (!response.ok)
+        throw await responseError(
+          response,
+          "No se pudieron consultar las referencias de medicamentos.",
+        );
+      return (await response.json()) as MedicineReference[];
+    },
+    () => buscarMedicamentosEnLaPc(query),
   );
-  if (!response.ok)
-    throw await responseError(
-      response,
-      "No se pudieron consultar las referencias de medicamentos.",
-    );
-  return (await response.json()) as MedicineReference[];
 }
 export async function getMedicinePacks(
   token: string,
   organizationId: string,
   codes?: string[],
 ): Promise<PurchasePack[]> {
-  const search = new URLSearchParams(codes ? { codes: codes.join(",") } : {});
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/packs?${search.toString()}`,
-    { headers: { Authorization: `Bearer ${token}` } },
+  return conBaseDeLaPc(
+    token,
+    async () => {
+      const search = new URLSearchParams(
+        codes ? { codes: codes.join(",") } : {},
+      );
+      const response = await fetch(
+        `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/packs?${search.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok)
+        throw await responseError(
+          response,
+          "No se pudieron leer los exhibidores.",
+        );
+      return (await response.json()) as PurchasePack[];
+    },
+    () => exhibidoresEnLaPc(codes),
   );
-  if (!response.ok)
-    throw await responseError(response, "No se pudieron leer los exhibidores.");
-  return (await response.json()) as PurchasePack[];
 }
-export async function saveMedicinePack(
+/** Guarda el exhibidor en el servidor, sin alternativa en la PC. */
+export async function enviarExhibidor(
   token: string,
   organizationId: string,
   pack: PurchasePack,
@@ -756,18 +802,62 @@ export async function saveMedicinePack(
   if (!response.ok)
     throw await responseError(response, "No se pudo guardar el exhibidor.");
 }
+export async function saveMedicinePack(
+  token: string,
+  organizationId: string,
+  pack: PurchasePack,
+): Promise<void> {
+  return conBaseDeLaPc(
+    token,
+    () => enviarExhibidor(token, organizationId, pack),
+    // Se usa ya en la PC y se manda solo al volver.
+    () => guardarExhibidorPendiente(organizationId, pack),
+  );
+}
 export async function lookupMedicineBarcode(
   token: string,
   organizationId: string,
   code: string,
 ): Promise<{ matches: MedicineReference[] }> {
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/barcode/${encodeURIComponent(code)}`,
+  return conBaseDeLaPc(
+    token,
+    async () => {
+      const response = await fetch(
+        `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/barcode/${encodeURIComponent(code)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok)
+        throw await responseError(response, "No se pudo consultar el código.");
+      return (await response.json()) as { matches: MedicineReference[] };
+    },
+    async () => ({ matches: await medicamentosPorCodigo(code) }),
+  );
+}
+/**
+ * Baja la base de medicamentos a la PC si cambió desde la que ya tiene
+ * (SISTEMA-69). No pasa por la copia local de consultas: se guarda aparte.
+ */
+export async function actualizarBaseMedicamentos(
+  token: string,
+  organizationId: string,
+) {
+  const version = await versionBaseMedicamentos();
+  const response = await globalThis.fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/catalog/medicine-references/base-local?${new URLSearchParams(version ? { version } : {}).toString()}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  if (!response.ok)
-    throw await responseError(response, "No se pudo consultar el código.");
-  return (await response.json()) as { matches: MedicineReference[] };
+  if (!response.ok) return;
+  const base = (await response.json()) as {
+    version: string;
+    items: MedicamentoBase[] | null;
+    packs: PurchasePack[] | null;
+  };
+  if (base.items && base.packs)
+    await guardarBaseMedicamentos({
+      version: base.version,
+      items: base.items,
+      packs: base.packs,
+    });
 }
 export async function createCatalogProduct(
   token: string,
@@ -2662,6 +2752,53 @@ export async function sendSignedOfflineCash(
   return response.json();
 }
 
+/** Operación de compras hecha sin conexión (SISTEMA-69). */
+export async function sendOfflinePurchase(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/purchases/offline`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la operación de compras sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return (await response.json()) as { offlineIssues?: unknown[] };
+}
+
+/** La de otro usuario de esta PC, firmada por él (SISTEMA-69). */
+export async function sendSignedOfflinePurchase(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: {
+    actorId: string;
+    deviceId: string;
+    payload: string;
+    signature: string;
+  },
+) {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/purchases/offline/firmada`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la operación de compras sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return (await response.json()) as { offlineIssues?: unknown[] };
+}
+
 /** Registra la clave con la que esta PC firma las ventas del usuario. */
 export async function registerOfflineKey(
   token: string,
@@ -2903,6 +3040,8 @@ async function responseError(
 
 export type Purchase = {
   canRegisterDebt?: boolean;
+  /** Hecha sin conexión en esta PC y todavía sin enviar (SISTEMA-69). */
+  porEnviar?: boolean;
   hasRegisteredDebt?: boolean;
   clientOperationId?: string | null;
   reference?: string | null;

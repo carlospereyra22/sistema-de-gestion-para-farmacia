@@ -35,6 +35,10 @@ import { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
 
+class BaseLocalQueryDto {
+  @IsOptional() @IsString() @MaxLength(120) version?: string;
+}
+
 class MedicinePackQueryDto {
   @IsOptional()
   @IsString()
@@ -124,6 +128,22 @@ export class MedicineReferenceController {
       automaticSelection: false,
       officialUnavailable,
     };
+  }
+
+  // Toda la base para buscar sin conexión en la PC (SISTEMA-69).
+  @Get("base-local")
+  @Header("Cache-Control", "no-store")
+  async baseLocal(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Query() query: BaseLocalQueryDto,
+  ) {
+    await this.catalog.assertPermission(
+      request.auth!.sub,
+      organizationId,
+      "CATALOG_READ",
+    );
+    return this.medicineCatalog.baseLocal(query.version);
   }
 
   @Get("packs")

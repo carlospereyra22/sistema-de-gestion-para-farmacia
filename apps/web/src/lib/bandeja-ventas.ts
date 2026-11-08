@@ -21,15 +21,25 @@ export type VentaPendiente = {
   documentType: "INTERNAL" | "INVOICE";
   /** Cuerpo listo para POST sales/offline. */
   cuerpo: Record<string, unknown>;
-  /** Unidades por producto, para descontarlas del stock que se ve en la PC. */
-  unidades: { productId: string; cantidad: number }[];
+  /**
+   * Unidades por producto, para descontarlas del stock que se ve en la PC. En
+   * compras van en negativo: suman stock (SISTEMA-69).
+   */
+  unidades: {
+    productId: string;
+    cantidad: number;
+    /** Compra recibida sin conexión: el lote y su vencimiento (SISTEMA-69). */
+    lote?: string;
+    vence?: string | null;
+  }[];
   /** Ticket provisorio impreso, para reimprimirlo (las de caja no tienen). */
   ticket?: ThermalTicket;
   /**
-   * Operación de caja sin conexión (SISTEMA-67): apertura, movimiento o
-   * cierre. Sin este campo es una venta.
+   * Operación sin conexión que no es venta: de caja (SISTEMA-67: apertura,
+   * movimiento o cierre) o de compras (SISTEMA-69: pedido, compra directa o
+   * recepción). Sin este campo es una venta.
    */
-  operacion?: "CAJA";
+  operacion?: "CAJA" | "COMPRA";
   /** Quién la hizo, para mostrarlo en la caja (nombre o email). */
   actorName?: string;
   estado: EstadoVentaPendiente;

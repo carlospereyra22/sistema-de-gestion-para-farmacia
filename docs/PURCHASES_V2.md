@@ -103,6 +103,8 @@ Agrega metadata de compra, cantidad no entregada y tablas PurchaseReceipt/Purcha
 
 El servicio existente PurchasesService sigue siendo el punto de acreditación de ProductLot y de InventoryMovement. Cada entrega bloquea la compra y valida el saldo dentro de la transacción; compra directa, líneas, lotes, movimientos y auditoría se confirman juntos. Las claves de operación son únicas por organización/sucursal y su hash impide reutilizarlas con otro contenido. Bloqueos adicionales ordenados serializan los lotes entre compras concurrentes; los lotes existentes conservan costo y vencimiento, rechazando un vencimiento incompatible. El costo de cada nueva recepción queda registrado por separado.
 
+Compras sin conexión (SISTEMA-69): `POST purchases/offline` y `purchases/offline/firmada` reciben un pedido, una compra directa o una recepción hecha sin internet, con su hora real, y reusan las mismas claves de operación, así no se duplican. Una recepción puede referirse al pedido por su `clientOperationId` y a cada renglón por su producto. Ver OFFLINE.md.
+
 Se conservan POST purchases y POST purchases/:id/receipts. Clientes antiguos sin clave de operación siguen siendo compatibles, pero no tienen garantía de deduplicación entre reenvíos independientes. La interfaz nueva siempre envía una clave. Los endpoints nuevos son GET purchases/:id, POST purchases/direct, POST purchases/:id/receipts/batch y POST purchases/:id/close-balance. No se cambian ventas, caja, cuenta corriente, listas de precios ni stock por crear un pedido.
 
 ## Despliegue y respaldo

@@ -206,10 +206,12 @@ export function PurchaseExcelImport({
         mapping: invoiceMapping,
       });
     } catch (e) {
+      // La causa real queda en la consola y en el aviso, para poder revisarla.
+      console.error("No se pudo leer la factura PDF", e);
       onError(
         e instanceof Error && e.message.startsWith("Importá")
           ? e.message
-          : "No se pudo leer la factura. Revisá que sea un PDF.",
+          : `No se pudo leer la factura. Revisá que sea un PDF.${e instanceof Error && e.message ? ` (${e.message})` : ""}`,
       );
     } finally {
       setReading("");

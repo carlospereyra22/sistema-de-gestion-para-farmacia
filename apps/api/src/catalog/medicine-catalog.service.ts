@@ -48,6 +48,27 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 const WRITE_CHUNK = 2000;
 const SEARCH_CANDIDATES = 300;
 const SEARCH_RESULTS = 30;
+/** Base de medicamentos para buscar sin conexión en la PC (SISTEMA-69). */ export type BaseLocalMedicamentos =
+  {
+    version: string;
+    /** null: la PC ya tiene esta versión. */ items:
+      | {
+          n: string;
+          p: string;
+          l: string;
+          d: string;
+          f: string;
+          s: string;
+          t: string;
+          o: string;
+          pr: string;
+          u: string;
+          b: string[];
+          x?: 1;
+        }[]
+      | null;
+    packs: { barcode: string; baseBarcode: string; factor: number }[] | null;
+  };
 
 function transientSourceError(cause: unknown): boolean {
   if (!(cause instanceof Error)) return false;
@@ -243,6 +264,54 @@ export class MedicineCatalogService {
       .map(({ item }) =>
         referenceFromCatalog(item, item.barcodes[0]?.barcode ?? ""),
       );
+  }
+
+  /**
+   * Toda la base para la PC (SISTEMA-69): así se busca sin conexión. Se baja
+   * sólo si cambió desde la versión que ya tiene la PC (la actualización de
+   * precios de las 9 y las 17 la cambia). Claves cortas: son ~18.000 filas.
+   */
+  async baseLocal(versionDeLaPc?: string): Promise<BaseLocalMedicamentos> {
+    const [resumen, packs] = await Promise.all([
+      this.prisma.medicineCatalogItem.aggregate({
+        _count: { _all: true },
+        _max: { updatedAt: true, priceUpdatedAt: true },
+      }),
+      this.prisma.medicineCatalogPack.findMany({
+        select: { barcode: true, baseBarcode: true, factor: true },
+        orderBy: { barcode: "asc" },
+      }),
+    ]);
+    const version = [
+      resumen._count._all,
+      resumen._max.updatedAt?.getTime() ?? 0,
+      resumen._max.priceUpdatedAt?.getTime() ?? 0,
+      packs.length,
+      packs.reduce((suma, pack) => suma + pack.factor, 0),
+    ].join("-");
+    if (versionDeLaPc === version) return { version, items: null, packs: null };
+    const items = await this.prisma.medicineCatalogItem.findMany({
+      include: { barcodes: { select: { barcode: true } } },
+      orderBy: [{ name: "asc" }, { presentation: "asc" }],
+    });
+    return {
+      version,
+      packs,
+      items: items.map((item) => ({
+        n: item.name,
+        p: item.presentation,
+        l: item.laboratory,
+        d: item.activeIngredient,
+        f: item.pharmaceuticalForm,
+        s: item.saleCondition,
+        t: item.troquel,
+        o: item.priceSource,
+        pr: String(item.priceMinor),
+        u: item.priceUpdatedAt.toISOString(),
+        b: [...new Set(item.barcodes.map((code) => code.barcode))],
+        ...(item.officialDelisted ? { x: 1 as const } : {}),
+      })),
+    };
   }
 
   // Referencias de toda la base, una por código distinto: las usa la corrida

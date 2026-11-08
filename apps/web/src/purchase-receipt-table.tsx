@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { InventoryLotInput } from "./inventory-lot-input";
+import { suscribirBandeja, ventasDeLaPc } from "./lib/bandeja-ventas";
+import { lotesConPendientes, lotesSinEnviar } from "./lib/compras-sin-conexion";
 import {
   getReceiptLots,
   type CatalogProduct,
@@ -65,7 +67,16 @@ export function PurchaseReceiptTable({
   onAddLot: (itemId: string) => void;
   initialExistingLots?: ReceiptLot[];
 }) {
-  const [existingLots, setExistingLots] = useState(initialExistingLots);
+  const [serverLots, setExistingLots] = useState<ReceiptLot[]>([]);
+  // Los lotes del stock de la sucursal y los de Compras, juntos: sin conexión
+  // alcanza con que uno de los dos esté guardado en la PC (SISTEMA-69).
+  const existingLots = useMemo(() => {
+    const byId = new Map(initialExistingLots.map((lot) => [lot.id, lot]));
+    for (const lot of serverLots) byId.set(lot.id, lot);
+    return [...byId.values()];
+  }, [initialExistingLots, serverLots]);
+  // Lotes recibidos sin conexión que todavía no llegaron (SISTEMA-69).
+  const [pendingLots, setPendingLots] = useState<ReceiptLot[]>([]);
   useEffect(() => {
     if (!branchId) return;
     let current = true;
@@ -75,16 +86,28 @@ export function PurchaseReceiptTable({
       })
       // Sin sugerencias se escribe a mano: la API sigue validando el lote.
       .catch(() => undefined);
+    const loadPending = () =>
+      void ventasDeLaPc()
+        .then((bandeja) => {
+          if (current)
+            setPendingLots(lotesSinEnviar(bandeja, organizationId, branchId));
+        })
+        .catch(() => undefined);
+    loadPending();
+    const stop = suscribirBandeja(loadPending);
     return () => {
       current = false;
+      stop();
     };
   }, [token, organizationId, branchId]);
   const lotsByProduct = useMemo(() => {
     const groups = new Map<string, ReceiptLot[]>();
-    for (const lot of [...existingLots].sort(byLotOrder))
+    for (const lot of lotesConPendientes(existingLots, pendingLots).sort(
+      byLotOrder,
+    ))
       groups.set(lot.productId, [...(groups.get(lot.productId) ?? []), lot]);
     return groups;
-  }, [existingLots]);
+  }, [existingLots, pendingLots]);
   const visible = items.filter((item) => {
     const product = products.find((entry) => entry.id === item.productId);
     return (
