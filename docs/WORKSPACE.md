@@ -1,5 +1,21 @@
 # Interfaz y navegación del sistema
 
+## Permisos por módulo (08/11/2026)
+
+El editor de roles presenta los permisos bajo los mismos apartados del menú lateral.
+Cada apartado se despliega para elegir sus acciones y muestra cuántas tiene
+seleccionadas. Los permisos compartidos aparecen en cada módulo afectado, con una
+nota que indica los demás módulos; marcar uno actualiza todas sus apariciones y
+guarda un solo código de permiso. Inicio no tiene un permiso propio: está disponible
+para los usuarios de la organización y cada dato respeta los permisos de las fuentes
+que consulta. Buscar productos, clientes o stock forma parte de sus permisos de
+lectura existentes. Esta reorganización no crea permisos ni cambia el control de
+acceso de la API.
+
+Administración muestra su título e icono en la barra superior, igual que Caja. Las
+pestañas de Usuarios y Roles y permisos quedan en una franja compacta dentro del
+contenido, sin repetir el título ni reservar espacio vacío arriba.
+
 Documento consolidado; conserva las decisiones de implementación de cada apartado. El catálogo externo y sus imágenes se documentan en [EXTERNAL_PRODUCT_CATALOG.md](EXTERNAL_PRODUCT_CATALOG.md).
 
 ## Pantalla completa
