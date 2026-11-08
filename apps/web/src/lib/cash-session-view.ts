@@ -59,7 +59,7 @@ export function cashTimeline(
       id: payment.id,
       date: payment.createdAt,
       label: `Venta · ${payment.saleId.slice(0, 8)}`,
-      actor: "—",
+      actor: payment.actorName ?? "—",
       amountMinor: payment.amountMinor,
       out: false,
     })),

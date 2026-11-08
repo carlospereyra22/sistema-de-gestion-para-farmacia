@@ -67,6 +67,35 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
         titulo: "Factura no emitida",
         detalle: `La venta quedó como ticket. ${texto(d.motivo)}`.trim(),
       };
+    // Caja sin conexión (SISTEMA-67).
+    case "CAJA_YA_ABIERTA":
+      return {
+        titulo: `Caja ya abierta: ${texto(d.caja) || "caja"}`,
+        detalle:
+          "Otra PC la abrió mientras no había conexión. Las ventas y movimientos de esta PC se sumaron a esa sesión.",
+      };
+    case "OTRA_CAJA_ABIERTA":
+      return {
+        titulo: "Dos cajas abiertas por la misma persona",
+        detalle: `Al abrir sin conexión ya tenía abierta ${texto(d.caja)} en ${texto(d.sucursal)}. Revisá cuál corresponde cerrar.`,
+      };
+    case "EGRESO_SUPERA_EFECTIVO":
+      return {
+        titulo: "Egreso mayor al efectivo",
+        detalle: `Se registró un egreso de ${pesos(d.amountMinor)} (${texto(d.motivo)}) y en la caja había ${pesos(d.disponibleMinor)}.`,
+      };
+    case "MOVIMIENTO_RETENIDO":
+      return {
+        titulo: `Movimiento fuera de caja: ${texto(d.caja) || "caja"}`,
+        detalle: `El ${d.tipo === "OUT" ? "egreso" : "ingreso"} de ${pesos(d.amountMinor)} (${texto(d.motivo)}) llegó con la caja ya cerrada y no entró en ese cierre. Registralo a mano si corresponde.`,
+      };
+    case "CIERRE_DISTINTO":
+      return {
+        titulo: `Cierre para revisar: ${texto(d.caja) || "caja"}`,
+        detalle: d.esperadoMinor
+          ? `La PC mostraba ${pesos(d.vioMinor)} esperados y el servidor calculó ${pesos(d.esperadoMinor)}. Se contaron ${pesos(d.contadoMinor)}.`
+          : `${texto(d.motivo)} Se contaron ${pesos(d.contadoMinor)}.`.trim(),
+      };
     default:
       return {
         titulo: "Venta sin conexión para revisar",

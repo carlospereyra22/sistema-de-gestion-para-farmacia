@@ -106,3 +106,7 @@
 - Incorporar el cobro (`POST .../assign`) libera la factura en la misma transacción: Caja llama a `liberarFacturaEnEspera` del módulo Fiscal con su `TransactionClient`, que la pasa a la cola y audita. La respuesta y la auditoría `ASSIGNED` llevan `facturaLiberada`.
 - La confirmación avisa que se emite la factura C con la fecha de hoy. Después, la web pide el envío de esa factura. Si no puede, por permisos o porque ARCA no responde, la cola fiscal la envía en su próxima vuelta.
 - Asignar o quitar la caja de destino no toca la factura.
+
+## Caja sin conexión (08/11/2026, SISTEMA-67)
+
+Abrir, mover y cerrar funcionan sin internet: la PC guarda la operación y la manda al volver. El servidor la registra con su hora real (`POST cash/offline`) y deja avisos "a revisar" cuando algo cambió mientras tanto. Detalle en OFFLINE.md.

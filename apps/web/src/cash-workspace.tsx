@@ -45,6 +45,8 @@ import {
 import { lotCostInput } from "./lib/lot-cost";
 import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { useConectividad } from "./lib/conectividad";
+import { guardarOperacionCaja } from "./lib/caja-sin-conexion";
+import { SinConexionError } from "./lib/api-fetch";
 import { MoneyInput } from "./money-input";
 import { ClosureVisibility, RegisterManager } from "./record-maintenance";
 
@@ -64,6 +66,7 @@ export function CashWorkspace({
   onRegisterChange,
   session,
   ventasSinEnviar = 0,
+  cierreLocal,
   done,
   error,
 }: {
@@ -80,6 +83,8 @@ export function CashWorkspace({
   session?: CashSession;
   /** Ventas cobradas sin conexión en esta sucursal que todavía no llegaron. */
   ventasSinEnviar?: number;
+  /** Último cierre hecho sin conexión que todavía no llegó (SISTEMA-67). */
+  cierreLocal?: CashClosure;
   done: () => void;
   error: (value: string) => void;
 }): ReactElement {
@@ -205,14 +210,35 @@ export function CashWorkspace({
     }
     cashPending.current = true;
     setCashBusy(true);
+    // Sin conexión la apertura queda en la PC y se manda sola (SISTEMA-67).
+    const abrirSinConexion = async () => {
+      await guardarOperacionCaja(organizationId, branchId, {
+        tipo: "APERTURA",
+        cashRegisterId: registerId,
+        openingAmountMinor: openingMinor,
+      });
+      setOpening("");
+      onRegisterChange(registerId);
+      done();
+    };
     try {
-      await openCashSession(
-        token,
-        organizationId,
-        branchId,
-        registerId,
-        openingMinor,
-      );
+      if (sinConexion) {
+        await abrirSinConexion();
+        return;
+      }
+      try {
+        await openCashSession(
+          token,
+          organizationId,
+          branchId,
+          registerId,
+          openingMinor,
+        );
+      } catch (cause) {
+        if (!(cause instanceof SinConexionError)) throw cause;
+        await abrirSinConexion();
+        return;
+      }
       setOpening("");
       onRegisterChange(registerId);
       done();
@@ -263,13 +289,35 @@ export function CashWorkspace({
       movementRequest.current = { signature, id: crypto.randomUUID() };
     cashPending.current = true;
     setCashBusy(true);
-    try {
-      await createCashMovement(token, organizationId, branchId, session.id, {
-        clientOperationId: movementRequest.current.id,
+    // Sin conexión el movimiento queda en la PC y se manda solo (SISTEMA-67).
+    const moverSinConexion = () =>
+      guardarOperacionCaja(organizationId, branchId, {
+        tipo: "MOVIMIENTO",
+        sessionId: session.id,
         type: movementType,
         amountMinor,
-        reason: movementReason,
+        reason: movementReason.trim(),
       });
+    try {
+      if (sinConexion) await moverSinConexion();
+      else
+        try {
+          await createCashMovement(
+            token,
+            organizationId,
+            branchId,
+            session.id,
+            {
+              clientOperationId: movementRequest.current.id,
+              type: movementType,
+              amountMinor,
+              reason: movementReason,
+            },
+          );
+        } catch (cause) {
+          if (!(cause instanceof SinConexionError)) throw cause;
+          await moverSinConexion();
+        }
       movementRequest.current = null;
       setMovementType("IN");
       setMovementAmount("");
@@ -283,8 +331,8 @@ export function CashWorkspace({
     }
   };
   const lastCounted =
-    lastClosure?.cashRegisterId === registerId
-      ? lastClosure.closingAmountMinor
+    (cierreLocal ?? lastClosure)?.cashRegisterId === registerId
+      ? (cierreLocal ?? lastClosure)!.closingAmountMinor
       : null;
   const ownOpenNotice = ownOpenRegisterNotice(openSessions, registers);
   const noPermission = management && !management.canManage && (
@@ -403,6 +451,7 @@ export function CashWorkspace({
               refreshKey={closures}
               onView={setClosureDetailId}
               onLoaded={setLastClosure}
+              cierreLocal={cierreLocal}
             />
           ) : (
             <div className="cash-metrics" />
@@ -548,25 +597,14 @@ export function CashWorkspace({
                 )}
                 <button
                   disabled={
-                    cashBusy ||
-                    sinConexion ||
-                    !management?.canManage ||
-                    Boolean(ownOpenNotice)
+                    cashBusy || !management?.canManage || Boolean(ownOpenNotice)
                   }
                   className="mt-5 w-full bg-teal-700 py-2 text-sm text-white disabled:opacity-50"
                 >
                   {register ? `Abrir ${register.name}` : "Abrir caja"}
                 </button>
-                {sinConexion ? (
-                  <p className="mt-3 text-xs text-slate-600">
-                    Para abrir la caja hace falta conexión con el servidor.
-                  </p>
-                ) : (
-                  ownOpenNotice && (
-                    <p className="mt-3 text-xs text-amber-800">
-                      {ownOpenNotice}
-                    </p>
-                  )
+                {ownOpenNotice && (
+                  <p className="mt-3 text-xs text-amber-800">{ownOpenNotice}</p>
                 )}
               </form>
             )}

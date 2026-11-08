@@ -7,6 +7,7 @@ import {
 import { typedCashMinor } from "./lib/cash-count";
 import { CashDialog } from "./cash-dialog";
 import { MoneyInput } from "./money-input";
+import { guardarOperacionCaja } from "./lib/caja-sin-conexion";
 
 const money = (minor: number) =>
   (minor / 100).toLocaleString("es-AR", { style: "currency", currency: "ARS" });
@@ -32,14 +33,18 @@ export function CashCloseForm({
   pendingCollections?: number;
   /** Ventas cobradas sin conexión que faltan enviar: mientras haya, no se cierra. */
   ventasSinEnviar?: number;
-  /** Cerrar caja necesita el servidor. */
+  /** Sin conexión el cierre se guarda en la PC y se confirma al volver (SISTEMA-67). */
   sinConexion?: boolean;
   onClosed: () => void;
   onRejected?: () => void;
 }) {
   // Una venta sin enviar es plata que ya está en el cajón pero todavía no en
   // la caja del servidor: cerrar ahora daría un faltante falso.
-  const disabled = disabledProp || ventasSinEnviar > 0 || sinConexion;
+  // Con conexión, una venta sin enviar es plata que todavía no figura en la
+  // caja del servidor. Sin conexión no hace falta esperar: el cierre se manda
+  // después de esas ventas, en orden.
+  const bloqueadoPorVentas = !sinConexion && ventasSinEnviar > 0;
+  const disabled = disabledProp || bloqueadoPorVentas;
   const pending = useRef(false);
   const [busy, setBusy] = useState(false);
   const [counted, setCounted] = useState("");
@@ -63,6 +68,22 @@ export function CashCloseForm({
     setBusy(true);
     setError("");
     try {
+      if (sinConexion) {
+        await guardarOperacionCaja(organizationId, branchId, {
+          tipo: "CIERRE",
+          sessionId: session.id,
+          // Para mostrarlo como "Último cierre" mientras no llega.
+          cashRegisterId: session.cashRegisterId,
+          closingAmountMinor: snapshot.minor,
+          expectedAmountMinor: snapshot.expected,
+          ...(snapshot.minor !== snapshot.expected
+            ? { reason: snapshot.reason }
+            : {}),
+        });
+        setConfirmation(undefined);
+        onClosed();
+        return;
+      }
       await closeCashSession(
         token,
         organizationId,
@@ -156,10 +177,11 @@ export function CashCloseForm({
           role="status"
           className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
         >
-          Para cerrar la caja hace falta conexión con el servidor.
+          Sin conexión: el cierre queda guardado en la PC y se confirma solo
+          cuando vuelva internet.
         </p>
       )}
-      {ventasSinEnviar > 0 && (
+      {bloqueadoPorVentas && (
         <p
           role="status"
           className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800"

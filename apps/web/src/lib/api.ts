@@ -1957,6 +1957,8 @@ export type CashSession = {
     saleId: string;
     amountMinor: string;
     createdAt: string;
+    /** Quién hizo la venta. */
+    actorName?: string | null;
   }[];
 };
 
@@ -2013,6 +2015,8 @@ export type CashClosure = CashSession & {
   registerResponsibleName?: string | null;
   cashRegisterName: string;
   closedBy?: string | null;
+  /** Cierre hecho sin conexión que todavía no llegó (SISTEMA-67). */
+  sinEnviar?: boolean;
 };
 
 export async function getCash(
@@ -2605,6 +2609,53 @@ export async function sendSignedOfflineSale(
     const error = await responseError(
       response,
       "El servidor no aceptó la venta sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return response.json();
+}
+
+/** Operación de caja hecha sin conexión (SISTEMA-67). */
+export async function sendOfflineCash(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+): Promise<{ entityId: string | null; offlineIssues: OfflineIssue[] }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/cash/offline`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la operación de caja sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return response.json();
+}
+
+/** La de otro usuario de esta PC, firmada por él (SISTEMA-67). */
+export async function sendSignedOfflineCash(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: {
+    actorId: string;
+    deviceId: string;
+    payload: string;
+    signature: string;
+  },
+): Promise<{ entityId: string | null; offlineIssues: OfflineIssue[] }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/cash/offline/firmada`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la operación de caja sin conexión.",
     );
     throw new EnvioRechazado(error.message, response.status);
   }

@@ -40,6 +40,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261108080000_offline_device_key` (SISTEMA-66): `OfflineDeviceKey` guarda, por usuario y PC (`deviceId`, única), la clave pública ECDSA P-256 (SPKI en base64) con la que esa PC firma sus ventas sin conexión. Permite que otro usuario de la PC las mande a su nombre. Ver OFFLINE.md.
 
+`20261108100000_offline_cash` (SISTEMA-67): `OfflineOperation` admite `CASH_OPEN` y `CASH_CLOSE`; `OfflineSyncIssue` suma los avisos `CAJA_YA_ABIERTA`, `OTRA_CAJA_ABIERTA` y `CIERRE_DISTINTO`. Una sesión abierta sin conexión usa como id el de la operación de la PC.
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

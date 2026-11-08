@@ -72,6 +72,8 @@ export function historialConPendientes(
   const pendientes = bandeja
     .filter(
       (venta) =>
+        // Sólo ventas: las operaciones de caja no van al historial.
+        venta.operacion !== "CAJA" &&
         venta.estado !== "ENVIADA" &&
         venta.organizationId === organizationId &&
         venta.branchId === branchId &&

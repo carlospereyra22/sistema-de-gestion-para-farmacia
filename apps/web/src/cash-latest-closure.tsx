@@ -12,6 +12,7 @@ export function CashLatestClosure({
   refreshKey,
   onView,
   onLoaded,
+  cierreLocal,
 }: {
   token: string;
   organizationId: string;
@@ -20,6 +21,8 @@ export function CashLatestClosure({
   refreshKey: unknown;
   onView: (id: string) => void;
   onLoaded?: (closure: CashClosure | null) => void;
+  /** Cierre hecho sin conexión que todavía no llegó: se muestra primero. */
+  cierreLocal?: CashClosure;
 }) {
   const [result, setResult] = useState<{
     registerId: string;
@@ -59,7 +62,8 @@ export function CashLatestClosure({
     onLoaded,
   ]);
   const closure =
-    result?.registerId === registerId ? result.closure : undefined;
+    cierreLocal ??
+    (result?.registerId === registerId ? result.closure : undefined);
   const difference = closure
     ? cashDifferenceView(closure.differenceMinor)
     : null;
@@ -88,6 +92,10 @@ export function CashLatestClosure({
         ) : closure === null ? (
           <p className="cash-metric-note">
             Sin cierres visibles para esta caja.
+          </p>
+        ) : closure.sinEnviar ? (
+          <p className="cash-metric-note">
+            Efectivo contado · se confirma al volver internet
           </p>
         ) : (
           <p className="cash-metric-note">

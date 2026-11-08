@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
-import { sendOfflineSale, sendSignedOfflineSale } from "./api";
+import {
+  sendOfflineCash,
+  sendOfflineSale,
+  sendSignedOfflineCash,
+  sendSignedOfflineSale,
+} from "./api";
 import {
   olvidarEnviadasViejas,
   suscribirBandeja,
@@ -39,21 +44,48 @@ export function useSincronizarVentas(
         if (!activo || !token || token === TOKEN_SIN_CONEXION) return;
         const resultado = await sincronizarVentas({
           alcance,
+          // Ventas y operaciones de caja, en el orden en que pasaron.
           enviar: (venta) =>
-            sendOfflineSale(
-              token,
-              venta.organizationId,
-              venta.branchId,
-              venta.cuerpo,
-            ),
+            venta.operacion === "CAJA"
+              ? sendOfflineCash(
+                  token,
+                  venta.organizationId,
+                  venta.branchId,
+                  venta.cuerpo,
+                )
+              : sendOfflineSale(
+                  token,
+                  venta.organizationId,
+                  venta.branchId,
+                  venta.cuerpo,
+                ),
           // Las de otros usuarios de la PC van firmadas por ellos (SISTEMA-66).
-          enviarDeOtro: (venta) =>
-            sendSignedOfflineSale(token, venta.organizationId, venta.branchId, {
-              sellerId: venta.vendedorId!,
+          enviarDeOtro: (venta) => {
+            const firmada = {
               deviceId: String(venta.cuerpo.deviceId),
               payload: venta.payload!,
               signature: venta.firma!,
-            }),
+            };
+            return venta.operacion === "CAJA"
+              ? sendSignedOfflineCash(
+                  token,
+                  venta.organizationId,
+                  venta.branchId,
+                  {
+                    ...firmada,
+                    actorId: venta.vendedorId!,
+                  },
+                )
+              : sendSignedOfflineSale(
+                  token,
+                  venta.organizationId,
+                  venta.branchId,
+                  {
+                    ...firmada,
+                    sellerId: venta.vendedorId!,
+                  },
+                );
+          },
         });
         await olvidarEnviadasViejas();
         if (resultado.enviadas && typeof window !== "undefined")

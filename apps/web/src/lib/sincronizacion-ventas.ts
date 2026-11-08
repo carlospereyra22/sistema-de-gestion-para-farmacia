@@ -71,14 +71,23 @@ export async function sincronizarVentas(opciones: {
     interrumpida: false,
   };
   const pendientes = (await ventasDeLaPc()).filter(
-    (venta) =>
-      venta.estado === "PENDIENTE" &&
-      (venta.alcance === opciones.alcance ||
-        (Boolean(opciones.enviarDeOtro) &&
-          sePuedeEnviar(venta, opciones.alcance))),
+    (venta) => venta.estado === "PENDIENTE",
   );
+  // El orden importa (SISTEMA-67): una venta usa la caja que se abrió antes.
+  // Si esta sesión no puede mandar algo, lo que vino después en esa sucursal
+  // espera, para no llegar antes que la apertura de la que depende.
+  const frenadas = new Set<string>();
   for (const venta of pendientes) {
+    const sucursal = `${venta.organizationId}|${venta.branchId}`;
+    if (frenadas.has(sucursal)) continue;
     const propia = venta.alcance === opciones.alcance;
+    if (
+      !propia &&
+      (!opciones.enviarDeOtro || !sePuedeEnviar(venta, opciones.alcance))
+    ) {
+      frenadas.add(sucursal);
+      continue;
+    }
     try {
       const respuesta = propia
         ? await opciones.enviar(venta)
@@ -100,8 +109,10 @@ export async function sincronizarVentas(opciones: {
         !propia &&
         cause instanceof EnvioRechazado &&
         quedaParaSuDueno(cause.status)
-      )
+      ) {
+        frenadas.add(sucursal);
         continue;
+      }
       if (cause instanceof EnvioRechazado && rechazoDefinitivo(cause.status)) {
         await actualizarVentaPendiente({
           ...venta,

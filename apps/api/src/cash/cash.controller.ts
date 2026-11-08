@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -10,7 +11,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { Type } from "class-transformer";
+import { Type, plainToInstance } from "class-transformer";
 import {
   IsEnum,
   IsBoolean,
@@ -23,6 +24,8 @@ import {
   IsUUID,
   Min,
   MinLength,
+  IsISO8601,
+  validate,
 } from "class-validator";
 import { CashMovementType } from "@prisma/client";
 
@@ -30,7 +33,10 @@ import type { AuthenticatedRequest } from "../auth/auth.types";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { CashService } from "./cash.service";
-import { AllowWhenReadOnly } from "../platform/subscription-gate";
+import {
+  AllowWhenReadOnly,
+  DecidedWhenOccurred,
+} from "../platform/subscription-gate";
 
 class CreateRegisterDto {
   @IsOptional() @IsString() @MaxLength(100) responsibleName?: string | null;
@@ -82,6 +88,37 @@ class EditRegisterDto {
   @IsBoolean() active!: boolean;
   @IsString() expectedName!: string;
   @IsBoolean() expectedActive!: boolean;
+}
+/** Apertura, movimiento o cierre hecho sin conexión (SISTEMA-67). */
+class OfflineCashDto {
+  @IsIn(["APERTURA", "MOVIMIENTO", "CIERRE"]) tipo!:
+    "APERTURA" | "MOVIMIENTO" | "CIERRE";
+  @IsUUID() clientOperationId!: string;
+  @IsISO8601({ strict: true }) occurredAt!: string;
+  @IsUUID() deviceId!: string;
+  @IsOptional() @IsUUID() cashRegisterId?: string;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  openingAmountMinor?: number;
+  @IsOptional() @IsUUID() sessionId?: string;
+  @IsOptional() @IsIn(["IN", "OUT"]) type?: "IN" | "OUT";
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) amountMinor?: number;
+  @IsOptional() @IsString() @MaxLength(300) reason?: string;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  closingAmountMinor?: number;
+  @IsOptional() @Type(() => Number) @IsInt() expectedAmountMinor?: number;
+}
+/** La de otro usuario de la PC, firmada por él (SISTEMA-67). */
+class SignedOfflineCashDto {
+  @IsUUID() actorId!: string;
+  @IsUUID() deviceId!: string;
+  @IsString() @MaxLength(20000) payload!: string;
+  @IsString() @MaxLength(200) signature!: string;
 }
 class ClosureVisibilityDto {
   @IsBoolean() archived!: boolean;
@@ -342,6 +379,56 @@ export class CashController {
       branchId,
       sessionId,
       body,
+    );
+  }
+  /** Operación de caja hecha sin conexión, que la PC manda al volver. */
+  @DecidedWhenOccurred()
+  @Post("offline")
+  offline(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: OfflineCashDto,
+  ) {
+    return this.cash.completeOffline(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      body,
+    );
+  }
+  /** La de otro usuario de esta PC: queda a nombre de quien la hizo. */
+  @DecidedWhenOccurred()
+  @Post("offline/firmada")
+  async offlineSigned(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: SignedOfflineCashDto,
+  ) {
+    let datos: unknown;
+    try {
+      datos = JSON.parse(body.payload);
+    } catch {
+      throw new BadRequestException("La operación firmada no se puede leer.");
+    }
+    const op = plainToInstance(OfflineCashDto, datos);
+    const errores = await validate(op, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    if (errores.length)
+      throw new BadRequestException(
+        "La operación firmada tiene datos inválidos.",
+      );
+    if (op.deviceId !== body.deviceId)
+      throw new BadRequestException("La operación no corresponde a esa PC.");
+    return this.cash.completeOfflineSigned(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      body,
+      op,
     );
   }
 }

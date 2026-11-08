@@ -17,6 +17,17 @@ import {
 import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { useConectividad } from "./lib/conectividad";
 
+/** Qué operación de caja es (SISTEMA-67). */
+const operacionDeCaja = (venta: VentaPendiente) => {
+  const op = venta.cuerpo as { tipo?: string; type?: string };
+  return op.tipo === "APERTURA"
+    ? "apertura"
+    : op.tipo === "CIERRE"
+      ? "cierre"
+      : op.type === "OUT"
+        ? "egreso"
+        : "ingreso";
+};
 const pesos = (minor: string) =>
   (Number(minor) / 100).toLocaleString("es-AR", {
     style: "currency",
@@ -179,11 +190,9 @@ export function SincronizacionPanel({
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-slate-700">
-                        {venta.id.slice(0, 8).toUpperCase()} ·{" "}
-                        {pesos(venta.totalMinor)}
-                        {venta.documentType === "INVOICE"
-                          ? " · con factura"
-                          : ""}
+                        {venta.operacion === "CAJA"
+                          ? `Caja · ${operacionDeCaja(venta)} · ${pesos(venta.totalMinor)}`
+                          : `${venta.id.slice(0, 8).toUpperCase()} · ${pesos(venta.totalMinor)}${venta.documentType === "INVOICE" ? " · con factura" : ""}`}
                       </p>
                       <p className="text-xs text-slate-500">
                         {hora(venta.occurredAt)}
@@ -202,13 +211,15 @@ export function SincronizacionPanel({
                           ? "Rechazada"
                           : "Por enviar"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => setTicket(venta.ticket)}
-                        className="rounded-lg border px-3 py-1.5 text-xs text-teal-700"
-                      >
-                        Reimprimir ticket
-                      </button>
+                      {venta.ticket && (
+                        <button
+                          type="button"
+                          onClick={() => setTicket(venta.ticket)}
+                          className="rounded-lg border px-3 py-1.5 text-xs text-teal-700"
+                        >
+                          Reimprimir ticket
+                        </button>
+                      )}
                       {venta.estado === "RECHAZADA" && (
                         <button
                           type="button"

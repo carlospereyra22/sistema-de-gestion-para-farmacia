@@ -23,8 +23,15 @@ export type VentaPendiente = {
   cuerpo: Record<string, unknown>;
   /** Unidades por producto, para descontarlas del stock que se ve en la PC. */
   unidades: { productId: string; cantidad: number }[];
-  /** Ticket provisorio impreso, para reimprimirlo. */
-  ticket: ThermalTicket;
+  /** Ticket provisorio impreso, para reimprimirlo (las de caja no tienen). */
+  ticket?: ThermalTicket;
+  /**
+   * Operación de caja sin conexión (SISTEMA-67): apertura, movimiento o
+   * cierre. Sin este campo es una venta.
+   */
+  operacion?: "CAJA";
+  /** Quién la hizo, para mostrarlo en la caja (nombre o email). */
+  actorName?: string;
   estado: EstadoVentaPendiente;
   intentos: number;
   ultimoError?: string;

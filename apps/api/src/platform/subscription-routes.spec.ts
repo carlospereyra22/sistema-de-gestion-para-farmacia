@@ -88,6 +88,9 @@ const EXCEPTIONS = [
   `OFFLINE_SYNC POST ${sales}/offline`,
   // Venta sin conexión de otro usuario de la PC (SISTEMA-66).
   `OFFLINE_SYNC POST ${sales}/offline/firmada`,
+  // Caja sin conexión (SISTEMA-67).
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/cash/offline`,
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/cash/offline/firmada`,
   `READ_ONLY POST ${sales}/offline-issues/:issueId/resolve`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/printing/jobs/:id/retry`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/transfers/:id/receive`,

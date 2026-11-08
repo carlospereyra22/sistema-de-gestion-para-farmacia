@@ -37,3 +37,32 @@ describe("textos de avisos a revisar", () => {
     );
   });
 });
+
+describe("avisos de caja sin conexión", () => {
+  it("cierre con otro esperado muestra lo que vio la PC y lo del servidor", () => {
+    const aviso = textoAviso({
+      kind: "CIERRE_DISTINTO",
+      detail: {
+        caja: "Mostrador",
+        vioMinor: "10000",
+        esperadoMinor: "15000",
+        contadoMinor: "10000",
+      },
+    });
+    expect(aviso.titulo).toBe("Cierre para revisar: Mostrador");
+    expect(aviso.detalle).toContain("150,00");
+  });
+
+  it("caja abierta por otra PC y movimiento fuera de caja", () => {
+    expect(
+      textoAviso({ kind: "CAJA_YA_ABIERTA", detail: { caja: "Mostrador" } })
+        .detalle,
+    ).toContain("Otra PC");
+    expect(
+      textoAviso({
+        kind: "MOVIMIENTO_RETENIDO",
+        detail: { tipo: "OUT", amountMinor: "5000", motivo: "Flete" },
+      }).detalle,
+    ).toContain("egreso");
+  });
+});
