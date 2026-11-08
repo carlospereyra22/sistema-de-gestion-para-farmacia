@@ -22,7 +22,7 @@ por etapas; este documento dice qué hay hoy y cómo funciona.
 | Etapa                                                         | Estado     |
 | ------------------------------------------------------------- | ---------- |
 | SISTEMA-59 Facturas que no llegaron a ARCA no traban el punto | En main    |
-| SISTEMA-61 Cola fiscal automática                             | PR         |
+| SISTEMA-61 Cola fiscal automática                             | En main    |
 | SISTEMA-62 La app abre sin conexión (consulta)                | Esta etapa |
 | Recibir ventas hechas sin conexión (API)                      | Pendiente  |
 | Vender sin conexión y sincronizar solo (web)                  | Pendiente  |
