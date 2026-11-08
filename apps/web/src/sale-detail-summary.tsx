@@ -67,7 +67,7 @@ export function SaleDetailTotal({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-xs text-teal-800">
           <ReceiptText size={15} aria-hidden="true" />
-          {documentType === "INVOICE" ? "Factura" : "Ticket"}
+          {documentType === "INVOICE" ? "Factura" : "Comprobante interno"}
         </span>
         <span
           className={`rounded-full px-2 py-1 text-[11px] font-semibold ${status === "COMPLETED" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}

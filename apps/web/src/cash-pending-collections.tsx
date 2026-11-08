@@ -5,6 +5,7 @@ import {
   apiBaseUrl,
   getCash,
   getCashPendingCollections,
+  saleInvoice,
   type CashPendingCollection as Collection,
   type CashRegister,
   type CashSession,
@@ -157,7 +158,25 @@ export function CashPendingCollections({
                 : item,
             ),
       );
-      setNotice(notices[action]);
+      const facturaLiberada =
+        action === "incorporate" &&
+        row.sourceType === "SALE" &&
+        row.facturaEnEspera;
+      setNotice(
+        facturaLiberada
+          ? `${notices.incorporate} La factura de la venta se está enviando a ARCA.`
+          : notices[action],
+      );
+      // La factura que esperaba la caja se pide enseguida, como al vender; si
+      // no se puede (permisos, ARCA), la cola fiscal la envía en su vuelta.
+      if (facturaLiberada)
+        void saleInvoice(
+          token,
+          organizationId,
+          branchId,
+          row.sourceId,
+          true,
+        ).catch(() => {});
       onAssigned();
     } catch (cause) {
       setMessage(
@@ -255,6 +274,11 @@ export function CashPendingCollections({
                               {row.sourceType === "SALE" ? "Venta" : "Recibo"} ·{" "}
                               {row.sourceId.slice(0, 8)}
                             </p>
+                            {row.facturaEnEspera && (
+                              <span className="mt-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                                Factura en espera
+                              </span>
+                            )}
                           </td>
                           <td className="max-w-40 break-words p-3">
                             {row.collectedBy ?? "No registrado"}

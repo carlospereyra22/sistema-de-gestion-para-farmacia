@@ -41,6 +41,8 @@ La revisión PDF de distribución usa PDF.js y Tesseract.js con carga diferida e
 
 El catálogo WSFE acepta los tipos explícitos `CAE` y `CAE - Monotributo` (este último observado en la respuesta productiva del 28/09/2026). Conserva controles de bloqueo/baja y rechaza CAEA y etiquetas desconocidas; consultar un punto no lo asocia a una sucursal ni activa emisión.
 
+Factura en espera de caja (08/11/2026, SISTEMA-65): Caja escribe en las tablas fiscales sólo a través de `liberarFacturaEnEspera` (módulo Fiscal), con la misma TransactionClient que incorpora el cobro, como Compras con Cuentas por pagar. No llama a ARCA dentro de esa transacción: deja la factura en cola y el envío ocurre después del commit (la web lo pide, o la cola fiscal en su vuelta).
+
 Cola fiscal (07/11/2026): `ColaFiscalService` es un temporizador dentro del proceso de la API, como la generación de cargos de suscripción, sin cron ni servicios nuevos. No mantiene transacciones abiertas durante las llamadas a ARCA: usa los mismos pasos atómicos y bloqueos por punto de `process()`. Si en algún momento corren dos instancias sobre la misma base, la reserva de número sigue siendo única; la segunda sólo encuentra el comprobante ya tomado. Se apaga con `FISCAL_QUEUE_WORKER=off`.
 
 WSFE productivo usa `node:https` con TLS mínimo 1.2 y suites ECDHE+AESGCM/ECDHE+CHACHA20: evita los parámetros DHE pequeños ofrecidos por el servidor remoto sin bajar el nivel de seguridad. Mantiene validación de certificado/hostname, URL fija, límite total de 20 segundos y 1 MB, sin redirecciones ni reintentos. WSAA y homologación conservan fetch.

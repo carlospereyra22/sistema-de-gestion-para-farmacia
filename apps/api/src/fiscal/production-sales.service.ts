@@ -20,6 +20,7 @@ import {
   matchesProduction,
 } from "./production-document";
 import { fiscalQrUrl } from "./fiscal-qr";
+import { estadoInicial, type FacturaDiferida } from "./factura-diferida";
 import {
   actorAuditoria,
   esAutomatico,
@@ -61,6 +62,8 @@ export class ProductionSalesService {
     options?: SaleFiscalOptions,
     /** Venta hecha sin conexión: se encola aunque la emisión esté apagada. */
     queueOnly = false,
+    /** Factura que no sale en el momento de la venta (SISTEMA-65). */
+    diferida?: FacturaDiferida,
   ) {
     const { organization, profile, configuration } =
       await this.configurations.validate(tx, org, branch, !queueOnly);
@@ -85,7 +88,12 @@ export class ProductionSalesService {
       where: { id: branch, organizationId: org, active: true },
     });
     const cashier = await tx.userOrganization.findUnique({
-      where: { userId_organizationId: { userId: actor, organizationId: org } },
+      where: {
+        userId_organizationId: {
+          userId: diferida?.cajeroId ?? actor,
+          organizationId: org,
+        },
+      },
       select: { displayName: true },
     });
     const products = await tx.product.findMany({
@@ -105,7 +113,8 @@ export class ProductionSalesService {
         requestId: saleId,
         kind: "INVOICE",
         environment: "PRODUCTION",
-        status: "QUEUED",
+        status: estadoInicial(diferida),
+        deferredReason: diferida?.motivo ?? null,
         issuerCuit: profile.cuit,
         point: configuration.point,
         voucherType: 11,
@@ -145,12 +154,13 @@ export class ProductionSalesService {
         actorId: actor,
         entityType: "FISCAL_DOCUMENT",
         entityId: document.id,
-        action: "SALE_QUEUED",
+        action: diferida?.enEspera ? "SALE_HELD" : "SALE_QUEUED",
         after: {
           saleId,
           environment: "PRODUCTION",
           point: document.point,
           totalMinor: String(total),
+          ...(diferida ? { deferredReason: diferida.motivo } : {}),
         },
       },
     });
@@ -196,7 +206,8 @@ export class ProductionSalesService {
     });
     if (!doc)
       throw new BadRequestException("Comprobante productivo no encontrado.");
-    if (["AUTHORIZED", "REJECTED"].includes(doc.status))
+    // En espera de caja: no se envía ni se consulta en ARCA.
+    if (["AUTHORIZED", "REJECTED", "HELD"].includes(doc.status))
       return this.present(doc);
     if (doc.status !== "QUEUED")
       return this.present(await this.reconcile(actor, doc));

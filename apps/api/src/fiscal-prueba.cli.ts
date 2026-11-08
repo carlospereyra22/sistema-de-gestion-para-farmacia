@@ -177,6 +177,8 @@ async function main(): Promise<void> {
         detail: null,
         sourceSaleId: null,
         saleSnapshot: null,
+        deferredReason: null,
+        releasedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       }) && str(consulta.CodAutorizacion) === str(detalle.CAE);

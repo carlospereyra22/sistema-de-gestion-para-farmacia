@@ -1,7 +1,15 @@
 import { reopenForHistoricStock } from "../catalog/branch-product-lifecycle";
 import { accountDueDate } from "../accounts/account-due-date";
 import { lockCashSession } from "../cash/lock-cash-session";
-import { recordPendingCollection } from "../cash/pending-collection";
+import {
+  cobroQuedaPendiente,
+  recordPendingCollection,
+} from "../cash/pending-collection";
+import {
+  fueraDePlazo,
+  leyendaComprobante,
+  type FacturaDiferida,
+} from "../fiscal/factura-diferida";
 import { assertCollectionSession } from "../cash/cash-settings";
 import {
   BadRequestException,
@@ -180,6 +188,7 @@ export class SalesService {
               point: true,
               number: true,
               voucherType: true,
+              deferredReason: true,
             },
           },
         },
@@ -277,6 +286,199 @@ export class SalesService {
     return this.invoice(actorId, organizationId, branchId, saleId, true);
   }
 
+  /**
+   * Manda a ARCA una venta hecha con comprobante interno (SISTEMA-65): a mano,
+   * con confirmación y hasta 30 días después. La factura lleva la fecha de hoy
+   * y queda marcada como facturada después. Si el cobro todavía no entró a una
+   * caja, espera igual que una factura pedida con la caja cerrada.
+   */
+  async invoiceInternal(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    saleId: string,
+    input: {
+      fiscalEnvironment?: "HOMOLOGATION" | "PRODUCTION";
+      confirmHomologation?: boolean;
+      confirmProduction?: boolean;
+      fiscalOptions?: SaleFiscalOptions;
+    },
+  ) {
+    await this.assert(actorId, organizationId, "SALE_MANAGE");
+    const isProduction = input.fiscalEnvironment === "PRODUCTION";
+    if (
+      isProduction
+        ? !this.production ||
+          !input.confirmProduction ||
+          input.confirmHomologation ||
+          !productionIssuanceAvailable()
+        : !this.fiscal || !input.confirmHomologation || input.confirmProduction
+    )
+      throw new BadRequestException(
+        "Confirmá explícitamente el ambiente fiscal disponible. No se envió nada a ARCA.",
+      );
+    const resultado = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${saleId}::uuid AND "organizationId" = ${organizationId}::uuid AND "branchId" = ${branchId}::uuid FOR UPDATE`;
+        const sale = await tx.sale.findFirst({
+          where: { id: saleId, organizationId, branchId },
+          include: {
+            items: true,
+            customerReturns: { select: { id: true } },
+            fiscalTrial: { select: { deferredReason: true } },
+          },
+        });
+        if (!sale?.completedAt)
+          throw new NotFoundException("Venta no encontrada.");
+        if (sale.status !== "COMPLETED")
+          throw new BadRequestException(
+            "La venta está anulada: no se puede enviar a ARCA.",
+          );
+        if (sale.documentType === "INVOICE") {
+          // El mismo pedido repetido (doble clic, corte): devuelve lo hecho.
+          const produccion = await tx.fiscalDocument.findFirst({
+            where: { sourceSaleId: saleId, organizationId, kind: "INVOICE" },
+            select: { deferredReason: true },
+          });
+          if (
+            (produccion ?? sale.fiscalTrial)?.deferredReason ===
+              "COMPROBANTE_INTERNO" &&
+            Boolean(produccion) === isProduction
+          )
+            return "YA_ENVIADA" as const;
+          throw new ConflictException("La venta ya tiene factura.");
+        }
+        if (sale.customerReturns.length)
+          throw new BadRequestException(
+            "La venta tiene devoluciones: no se puede enviar a ARCA.",
+          );
+        const plazo = fueraDePlazo(sale.completedAt, new Date());
+        if (plazo) throw new BadRequestException(plazo);
+        if (
+          !isProduction &&
+          (await tx.fiscalProductionConfiguration.findFirst({
+            where: { organizationId, branchId, enabled: true },
+          }))
+        )
+          throw new BadRequestException(
+            "Esta sucursal usa producción. Actualizá Ventas; no se registra una nueva factura de prueba.",
+          );
+        const fiscalOptions = input.fiscalOptions ?? {
+          recipient: "FINAL_CONSUMER" as const,
+          voucherType: 11 as const,
+        };
+        const cliente = sale.customerId
+          ? await tx.customer.findFirst({
+              where: { id: sale.customerId, organizationId, active: true },
+              select: { id: true },
+            })
+          : null;
+        if (fiscalOptions.recipient === "CUSTOMER" && !cliente)
+          throw new BadRequestException(
+            "El cliente de la venta ya no está activo: facturá a consumidor final.",
+          );
+        // El cobro todavía sin caja: la factura espera a que se incorpore.
+        const pendiente = await tx.cashPendingCollection.findUnique({
+          where: {
+            organizationId_sourceType_sourceId: {
+              organizationId,
+              sourceType: "SALE",
+              sourceId: saleId,
+            },
+          },
+        });
+        const enEspera = Boolean(
+          pendiente && !pendiente.assignedAt && !pendiente.voidedAt,
+        );
+        const vendedor = await tx.auditLog.findFirst({
+          where: {
+            organizationId,
+            entityType: "SALE",
+            entityId: saleId,
+            action: "COMPLETED",
+          },
+          orderBy: { createdAt: "asc" },
+          select: { actorId: true },
+        });
+        const diferida: FacturaDiferida = {
+          motivo: "COMPROBANTE_INTERNO",
+          enEspera,
+          cajeroId: vendedor?.actorId ?? undefined,
+        };
+        const items = sale.items.map((item) => ({
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity,
+          unitPriceMinor: item.unitPriceMinor,
+          discountMinor: item.discountMinor,
+        }));
+        if (isProduction)
+          await this.production!.enqueue(
+            tx,
+            actorId,
+            organizationId,
+            branchId,
+            saleId,
+            cliente?.id,
+            sale.totalMinor,
+            items,
+            fiscalOptions,
+            false,
+            diferida,
+          );
+        else
+          await this.fiscal!.enqueue(
+            tx,
+            actorId,
+            organizationId,
+            branchId,
+            saleId,
+            cliente?.id,
+            sale.totalMinor,
+            items,
+            fiscalOptions,
+            diferida,
+          );
+        await tx.sale.update({
+          where: { id: saleId },
+          data: { documentType: "INVOICE" },
+        });
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            branchId,
+            actorId,
+            entityType: "SALE",
+            entityId: saleId,
+            action: "FACTURADA_DESPUES",
+            before: { documentType: "INTERNAL" },
+            after: {
+              documentType: "INVOICE",
+              environment: isProduction ? "PRODUCTION" : "HOMOLOGATION",
+              enEspera,
+              completedAt: sale.completedAt.toISOString(),
+            },
+          },
+        });
+        return enEspera ? ("EN_ESPERA" as const) : ("EN_COLA" as const);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    // Como al vender: ARCA se contacta después del commit. La venta ya quedó
+    // facturada en el sistema aunque el envío falle; la cola la reintenta.
+    try {
+      return await this.invoice(
+        actorId,
+        organizationId,
+        branchId,
+        saleId,
+        resultado === "EN_COLA",
+      );
+    } catch {
+      return this.invoice(actorId, organizationId, branchId, saleId);
+    }
+  }
+
   async ticket(
     actorId: string,
     organizationId: string,
@@ -304,7 +506,25 @@ export class SalesService {
     });
     if (!sale || !sale.completedAt)
       throw new NotFoundException("Comprobante no encontrado.");
-    if (sale.documentType === "INVOICE" && !invoice)
+    const productionDocument =
+      sale.documentType === "INVOICE"
+        ? await this.prisma.fiscalDocument.findFirst({
+            where: {
+              sourceSaleId: saleId,
+              organizationId,
+              branchId,
+              kind: "INVOICE",
+            },
+          })
+        : null;
+    const factura = productionDocument ?? sale.fiscalTrial;
+    // Mientras la factura espera la caja, lo que se entrega es el comprobante
+    // interno con su leyenda (SISTEMA-65).
+    if (
+      sale.documentType === "INVOICE" &&
+      !invoice &&
+      factura?.status !== "HELD"
+    )
       throw new BadRequestException(
         "Usá el comprobante de homologación de esta venta, no el ticket interno.",
       );
@@ -368,23 +588,20 @@ export class SalesService {
     const cash = sale.payments
       .filter((payment) => payment.method === "CASH")
       .reduce((sum, payment) => sum + payment.amountMinor, 0n);
-    const productionDocument = invoice
-      ? await this.prisma.fiscalDocument.findFirst({
-          where: {
-            sourceSaleId: saleId,
-            organizationId,
-            branchId,
-            kind: "INVOICE",
-          },
-        })
-      : null;
     const snapshot = invoice
       ? obj(productionDocument?.saleSnapshot ?? sale.fiscalTrial?.saleSnapshot)
       : {};
     const savedStore = obj(snapshot.store);
     const snapshotItems = list(snapshot.items).map(obj);
+    const note = leyendaComprobante({
+      factura: sale.documentType === "INVOICE",
+      estado: factura?.status,
+      motivo: factura?.deferredReason,
+      venta: sale.completedAt,
+    });
     return {
       kind: "sale",
+      ...(note ? { note } : {}),
       id: sale.id,
       number: sale.id.slice(0, 8).toUpperCase(),
       date: sale.completedAt.toISOString(),
@@ -1120,6 +1337,13 @@ export class SalesService {
             },
           });
           if (documentType === "INVOICE") {
+            // Con la caja cerrada el cobro queda pendiente y la factura espera
+            // a que se incorpore a una caja: no va a ARCA antes (SISTEMA-65).
+            const diferida: FacturaDiferida | undefined =
+              !collectionSessionId &&
+              cobroQuedaPendiente(input.payments, changeMinor)
+                ? { motivo: "CAJA_CERRADA", enEspera: true }
+                : undefined;
             try {
               if (isProduction)
                 await this.production!.enqueue(
@@ -1133,6 +1357,7 @@ export class SalesService {
                   items,
                   input.fiscalOptions,
                   Boolean(offline),
+                  diferida,
                 );
               else
                 await this.fiscal!.enqueue(
@@ -1145,6 +1370,7 @@ export class SalesService {
                   total,
                   items,
                   input.fiscalOptions,
+                  diferida,
                 );
             } catch (cause) {
               // Sólo errores de validación (antes de escribir): un error de
@@ -1420,9 +1646,10 @@ export class SalesService {
           const productionDocument = await tx.fiscalDocument.findFirst({
             where: { sourceSaleId: saleId, organizationId, kind: "INVOICE" },
           });
+          // En cola, rechazada o en espera de caja: no hay nada emitido en ARCA.
           if (
             productionDocument &&
-            !["QUEUED", "REJECTED"].includes(productionDocument.status)
+            !["QUEUED", "REJECTED", "HELD"].includes(productionDocument.status)
           )
             throw new BadRequestException(
               "La factura productiva requiere nota de crédito; no se anula como ticket.",
@@ -1430,7 +1657,10 @@ export class SalesService {
           const invoice = await tx.fiscalTrial.findUnique({
             where: { sourceSaleId: saleId },
           });
-          if (invoice && !["QUEUED", "REJECTED"].includes(invoice.status))
+          if (
+            invoice &&
+            !["QUEUED", "REJECTED", "HELD"].includes(invoice.status)
+          )
             throw new BadRequestException(
               "La factura está autorizada o pendiente en ARCA. No se permite anularla como ticket interno; requiere el circuito de nota de crédito.",
             );

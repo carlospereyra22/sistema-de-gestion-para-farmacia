@@ -16,29 +16,44 @@ export type NumeroVenta = {
   interno: string;
   /** Factura de homologación: no tiene validez fiscal. */
   prueba: boolean;
+  /**
+   * Ya se facturó, después de la venta (caja cerrada o comprobante interno).
+   * Mientras espera la caja o si la venta se anuló, todavía no se facturó.
+   */
+  despues: boolean;
 };
 
 export function numeroDeVenta(
-  sale: Pick<Sale, "id" | "documentType" | "fiscalTrial" | "fiscalDocuments">,
+  sale: Pick<Sale, "id" | "documentType" | "fiscalTrial" | "fiscalDocuments"> &
+    Partial<Pick<Sale, "status">>,
 ): NumeroVenta {
   const interno = sale.id.slice(0, 8).toUpperCase();
   const produccion = sale.fiscalDocuments?.[0];
   const factura = produccion ?? sale.fiscalTrial ?? undefined;
   if (sale.documentType !== "INVOICE" || !factura)
-    return { texto: interno, interno, prueba: false };
+    return { texto: interno, interno, prueba: false, despues: false };
   const prueba = !produccion;
+  const despues =
+    Boolean(factura.deferredReason) &&
+    factura.status !== "HELD" &&
+    sale.status !== "CANCELLED";
   const tipo = `Fact. ${letra(factura.voucherType)}`.trim();
   if (factura.status === "AUTHORIZED" && factura.number)
     return {
       texto: `${tipo} ${pad(factura.point, 5)}-${pad(factura.number, 8)}`,
       interno,
       prueba,
+      despues,
     };
-  return {
-    texto: `${tipo} · ${factura.status === "REJECTED" ? "rechazada" : "pendiente"}`,
-    interno,
-    prueba,
-  };
+  const estado =
+    sale.status === "CANCELLED"
+      ? "no emitida"
+      : factura.status === "HELD"
+        ? "en espera de caja"
+        : factura.status === "REJECTED"
+          ? "rechazada"
+          : "pendiente";
+  return { texto: `${tipo} · ${estado}`, interno, prueba, despues };
 }
 
 /**
@@ -58,5 +73,19 @@ export function facturaEnEspera(
     factura?.status === "QUEUED" ||
     factura?.status === "PENDING" ||
     factura?.status === "UNCERTAIN"
+  );
+}
+
+/**
+ * ¿La factura de la venta recién cobrada espera a que el cobro entre a una
+ * caja? Entonces la venta termina como cualquier otra: se sabe que la caja
+ * está cerrada y que ARCA viene después (SISTEMA-65).
+ */
+export function facturaEsperaCaja(
+  sale: Pick<Sale, "documentType" | "fiscalTrial" | "fiscalDocument">,
+) {
+  return (
+    sale.documentType === "INVOICE" &&
+    (sale.fiscalDocument ?? sale.fiscalTrial)?.status === "HELD"
   );
 }

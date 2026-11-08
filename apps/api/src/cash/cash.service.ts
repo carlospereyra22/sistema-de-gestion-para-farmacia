@@ -13,6 +13,7 @@ import { lockCashSession } from "./lock-cash-session";
 import { findOwnOpenSession } from "./own-open-session";
 import { randomUUID } from "node:crypto";
 import { readReceiptPayments } from "../accounts/receipt-payments";
+import { liberarFacturaEnEspera } from "../fiscal/factura-diferida";
 import { isOrganizationAdministrator } from "../roles/administrator-role";
 import {
   cashMovementCategory,
@@ -131,8 +132,36 @@ export class CashService {
       organizationId,
       rows.map((row) => row.actorId),
     );
+    // Ventas con factura esperando este cobro: al incorporarlo se emite.
+    const ventas = rows
+      .filter((row) => row.sourceType === "SALE")
+      .map((row) => row.sourceId);
+    const enEspera = new Set(
+      ventas.length
+        ? [
+            ...(await this.prisma.fiscalDocument.findMany({
+              where: {
+                organizationId,
+                sourceSaleId: { in: ventas },
+                kind: "INVOICE",
+                status: "HELD",
+              },
+              select: { sourceSaleId: true },
+            })),
+            ...(await this.prisma.fiscalTrial.findMany({
+              where: {
+                organizationId,
+                sourceSaleId: { in: ventas },
+                status: "HELD",
+              },
+              select: { sourceSaleId: true },
+            })),
+          ].map((documento) => documento.sourceSaleId)
+        : [],
+    );
     return rows.map((row) => ({
       ...row,
+      facturaEnEspera: row.sourceType === "SALE" && enEspera.has(row.sourceId),
       collectedBy: names.get(row.actorId) ?? null,
       cashMinor: row.cashMinor.toString(),
       cardMinor: row.cardMinor.toString(),
@@ -224,6 +253,17 @@ export class CashService {
           assignedById: actorId,
         },
       });
+      // La factura pedida con la caja cerrada esperaba este momento: pasa a
+      // la cola fiscal, que la emite con la fecha de hoy (SISTEMA-65).
+      const facturaLiberada =
+        row.sourceType === "SALE" &&
+        (await liberarFacturaEnEspera(tx, {
+          organizationId,
+          branchId,
+          saleId: row.sourceId,
+          actorId,
+          ahora: assignedAt,
+        }));
       await this.audit.recordInTransaction(tx, {
         organizationId,
         branchId,
@@ -240,9 +280,10 @@ export class CashService {
           cardMinor: row.cardMinor.toString(),
           transferMinor: row.transferMinor.toString(),
           changeMinor: row.changeMinor.toString(),
+          facturaLiberada,
         },
       });
-      return { id, assignedSessionId: sessionId, assignedAt };
+      return { id, assignedSessionId: sessionId, assignedAt, facturaLiberada };
     });
   }
   async setCollectionDestination(

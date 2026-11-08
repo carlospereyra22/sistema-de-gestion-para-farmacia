@@ -51,5 +51,5 @@ it("keeps the historical total and sale status separate from fiscal authorizatio
     />,
   );
   expect(cancelled).toContain("Anulada");
-  expect(cancelled).toContain("Ticket");
+  expect(cancelled).toContain("Comprobante interno");
 });

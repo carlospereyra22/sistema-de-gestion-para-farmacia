@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Ellipsis, FileMinus2, History, X } from "lucide-react";
+import { Ellipsis, FileMinus2, History, RefreshCw, X } from "lucide-react";
 import { saleInvoice, type FiscalTrial } from "./lib/api";
 import { SaleCreditNotes } from "./sale-credit-notes";
 
@@ -112,15 +112,18 @@ export function SaleCreditActions({
   return (
     <>
       {error ? (
+        // Mismo tamaño que el botón "⋯": no aprieta al de imprimir.
         <button
           type="button"
           onClick={() => {
             setError(false);
             setAttempt(attempt + 1);
           }}
-          className="text-xs text-slate-500 underline"
+          aria-label="Reintentar consulta de notas de crédito"
+          title="No se pudieron consultar las notas de crédito. Reintentar."
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700"
         >
-          Reintentar consulta de notas
+          <RefreshCw size={18} aria-hidden="true" />
         </button>
       ) : (
         <SaleCreditMenu eligible={eligible} onSelect={setMode} />

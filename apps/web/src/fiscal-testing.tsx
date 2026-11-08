@@ -245,6 +245,7 @@ export function FiscalTesting({
             {
               {
                 AUTHORIZED: "Autorizada en homologación",
+                HELD: "En espera de caja",
                 QUEUED: "Pendiente de envío",
                 REJECTED: "Rechazada",
                 PENDING: "En proceso",

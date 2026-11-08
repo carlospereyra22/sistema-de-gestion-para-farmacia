@@ -44,3 +44,17 @@ it("no muestra nada hasta que se abre desde la barra de estado", () => {
     ),
   ).toBe("");
 });
+
+it("marca la factura en espera y avisa que se emite al incorporar el cobro", () => {
+  const texto = (archivo: string) =>
+    readFileSync(new URL(archivo, import.meta.url), "utf8").replace(
+      /\s+/g,
+      " ",
+    );
+  const lista = texto("./cash-pending-collections.tsx");
+  expect(lista).toContain("Factura en espera");
+  expect(lista).toContain("La factura de la venta se está enviando a ARCA.");
+  expect(texto("./cash-pending-confirmation.tsx")).toContain(
+    "Al incorporar el cobro se emite la factura C en ARCA, con la fecha de hoy.",
+  );
+});
