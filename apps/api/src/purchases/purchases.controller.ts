@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,7 +8,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { Type } from "class-transformer";
+import { Type, plainToInstance } from "class-transformer";
 import {
   ArrayMinSize,
   ArrayMaxSize,
@@ -22,11 +23,17 @@ import {
   Min,
   Matches,
   ValidateNested,
+  IsIn,
+  IsISO8601,
+  IsObject,
+  validate,
 } from "class-validator";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { PurchasesService } from "./purchases.service";
+import { DecidedWhenOccurred } from "../platform/subscription-gate";
+import type { OperacionCompraSinConexion } from "./purchase-input";
 
 class LineDto {
   @IsString() productId!: string;
@@ -109,6 +116,67 @@ class CloseDto {
   @Type(() => ExpectedDto)
   expected!: ExpectedDto[];
 }
+/** Pedido, compra directa o recepción hecho sin conexión (SISTEMA-69). */
+class OfflinePurchaseDto {
+  @IsIn(["PEDIDO", "DIRECTA", "RECEPCION"]) tipo!:
+    "PEDIDO" | "DIRECTA" | "RECEPCION";
+  @IsISO8601({ strict: true }) occurredAt!: string;
+  @IsUUID() deviceId!: string;
+  @IsOptional() @IsUUID() purchaseId?: string;
+  /** La misma solicitud que con conexión. */
+  @IsObject() cuerpo!: Record<string, unknown>;
+}
+class SignedOfflinePurchaseDto {
+  @IsUUID() actorId!: string;
+  @IsUUID() deviceId!: string;
+  @IsString() @MaxLength(400000) payload!: string;
+  @IsString() @MaxLength(200) signature!: string;
+}
+const fechas = <T extends { expiresAt?: string }>(lineas: T[]) =>
+  lineas.map((linea) => ({
+    ...linea,
+    expiresAt: linea.expiresAt ? new Date(linea.expiresAt) : undefined,
+  }));
+/** Valida el cuerpo con el DTO de su tipo, como la ruta con conexión. */
+async function operacionDeCompra(
+  datos: unknown,
+): Promise<OperacionCompraSinConexion & { deviceId: string }> {
+  const op = plainToInstance(OfflinePurchaseDto, datos);
+  const DTO: new () => object =
+    op?.tipo === "PEDIDO"
+      ? CreateDto
+      : op?.tipo === "DIRECTA"
+        ? DirectDto
+        : BatchDto;
+  const cuerpo = plainToInstance(DTO, op?.cuerpo ?? {});
+  const opciones = { whitelist: true, forbidNonWhitelisted: true };
+  const errores = [
+    ...(await validate(op ?? {}, opciones)),
+    ...(await validate(cuerpo, opciones)),
+  ];
+  if (errores.length || (op.tipo === "RECEPCION" && !op.purchaseId))
+    throw new BadRequestException(
+      "La operación de compras sin conexión tiene datos inválidos.",
+    );
+  if (op.tipo === "PEDIDO")
+    return { ...op, tipo: "PEDIDO", cuerpo: cuerpo as CreateDto };
+  if (op.tipo === "DIRECTA") {
+    const directa = cuerpo as DirectDto;
+    return {
+      ...op,
+      tipo: "DIRECTA",
+      cuerpo: { ...directa, receipts: fechas(directa.receipts) },
+    };
+  }
+  const recepcion = cuerpo as BatchDto;
+  return {
+    ...op,
+    tipo: "RECEPCION",
+    purchaseId: op.purchaseId!,
+    cuerpo: { ...recepcion, items: fechas(recepcion.items) },
+  };
+}
+
 @Controller("organizations/:organizationId/branches/:branchId/purchases")
 @UseGuards(JwtAccessGuard, BranchAccessGuard)
 export class PurchasesController {
@@ -132,6 +200,48 @@ export class PurchasesController {
       organizationId,
       branchId,
       id,
+    );
+  }
+  /** Operación de compras hecha sin conexión, que la PC manda al volver. */
+  @DecidedWhenOccurred()
+  @Post("offline")
+  async offline(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: OfflinePurchaseDto,
+  ) {
+    return this.purchases.completeOffline(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      await operacionDeCompra(body),
+    );
+  }
+  /** La de otro usuario de esta PC: queda a nombre de quien la hizo. */
+  @DecidedWhenOccurred()
+  @Post("offline/firmada")
+  async offlineSigned(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: SignedOfflinePurchaseDto,
+  ) {
+    let datos: unknown;
+    try {
+      datos = JSON.parse(body.payload);
+    } catch {
+      throw new BadRequestException("La operación firmada no se puede leer.");
+    }
+    const op = await operacionDeCompra(datos);
+    if (op.deviceId !== body.deviceId)
+      throw new BadRequestException("La operación no corresponde a esa PC.");
+    return this.purchases.completeOfflineSigned(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      body,
+      op,
     );
   }
   @Post("direct") direct(

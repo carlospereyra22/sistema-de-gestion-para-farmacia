@@ -37,6 +37,7 @@ import {
   type CatalogProduct,
   type Party,
   type Purchase,
+  type ReceiptLot,
 } from "./lib/api";
 import {
   preparePurchaseLines,
@@ -51,6 +52,22 @@ import {
 } from "./lib/purchases";
 import { SearchableSaleSelect } from "./searchable-sale-select";
 import { Pagination } from "./pagination";
+import { ComprasPorEnviar } from "./compras-por-enviar";
+import { StatusToast } from "./status-toast";
+import {
+  suscribirBandeja,
+  ventasDeLaPc,
+  type VentaPendiente,
+} from "./lib/bandeja-ventas";
+import { SinConexionError } from "./lib/api-fetch";
+import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
+import { conectividad } from "./lib/conectividad";
+import {
+  comprasConPendientes,
+  detalleConPendientes,
+  guardarOperacionCompra,
+  ingresosDeCompra,
+} from "./lib/compras-sin-conexion";
 import { OperationHistory } from "./operation-history";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
 
@@ -109,6 +126,7 @@ export function PurchasesWorkspace({
   onRegisterDebt,
   canBuy = true,
   canReceiveGoods = true,
+  stockLots = [],
 }: {
   token: string;
   organizationId: string;
@@ -131,6 +149,8 @@ export function PurchasesWorkspace({
   /** Comprar y recibir son tareas separadas: cada rol ve solo la suya. */
   canBuy?: boolean;
   canReceiveGoods?: boolean;
+  /** Lotes del stock de la sucursal (la copia del inicio): sirven sin conexión. */
+  stockLots?: ReceiptLot[];
 }) {
   const packActions = useMemo(
     () => ({
@@ -233,6 +253,64 @@ export function PurchasesWorkspace({
     const purchases = await getPurchases(token, organizationId, branchId);
     setRows(purchases);
   };
+  // Lo hecho sin conexión en esta PC se ve en la lista hasta que llega
+  // (SISTEMA-69). Cuando se envía, la lista se vuelve a pedir.
+  const [bandeja, setBandeja] = useState<VentaPendiente[]>([]);
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
+  useEffect(() => {
+    let activo = true;
+    let primera = true;
+    const cargar = () =>
+      void ventasDeLaPc()
+        .then((todas) => {
+          if (!activo) return;
+          setBandeja(todas);
+          if (!primera) void latestLoad.current().catch(() => {});
+          primera = false;
+        })
+        .catch(() => {});
+    cargar();
+    const dejar = suscribirBandeja(cargar);
+    return () => {
+      activo = false;
+      dejar();
+    };
+  }, []);
+  const visibles = useMemo(
+    () =>
+      comprasConPendientes(rows, bandeja, organizationId, branchId, suppliers),
+    [rows, bandeja, organizationId, branchId, suppliers],
+  );
+  /** Detalle con lo recibido sin conexión; si el pedido se hizo sin conexión, el de la PC. */
+  const obtenerDetalle = async (id: string) => {
+    const actual = await ventasDeLaPc().catch(() => bandeja);
+    const local = detalleConPendientes(
+      id,
+      undefined,
+      actual,
+      organizationId,
+      branchId,
+      suppliers,
+    );
+    if (local) return local;
+    const servidor = await purchaseRequest<PurchaseDetail>(
+      token,
+      organizationId,
+      branchId,
+      `/${id}`,
+    );
+    return (
+      detalleConPendientes(
+        id,
+        servidor,
+        actual,
+        organizationId,
+        branchId,
+        suppliers,
+      ) ?? servidor
+    );
+  };
   useEffect(() => {
     let alive = true;
     void Promise.all([
@@ -275,14 +353,7 @@ export function PurchasesWorkspace({
     setError("");
     setNotice("");
     try {
-      setDetail(
-        await purchaseRequest<PurchaseDetail>(
-          token,
-          organizationId,
-          branchId,
-          `/${id}`,
-        ),
-      );
+      setDetail(await obtenerDetalle(id));
       setOpen(true);
       setCloseReason("");
     } catch (e) {
@@ -296,12 +367,7 @@ export function PurchasesWorkspace({
   const startReceive = async (purchase: Purchase) => {
     setBusy(true);
     try {
-      const p = await purchaseRequest<PurchaseDetail>(
-        token,
-        organizationId,
-        branchId,
-        `/${purchase.id}`,
-      );
+      const p = await obtenerDetalle(purchase.id);
       setDraft({
         ...fresh(),
         mode: "receive",
@@ -488,24 +554,49 @@ export function PurchasesWorkspace({
       // Persistir la misma solicitud antes de enviarla permite reintentar tras perder la respuesta.
       sessionStorage.setItem(storageKey, JSON.stringify(locked));
       setDraft(locked);
-      await purchaseRequest(
-        token,
-        organizationId,
-        branchId,
-        request.path,
-        request.body,
-      );
+      // Sin conexión, la misma solicitud queda en la PC (firmada) y se manda
+      // sola al volver; el stock sube enseguida en la PC (SISTEMA-69).
+      const solicitud = request;
+      // Un pedido con algo todavía en la PC se sigue en la PC: así llega en orden.
+      let guardadaSinConexion =
+        Boolean(draft.purchase?.porEnviar) ||
+        !conectividad().enLinea ||
+        token === TOKEN_SIN_CONEXION;
+      if (!guardadaSinConexion)
+        try {
+          await purchaseRequest(
+            token,
+            organizationId,
+            branchId,
+            solicitud.path,
+            solicitud.body,
+          );
+        } catch (cause) {
+          if (!(cause instanceof SinConexionError)) throw cause;
+          guardadaSinConexion = true;
+        }
+      if (guardadaSinConexion)
+        await guardarOperacionCompra(
+          organizationId,
+          branchId,
+          solicitud.path,
+          solicitud.body as Record<string, unknown>,
+          ingresosDeCompra(solicitud, currentItems),
+        );
       setDraft(undefined);
       sessionStorage.removeItem(storageKey);
       setOpen(false);
       setNotice(
-        draft.step === "receive"
-          ? draft.debt?.enabled
-            ? "Recepción y deuda registradas. Podés consultar el importe en Cuentas por pagar."
-            : "Recepción registrada sin generar deuda. Sólo se ingresaron las cantidades confirmadas."
-          : "Pedido guardado sin modificar stock.",
+        guardadaSinConexion
+          ? "Guardado sin conexión: se envía solo cuando vuelva internet, con la hora en que lo hiciste."
+          : draft.step === "receive"
+            ? draft.debt?.enabled
+              ? "Recepción y deuda registradas. Podés consultar el importe en Cuentas por pagar."
+              : "Recepción registrada sin generar deuda. Sólo se ingresaron las cantidades confirmadas."
+            : "Pedido guardado sin modificar stock.",
       );
-      await load();
+      // Sin conexión la lista sale de la copia guardada: si no hay, sigue la de pantalla.
+      await load().catch(() => {});
       onChanged();
     } catch (e) {
       if (
@@ -597,7 +688,7 @@ export function PurchasesWorkspace({
     setError("");
     setNotice("");
   };
-  const filtered = rows.filter(
+  const filtered = visibles.filter(
     (p) =>
       (!status || p.status === status) &&
       (!supplierFilter || p.supplierId === supplierFilter) &&
@@ -801,6 +892,11 @@ export function PurchasesWorkspace({
           }}
         />
       )}
+      <ComprasPorEnviar
+        organizationId={organizationId}
+        branchId={branchId}
+        proveedores={suppliers}
+      />
       {!open && error && (
         <p
           role="alert"
@@ -810,12 +906,7 @@ export function PurchasesWorkspace({
         </p>
       )}
       {!open && notice && (
-        <p
-          role="status"
-          className="mb-3 border-l-2 border-slate-300 pl-3 text-sm text-slate-600"
-        >
-          {notice}
-        </p>
+        <StatusToast message={notice} onClose={() => setNotice("")} />
       )}
       {!receivingPage && (
         <section className="purchases-table-panel flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -962,6 +1053,11 @@ export function PurchasesWorkspace({
                         />
                         {purchaseStatus(p)}
                       </span>
+                      {p.porEnviar && (
+                        <span className="mt-1 block w-fit whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                          Por enviar
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-center">
                       <PurchaseRowActions
@@ -972,7 +1068,7 @@ export function PurchasesWorkspace({
                         onDetail={() => void openDetail(p.id)}
                         onCancel={() => setCancelPurchase(p)}
                         mayReceive={canReceiveGoods}
-                        mayCancel={canBuy}
+                        mayCancel={canBuy && !p.porEnviar}
                       />
                     </td>
                   </tr>
@@ -1205,67 +1301,68 @@ export function PurchasesWorkspace({
                   Motivo de cierre de saldo: {detail.closedReason}
                 </p>
               )}
-              {["ORDERED", "PARTIALLY_RECEIVED"].includes(detail.status) && (
-                <details className="mt-5 border-t border-slate-200 pt-3">
-                  <summary className="cursor-pointer text-sm text-amber-800">
-                    Cerrar saldo pendiente sin modificar lo recibido
-                  </summary>
-                  <label className="mt-3 block text-sm">
-                    Motivo
-                    <input
-                      maxLength={300}
-                      className={field}
-                      value={closeReason}
-                      onChange={(e) => setCloseReason(e.target.value)}
-                    />
-                  </label>
-                  <button
-                    disabled={busy || closeReason.trim().length < 3}
-                    className={`${button} mt-3`}
-                    onClick={async () => {
-                      if (pending.current) return;
-                      pending.current = true;
-                      setBusy(true);
-                      try {
-                        await purchaseRequest(
-                          token,
-                          organizationId,
-                          branchId,
-                          `/${detail.id}/close-balance`,
-                          {
-                            reason: closeReason,
-                            expected: detail.items.map((i) => ({
-                              itemId: i.id,
-                              pending: purchasePending(i),
-                            })),
-                          },
-                        );
-                        setDetail(
-                          await purchaseRequest<PurchaseDetail>(
+              {!detail.porEnviar &&
+                ["ORDERED", "PARTIALLY_RECEIVED"].includes(detail.status) && (
+                  <details className="mt-5 border-t border-slate-200 pt-3">
+                    <summary className="cursor-pointer text-sm text-amber-800">
+                      Cerrar saldo pendiente sin modificar lo recibido
+                    </summary>
+                    <label className="mt-3 block text-sm">
+                      Motivo
+                      <input
+                        maxLength={300}
+                        className={field}
+                        value={closeReason}
+                        onChange={(e) => setCloseReason(e.target.value)}
+                      />
+                    </label>
+                    <button
+                      disabled={busy || closeReason.trim().length < 3}
+                      className={`${button} mt-3`}
+                      onClick={async () => {
+                        if (pending.current) return;
+                        pending.current = true;
+                        setBusy(true);
+                        try {
+                          await purchaseRequest(
                             token,
                             organizationId,
                             branchId,
-                            `/${detail.id}`,
-                          ),
-                        );
-                        await load();
-                        onChanged();
-                      } catch (e) {
-                        setError(
-                          e instanceof Error
-                            ? e.message
-                            : "No se pudo cerrar el saldo.",
-                        );
-                      } finally {
-                        pending.current = false;
-                        setBusy(false);
-                      }
-                    }}
-                  >
-                    Confirmar cierre del saldo
-                  </button>
-                </details>
-              )}
+                            `/${detail.id}/close-balance`,
+                            {
+                              reason: closeReason,
+                              expected: detail.items.map((i) => ({
+                                itemId: i.id,
+                                pending: purchasePending(i),
+                              })),
+                            },
+                          );
+                          setDetail(
+                            await purchaseRequest<PurchaseDetail>(
+                              token,
+                              organizationId,
+                              branchId,
+                              `/${detail.id}`,
+                            ),
+                          );
+                          await load();
+                          onChanged();
+                        } catch (e) {
+                          setError(
+                            e instanceof Error
+                              ? e.message
+                              : "No se pudo cerrar el saldo.",
+                          );
+                        } finally {
+                          pending.current = false;
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Confirmar cierre del saldo
+                    </button>
+                  </details>
+                )}
             </>
           )}
           {draft && !detail && (
@@ -1613,6 +1710,7 @@ export function PurchasesWorkspace({
                       lots={draft.lots}
                       search={receiptSearch}
                       onLotsChange={(lots) => patch({ lots })}
+                      initialExistingLots={stockLots}
                       onAddLot={(itemId) =>
                         patch({ lots: [...draft.lots, lotRow(itemId)] })
                       }

@@ -10,6 +10,10 @@ import {
 } from "./lib/api";
 import { textoAviso } from "./lib/avisos-sincronizacion";
 import {
+  tipoDeCompraTexto,
+  type OperacionCompra,
+} from "./lib/compras-sin-conexion";
+import {
   actualizarVentaPendiente,
   useBandejaVentas,
   type VentaPendiente,
@@ -190,9 +194,11 @@ export function SincronizacionPanel({
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-slate-700">
-                        {venta.operacion === "CAJA"
-                          ? `Caja · ${operacionDeCaja(venta)} · ${pesos(venta.totalMinor)}`
-                          : `${venta.id.slice(0, 8).toUpperCase()} · ${pesos(venta.totalMinor)}${venta.documentType === "INVOICE" ? " · con factura" : ""}`}
+                        {venta.operacion === "COMPRA"
+                          ? `Compras · ${tipoDeCompraTexto((venta.cuerpo as OperacionCompra).tipo)}`
+                          : venta.operacion === "CAJA"
+                            ? `Caja · ${operacionDeCaja(venta)} · ${pesos(venta.totalMinor)}`
+                            : `${venta.id.slice(0, 8).toUpperCase()} · ${pesos(venta.totalMinor)}${venta.documentType === "INVOICE" ? " · con factura" : ""}`}
                       </p>
                       <p className="text-xs text-slate-500">
                         {hora(venta.occurredAt)}

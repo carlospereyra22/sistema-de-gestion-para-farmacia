@@ -13,7 +13,7 @@ por etapas; este documento dice qué hay hoy y cómo funciona.
   (cola fiscal, SISTEMA-61). El Ticket nunca va a ARCA.
 - Funcionan sin conexión: ventas, ingresos y egresos de caja, ventas y cobros
   de cuenta corriente, consulta de stock y precios. Abrir y cerrar caja,
-  compras, recepciones, transferencias y catálogo necesitan conexión.
+  compras, recepciones, transferencias y catálogo necesitan conexión (ver el cambio del 08/11 abajo).
 - Cobro de cuenta corriente mayor a la deuda al sincronizar: saldo a favor y aviso.
 - Una PC trabaja sin conexión hasta 24 horas desde la última sincronización.
 
@@ -48,9 +48,9 @@ necesita conexión.
 | SISTEMA-64 Vender sin conexión y sincronizar solo (web)       | En main    |
 | SISTEMA-65 Comprobante interno a ARCA, factura en espera      | En main    |
 | SISTEMA-66 Sesiones: cerrar sesión y entrar sin conexión      | En main    |
-| SISTEMA-67 Caja sin conexión (abrir, movimientos, cerrar)     | Esta etapa |
+| SISTEMA-67 Caja sin conexión (abrir, movimientos, cerrar)     | En main    |
 | Cuenta corriente sin conexión                                 | Pendiente  |
-| Compras y recepciones sin conexión                            | Pendiente  |
+| SISTEMA-69 Compras y recepciones sin conexión                 | Esta etapa |
 | Transferencias sin conexión                                   | Pendiente  |
 | Catálogo y precios sin conexión                               | Pendiente  |
 | Prueba completa con dos PCs                                   | Pendiente  |
@@ -183,6 +183,29 @@ conexión). Puntos técnicos:
 - **Lista de la caja**: cada venta muestra quién la hizo, con conexión (de la auditoría de la venta) y sin ella.
 - **Mensajes**: la validación de la API responde en castellano (`common/http/mensajes-validacion.ts`).
 - Migración `20261108100000_offline_cash`: tipos de operación y de aviso.
+
+## Compras sin conexión (SISTEMA-69)
+
+Decisión del usuario (08/11/2026): sin internet se pueden crear pedidos, hacer compras directas y recibir pedidos (los que ya estaban y los creados sin conexión, varias veces y de a partes). Al volver, todo se manda solo y en orden. La deuda con el proveedor se registra al llegar la recepción.
+
+- **Bandeja**: la misma solicitud que se mandaría con conexión queda en la PC (`operacion: "COMPRA"`, `lib/compras-sin-conexion.ts`), firmada por quien la hizo. Se manda en orden con las ventas y la caja (`POST purchases/offline`, o `purchases/offline/firmada` si la hizo otro usuario de la PC). El stock de la PC sube enseguida.
+- **Pedidos guardados**: con conexión, cada 10 minutos, la PC guarda la lista de compras y el detalle de los pedidos abiertos (`lib/precarga-compras.ts`). Así se pueden recibir sin conexión aunque nadie haya entrado antes a Compras.
+- **La pantalla**: la lista y el detalle parten de la copia del servidor y suman lo pendiente (`comprasConPendientes`, `detalleConPendientes`). Un pedido creado sin conexión aparece como fila "Por enviar". Su id es su clave de operación y cada renglón se conoce por su producto, porque en un pedido los productos no se repiten. Las recepciones pendientes suman lo recibido y cambian el estado. Mientras un pedido tiene algo por enviar, lo que se haga con él también queda en la PC, para que llegue en orden. Cancelar o cerrar el saldo necesita conexión.
+- **El servidor**:
+  - registra cada operación una sola vez: el pedido por su `clientOperationId` y la recepción por su `operationId`;
+  - usa la hora real: `orderedAt`, la recepción, `receivedAt`, el movimiento de stock y la fecha de la deuda;
+  - acepta una recepción que se refiere al pedido por su clave y a los renglones por producto.
+- **Conflicto**: si otra PC ya recibió o canceló ese saldo, la recepción se rechaza ("saldo abierto") y queda como rechazada en el panel de sincronización y arriba de la lista de Compras.
+
+- **Transacciones**: cada operación que llega es una sola transacción. Incluye el pedido, la recepción, los lotes, los movimientos de stock, la deuda y la auditoría, también la de "sincronizada por otro". Si algo falla, se deshace entera y la PC la reintenta igual, sin duplicar. Si el servidor la rechaza, la PC deja de contarla en el stock y en el estado del pedido.
+
+## Base de medicamentos en la PC (SISTEMA-69)
+
+- La PC guarda la base de medicamentos completa (~18.000 productos, 4,3 MB) y los exhibidores (`lib/base-medicamentos-local.ts`). La baja con conexión al entrar, al volver internet y cada 10 minutos, pero sólo si cambió: `GET catalog/medicine-references/base-local?version=` responde `items: null` si la PC ya tiene esa versión. Así entra la actualización de precios de las 9 y las 17.
+- Sin conexión, buscar medicamentos (por nombre, droga, laboratorio o código), buscar por código y leer exhibidores usan esa copia, en todas las pantallas. La búsqueda es la misma que la del servidor.
+- Un exhibidor armado sin conexión se usa enseguida y se manda solo al volver. Si el servidor lo rechaza, se descarta, porque la compra ya llevó sus unidades.
+- Crear productos del catálogo sin conexión queda para la etapa "Catálogo y precios sin conexión".
+- El nginx de producción no comprime JSON. Con `gzip_types application/json` la descarga bajaría a ~0,7 MB.
 
 ## Cómo probarlo
 

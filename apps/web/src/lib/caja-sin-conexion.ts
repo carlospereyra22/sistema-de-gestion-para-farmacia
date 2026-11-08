@@ -135,6 +135,8 @@ export function aplicarCajaLocal(
       }
       continue;
     }
+    // Las compras no tocan la caja.
+    if (item.operacion) continue;
     // Venta sin enviar: suma sus cobros a la caja donde se cobró.
     const pagos = (item.cuerpo as CuerpoVenta).payments ?? [];
     const sesion = porId.get(

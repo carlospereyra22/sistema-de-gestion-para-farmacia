@@ -12,11 +12,16 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SupplierPayablesService } from "../supplier-payables/supplier-payables.service";
 import { hidePurchaseCosts } from "./purchase-cost-visibility";
 import { payableToday } from "../supplier-payables/payable-rules";
+import { offlineOccurredAt } from "../sales/offline-sale";
+import { verificarOperacionDeOtro } from "../sales/operacion-firmada";
+import { subscriptionAccessAt } from "../platform/subscription-access";
+import { subscriptionDenied } from "../platform/subscription-gate";
 import type {
   PurchaseInput,
   ReceiptInput,
   ReceiptLineInput,
   DirectPurchaseInput,
+  OperacionCompraSinConexion,
 } from "./purchase-input";
 import { stockAvailability } from "../inventory/stock-availability";
 const hash = (value: unknown) =>
@@ -27,6 +32,12 @@ const serializable = <T>(value: T): T =>
       typeof item === "bigint" ? item.toString() : item,
     ),
   ) as T;
+
+/** Se ejecuta dentro de la transacción de la compra (SISTEMA-69). */
+type AlTerminarCompra = (
+  tx: Prisma.TransactionClient,
+  purchaseId: string,
+) => Promise<void>;
 
 @Injectable()
 export class PurchasesService {
@@ -149,6 +160,7 @@ export class PurchasesService {
     organizationId: string,
     branchId: string,
     input: PurchaseInput,
+    alTerminar?: AlTerminarCompra,
   ) {
     await this.assert(actorId, organizationId, branchId, "PURCHASE_MANAGE");
     return this.prisma.$transaction(
@@ -161,6 +173,7 @@ export class PurchasesService {
           input,
           hash(input),
         );
+        await alTerminar?.(tx, p.id);
         return { id: p.id, status: p.status };
       },
       { timeout: 30000 },
@@ -171,6 +184,7 @@ export class PurchasesService {
     organizationId: string,
     branchId: string,
     input: DirectPurchaseInput,
+    alTerminar?: AlTerminarCompra,
   ) {
     await this.assert(actorId, organizationId, branchId, "PURCHASE_MANAGE");
     await this.assert(actorId, organizationId, branchId, "PURCHASE_RECEIVE");
@@ -201,6 +215,7 @@ export class PurchasesService {
             operationId: input.clientOperationId,
             debt: input.debt,
             notes: input.notes,
+            ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
             items: input.receipts.map((line) => ({
               ...line,
               itemId:
@@ -208,6 +223,7 @@ export class PurchasesService {
             })),
           },
         );
+        await alTerminar?.(tx, p.id);
         return { id: p.id, ...receipt };
       },
       { timeout: 30000 },
@@ -323,6 +339,7 @@ export class PurchasesService {
     branchId: string,
     purchaseId: string,
     input: ReceiptInput | (ReceiptLineInput & { operationId?: string }),
+    alTerminar?: AlTerminarCompra,
   ) {
     await this.assert(actorId, organizationId, branchId, "PURCHASE_RECEIVE");
     const batch: ReceiptInput =
@@ -330,15 +347,18 @@ export class PurchasesService {
         ? input
         : { operationId: input.operationId ?? randomUUID(), items: [input] };
     return this.prisma.$transaction(
-      (tx) =>
-        this.receiveInTransaction(
+      async (tx) => {
+        const recibido = await this.receiveInTransaction(
           tx,
           actorId,
           organizationId,
           branchId,
           purchaseId,
           batch,
-        ),
+        );
+        await alTerminar?.(tx, purchaseId);
+        return recibido;
+      },
       { timeout: 30000 },
     );
   }
@@ -434,6 +454,8 @@ export class PurchasesService {
         actorId,
         actorName: member?.displayName || "Usuario sin nombre configurado",
         notes: input.notes?.trim() || null,
+        // Sin conexión, la recepción conserva cuándo pasó (SISTEMA-69).
+        ...(input.occurredAt ? { createdAt: input.occurredAt } : {}),
       },
     });
     const productIds = [
@@ -536,6 +558,7 @@ export class PurchasesService {
           actorId,
           referenceType: "PURCHASE",
           referenceId: purchaseId,
+          ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
         },
       });
       await tx.purchaseReceiptItem.create({
@@ -565,7 +588,10 @@ export class PurchasesService {
     const status = complete ? "RECEIVED" : "PARTIALLY_RECEIVED";
     await tx.purchase.update({
       where: { id: purchaseId },
-      data: { status, receivedAt: complete ? new Date() : null },
+      data: {
+        status,
+        receivedAt: complete ? (input.occurredAt ?? new Date()) : null,
+      },
     });
     await this.audit.recordInTransaction(tx, {
       organizationId,
@@ -596,7 +622,7 @@ export class PurchasesService {
           documentType: "OTRO",
           pointOfSale: "",
           documentNumber: "",
-          issuedOn: payableToday(),
+          issuedOn: payableToday(input.occurredAt),
           amountMinor: input.debt.amountMinor,
           dues: [
             { dueOn: input.debt.dueOn, amountMinor: input.debt.amountMinor },
@@ -608,6 +634,149 @@ export class PurchasesService {
       );
     }
     return { receiptId: receipt.id, status };
+  }
+  /**
+   * Pedido, compra directa o recepción hecho sin conexión (SISTEMA-69): es la
+   * misma solicitud que con conexión (con su clave, así no se duplica) más la
+   * hora en que pasó. Un pedido ya recibido o cancelado por otra PC se rechaza.
+   */
+  async completeOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: OperacionCompraSinConexion,
+    alTerminar?: AlTerminarCompra,
+  ) {
+    const occurredAt = offlineOccurredAt(op.occurredAt, new Date());
+    const subscription = await this.prisma.organizationSubscription.findUnique({
+      where: { organizationId },
+    });
+    if (subscription) {
+      const { access, stage } = subscriptionAccessAt(subscription, occurredAt);
+      if (access !== "FULL")
+        throw subscriptionDenied(
+          access === "READ_ONLY" ? "READ_ONLY" : "BLOCKED",
+          stage,
+        );
+    }
+    if (op.tipo === "PEDIDO")
+      return this.create(
+        actorId,
+        organizationId,
+        branchId,
+        {
+          ...op.cuerpo,
+          orderedAt: occurredAt.toISOString(),
+        },
+        alTerminar,
+      );
+    if (op.tipo === "DIRECTA")
+      return this.direct(
+        actorId,
+        organizationId,
+        branchId,
+        {
+          ...op.cuerpo,
+          orderedAt: occurredAt.toISOString(),
+          occurredAt,
+        },
+        alTerminar,
+      );
+    // El pedido pudo hacerse sin conexión en la misma PC: ahí se conoce por
+    // su clave y cada renglón por su producto (no se repiten en un pedido).
+    const pedido = await this.prisma.purchase.findFirst({
+      where: {
+        organizationId,
+        branchId,
+        OR: [{ id: op.purchaseId }, { clientOperationId: op.purchaseId }],
+      },
+      select: { id: true, items: { select: { id: true, productId: true } } },
+    });
+    if (!pedido) throw new NotFoundException("Compra no encontrada.");
+    return this.receive(
+      actorId,
+      organizationId,
+      branchId,
+      pedido.id,
+      {
+        ...op.cuerpo,
+        occurredAt,
+        items: op.cuerpo.items.map((line) => ({
+          ...line,
+          itemId: pedido.items.some((i) => i.id === line.itemId)
+            ? line.itemId
+            : (pedido.items.find((i) => i.productId === line.itemId)?.id ??
+              line.itemId),
+        })),
+      },
+      alTerminar,
+    );
+  }
+  /** La de otro usuario de la PC: queda a nombre de quien la hizo. */
+  async completeOfflineSigned(
+    senderId: string,
+    organizationId: string,
+    branchId: string,
+    firma: {
+      actorId: string;
+      deviceId: string;
+      payload: string;
+      signature: string;
+    },
+    op: OperacionCompraSinConexion,
+  ) {
+    if (firma.actorId !== senderId)
+      await verificarOperacionDeOtro(this.prisma, {
+        ...firma,
+        senderId,
+        organizationId,
+        branchId,
+      });
+    if (firma.actorId === senderId)
+      return this.completeOffline(senderId, organizationId, branchId, op);
+    // Quién la mandó queda en la misma transacción que la compra: si algo
+    // falla, se deshace todo junto. Una vez por operación, aunque se reenvíe.
+    const clave = String(
+      op.tipo === "RECEPCION"
+        ? op.cuerpo.operationId
+        : op.cuerpo.clientOperationId,
+    );
+    const resultado = await this.completeOffline(
+      firma.actorId,
+      organizationId,
+      branchId,
+      op,
+      async (tx, purchaseId) => {
+        if (
+          await tx.auditLog.findFirst({
+            where: {
+              organizationId,
+              entityType: "PURCHASE",
+              entityId: purchaseId,
+              action: "SINCRONIZADA_POR_OTRO",
+              after: { path: ["clave"], equals: clave },
+            },
+            select: { id: true },
+          })
+        )
+          return;
+        await this.audit.recordInTransaction(tx, {
+          organizationId,
+          branchId,
+          actorId: senderId,
+          entityType: "PURCHASE",
+          entityId: purchaseId,
+          action: "SINCRONIZADA_POR_OTRO",
+          after: {
+            clave,
+            hizoId: firma.actorId,
+            deviceId: firma.deviceId,
+            tipo: op.tipo,
+          },
+        });
+      },
+    );
+    return resultado;
   }
   async closeBalance(
     actorId: string,

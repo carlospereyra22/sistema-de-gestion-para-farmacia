@@ -1,5 +1,7 @@
 import { resolveExternalCategory } from "./lib/api";
 import { PurchasesWorkspace } from "./purchases-workspace";
+import { precargarCompras } from "./lib/precarga-compras";
+import { enviarExhibidoresPendientes } from "./lib/base-medicamentos-local";
 import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
   ExternalProductLookup,
@@ -375,6 +377,8 @@ import {
   type UserCreateOptions,
   type UserListItem,
   updateUser,
+  actualizarBaseMedicamentos,
+  enviarExhibidor,
 } from "./lib/api";
 import {
   effectiveSalePriceListId,
@@ -731,6 +735,43 @@ export function WorkspaceShell({
     );
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal]);
+  // Pedidos abiertos guardados en la PC para recibirlos sin conexión (SISTEMA-69).
+  const veCompras = canOpenView("Compras", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !veCompras ||
+      !organizationId ||
+      !branchId
+    )
+      return;
+    const precargar = () =>
+      void precargarCompras(accessToken, organizationId, branchId).catch(
+        () => {},
+      );
+    precargar();
+    const timer = window.setInterval(precargar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [enLinea, sesionReal, veCompras, accessToken, organizationId, branchId]);
+  // Base de medicamentos en la PC para buscar sin conexión; se baja sólo si
+  // cambió. Antes, los exhibidores armados sin conexión (SISTEMA-69).
+  useEffect(() => {
+    if (!enLinea || !sesionReal || !accessToken || !organizationId) return;
+    const actualizar = () =>
+      void enviarExhibidoresPendientes(
+        (organizacion, pack) =>
+          enviarExhibidor(accessToken, organizacion, pack),
+        (error) => error instanceof SinConexionError,
+      )
+        .catch(() => {})
+        .then(() => actualizarBaseMedicamentos(accessToken, organizationId))
+        .catch(() => {});
+    actualizar();
+    const timer = window.setInterval(actualizar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [enLinea, sesionReal, accessToken, organizationId]);
   // Ventas cobradas sin conexión: se mandan solas y, al llegar, se actualiza
   // el stock (SISTEMA-64).
   useSincronizarVentas(accessToken, alcance);
@@ -1364,6 +1405,7 @@ export function WorkspaceShell({
               userKey={email}
               canBuy={permissionCodes.includes("PURCHASE_MANAGE")}
               canReceiveGoods={permissionCodes.includes("PURCHASE_RECEIVE")}
+              stockLots={stock}
               onChanged={() => void refresh()}
               initialPurchaseId={initialPurchaseId}
               onInitialConsumed={consumeInitialPurchase}

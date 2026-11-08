@@ -73,7 +73,7 @@ export function historialConPendientes(
     .filter(
       (venta) =>
         // Sólo ventas: las operaciones de caja no van al historial.
-        venta.operacion !== "CAJA" &&
+        !venta.operacion &&
         venta.estado !== "ENVIADA" &&
         venta.organizationId === organizationId &&
         venta.branchId === branchId &&
