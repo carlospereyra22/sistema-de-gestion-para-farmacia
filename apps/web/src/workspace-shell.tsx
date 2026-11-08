@@ -52,6 +52,11 @@ import {
 } from "./lib/transfer-product-lookup";
 import { NavigationRail } from "./navigation-rail";
 import { SidebarToggle } from "./sidebar-toggle";
+import { RolePermissionPicker } from "./role-permission-picker";
+import {
+  rolePermissionLabel,
+  toggleRolePermission,
+} from "./lib/role-permissions";
 import { useWorkspaceSidebar } from "./use-workspace-sidebar";
 import { ProductInternalBarcode } from "./product-internal-barcode";
 import { canDismissProductBackdrop } from "./lib/product-backdrop";
@@ -397,68 +402,6 @@ const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Cuentas por pagar", icon: ReceiptText },
   { name: "Proveedores", icon: Truck },
 ];
-const permissionGroups: {
-  title: string;
-  permissions: readonly (readonly [string, string])[];
-}[] = [
-  {
-    title: "Usuarios y roles",
-    permissions: [
-      ["USER_READ", "Ver usuarios"],
-      ["USER_MANAGE", "Crear y administrar usuarios"],
-      ["ROLE_READ", "Ver roles y permisos"],
-      ["ROLE_MANAGE", "Crear y administrar roles"],
-    ],
-  },
-  {
-    title: "Organización",
-    permissions: [
-      ["ORGANIZATION_READ", "Ver información de la organización"],
-      ["ORGANIZATION_MANAGE", "Administrar organización y sucursales"],
-    ],
-  },
-  {
-    title: "Productos y contactos",
-    permissions: [
-      ["CATALOG_READ", "Ver productos, categorías y listas"],
-      ["CATALOG_MANAGE", "Administrar productos, categorías y listas"],
-      ["PARTY_READ", "Ver clientes y proveedores"],
-      ["PARTY_MANAGE", "Administrar clientes y proveedores"],
-    ],
-  },
-  {
-    title: "Operación",
-    permissions: [
-      ["INVENTORY_READ", "Ver inventario"],
-      ["INVENTORY_MANAGE", "Recibir y ajustar stock"],
-      ["COST_READ", "Ver costos de los productos"],
-      ["SALE_READ", "Ver ventas e historial"],
-      ["SALE_MANAGE", "Registrar ventas, anulaciones y devoluciones"],
-      ["CASH_READ", "Ver caja y movimientos"],
-      ["CASH_MANAGE", "Abrir, cerrar y operar la caja"],
-      ["ACCOUNT_READ", "Ver cuentas corrientes"],
-      ["ACCOUNT_MANAGE", "Administrar cuentas corrientes"],
-      ["REPORT_READ", "Ver reportes"],
-      ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
-      ["REPORT_EXPORT", "Exportar reportes"],
-    ],
-  },
-  {
-    title: "Mercadería y proveedores",
-    permissions: [
-      ["PURCHASE_RECEIVE", "Recibir mercadería"],
-      ["PURCHASE_READ", "Ver compras y sus costos"],
-      ["PURCHASE_MANAGE", "Crear y editar compras"],
-      ["PAYABLE_READ", "Ver cuentas por pagar"],
-      ["PAYABLE_MANAGE", "Cargar facturas y tickets de proveedores"],
-      ["PAYABLE_PAY", "Registrar pagos a proveedores"],
-    ],
-  },
-];
-const permissionLabels = Object.fromEntries(
-  permissionGroups.flatMap(({ permissions }) => permissions),
-) as Record<string, string>;
-const permissionLabel = (code: string) => permissionLabels[code] ?? code;
 const money = (minor: string | number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
     Number(minor) / 100,
@@ -775,7 +718,7 @@ export function WorkspaceShell({
     >
       <header
         ref={sidebar.header}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
         <div className="flex items-center gap-3">
           <SidebarToggle
@@ -807,7 +750,8 @@ export function WorkspaceShell({
             view === "Cuentas por pagar" ||
             view === "Categorías y laboratorios" ||
             view === "Transferencias" ||
-            view === "Reportes") && (
+            view === "Reportes" ||
+            view === "Administración") && (
             <h1 className="workspace-sales-title">
               {view === "Compras" ? (
                 <ShoppingCart size={22} aria-hidden />
@@ -835,6 +779,8 @@ export function WorkspaceShell({
                 <ChartNoAxesCombined size={22} aria-hidden />
               ) : view === "Transferencias" ? (
                 <ArrowLeftRight size={22} aria-hidden />
+              ) : view === "Administración" ? (
+                <Users size={22} aria-hidden />
               ) : (
                 <CashRegisterIcon size={22} />
               )}
@@ -1070,7 +1016,8 @@ export function WorkspaceShell({
             view !== "Clientes" &&
             view !== "Compras" &&
             view !== "Transferencias" &&
-            view !== "Reportes" && (
+            view !== "Reportes" &&
+            view !== "Administración" && (
               <div className="workspace-page-heading flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
@@ -7821,8 +7768,8 @@ function Administration({
   }, [organizationId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setTab(initialTab), [initialTab]);
   return (
-    <div className="mt-8">
-      <div className="flex gap-2 border-b border-slate-200">
+    <div>
+      <div className="flex gap-1 rounded-xl border border-slate-200 bg-white px-2 shadow-sm">
         {[
           ["users", "Usuarios"],
           ["roles", "Roles y permisos"],
@@ -7831,7 +7778,7 @@ function Administration({
             key={key}
             type="button"
             onClick={() => setTab(key as typeof tab)}
-            className={`px-4 py-3 text-sm ${tab === key ? "border-b-2 border-teal-700 font-medium text-teal-800" : "text-slate-600"}`}
+            className={`border-b-2 px-4 py-3 text-sm transition-colors ${tab === key ? "border-teal-700 font-semibold text-teal-800" : "border-transparent text-slate-600 hover:text-teal-800"}`}
           >
             {label}
           </button>
@@ -8110,7 +8057,7 @@ function RolesPanel({
                     key={permission.code}
                     className="rounded-full bg-teal-50 px-2.5 py-1 text-xs text-teal-800"
                   >
-                    {permissionLabel(permission.code)}
+                    {rolePermissionLabel(permission.code)}
                   </span>
                 ))}
               </div>
@@ -8142,37 +8089,14 @@ function RolesPanel({
           <p className="mt-1 text-xs text-slate-500">
             Elegí las tareas que esta persona podrá realizar en el sistema.
           </p>
-          <div className="mt-4 space-y-5">
-            {permissionGroups.map((group) => (
-              <div key={group.title}>
-                <p className="mb-2 text-xs font-semibold text-slate-700">
-                  {group.title}
-                </p>
-                <div className="space-y-1.5">
-                  {group.permissions.map(([permission, label]) => (
-                    <label
-                      key={permission}
-                      className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-xs ${permissionCodes.includes(permission) ? "border-teal-200 bg-teal-50 text-teal-950" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200"}`}
-                    >
-                      <input
-                        className="mt-0.5"
-                        type="checkbox"
-                        checked={permissionCodes.includes(permission)}
-                        onChange={(event) =>
-                          setPermissionCodes((current) =>
-                            event.target.checked
-                              ? [...current, permission]
-                              : current.filter((code) => code !== permission),
-                          )
-                        }
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <RolePermissionPicker
+            value={permissionCodes}
+            onChange={(permission, enabled) =>
+              setPermissionCodes((current) =>
+                toggleRolePermission(current, permission, enabled),
+              )
+            }
+          />
         </fieldset>
         <button className="mt-5 w-full bg-teal-700 py-2 text-sm text-white">
           {editing ? "Guardar permisos" : "Crear rol"}
