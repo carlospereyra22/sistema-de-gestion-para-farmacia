@@ -15,6 +15,12 @@ import {
 } from "./arca-connection.service";
 import { ArcaSoap, arcaMessages, obj, str } from "./arca-soap";
 import {
+  actorAuditoria,
+  esAutomatico,
+  origenAuditoria,
+  type FiscalActor,
+} from "./actor-fiscal";
+import {
   ESPERA_PARA_LIBERAR_MS,
   comprobanteInexistente,
   decidirIncierto,
@@ -153,7 +159,11 @@ export class FiscalTrialService {
     });
     return this.sendPrepared(actor, trial, access);
   }
-  async sendPrepared(actor: string, trial: FiscalTrial, access: ArcaAccess) {
+  async sendPrepared(
+    actor: FiscalActor,
+    trial: FiscalTrial,
+    access: ArcaAccess,
+  ) {
     const point = trial.point;
     let numbered: FiscalTrial = trial;
     try {
@@ -230,7 +240,7 @@ export class FiscalTrialService {
     }
   }
   private async finish(
-    actor: string,
+    actor: FiscalActor,
     trial: FiscalTrial,
     status: string,
     detail: string,
@@ -249,7 +259,7 @@ export class FiscalTrialService {
       await tx.auditLog.create({
         data: {
           organizationId: trial.organizationId,
-          actorId: actor,
+          actorId: actorAuditoria(actor),
           entityType: "FISCAL_TRIAL",
           entityId: trial.id,
           action: status,
@@ -257,14 +267,25 @@ export class FiscalTrialService {
             environment: "HOMOLOGATION",
             number: trial.number,
             cae: cae ?? null,
+            ...origenAuditoria(actor),
           },
         },
       });
       return updated;
     });
   }
-  async reconcile(actor: string, org: string, id: string, saleId?: string) {
-    if (saleId) await this.organizations.authorizeFiscalSale(actor, org);
+  async reconcile(
+    actor: FiscalActor,
+    org: string,
+    id: string,
+    saleId?: string,
+  ) {
+    if (esAutomatico(actor)) {
+      if (!saleId)
+        throw new BadRequestException(
+          "El proceso automático sólo concilia facturas de ventas.",
+        );
+    } else if (saleId) await this.organizations.authorizeFiscalSale(actor, org);
     else await this.organizations.authorizeFiscalManagement(actor, org);
     const trial = await this.prisma.fiscalTrial.findFirst({
       where: {

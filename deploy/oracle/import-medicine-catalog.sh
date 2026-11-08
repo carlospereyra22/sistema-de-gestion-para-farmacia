@@ -26,6 +26,7 @@ run() {
     --property=EnvironmentFile="$environment" \
     --setenv=PRICE_REFRESH_SCHEDULER=off \
     --setenv=SUBSCRIPTION_SCHEDULER=off \
+    --setenv=FISCAL_QUEUE_WORKER=off \
     /usr/local/bin/node "$cli" "$@"
 }
 

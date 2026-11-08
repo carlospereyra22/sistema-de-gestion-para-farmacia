@@ -16,6 +16,7 @@ import { PrismaService } from "../../src/prisma/prisma.service";
 export async function startHttpApp(prefix: string) {
   process.env.PRICE_REFRESH_SCHEDULER = "off";
   process.env.SUBSCRIPTION_SCHEDULER = "off";
+  process.env.FISCAL_QUEUE_WORKER = "off";
   const schema = `${prefix}_${randomUUID().replaceAll("-", "")}`;
   const main = await Test.createTestingModule({
     imports: [AppModule],
