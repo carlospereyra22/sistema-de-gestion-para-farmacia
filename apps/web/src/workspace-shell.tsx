@@ -111,6 +111,7 @@ import {
   leerSesion,
 } from "./lib/cache-local";
 import { firmarVenta } from "./lib/firma-ventas";
+import { aplicarCajaLocal, ultimoCierreLocal } from "./lib/caja-sin-conexion";
 import { conectividad } from "./lib/conectividad";
 import {
   guardarVentaPendiente,
@@ -625,7 +626,22 @@ export function WorkspaceShell({
     [products],
   );
   const [stock, setStock] = useState<StockLot[]>([]);
-  const [openSessions, setOpenSessions] = useState<CashSession[]>([]);
+  // Ventas y operaciones de caja hechas sin conexión en esta PC (SISTEMA-64/67).
+  const alcance = alcanceDe({ email });
+  const bandeja = useBandejaVentas(alcance);
+  const [sesionesServidor, setOpenSessions] = useState<CashSession[]>([]);
+  // Caja como la vería el servidor con lo pendiente de la PC ya aplicado:
+  // aperturas, ventas, movimientos y cierres hechos sin conexión.
+  const openSessions = useMemo(
+    () =>
+      aplicarCajaLocal(
+        sesionesServidor,
+        bandeja.deLaPc,
+        organizationId ?? "",
+        branchId,
+      ),
+    [sesionesServidor, bandeja.deLaPc, organizationId, branchId],
+  );
   const [chosenRegisterId, setChosenRegisterId] = useState("");
   const [defaultRegisterId, setDefaultRegisterId] = useState<string | null>(
     null,
@@ -717,8 +733,6 @@ export function WorkspaceShell({
   }, [enLinea, sesionReal]);
   // Ventas cobradas sin conexión: se mandan solas y, al llegar, se actualiza
   // el stock (SISTEMA-64).
-  const alcance = alcanceDe({ email });
-  const bandeja = useBandejaVentas(alcance);
   useSincronizarVentas(accessToken, alcance);
   useEffect(() => {
     const actualizar = () => void latestRefresh.current().catch(() => {});
@@ -1228,6 +1242,16 @@ export function WorkspaceShell({
               registerId={activeRegisterId}
               onRegisterChange={chooseRegister}
               session={cashSession}
+              cierreLocal={
+                organizationId
+                  ? ultimoCierreLocal(
+                      bandeja.deLaPc,
+                      organizationId,
+                      branchId,
+                      activeRegisterId,
+                    )
+                  : undefined
+              }
               ventasSinEnviar={
                 // De todos los usuarios de la PC: la plata ya está en el cajón.
                 bandeja.deLaPc.filter(
@@ -5905,6 +5929,8 @@ function Sales({
       totalMinor: String(total),
       documentType,
       cuerpo: cuerpoGuardado,
+      // Quién vendió, para la lista de la caja sin conexión.
+      actorName: cajero || alcance,
       ...(vendedorId && firma ? { vendedorId, payload, firma } : {}),
       unidades: lines
         .filter((line) => !line.description)

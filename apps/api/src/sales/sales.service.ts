@@ -49,6 +49,7 @@ import { ProductionSalesService } from "../fiscal/production-sales.service";
 import { ProductionConfigurationService } from "../fiscal/production-configuration.service";
 import { productionIssuanceAvailable } from "../fiscal/production-document";
 import { firmaValida } from "./firma-venta";
+import { sesionReal } from "../cash/offline-cash";
 import { obj, str, list } from "../fiscal/arca-soap";
 
 type SaleInput = {
@@ -678,9 +679,16 @@ export class SalesService {
     },
     input: OfflineSaleInput,
   ) {
-    await this.assert(senderId, organizationId, "SALE_MANAGE");
     if (firma.sellerId === senderId)
       return this.completeOffline(senderId, organizationId, branchId, input);
+    // Quien la manda sólo la reenvía: alcanza con que sea de la farmacia (la
+    // sucursal ya la validó el guard). Cuenta la firma y el permiso del vendedor.
+    if (
+      !(await this.prisma.userOrganization.findFirst({
+        where: { userId: senderId, organizationId, active: true },
+      }))
+    )
+      throw new ForbiddenException("No pertenecés a esta farmacia.");
     const clave = await this.prisma.offlineDeviceKey.findUnique({
       where: {
         userId_deviceId: { userId: firma.sellerId, deviceId: firma.deviceId },
@@ -1374,6 +1382,14 @@ export class SalesService {
               input.payments.every(
                 (payment) => payment.method === PaymentMethod.ACCOUNT,
               ),
+            );
+          // Caja abierta sin conexión (SISTEMA-67): la PC usa el id de su
+          // apertura, que puede apuntar a la sesión que abrió otra PC.
+          if (offline && collectionSessionId)
+            collectionSessionId = await sesionReal(
+              tx,
+              organizationId,
+              collectionSessionId,
             );
           if (collectionSessionId) {
             await lockCashSession(tx, collectionSessionId);

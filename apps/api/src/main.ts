@@ -7,6 +7,7 @@ import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { ApiExceptionFilter } from "./common/http/api-exception.filter";
 import { requestIdMiddleware } from "./common/http/request-id.middleware";
+import { errorDeValidacion } from "./common/http/mensajes-validacion";
 import { EnvironmentService } from "./config/environment.service";
 
 async function bootstrap(): Promise<void> {
@@ -30,6 +31,8 @@ async function bootstrap(): Promise<void> {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      // Mensajes en castellano (SISTEMA-67).
+      exceptionFactory: errorDeValidacion,
     }),
   );
 

@@ -14,6 +14,17 @@ import { findOwnOpenSession } from "./own-open-session";
 import { randomUUID } from "node:crypto";
 import { readReceiptPayments } from "../accounts/receipt-payments";
 import { liberarFacturaEnEspera } from "../fiscal/factura-diferida";
+import { offlineOccurredAt } from "../sales/offline-sale";
+import { firmaValida } from "../sales/firma-venta";
+import { subscriptionAccessAt } from "../platform/subscription-access";
+import { subscriptionDenied } from "../platform/subscription-gate";
+import {
+  KIND_POR_TIPO,
+  hashOperacionCaja,
+  sesionReal,
+  validarOperacionCaja,
+  type OperacionCajaSinConexion,
+} from "./offline-cash";
 import { isOrganizationAdministrator } from "../roles/administrator-role";
 import {
   cashMovementCategory,
@@ -631,6 +642,10 @@ export class CashService {
           orderBy: { createdAt: "desc" },
         })
       : [];
+    const vendedores = await this.sellerLabels(
+      organizationId,
+      openPayments.map((payment) => payment.saleId),
+    );
     return {
       registers,
       settings: await readCashSettings(this.prisma, branchId),
@@ -643,6 +658,7 @@ export class CashService {
             saleId: payment.saleId,
             amountMinor: payment.amountMinor.toString(),
             createdAt: payment.createdAt,
+            actorName: vendedores.get(payment.saleId) ?? null,
           })),
         openedBy:
           memberNames.get(
@@ -772,10 +788,7 @@ export class CashService {
         category: cashMovementCategory(movement.reason),
         actorName: names.get(movement.actorId) ?? null,
       })),
-      cashPayments: payments.map((payment) => ({
-        ...payment,
-        amountMinor: payment.amountMinor.toString(),
-      })),
+      cashPayments: await this.withSellers(organizationId, payments),
     };
   }
   async closures(
@@ -970,10 +983,7 @@ export class CashService {
         amountMinor: movement.amountMinor.toString(),
         actorName: name(movement.actorId),
       })),
-      cashPayments: payments.map((payment) => ({
-        ...payment,
-        amountMinor: payment.amountMinor.toString(),
-      })),
+      cashPayments: await this.withSellers(organizationId, payments),
     };
   }
   async createRegister(
@@ -1281,6 +1291,400 @@ export class CashService {
       return { ...movement, amountMinor: movement.amountMinor.toString() };
     });
   }
+  /**
+   * Apertura, movimiento o cierre hecho sin conexión que la PC manda al volver
+   * (SISTEMA-67). Ya ocurrió: se registra con su hora real y lo que haya
+   * cambiado mientras tanto queda como aviso "a revisar". Reenviarla devuelve
+   * el resultado original.
+   */
+  async completeOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: OperacionCajaSinConexion,
+  ) {
+    await this.assert(actorId, organizationId, "CASH_MANAGE");
+    await this.branch(organizationId, branchId);
+    validarOperacionCaja(op);
+    const occurredAt = offlineOccurredAt(op.occurredAt, new Date());
+    const subscription = await this.prisma.organizationSubscription.findUnique({
+      where: { organizationId },
+    });
+    if (subscription) {
+      const { access, stage } = subscriptionAccessAt(subscription, occurredAt);
+      if (access !== "FULL")
+        throw subscriptionDenied(
+          access === "READ_ONLY" ? "READ_ONLY" : "BLOCKED",
+          stage,
+        );
+    }
+    const requestHash = hashOperacionCaja(op);
+    return this.prisma.$transaction(async (tx) => {
+      const previa = await tx.offlineOperation.findUnique({
+        where: { id: op.clientOperationId },
+        include: { issues: true },
+      });
+      if (previa) {
+        if (
+          previa.organizationId !== organizationId ||
+          previa.requestHash !== requestHash
+        )
+          throw new ConflictException(
+            "Esta operación sin conexión ya se registró con otros datos.",
+          );
+        return { entityId: previa.entityId, offlineIssues: previa.issues };
+      }
+      const avisos: { kind: string; detail: Prisma.InputJsonValue }[] = [];
+      const origen = { origen: "SIN_CONEXION", deviceId: op.deviceId };
+      let entityId: string | null = null;
+      if (op.tipo === "APERTURA") {
+        await tx.$queryRaw`SELECT id FROM "CashRegister" WHERE id=${op.cashRegisterId!}::uuid AND "branchId"=${branchId}::uuid FOR UPDATE`;
+        const register = await tx.cashRegister.findFirst({
+          where: { id: op.cashRegisterId, branchId, active: true },
+        });
+        if (!register)
+          throw new NotFoundException("La caja no está disponible.");
+        const abierta = await tx.cashSession.findFirst({
+          where: { cashRegisterId: register.id, closedAt: null },
+        });
+        if (abierta) {
+          // Otra PC la abrió mientras tanto: todo se suma a esa sesión.
+          entityId = abierta.id;
+          avisos.push({
+            kind: "CAJA_YA_ABIERTA",
+            detail: { caja: register.name, cashSessionId: abierta.id },
+          });
+        } else {
+          const own = await findOwnOpenSession(tx, actorId, organizationId);
+          if (own)
+            avisos.push({
+              kind: "OTRA_CAJA_ABIERTA",
+              detail: { caja: own.registerName, sucursal: own.branchName },
+            });
+          const rules = await readCashSettings(tx, branchId);
+          const session = await tx.cashSession.create({
+            data: {
+              id: op.clientOperationId,
+              cashRegisterId: register.id,
+              openedById: actorId,
+              openedAt: occurredAt,
+              openingAmountMinor: BigInt(
+                rules.askOpeningAmount ? op.openingAmountMinor! : 0,
+              ),
+            },
+          });
+          entityId = session.id;
+          await this.audit.recordInTransaction(tx, {
+            organizationId,
+            branchId,
+            actorId,
+            entityType: "CASH_SESSION",
+            entityId: session.id,
+            action: "OPENED",
+            after: {
+              cashRegisterId: register.id,
+              openingAmountMinor: session.openingAmountMinor.toString(),
+              ...origen,
+            },
+          });
+        }
+        // Ventas de esta caja que llegaron antes que su apertura quedaron en
+        // cobros pendientes: pasan a esta caja con su hora original.
+        await this.reubicarCobrosDeApertura(
+          tx,
+          organizationId,
+          branchId,
+          op.clientOperationId,
+          entityId!,
+          actorId,
+        );
+      } else {
+        const sessionId = await sesionReal(tx, organizationId, op.sessionId!);
+        await lockCashSession(tx, sessionId);
+        const session = await tx.cashSession.findFirst({
+          where: { id: sessionId },
+        });
+        const register = session
+          ? await tx.cashRegister.findFirst({
+              where: { id: session.cashRegisterId, branchId },
+            })
+          : null;
+        if (!session || !register)
+          throw new NotFoundException(
+            "La caja de esta operación no está disponible en la sucursal.",
+          );
+        entityId = session.id;
+        if (op.tipo === "MOVIMIENTO") {
+          const rules = await readCashSettings(tx, branchId);
+          if (!rules.allowManualMovements)
+            throw new BadRequestException(
+              "Los movimientos manuales están deshabilitados en esta sucursal.",
+            );
+          const detalle = {
+            tipo: op.type!,
+            amountMinor: String(op.amountMinor),
+            motivo: op.reason?.trim() ?? "",
+            caja: register.name,
+          };
+          if (session.closedAt) {
+            // La caja se cerró antes de que llegara: no entra en ese cierre.
+            avisos.push({ kind: "MOVIMIENTO_RETENIDO", detail: detalle });
+          } else {
+            if (op.type === "OUT") {
+              const disponible = await this.expectedCash(tx, session);
+              if (BigInt(op.amountMinor!) > disponible)
+                avisos.push({
+                  kind: "EGRESO_SUPERA_EFECTIVO",
+                  detail: {
+                    ...detalle,
+                    disponibleMinor: disponible.toString(),
+                  },
+                });
+            }
+            await tx.cashMovement.create({
+              data: {
+                id: op.clientOperationId,
+                cashSessionId: session.id,
+                type: op.type!,
+                amountMinor: BigInt(op.amountMinor!),
+                reason: op.reason?.trim() || "Movimiento sin conexión",
+                actorId,
+                createdAt: occurredAt,
+              },
+            });
+            await this.audit.recordInTransaction(tx, {
+              organizationId,
+              branchId,
+              actorId,
+              entityType: "CASH_SESSION",
+              entityId: session.id,
+              action: op.type === "IN" ? "MANUAL_IN" : "MANUAL_OUT",
+              after: {
+                amountMinor: op.amountMinor,
+                reason: op.reason?.trim() ?? "",
+                ...origen,
+              },
+            });
+          }
+        } else if (session.closedAt) {
+          // Ya la cerró otra PC: el cierre de esta PC sólo queda como aviso.
+          avisos.push({
+            kind: "CIERRE_DISTINTO",
+            detail: {
+              motivo: "La caja ya estaba cerrada.",
+              caja: register.name,
+              contadoMinor: String(op.closingAmountMinor),
+            },
+          });
+        } else {
+          const esperado = await this.expectedCash(tx, session);
+          if (esperado !== BigInt(op.expectedAmountMinor!))
+            avisos.push({
+              kind: "CIERRE_DISTINTO",
+              detail: {
+                motivo: "El esperado cambió mientras no había conexión.",
+                caja: register.name,
+                vioMinor: String(op.expectedAmountMinor),
+                esperadoMinor: esperado.toString(),
+                contadoMinor: String(op.closingAmountMinor),
+              },
+            });
+          const closedAt =
+            occurredAt.getTime() < session.openedAt.getTime()
+              ? session.openedAt
+              : occurredAt;
+          await tx.cashSession.update({
+            where: { id: session.id },
+            data: {
+              closedAt,
+              closingAmountMinor: BigInt(op.closingAmountMinor!),
+            },
+          });
+          await this.audit.recordInTransaction(tx, {
+            organizationId,
+            branchId,
+            actorId,
+            entityType: "CASH_SESSION",
+            entityId: session.id,
+            action: "CLOSED",
+            before: {
+              openingAmountMinor: session.openingAmountMinor.toString(),
+            },
+            after: {
+              expectedAmountMinor: esperado.toString(),
+              cashRegisterName: register.name,
+              closingAmountMinor: op.closingAmountMinor,
+              differenceMinor: (
+                BigInt(op.closingAmountMinor!) - esperado
+              ).toString(),
+              reason: op.reason?.trim() || "Cierre sin conexión",
+              ...origen,
+            },
+          });
+        }
+      }
+      await tx.offlineOperation.create({
+        data: {
+          id: op.clientOperationId,
+          organizationId,
+          branchId,
+          kind: KIND_POR_TIPO[op.tipo],
+          actorId,
+          deviceId: op.deviceId,
+          occurredAt,
+          requestHash,
+          entityId,
+        },
+      });
+      const offlineIssues = [];
+      for (const aviso of avisos)
+        offlineIssues.push(
+          await tx.offlineSyncIssue.create({
+            data: {
+              organizationId,
+              branchId,
+              operationId: op.clientOperationId,
+              kind: aviso.kind,
+              detail: aviso.detail,
+            },
+          }),
+        );
+      return { entityId, offlineIssues };
+    });
+  }
+
+  /**
+   * Operación de caja sin conexión de otro usuario de la misma PC: la manda
+   * quien esté conectado y queda a nombre de quien la hizo, si su firma de esa
+   * PC coincide con el texto exacto (SISTEMA-67, como las ventas).
+   */
+  async completeOfflineSigned(
+    senderId: string,
+    organizationId: string,
+    branchId: string,
+    firma: {
+      actorId: string;
+      deviceId: string;
+      payload: string;
+      signature: string;
+    },
+    op: OperacionCajaSinConexion,
+  ) {
+    if (firma.actorId === senderId)
+      return this.completeOffline(senderId, organizationId, branchId, op);
+    // Quien la manda sólo la reenvía: alcanza con que sea de la farmacia (la
+    // sucursal ya la validó el guard). Lo que cuenta es la firma y el permiso
+    // de quien la hizo.
+    if (
+      !(await this.prisma.userOrganization.findFirst({
+        where: { userId: senderId, organizationId, active: true },
+      }))
+    )
+      throw new ForbiddenException("No pertenecés a esta farmacia.");
+    const clave = await this.prisma.offlineDeviceKey.findUnique({
+      where: {
+        userId_deviceId: { userId: firma.actorId, deviceId: firma.deviceId },
+      },
+    });
+    if (!clave)
+      throw new ConflictException(
+        "Esta PC todavía no registró la clave de quien hizo la operación. La va a enviar esa persona al entrar con conexión.",
+      );
+    if (!firmaValida(clave.publicKey, firma.payload, firma.signature))
+      throw new BadRequestException(
+        "La firma de la operación de caja no es válida: no se registra a nombre de otro usuario.",
+      );
+    try {
+      await this.assert(firma.actorId, organizationId, "CASH_MANAGE");
+    } catch {
+      throw new BadRequestException(
+        "Quien hizo la operación ya no puede manejar la caja. Revisala a mano.",
+      );
+    }
+    if (
+      !(await this.prisma.userBranch.findFirst({
+        where: {
+          userId: firma.actorId,
+          branchId,
+          branch: { organizationId, active: true },
+        },
+      }))
+    )
+      throw new BadRequestException(
+        "Quien hizo la operación ya no tiene acceso a esta sucursal. Revisala a mano.",
+      );
+    const resultado = await this.completeOffline(
+      firma.actorId,
+      organizationId,
+      branchId,
+      op,
+    );
+    if (
+      !(await this.prisma.auditLog.findFirst({
+        where: {
+          organizationId,
+          entityId: op.clientOperationId,
+          action: "SINCRONIZADA_POR_OTRO",
+        },
+      }))
+    )
+      await this.prisma.auditLog.create({
+        data: {
+          organizationId,
+          branchId,
+          actorId: senderId,
+          entityType: "OFFLINE_OPERATION",
+          entityId: op.clientOperationId,
+          action: "SINCRONIZADA_POR_OTRO",
+          after: {
+            hizoId: firma.actorId,
+            deviceId: firma.deviceId,
+            tipo: op.tipo,
+          },
+        },
+      });
+    return resultado;
+  }
+
+  /** Quién hizo cada venta (auditoría de la venta), para la lista de caja. */
+  private async sellerLabels(organizationId: string, saleIds: string[]) {
+    if (!saleIds.length) return new Map<string, string>();
+    const completadas = await this.prisma.auditLog.findMany({
+      where: {
+        organizationId,
+        entityType: "SALE",
+        action: "COMPLETED",
+        entityId: { in: [...new Set(saleIds)] },
+      },
+      select: { entityId: true, actorId: true },
+    });
+    const names = await this.memberLabels(
+      organizationId,
+      completadas.flatMap((row) => (row.actorId ? [row.actorId] : [])),
+    );
+    const vendedores = new Map<string, string>();
+    for (const row of completadas)
+      if (row.entityId && row.actorId) {
+        const nombre = names.get(row.actorId);
+        if (nombre) vendedores.set(row.entityId, nombre);
+      }
+    return vendedores;
+  }
+  private async withSellers<T extends { saleId: string; amountMinor: bigint }>(
+    organizationId: string,
+    payments: T[],
+  ) {
+    const vendedores = await this.sellerLabels(
+      organizationId,
+      payments.map((payment) => payment.saleId),
+    );
+    return payments.map((payment) => ({
+      ...payment,
+      amountMinor: payment.amountMinor.toString(),
+      actorName: vendedores.get(payment.saleId) ?? null,
+    }));
+  }
+
   /** Nombre visible de cada usuario: sin nombre cargado, se identifica por su email. */
   private async memberLabels(organizationId: string, userIds: string[]) {
     const members = await this.prisma.userOrganization.findMany({
@@ -1458,6 +1862,82 @@ export class CashService {
     });
   }
   /** Efectivo que debería haber en la sesión. Llamar con la sesión bloqueada. */
+  /**
+   * Si una venta sin conexión llegó antes que la apertura de su caja, quedó en
+   * cobros pendientes con aviso CAJA_CERRADA. Al llegar la apertura se pasa a
+   * esa caja como venta (no como cobro incorporado) y el aviso se resuelve.
+   */
+  private async reubicarCobrosDeApertura(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    branchId: string,
+    aperturaId: string,
+    sessionId: string,
+    actorId: string,
+  ) {
+    const avisos = await tx.offlineSyncIssue.findMany({
+      where: {
+        organizationId,
+        branchId,
+        kind: "CAJA_CERRADA",
+        status: "OPEN",
+        saleId: { not: null },
+      },
+    });
+    const ahora = new Date();
+    for (const aviso of avisos) {
+      const detalle = aviso.detail as { cashSessionId?: string } | null;
+      if (detalle?.cashSessionId !== aperturaId || !aviso.saleId) continue;
+      const pendiente = await tx.cashPendingCollection.findUnique({
+        where: {
+          organizationId_sourceType_sourceId: {
+            organizationId,
+            sourceType: "SALE",
+            sourceId: aviso.saleId,
+          },
+        },
+      });
+      // Ya la incorporó alguien a mano o se anuló: no se toca.
+      if (!pendiente || pendiente.assignedAt || pendiente.voidedAt) continue;
+      await tx.salePayment.updateMany({
+        where: {
+          saleId: aviso.saleId,
+          method: { not: "ACCOUNT" },
+          cashSessionId: null,
+        },
+        data: { cashSessionId: sessionId },
+      });
+      if (pendiente.changeMinor > 0n)
+        await tx.cashMovement.create({
+          data: {
+            cashSessionId: sessionId,
+            type: CashMovementType.OUT,
+            amountMinor: pendiente.changeMinor,
+            reason: `Vuelto de venta ${aviso.saleId}`,
+            actorId: pendiente.actorId,
+            createdAt: pendiente.collectedAt,
+          },
+        });
+      await tx.cashPendingCollection.update({
+        where: { id: pendiente.id },
+        data: {
+          assignedSessionId: sessionId,
+          assignedAt: ahora,
+          assignedById: actorId,
+        },
+      });
+      await tx.offlineSyncIssue.update({
+        where: { id: aviso.id },
+        data: {
+          status: "RESOLVED",
+          resolvedAt: ahora,
+          resolvedById: actorId,
+          resolutionNote:
+            "Llegó la apertura de su caja: la venta quedó en esa caja.",
+        },
+      });
+    }
+  }
   private async expectedCash(
     tx: Prisma.TransactionClient,
     session: { id: string; openingAmountMinor: bigint },

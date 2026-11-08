@@ -14,7 +14,9 @@ it("starts movements as income and restores income only after a successful save"
   expect(save).toMatch(
     /movementRequest.current = null;\s+setMovementType\("IN"\);/,
   );
+  // Vuelve a "Ingreso" sólo si se guardó (con o sin conexión), nunca en el
+  // error final.
   expect(save.indexOf('setMovementType("IN")')).toBeLessThan(
-    save.indexOf("catch (cause)"),
+    save.indexOf("error(fallback(cause"),
   );
 });

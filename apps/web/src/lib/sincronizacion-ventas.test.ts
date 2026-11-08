@@ -253,3 +253,28 @@ describe("ventas de otros usuarios de la PC (cambio de turno)", () => {
     expect(resultado.enviadas).toBe(1);
   });
 });
+
+describe("orden con la caja (SISTEMA-67)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("BroadcastChannel", undefined);
+    usarAlmacen(almacenEnMemoria());
+  });
+
+  it("si la apertura de otro no se puede mandar, la venta que vino después espera", async () => {
+    await guardarVentaPendiente(
+      venta("apertura", 1, {
+        alcance: "beto@farmacia.ar",
+        operacion: "CAJA",
+      }),
+    );
+    await guardarVentaPendiente(venta("venta-propia", 2));
+    const enviar = vi.fn(() => Promise.resolve({}));
+    const resultado = await sincronizarVentas({
+      alcance: ALCANCE,
+      enviar,
+      enviarDeOtro: () => Promise.resolve({}),
+    });
+    expect(enviar).not.toHaveBeenCalled();
+    expect(resultado.enviadas).toBe(0);
+  });
+});

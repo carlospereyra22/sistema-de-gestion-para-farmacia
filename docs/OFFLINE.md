@@ -47,8 +47,9 @@ necesita conexión.
 | SISTEMA-63 Recibir ventas hechas sin conexión (API)           | En main    |
 | SISTEMA-64 Vender sin conexión y sincronizar solo (web)       | En main    |
 | SISTEMA-65 Comprobante interno a ARCA, factura en espera      | En main    |
-| SISTEMA-66 Sesiones: cerrar sesión y entrar sin conexión      | Esta etapa |
-| Caja (abrir, movimientos, cerrar) y cuenta corriente          | Pendiente  |
+| SISTEMA-66 Sesiones: cerrar sesión y entrar sin conexión      | En main    |
+| SISTEMA-67 Caja sin conexión (abrir, movimientos, cerrar)     | Esta etapa |
+| Cuenta corriente sin conexión                                 | Pendiente  |
 | Compras y recepciones sin conexión                            | Pendiente  |
 | Transferencias sin conexión                                   | Pendiente  |
 | Catálogo y precios sin conexión                               | Pendiente  |
@@ -161,6 +162,27 @@ conexión). Puntos técnicos:
 - El stock en pantalla y el bloqueo de cierre de caja cuentan las ventas pendientes de todos los usuarios de la PC.
 - **Ventas igual que con internet**: cobrar sin conexión abre la misma confirmación de venta, con el comprobante provisorio para ver e imprimir. El historial muestra lo que había hasta el corte más lo vendido en la PC sin enviar ("Por enviar"), que se puede reimprimir. Las ventas con Factura se emiten solas en ARCA al volver la conexión (cola fiscal).
 - **Copia local**: desde SISTEMA-66 se guardan todas las consultas de datos de la farmacia (`/organizations/...`), no una lista fija. Cualquier pantalla abierta alguna vez con conexión se puede consultar sin ella; las de sesión y plataforma nunca se guardan.
+
+## Caja sin conexión (SISTEMA-67)
+
+- **Abrir, mover y cerrar sin internet**: la operación queda en la bandeja de la PC (`operacion: "CAJA"`), firmada por quien la hizo, y se manda sola al volver, en orden con las ventas (`POST cash/offline`, o `cash/offline/firmada` si la hizo otro usuario de la PC). Si el envío se corta en el momento, también queda en la PC.
+- **La pantalla**: Caja y Ventas parten de la última copia del servidor y le aplican lo pendiente (`lib/caja-sin-conexion.ts`): aperturas, ventas, movimientos y cierres. El esperado que se ve es el que tendría el servidor.
+- **El servidor**:
+  - registra cada operación una sola vez (`OfflineOperation` `CASH_OPEN`/`CASH_MOVEMENT`/`CASH_CLOSE`), con su hora real;
+  - la apertura usa como id de la sesión el de la PC, así las ventas de esa caja la encuentran;
+  - si la caja ya estaba abierta por otra PC, la apertura apunta a esa sesión y todo se suma ahí (aviso `CAJA_YA_ABIERTA`).
+- **Avisos**:
+  - un egreso mayor al efectivo se acepta y se marca (`EGRESO_SUPERA_EFECTIVO`);
+  - un movimiento que llega con la caja ya cerrada no entra en ese cierre (`MOVIMIENTO_RETENIDO`);
+  - un cierre cuyo esperado no es el que vio la PC, o de una caja ya cerrada, queda marcado (`CIERRE_DISTINTO`);
+  - quien abre teniendo otra caja abierta: `OTRA_CAJA_ABIERTA`.
+- **Cerrar caja sin conexión** no espera a que se envíen las ventas pendientes: el cierre va después de ellas. Con conexión sigue bloqueado mientras haya ventas por enviar.
+- **Orden**: si la sesión conectada no puede mandar algo (de otro usuario sin firma, o sin permiso), lo que vino después en esa sucursal espera. Una venta nunca llega antes que la apertura de su caja.
+- **Red de seguridad**: si igual una venta llegó antes que la apertura de su caja (quedó en cobros pendientes con aviso `CAJA_CERRADA`), al llegar la apertura pasa sola a esa caja, como venta y con su hora original, y el aviso se resuelve. Fuera de ese caso, los cobros pendientes se siguen asignando a mano (decisión del usuario del 08/11/2026, se mantiene la del 17/10).
+- **Quien reenvía** operaciones firmadas de otro usuario sólo tiene que ser de la farmacia: se validan la firma y los permisos de quien las hizo.
+- **Lista de la caja**: cada venta muestra quién la hizo, con conexión (de la auditoría de la venta) y sin ella.
+- **Mensajes**: la validación de la API responde en castellano (`common/http/mensajes-validacion.ts`).
+- Migración `20261108100000_offline_cash`: tipos de operación y de aviso.
 
 ## Cómo probarlo
 

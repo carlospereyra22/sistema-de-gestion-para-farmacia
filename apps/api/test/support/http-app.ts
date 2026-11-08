@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ValidationPipe } from "@nestjs/common";
+import { errorDeValidacion } from "../../src/common/http/mensajes-validacion";
 import { Test } from "@nestjs/testing";
 import * as cookieParser from "cookie-parser";
 import { AppModule } from "../../src/app.module";
@@ -60,6 +61,8 @@ export async function startHttpApp(prefix: string) {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      // Mensajes en castellano (SISTEMA-67).
+      exceptionFactory: errorDeValidacion,
     }),
   );
   await app.listen(0, "127.0.0.1");

@@ -69,6 +69,8 @@ function setup(roleCode = "CASHIER") {
       ]),
     },
     auditLog: {
+      // Quién hizo cada venta de la lista (SISTEMA-67).
+      findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue({
         actorId: "closer",
         after: {
