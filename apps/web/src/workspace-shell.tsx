@@ -95,8 +95,27 @@ import { getSaleFiscalCapabilities } from "./lib/api";
 import type {
   SaleFiscalOptions,
   SaleFiscalCapabilities,
+  ThermalTicket,
 } from "@gestion/contracts";
 import { SaleInvoiceDialog } from "./sale-invoice-dialog";
+import { getSubscriptionStatus } from "./lib/subscription-status";
+import { SinConexionError } from "./lib/api-fetch";
+import { alcanceDe, horaUltimaSincronizacion } from "./lib/cache-local";
+import { conectividad } from "./lib/conectividad";
+import {
+  guardarVentaPendiente,
+  unidadesPendientes,
+  useBandejaVentas,
+} from "./lib/bandeja-ventas";
+import {
+  ahoraSegunServidor,
+  encabezadoGuardado,
+  idDeEstaPc,
+  motivoParaNoVenderSinConexion,
+  ticketProvisorio,
+} from "./lib/venta-sin-conexion";
+import { VENTAS_SINCRONIZADAS } from "./lib/sincronizacion-ventas";
+import { useSincronizarVentas } from "./lib/use-sincronizar-ventas";
 import { SaleCreditActions } from "./sale-credit-actions";
 import { SaleDetailTotal, SalePaymentSummary } from "./sale-detail-summary";
 import { UserTicketNameDialog, UserTicketNameField } from "./user-ticket-names";
@@ -213,6 +232,7 @@ import {
 } from "./lib/workspace-permissions";
 import { SubscriptionNoticeChip } from "./subscription-gate";
 import { ConexionChip } from "./conexion-chip";
+import { facturaEnEspera, numeroDeVenta } from "./lib/numero-venta";
 import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { useConectividad } from "./lib/conectividad";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
@@ -430,6 +450,8 @@ const money = (minor: string | number) =>
   );
 // Sin busqueda se muestra todo el catalogo; el tope evita renderizar miles de filas.
 const SALE_CATALOG_ROW_LIMIT = 200;
+/** Cada cuánto se revisa el historial mientras una factura espera a ARCA. */
+const HISTORIAL_FACTURAS_MS = 15_000;
 
 const parseArgentineAmountMinor = (value: string): number | undefined => {
   const cleaned = value.trim().replace(/[^\d.,]/g, "");
@@ -679,6 +701,16 @@ export function WorkspaceShell({
     );
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal]);
+  // Ventas cobradas sin conexión: se mandan solas y, al llegar, se actualiza
+  // el stock (SISTEMA-64).
+  const alcance = alcanceDe({ email });
+  const bandeja = useBandejaVentas(alcance);
+  useSincronizarVentas(accessToken, alcance);
+  useEffect(() => {
+    const actualizar = () => void latestRefresh.current().catch(() => {});
+    window.addEventListener(VENTAS_SINCRONIZADAS, actualizar);
+    return () => window.removeEventListener(VENTAS_SINCRONIZADAS, actualizar);
+  }, []);
   const setPage = (next: View) => {
     setSearchParams(
       workspaceLocation(
@@ -893,7 +925,13 @@ export function WorkspaceShell({
               branches.find((item) => item.id === branchId)?.name ?? "Cargando…"
             }
             onLogout={() => {
-              if (pendingSale) setPendingSaleConfirmation({ action: "logout" });
+              // Las ventas sin enviar sólo las puede mandar esta sesión.
+              if (bandeja.pendientes)
+                setMessage(
+                  `Tenés ${bandeja.pendientes === 1 ? "1 venta" : `${bandeja.pendientes} ventas`} sin enviar. Se envían solas cuando vuelve internet; esperá a que terminen antes de cerrar sesión.`,
+                );
+              else if (pendingSale)
+                setPendingSaleConfirmation({ action: "logout" });
               else onLogout();
             }}
           />
@@ -1157,6 +1195,11 @@ export function WorkspaceShell({
               canSeeCosts={permissionCodes.includes("COST_READ")}
               done={() => void refresh()}
               error={setMessage}
+              cajero={displayName}
+              storeName={organizationName}
+              branchName={
+                branches.find((item) => item.id === branchId)?.name ?? ""
+              }
             />
           ) : null}
           {ready && (view === "Caja" || visitedCashScope === accountsScope) ? (
@@ -1175,6 +1218,14 @@ export function WorkspaceShell({
               registerId={activeRegisterId}
               onRegisterChange={chooseRegister}
               session={cashSession}
+              ventasSinEnviar={
+                bandeja.ventas.filter(
+                  (venta) =>
+                    venta.estado === "PENDIENTE" &&
+                    venta.organizationId === organizationId &&
+                    venta.branchId === branchId,
+                ).length
+              }
               done={() => void refresh()}
               error={setMessage}
             />
@@ -4977,7 +5028,14 @@ function Sales({
   done,
   error,
   canSeeCosts = true,
+  cajero,
+  storeName,
+  branchName = "",
 }: {
+  /** Para el ticket provisorio sin conexión (SISTEMA-64). */
+  cajero?: string;
+  storeName?: string;
+  branchName?: string;
   active: boolean;
   onPendingChange: (pending: boolean) => void;
   allowWithoutSession: boolean;
@@ -5236,6 +5294,16 @@ function Sales({
   const [clientOperationId, setClientOperationId] = useState(() =>
     crypto.randomUUID(),
   );
+  // Ventas cobradas sin conexión que todavía no llegaron al servidor: su stock
+  // se descuenta de lo que se ve, para no vender de más (SISTEMA-64).
+  const alcance = alcanceDe({ email: userKey });
+  const bandeja = useBandejaVentas(alcance);
+  const pendientesLocales = useMemo(
+    () => unidadesPendientes(bandeja.ventas, organizationId, branchId),
+    [bandeja.ventas, organizationId, branchId],
+  );
+  const [ticketSinConexion, setTicketSinConexion] = useState<ThermalTicket>();
+  const [ventaGuardada, setVentaGuardada] = useState("");
   const stockByProduct = useMemo(() => {
     const totals = new Map<string, { available: number; expired: number }>();
     for (const lot of stock) {
@@ -5246,8 +5314,16 @@ function Sales({
         expired: current.expired + lotStock.expiredQuantity,
       });
     }
+    for (const [productId, cantidad] of pendientesLocales) {
+      const current = totals.get(productId);
+      if (current)
+        totals.set(productId, {
+          ...current,
+          available: Math.max(0, current.available - cantidad),
+        });
+    }
     return totals;
-  }, [stock]);
+  }, [stock, pendientesLocales]);
   const productStock = (id: string) =>
     stockByProduct.get(id) ?? { available: 0, expired: 0 };
   const available = (id: string) => productStock(id).available;
@@ -5719,6 +5795,106 @@ function Sales({
         : "No se pudo registrar la devolución.";
     }
   };
+  const limpiarVenta = () => {
+    setLines([]);
+    resetSaleParties();
+    setLastAddedId("");
+    setFiscalOptions(defaultSaleFiscalOptions);
+    setPayments([]);
+    setMethod("CASH");
+    setPaymentAmount("");
+    setCheckoutOpen(false);
+    setCheckoutError("");
+    setClientOperationId(crypto.randomUUID());
+  };
+  /**
+   * Cobro sin conexión (SISTEMA-64): guarda la venta en la bandeja de la PC,
+   * imprime el ticket provisorio y la deja lista para enviarse sola.
+   */
+  const cobrarSinConexion = async (
+    cuerpo: Parameters<typeof createSale>[3],
+    finalPayments: typeof payments,
+  ) => {
+    const estado = await getSubscriptionStatus(token, organizationId).catch(
+      () => undefined,
+    );
+    const motivo = motivoParaNoVenderSinConexion({
+      ultimaSincronizacion: horaUltimaSincronizacion(),
+      ahora: Date.now(),
+      acceso: estado?.access,
+      metodos: finalPayments.map((payment) => payment.method),
+    });
+    if (motivo) return reportPayment(motivo);
+    const nombre = (productId: string) =>
+      products.find((product) => product.id === productId)?.name ?? "Producto";
+    const occurredAt = ahoraSegunServidor().toISOString();
+    const encabezado = (await encabezadoGuardado(
+      organizationId,
+      branchId,
+    ).catch(() => undefined)) ?? {
+      store: { name: storeName || "Farmacia" },
+      branch: branchName,
+    };
+    const ticket = ticketProvisorio({
+      id: clientOperationId,
+      occurredAt,
+      encabezado,
+      cajero,
+      cliente:
+        customers.find((customer) => customer.id === customerId)?.name ??
+        "Público general",
+      lineas: lines.map((line) => ({
+        nombre: line.description ?? nombre(line.productId),
+        cantidad: line.quantity,
+        unitarioMinor: Number(
+          line.requestedUnitPriceMinor ??
+            line.unitPriceMinor ??
+            products.find((product) => product.id === line.productId)?.prices[0]
+              ?.amountMinor ??
+            0,
+        ),
+        descuentoMinor: line.discountMinor,
+      })),
+      pagos: finalPayments,
+      factura: documentType === "INVOICE",
+    });
+    await guardarVentaPendiente({
+      version: 1,
+      id: clientOperationId,
+      alcance,
+      organizationId,
+      branchId,
+      occurredAt,
+      totalMinor: String(total),
+      documentType,
+      cuerpo: {
+        ...cuerpo,
+        items: cuerpo.items.map((item) =>
+          item.productId
+            ? { ...item, productName: nombre(item.productId) }
+            : item,
+        ),
+        occurredAt,
+        deviceId: idDeEstaPc(),
+      },
+      unidades: lines
+        .filter((line) => !line.description)
+        .map((line) => ({
+          productId: line.productId,
+          cantidad: line.quantity,
+        })),
+      ticket,
+      estado: "PENDIENTE",
+      intentos: 0,
+    });
+    limpiarVenta();
+    setTicketSinConexion(ticket);
+    setVentaGuardada(
+      documentType === "INVOICE"
+        ? "Venta guardada sin conexión. Se envía sola cuando vuelva internet y ahí se emite la factura."
+        : "Venta guardada sin conexión. Se envía sola cuando vuelva internet.",
+    );
+  };
   // Recibe la lista final de pagos para no depender del setState asíncrono.
   const complete = async (finalPayments = payments) => {
     if (submitting) return;
@@ -5756,7 +5932,7 @@ function Sales({
           "Agregá cobros hasta cubrir el total de la venta.",
         );
       setSubmitting(true);
-      const completedSale = await createSale(token, organizationId, branchId, {
+      const cuerpo = {
         priceListId: salePriceListId || undefined,
         documentType,
         confirmHomologation:
@@ -5793,7 +5969,26 @@ function Sales({
           ...payment,
           cashSessionId: payment.method !== "ACCOUNT" ? session?.id : undefined,
         })),
-      });
+      };
+      // Sin conexión (o si el envío se corta) la venta queda en la bandeja de
+      // la PC con el mismo id: el servidor no la duplica si sí había llegado.
+      if (token === TOKEN_SIN_CONEXION || !conectividad().enLinea) {
+        await cobrarSinConexion(cuerpo, finalPayments);
+        return;
+      }
+      let completedSale: Sale;
+      try {
+        completedSale = await createSale(
+          token,
+          organizationId,
+          branchId,
+          cuerpo,
+        );
+      } catch (cause) {
+        if (!(cause instanceof SinConexionError)) throw cause;
+        await cobrarSinConexion(cuerpo, finalPayments);
+        return;
+      }
       if (completedSale.documentType === "INVOICE")
         setInvoiceSaleId(completedSale.id);
       else
@@ -5821,16 +6016,7 @@ function Sales({
           discountMinor,
           payments: finalPayments,
         });
-      setLines([]);
-      resetSaleParties();
-      setLastAddedId("");
-      setFiscalOptions(defaultSaleFiscalOptions);
-      setPayments([]);
-      setMethod("CASH");
-      setPaymentAmount("");
-      setCheckoutOpen(false);
-      setCheckoutError("");
-      setClientOperationId(crypto.randomUUID());
+      limpiarVenta();
       await loadHistory();
       done();
     } catch (cause) {
@@ -5891,6 +6077,49 @@ function Sales({
     () => getSaleTicket(token, organizationId, branchId, receiptSaleId!),
     [token, organizationId, branchId, receiptSaleId],
   );
+  // Ticket provisorio de una venta sin conexión: ya está armado en la PC.
+  const cargarTicketSinConexion = useCallback(
+    () =>
+      ticketSinConexion
+        ? Promise.resolve(ticketSinConexion)
+        : Promise.reject(new Error("No hay ticket para imprimir.")),
+    [ticketSinConexion],
+  );
+  const ticketSinConexionDialog = ticketSinConexion ? (
+    <DirectTicketPrint
+      key={ticketSinConexion.id}
+      load={cargarTicketSinConexion}
+      onClose={() => setTicketSinConexion(undefined)}
+    />
+  ) : null;
+  // Cuando se envían ventas guardadas sin conexión, el historial se actualiza.
+  const loadHistoryRef = useRef(loadHistory);
+  loadHistoryRef.current = loadHistory;
+  useEffect(() => {
+    const actualizar = () => void loadHistoryRef.current();
+    window.addEventListener(VENTAS_SINCRONIZADAS, actualizar);
+    return () => window.removeEventListener(VENTAS_SINCRONIZADAS, actualizar);
+  }, []);
+  // La cola fiscal emite las facturas por su cuenta: mientras alguna espera a
+  // ARCA, el historial (y el detalle abierto) se actualiza solo.
+  const { enLinea: historialEnLinea } = useConectividad();
+  const hayFacturaEnEspera = history.some(facturaEnEspera);
+  useEffect(() => {
+    if (!active || !historialEnLinea || !hayFacturaEnEspera) return;
+    const timer = window.setInterval(() => {
+      void getSales(token, organizationId, branchId)
+        .then(setHistory)
+        .catch(() => {});
+    }, HISTORIAL_FACTURAS_MS);
+    return () => window.clearInterval(timer);
+  }, [
+    active,
+    historialEnLinea,
+    hayFacturaEnEspera,
+    token,
+    organizationId,
+    branchId,
+  ]);
   if (!active) return <></>;
   if (resumeNeeded && submitting) {
     return (
@@ -5983,6 +6212,14 @@ function Sales({
       {resumeDialog}
       {ticketDialog}
       {invoiceDialog}
+      {ticketSinConexionDialog}
+      {ventaGuardada && (
+        <StatusToast
+          title="Sin conexión"
+          message={ventaGuardada}
+          onClose={() => setVentaGuardada("")}
+        />
+      )}
       <section
         aria-label="Catálogo de venta"
         className="sale-catalog-column flex min-h-[585px] flex-col lg:h-full lg:min-h-0"
@@ -6704,18 +6941,30 @@ function SalesHistory({
     return labels.length ? [...new Set(labels)].join(" + ") : "Sin cobro";
   };
   const exportCsv = () => {
-    const rows = filteredSales.map((sale) => [
-      sale.id.slice(0, 8).toUpperCase(),
-      sale.completedAt
-        ? new Date(sale.completedAt).toLocaleString("es-AR")
-        : "",
-      customerName(sale),
-      money(sale.totalMinor),
-      paymentName(sale),
-      sale.status === "COMPLETED" ? "Confirmada" : "Anulada",
-    ]);
+    const rows = filteredSales.map((sale) => {
+      const numero = numeroDeVenta(sale);
+      return [
+        numero.prueba ? `${numero.texto} (prueba)` : numero.texto,
+        numero.interno,
+        sale.completedAt
+          ? new Date(sale.completedAt).toLocaleString("es-AR")
+          : "",
+        customerName(sale),
+        money(sale.totalMinor),
+        paymentName(sale),
+        sale.status === "COMPLETED" ? "Confirmada" : "Anulada",
+      ];
+    });
     const csv = [
-      ["Número", "Fecha", "Cliente", "Total", "Pago", "Estado"],
+      [
+        "Comprobante",
+        "Código interno",
+        "Fecha",
+        "Cliente",
+        "Total",
+        "Pago",
+        "Estado",
+      ],
       ...rows,
     ]
       .map((row) =>
@@ -6758,7 +7007,7 @@ function SalesHistory({
         </div>
       </div>
       <section className="border bg-white p-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid items-end gap-3 sm:grid-cols-3">
           <label className="text-xs font-medium text-slate-600">
             Desde
             <input
@@ -6768,7 +7017,7 @@ function SalesHistory({
                 setFrom(event.target.value);
                 setPage(1);
               }}
-              className="mt-1 h-10 w-full border bg-white px-3 text-sm"
+              className="mt-1 h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
             />
           </label>
           <label className="text-xs font-medium text-slate-600">
@@ -6780,24 +7029,23 @@ function SalesHistory({
                 setTo(event.target.value);
                 setPage(1);
               }}
-              className="mt-1 h-10 w-full border bg-white px-3 text-sm"
+              className="mt-1 h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
             />
           </label>
-          <label className="text-xs font-medium text-slate-600">
-            Estado
-            <select
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as "" | Sale["status"]);
-                setPage(1);
-              }}
-              className="mt-1 h-10 w-full border bg-white px-3 text-sm"
-            >
-              <option value="">Todos</option>
-              <option value="COMPLETED">Confirmada</option>
-              <option value="CANCELLED">Anulada</option>
-            </select>
-          </label>
+          <ProductFilterSelect
+            label="Estado"
+            icon={<ReceiptText size={18} />}
+            value={status}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "COMPLETED", label: "Confirmada" },
+              { value: "CANCELLED", label: "Anulada" },
+            ]}
+            onChange={(value) => {
+              setStatus(value as "" | Sale["status"]);
+              setPage(1);
+            }}
+          />
         </div>
       </section>
       <section className="overflow-hidden border bg-white">
@@ -6814,49 +7062,67 @@ function SalesHistory({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {pageSales.map((sale) => (
-                <tr
-                  key={sale.id}
-                  onClick={() => {
-                    onReasonChange("");
-                    setActionMessage("");
-                    setSelectedSaleId(sale.id);
-                  }}
-                  className={`cursor-pointer hover:bg-[#f6faf9] ${selectedSaleId === sale.id ? "bg-[#eef9f5]" : ""}`}
-                >
-                  <td className="px-4 py-3 font-mono text-xs">
-                    <button
-                      type="button"
-                      aria-label={`Ver venta ${sale.id.slice(0, 8).toUpperCase()}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onReasonChange("");
-                        setActionMessage("");
-                        setSelectedSaleId(sale.id);
-                      }}
-                    >
-                      {sale.id.slice(0, 8).toUpperCase()}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    {sale.completedAt
-                      ? new Date(sale.completedAt).toLocaleString("es-AR")
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-3">{customerName(sale)}</td>
-                  <td className="px-4 py-3 font-semibold">
-                    {money(sale.totalMinor)}
-                  </td>
-                  <td className="px-4 py-3">{paymentName(sale)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${sale.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
-                    >
-                      {sale.status === "COMPLETED" ? "Confirmada" : "Anulada"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {pageSales.map((sale) => {
+                const numero = numeroDeVenta(sale);
+                return (
+                  <tr
+                    key={sale.id}
+                    onClick={() => {
+                      onReasonChange("");
+                      setActionMessage("");
+                      setSelectedSaleId(sale.id);
+                    }}
+                    className={`cursor-pointer hover:bg-[#f6faf9] ${selectedSaleId === sale.id ? "bg-[#eef9f5]" : ""}`}
+                  >
+                    <td className="px-4 py-3 text-xs">
+                      <button
+                        type="button"
+                        aria-label={`Ver venta ${numero.texto}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onReasonChange("");
+                          setActionMessage("");
+                          setSelectedSaleId(sale.id);
+                        }}
+                        className="text-left"
+                      >
+                        <span
+                          className={
+                            numero.texto === numero.interno
+                              ? "font-mono"
+                              : "font-semibold text-slate-700"
+                          }
+                        >
+                          {numero.texto}
+                        </span>
+                        {numero.texto !== numero.interno && (
+                          <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
+                            {numero.interno}
+                            {numero.prueba ? " · prueba" : ""}
+                          </span>
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      {sale.completedAt
+                        ? new Date(sale.completedAt).toLocaleString("es-AR")
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3">{customerName(sale)}</td>
+                    <td className="px-4 py-3 font-semibold">
+                      {money(sale.totalMinor)}
+                    </td>
+                    <td className="px-4 py-3">{paymentName(sale)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${sale.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
+                      >
+                        {sale.status === "COMPLETED" ? "Confirmada" : "Anulada"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
               {!filteredSales.length ? (
                 <tr>
                   <td
@@ -6891,7 +7157,8 @@ function SalesHistory({
         <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-teal-50/60 p-5">
           <div>
             <h3 id="sale-detail-title" className="text-lg font-semibold">
-              Detalle de venta · {selectedSale?.id.slice(0, 8).toUpperCase()}
+              Detalle de venta ·{" "}
+              {selectedSale ? numeroDeVenta(selectedSale).texto : ""}
             </h3>
             {selectedSale && (
               <p className="mt-1 text-sm text-slate-500">
@@ -6938,6 +7205,24 @@ function SalesHistory({
                           {item.description ??
                             product?.name ??
                             "Producto histórico"}
+                          {(() => {
+                            const barcode =
+                              product?.barcodes.find((code) => code.primary)
+                                ?.code ?? product?.barcodes[0]?.code;
+                            return barcode ? (
+                              <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
+                                {barcode}
+                              </span>
+                            ) : null;
+                          })()}
+                          {item.productId && item.lotId === null && (
+                            <span
+                              className="mt-1 block w-fit rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                              title="Se vendió sin conexión y, al sincronizar, no había stock para descontar. Revisalo en las notificaciones."
+                            >
+                              Sin stock al sincronizar
+                            </span>
+                          )}
                         </span>
                         <span>{item.quantity}</span>
                         <span className="text-right font-medium">

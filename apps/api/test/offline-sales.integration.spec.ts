@@ -327,9 +327,24 @@ describe("ventas hechas sin conexión (base local con rollback)", () => {
       });
       expect(minimo._min.quantity).toBe(0);
 
-      // Anular el faltante no repone lo que nunca se descontó.
+      // Anular el faltante no repone lo que nunca se descontó, y cierra sus
+      // avisos: ya no hay nada que revisar.
       await f.sales.cancel(f.user.id, f.org.id, f.branch.id, pc2.id, "Prueba");
       expect(await lotQuantity(tx, f.lot.id)).toBe(0);
+      expect(
+        await tx.offlineSyncIssue.findMany({
+          where: { saleId: pc2.id },
+          select: { status: true, resolutionNote: true },
+        }),
+      ).toEqual([
+        { status: "RESOLVED", resolutionNote: "Venta anulada" },
+        { status: "RESOLVED", resolutionNote: "Venta anulada" },
+      ]);
+      expect(
+        await tx.offlineSyncIssue.count({
+          where: { saleId: pc1.id, status: "OPEN" },
+        }),
+      ).toBe(1);
       await f.sales.cancel(f.user.id, f.org.id, f.branch.id, pc1.id, "Prueba");
       expect(await lotQuantity(tx, f.lot.id)).toBe(2);
     }));

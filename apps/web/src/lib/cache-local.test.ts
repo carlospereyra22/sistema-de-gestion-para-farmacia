@@ -58,6 +58,20 @@ describe("copia local", () => {
     expect(seGuarda(`${base}/auth/me`, "GET")).toBe(false);
   });
 
+  it("guarda lo que muestra la pantalla de Caja, no sus operaciones", () => {
+    const caja = `${base}/organizations/o1/branches/b1/cash`;
+    for (const ruta of [
+      "/management",
+      "/settings",
+      "/closures?from=2026-11-01",
+      "/pending-collections",
+      "/registers/r1/recent-activity",
+    ])
+      expect(seGuarda(`${caja}${ruta}`, "GET")).toBe(true);
+    expect(seGuarda(`${caja}/sessions`, "POST")).toBe(false);
+    expect(seGuarda(`${caja}/closures/c1`, "GET")).toBe(false);
+  });
+
   it("devuelve lo guardado para el mismo usuario y nunca para otro", async () => {
     usarAlcance("Ana@Farmacia.com");
     await guardarRespuesta(stock, json([{ id: "lote" }]));

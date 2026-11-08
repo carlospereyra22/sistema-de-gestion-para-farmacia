@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   Bell,
   CheckCheck,
+  CloudOff,
   Package,
   CalendarClock,
   RefreshCw,
@@ -9,10 +10,14 @@ import {
 } from "lucide-react";
 import {
   getCatalogProducts,
+  getOfflineIssues,
   getStock,
   type CatalogProduct,
   type StockLot,
 } from "./lib/api";
+import { alcanceDe, TOKEN_SIN_CONEXION } from "./lib/cache-local";
+import { useBandejaVentas } from "./lib/bandeja-ventas";
+import { SincronizacionPanel } from "./sincronizacion-panel";
 import {
   getAccountDueDates,
   type AccountDueRow,
@@ -73,6 +78,22 @@ export function NotificationBell({
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [updated, setUpdated] = useState<Date>();
+  // Ventas sin conexión (SISTEMA-64): lo que falta enviar y lo que quedó para
+  // revisar. Siempre se muestra hasta resolverse, no se "lee".
+  const alcance = alcanceDe({ email: userKey });
+  const bandeja = useBandejaVentas(alcance);
+  const sinEnviar = bandeja.ventas.filter(
+    (venta) =>
+      venta.organizationId === organizationId &&
+      venta.branchId === branchId &&
+      venta.estado !== "ENVIADA",
+  );
+  const rechazadas = sinEnviar.filter(
+    (venta) => venta.estado === "RECHAZADA",
+  ).length;
+  const [avisosAbiertos, setAvisosAbiertos] = useState(0);
+  const [panelSinConexion, setPanelSinConexion] = useState(false);
+  const sinConexionTotal = sinEnviar.length + avisosAbiertos;
   const [filter, setFilter] = useState<"all" | "accounts" | "stock">("all");
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -84,14 +105,20 @@ export function NotificationBell({
     pending.current = true;
     setLoading(true);
     try {
-      const [due, inventory] = await Promise.allSettled([
+      const [due, inventory, offlineIssues] = await Promise.allSettled([
         getAccountDueDates(token, organizationId, branchId),
         Promise.all([
           getCatalogProducts(token, organizationId, branchId),
           getStock(token, organizationId, branchId),
         ]),
+        token === TOKEN_SIN_CONEXION
+          ? Promise.reject(new Error("Sin conexión"))
+          : getOfflineIssues(token, organizationId, branchId),
       ]);
       if (!mounted.current) return;
+      // Sin conexión o sin permiso se conserva el último número conocido.
+      if (offlineIssues.status === "fulfilled")
+        setAvisosAbiertos(offlineIssues.value.length);
       const failed: string[] = [];
       if (due.status === "fulfilled") setRows(due.value.rows);
       else {
@@ -208,12 +235,26 @@ export function NotificationBell({
         className="relative flex size-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
       >
         <Bell size={20} />
-        {unread.length > 0 && (
+        {unread.length + sinConexionTotal > 0 && (
           <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-semibold leading-4 text-white">
-            {unread.length > 99 ? "99+" : unread.length}
+            {unread.length + sinConexionTotal > 99
+              ? "99+"
+              : unread.length + sinConexionTotal}
           </span>
         )}
       </button>
+      {panelSinConexion && (
+        <SincronizacionPanel
+          token={token}
+          organizationId={organizationId}
+          branchId={branchId}
+          alcance={alcance}
+          onClose={() => {
+            setPanelSinConexion(false);
+            void refresh();
+          }}
+        />
+      )}
       {open && (
         <section
           id={panelId}
@@ -301,6 +342,36 @@ export function NotificationBell({
             className="max-h-[min(55dvh,420px)] overflow-y-auto px-2 pb-2"
             aria-busy={loading}
           >
+            {sinConexionTotal > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setPanelSinConexion(true);
+                }}
+                className="mb-2 flex w-full items-start gap-3 rounded-xl border border-amber-100 bg-amber-50/60 p-3 text-left hover:bg-amber-50"
+              >
+                <span className="mt-0.5 rounded-lg bg-white p-2 text-amber-700">
+                  <CloudOff size={17} aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <strong className="block text-xs font-semibold text-slate-700">
+                    Ventas sin conexión
+                  </strong>
+                  <span className="mt-1 block text-[11px] leading-5 text-slate-600">
+                    {[
+                      sinEnviar.length - rechazadas
+                        ? `${sinEnviar.length - rechazadas} por enviar`
+                        : "",
+                      rechazadas ? `${rechazadas} rechazadas` : "",
+                      avisosAbiertos ? `${avisosAbiertos} para revisar` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </span>
+              </button>
+            )}
             {errors.map((error) => (
               <p
                 key={error}

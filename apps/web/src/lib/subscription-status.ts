@@ -1,4 +1,7 @@
 import { apiBaseUrl } from "./api";
+// Pasa por apiFetch para quedar en la copia local: sin conexión se sabe si la
+// farmacia está al día antes de dejar vender (SISTEMA-64).
+import { apiFetch as fetch } from "./api-fetch";
 import type { SubscriptionStage } from "./platform-subscription";
 
 export type SubscriptionCut = {

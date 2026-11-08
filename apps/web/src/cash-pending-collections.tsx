@@ -242,8 +242,10 @@ export function CashPendingCollections({
                         >
                           <td className="p-3">
                             <p className="whitespace-nowrap">
+                              {/* 24 h: si no, 00:33 se ve como "12:33". */}
                               {new Date(row.collectedAt).toLocaleString(
                                 "es-AR",
+                                { hourCycle: "h23" },
                               )}
                             </p>
                             <p

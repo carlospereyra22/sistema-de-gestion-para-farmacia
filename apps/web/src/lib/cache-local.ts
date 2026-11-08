@@ -23,6 +23,9 @@ const RUTAS_GUARDADAS = [
   /^\/organizations\/[^/]+\/catalog\/(products|price-lists|effective-prices|medicine-references\/packs)$/,
   /^\/organizations\/[^/]+\/customers$/,
   /^\/organizations\/[^/]+\/branches\/[^/]+\/(inventory\/stock|cash|customer-accounts|sales\/fiscal-options)$/,
+  // Pantalla de Caja: reglas, gestión, cierres, cobros pendientes y últimos
+  // movimientos, para consultarla sin conexión (SISTEMA-64).
+  /^\/organizations\/[^/]+\/branches\/[^/]+\/cash\/(management|settings|closures|pending-collections|registers\/[^/]+\/recent-activity)$/,
   /^\/organizations\/[^/]+\/subscription\/status$/,
   /^\/organizations\/[^/]+\/ticket-header$/,
 ];
