@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ProductImageSession } from "./product-image-session";
 import { SessionStartup } from "./session-startup";
 import { ForcedPasswordChange } from "./forced-password-change";
@@ -28,6 +28,7 @@ import {
   login,
   logout,
   refreshSession,
+  registerOfflineKey,
   SessionExpiredError,
   apiBaseUrl,
   type CurrentUserProfile,
@@ -45,14 +46,25 @@ import { SubscriptionGate } from "./subscription-gate";
 import { useNavigate } from "react-router-dom";
 import {
   TOKEN_SIN_CONEXION,
+  activarSesionGuardada,
   alcanceDe,
   borrarCopiaLocal,
+  cerrarSesionLocal,
   guardarSesion,
   leerSesion,
   sesionVigente,
   usarAlcance,
   usarSincronizacionGuardada,
+  type SesionGuardada,
 } from "./lib/cache-local";
+import {
+  SIN_ACCESO_GUARDADO,
+  entrarSinConexion,
+  guardarAcceso,
+} from "./lib/acceso-sin-conexion";
+import { SinConexionError } from "./lib/api-fetch";
+import { claveDeEstaPc } from "./lib/firma-ventas";
+import { idDeEstaPc } from "./lib/venta-sin-conexion";
 import { pedirPersistencia } from "./lib/almacen-local";
 import {
   conectividad,
@@ -71,6 +83,22 @@ const puedeTrabajarSinConexion = (perfil: CurrentUserProfile) =>
   !perfil.isPlatformAdmin &&
   !perfil.mustChangePassword &&
   perfil.organizations.length > 0;
+
+/** Volvió la conexión y la cookie es de otra persona: no se cambia de usuario. */
+class OtroUsuarioError extends Error {}
+
+/** Registra la clave con la que esta PC firma las ventas del usuario. */
+async function registrarClaveDeEstaPc(token: string, alcance: string) {
+  try {
+    const { publica } = await claveDeEstaPc(alcance);
+    await registerOfflineKey(token, {
+      deviceId: idDeEstaPc(),
+      publicKey: publica,
+    });
+  } catch {
+    /* se vuelve a intentar en la próxima sesión con conexión */
+  }
+}
 
 const permissionGroups = [
   {
@@ -138,18 +166,47 @@ export function App(): ReactElement {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [permissionCodes, setPermissionCodes] = useState<string[]>([]);
   const navigate = useNavigate();
+  // Sesiones sin internet (SISTEMA-66). Quien entró sin conexión con su
+  // contraseña: al volver internet se inicia su sesión real con estos datos,
+  // que sólo viven en memoria.
+  const credenciales = useRef<{ email: string; password: string } | undefined>(
+    undefined,
+  );
+  /** La app trabaja sin conexión, y con qué usuario. */
+  const sinConexion = useRef<string | undefined>(undefined);
 
-  const startSession = async (token: string): Promise<void> => {
+  const startSession = async (
+    token: string,
+    opciones: { password?: string; esperado?: string } = {},
+  ): Promise<void> => {
     const profile = await getCurrentUser(token);
+    if (opciones.esperado && alcanceDe(profile) !== opciones.esperado)
+      throw new OtroUsuarioError();
     if (puedeTrabajarSinConexion(profile)) {
       usarAlcance(alcanceDe(profile));
-      void guardarSesion(profile).catch(() => {});
+      // Con la contraseña recién escrita se guarda su huella: así puede volver
+      // a entrar en esta PC aunque no haya internet.
+      void guardarSesion(profile)
+        .then(() =>
+          opciones.password
+            ? guardarAcceso(opciones.password, profile)
+            : undefined,
+        )
+        .catch(() => {});
+      void registrarClaveDeEstaPc(token, alcanceDe(profile));
       pedirPersistencia();
     } else {
       usarAlcance(undefined);
       void borrarCopiaLocal().catch(() => {});
     }
     applyProfile(profile, token);
+  };
+  const abrirSinConexion = (sesion: SesionGuardada) => {
+    usarAlcance(sesion.alcance);
+    usarSincronizacionGuardada(sesion.ultimaSincronizacion);
+    marcarSinConexion();
+    sinConexion.current = sesion.alcance;
+    applyProfile(sesion.perfil, TOKEN_SIN_CONEXION);
   };
   /** Abre con el último usuario de esta PC, si sincronizó hace menos de 24 h. */
   const startOfflineSession = async (): Promise<boolean> => {
@@ -159,11 +216,24 @@ export function App(): ReactElement {
       !puedeTrabajarSinConexion(sesion.perfil)
     )
       return false;
-    usarAlcance(sesion.alcance);
-    usarSincronizacionGuardada(sesion.ultimaSincronizacion);
-    marcarSinConexion();
-    applyProfile(sesion.perfil, TOKEN_SIN_CONEXION);
+    abrirSinConexion(sesion);
     return true;
+  };
+  /** Sin internet: entra con la contraseña guardada en la PC (SISTEMA-66). */
+  const entrarSinInternet = async () => {
+    const resultado = await entrarSinConexion(email, password);
+    if (!resultado.ok) {
+      setMessage(resultado.motivo);
+      return;
+    }
+    if (!puedeTrabajarSinConexion(resultado.sesion.perfil)) {
+      setMessage(SIN_ACCESO_GUARDADO);
+      return;
+    }
+    await activarSesionGuardada(resultado.sesion);
+    credenciales.current = { email, password };
+    navigate("/", { replace: true });
+    abrirSinConexion(resultado.sesion);
   };
   const applyProfile = (profile: CurrentUserProfile, token: string) => {
     setMustChangePassword(profile.mustChangePassword ?? false);
@@ -214,12 +284,21 @@ export function App(): ReactElement {
     event.preventDefault();
     setMessage(undefined);
     try {
-      const result = await login(email, password);
+      let result: { accessToken: string };
+      try {
+        result = await login(email, password);
+      } catch (error) {
+        if (!(error instanceof SinConexionError)) throw error;
+        await entrarSinInternet();
+        return;
+      }
       // La sesión nueva reemplaza a la que quedó por cerrar: no se la revoca.
       olvidarCierreDeSesion();
+      credenciales.current = undefined;
+      sinConexion.current = undefined;
       // La dirección conserva la pantalla de la sesión anterior: se empieza por Inicio.
       navigate("/", { replace: true });
-      await startSession(result.accessToken);
+      await startSession(result.accessToken, { password });
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se pudo iniciar sesion.",
@@ -232,12 +311,25 @@ export function App(): ReactElement {
   useEffect(() => {
     let active = true;
     let timer: number | undefined;
-    let sinConexion = false;
     let restoring = false;
+    /** Sin sesión real posible: vuelve a la pantalla de ingreso con un aviso. */
+    const pedirIngreso = (aviso: string) => {
+      credenciales.current = undefined;
+      if (sinConexion.current) {
+        void cerrarSesionLocal().catch(() => {});
+        setUser(undefined);
+        setAccessToken(undefined);
+        setOrganizationId(undefined);
+        setMessage(aviso);
+      }
+      sinConexion.current = undefined;
+      setRestoringSession(false);
+    };
     const restore = async () => {
       if (restoring) return;
       restoring = true;
       window.clearTimeout(timer);
+      const conCredenciales = credenciales.current;
       try {
         // Se cerró sesión sin conexión: primero se avisa al servidor.
         if (cierreDeSesionPendiente()) {
@@ -245,15 +337,32 @@ export function App(): ReactElement {
             await logout();
             olvidarCierreDeSesion();
           } catch {
-            /* se reintenta en el próximo arranque */
+            // Todavía sin conexión: se reintenta cuando vuelva.
+            if (active) setRestoringSession(false);
+            return;
           }
-          if (active) setRestoringSession(false);
-          return;
+          if (!conCredenciales) {
+            if (active) setRestoringSession(false);
+            return;
+          }
         }
-        const { accessToken: token } = await refreshSession();
-        if (!active) return;
-        await startSession(token);
-        sinConexion = false;
+        if (conCredenciales) {
+          // Entró sin conexión con su contraseña: se inicia su sesión real.
+          const { accessToken: token } = await login(
+            conCredenciales.email,
+            conCredenciales.password,
+          );
+          if (!active) return;
+          credenciales.current = undefined;
+          await startSession(token, { password: conCredenciales.password });
+        } else {
+          const { accessToken: token } = await refreshSession();
+          if (!active) return;
+          // Si alguien trabajaba sin conexión, la sesión tiene que ser suya:
+          // nunca se cambia de usuario por la cookie de otro.
+          await startSession(token, { esperado: sinConexion.current });
+        }
+        sinConexion.current = undefined;
         if (active) {
           setRestoringSession(false);
           setSessionRestoreFailed(false);
@@ -263,19 +372,17 @@ export function App(): ReactElement {
         if (cause instanceof SessionExpiredError) {
           // La sesión ya no vale: sin conexión tampoco se puede seguir.
           void borrarCopiaLocal().catch(() => {});
-          if (sinConexion) {
-            setUser(undefined);
-            setAccessToken(undefined);
-            setOrganizationId(undefined);
-            setMessage("La sesión venció. Iniciá sesión nuevamente.");
-          }
-          sinConexion = false;
-          setRestoringSession(false);
+          pedirIngreso("La sesión venció. Iniciá sesión nuevamente.");
+        } else if (
+          cause instanceof OtroUsuarioError ||
+          (conCredenciales && !(cause instanceof SinConexionError))
+        ) {
+          pedirIngreso("Volvió la conexión: ingresá de nuevo para seguir.");
         } else {
-          if (!sinConexion && (await startOfflineSession())) {
-            sinConexion = true;
-            if (active) setRestoringSession(false);
-          } else if (!sinConexion) setSessionRestoreFailed(true);
+          // Sin conexión: abre con la sesión guardada o, si no hay, muestra el
+          // ingreso, que acepta la contraseña de quien usó la PC.
+          if (!sinConexion.current) await startOfflineSession();
+          if (active) setRestoringSession(false);
           timer = window.setTimeout(() => void restore(), 15000);
         }
       } finally {
@@ -285,7 +392,7 @@ export function App(): ReactElement {
     void restore();
     // Sin conexión: apenas el servidor vuelve a responder, se recupera la sesión.
     const dejar = suscribirConectividad(() => {
-      if (sinConexion && conectividad().enLinea) void restore();
+      if (sinConexion.current && conectividad().enLinea) void restore();
     });
     return () => {
       active = false;
@@ -463,9 +570,12 @@ export function App(): ReactElement {
   };
 
   const endSession = () => {
-    // La copia local se borra siempre: después de cerrar sesión no se puede
-    // abrir sin conexión. Si el servidor no responde, se le avisa al volver.
-    void borrarCopiaLocal().catch(() => {});
+    // La app deja de abrirse sola, pero la copia queda: sirve para volver a
+    // entrar con la contraseña aun sin internet (cambio de turno, SISTEMA-66).
+    // Si el servidor no responde, se le avisa al volver.
+    credenciales.current = undefined;
+    sinConexion.current = undefined;
+    void cerrarSesionLocal().catch(() => {});
     recordarCierreDeSesion();
     void logout()
       .then(olvidarCierreDeSesion)

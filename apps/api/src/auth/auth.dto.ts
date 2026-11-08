@@ -1,4 +1,10 @@
-import { IsEmail, IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsEmail,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 
 export class LoginDto {
   @IsEmail()
@@ -19,4 +25,15 @@ export class ChangePasswordDto {
   @MinLength(12)
   @MaxLength(256)
   newPassword!: string;
+}
+
+/** Clave de esta PC para firmar ventas sin conexión (SISTEMA-66). */
+export class OfflineKeyDto {
+  @IsUUID()
+  deviceId!: string;
+
+  @IsString()
+  @MinLength(80)
+  @MaxLength(500)
+  publicKey!: string;
 }

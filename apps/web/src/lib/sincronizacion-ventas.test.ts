@@ -3,6 +3,7 @@ import { almacenEnMemoria, usarAlmacen } from "./almacen-local";
 import {
   guardarVentaPendiente,
   ventasDe,
+  ventasDeLaPc,
   type VentaPendiente,
 } from "./bandeja-ventas";
 import {
@@ -178,5 +179,77 @@ describe("envío de ventas hechas sin conexión", () => {
     expect(segunda).toBeUndefined();
     expect(await primera).toBe("primera");
     expect(await conCandado(() => Promise.resolve("tercera"))).toBe("tercera");
+  });
+});
+
+describe("ventas de otros usuarios de la PC (cambio de turno)", () => {
+  beforeEach(async () => {
+    vi.stubGlobal("BroadcastChannel", undefined);
+    usarAlmacen(almacenEnMemoria());
+    await guardarVentaPendiente(venta("propia", 1));
+    await guardarVentaPendiente(
+      venta("firmada", 2, {
+        alcance: "beto@farmacia.ar",
+        vendedorId: "beto",
+        payload: "{}",
+        firma: "firma",
+      }),
+    );
+    await guardarVentaPendiente(
+      venta("sin-firma", 3, { alcance: "carla@farmacia.ar" }),
+    );
+  });
+
+  it("manda las firmadas por su dueño y deja las que no tienen firma", async () => {
+    const enviarDeOtro = vi.fn(() => Promise.resolve({}));
+    const resultado = await sincronizarVentas({
+      alcance: ALCANCE,
+      enviar: () => Promise.resolve({}),
+      enviarDeOtro,
+    });
+    expect(resultado.enviadas).toBe(2);
+    expect(enviarDeOtro).toHaveBeenCalledTimes(1);
+    const estados = Object.fromEntries(
+      (await ventasDeLaPc()).map((item) => [item.id, item.estado]),
+    );
+    expect(estados).toEqual({
+      propia: "ENVIADA",
+      firmada: "ENVIADA",
+      "sin-firma": "PENDIENTE",
+    });
+  });
+
+  it("si esta sesión no puede mandarla, queda para su dueño sin marcarla rechazada", async () => {
+    for (const status of [403, 404, 409]) {
+      await sincronizarVentas({
+        alcance: ALCANCE,
+        enviar: () => Promise.resolve({}),
+        enviarDeOtro: () => Promise.reject(new EnvioRechazado("No", status)),
+      });
+      const firmada = (await ventasDeLaPc()).find(
+        (item) => item.id === "firmada",
+      );
+      expect(firmada?.estado).toBe("PENDIENTE");
+    }
+  });
+
+  it("una firma inválida sí queda rechazada para revisar", async () => {
+    await sincronizarVentas({
+      alcance: ALCANCE,
+      enviar: () => Promise.resolve({}),
+      enviarDeOtro: () =>
+        Promise.reject(new EnvioRechazado("La firma no es válida", 400)),
+    });
+    expect(
+      (await ventasDeLaPc()).find((item) => item.id === "firmada")?.estado,
+    ).toBe("RECHAZADA");
+  });
+
+  it("sin envío para otros, sólo manda las propias", async () => {
+    const resultado = await sincronizarVentas({
+      alcance: ALCANCE,
+      enviar: () => Promise.resolve({}),
+    });
+    expect(resultado.enviadas).toBe(1);
   });
 });

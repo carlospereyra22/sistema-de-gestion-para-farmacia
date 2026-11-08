@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { HttpException } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { Prisma } from "@prisma/client";
@@ -551,5 +551,95 @@ describe("ventas hechas sin conexión (base local con rollback)", () => {
       expect(
         await f.sales.offlineIssues(f.user.id, f.org.id, f.branch.id, true),
       ).toHaveLength(1);
+    }));
+
+  it("otro usuario de la PC manda la venta firmada y queda a nombre de quien la hizo", () =>
+    enRollback(async (tx, f) => {
+      // Beto, cajero del turno siguiente en la misma PC y sucursal.
+      const beto = await tx.user.create({
+        data: {
+          email: `${randomUUID()}@example.invalid`,
+          passwordHash: "not-a-secret",
+        },
+      });
+      const rol = await tx.userOrganizationRole.findFirstOrThrow({
+        where: { membership: { userId: f.user.id } },
+      });
+      await tx.userOrganization.create({
+        data: {
+          organizationId: f.org.id,
+          userId: beto.id,
+          roles: { create: { roleId: rol.roleId } },
+        },
+      });
+      await tx.userBranch.create({
+        data: { userId: beto.id, branchId: f.branch.id },
+      });
+      // Clave de Ana en esa PC, registrada al entrar con conexión.
+      const { publicKey, privateKey } = generateKeyPairSync("ec", {
+        namedCurve: "prime256v1",
+      });
+      const venta = f.sale();
+      await tx.offlineDeviceKey.create({
+        data: {
+          userId: f.user.id,
+          deviceId: venta.deviceId,
+          publicKey: publicKey
+            .export({ format: "der", type: "spki" })
+            .toString("base64"),
+        },
+      });
+      const payload = JSON.stringify(venta);
+      const firmar = (key: typeof privateKey, texto: string) =>
+        sign("sha256", Buffer.from(texto), {
+          key,
+          dsaEncoding: "ieee-p1363",
+        }).toString("base64");
+      const enviarComoBeto = (firma: string, texto = payload) =>
+        f.sales.completeOfflineSigned(
+          beto.id,
+          f.org.id,
+          f.branch.id,
+          {
+            sellerId: f.user.id,
+            deviceId: venta.deviceId,
+            payload: texto,
+            signature: firma,
+          },
+          JSON.parse(texto),
+        );
+
+      // Beto no puede cargar ventas a nombre de Ana con su propia clave ni
+      // cambiando lo que Ana firmó.
+      const otra = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+      await expect(
+        enviarComoBeto(firmar(otra.privateKey, payload)),
+      ).rejects.toThrow("firma");
+      await expect(
+        enviarComoBeto(
+          firmar(privateKey, payload),
+          JSON.stringify({
+            ...venta,
+            items: [{ ...venta.items[0]!, quantity: 2 }],
+          }),
+        ),
+      ).rejects.toThrow("firma");
+
+      const registrada = await enviarComoBeto(firmar(privateKey, payload));
+      expect(registrada.id).toBe(venta.clientOperationId);
+      const operacion = await tx.offlineOperation.findUniqueOrThrow({
+        where: { id: venta.clientOperationId },
+      });
+      expect(operacion.actorId).toBe(f.user.id);
+      expect(
+        await tx.auditLog.findFirstOrThrow({
+          where: { entityId: registrada.id, action: "SINCRONIZADA_POR_OTRO" },
+        }),
+      ).toMatchObject({ actorId: beto.id });
+      // Reenviarla no la duplica.
+      await enviarComoBeto(firmar(privateKey, payload));
+      expect(await tx.sale.count({ where: { organizationId: f.org.id } })).toBe(
+        1,
+      );
     }));
 });

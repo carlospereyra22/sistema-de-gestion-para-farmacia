@@ -45,8 +45,9 @@ necesita conexión.
 | SISTEMA-61 Cola fiscal automática                             | En main    |
 | SISTEMA-62 La app abre sin conexión (consulta)                | En main    |
 | SISTEMA-63 Recibir ventas hechas sin conexión (API)           | En main    |
-| SISTEMA-64 Vender sin conexión y sincronizar solo (web)       | Esta etapa |
-| Sesiones: cerrar sesión y entrar sin conexión                 | Pendiente  |
+| SISTEMA-64 Vender sin conexión y sincronizar solo (web)       | En main    |
+| SISTEMA-65 Comprobante interno a ARCA, factura en espera      | En main    |
+| SISTEMA-66 Sesiones: cerrar sesión y entrar sin conexión      | Esta etapa |
 | Caja (abrir, movimientos, cerrar) y cuenta corriente          | Pendiente  |
 | Compras y recepciones sin conexión                            | Pendiente  |
 | Transferencias sin conexión                                   | Pendiente  |
@@ -146,6 +147,20 @@ conexión). Puntos técnicos:
   sin recargar la página. El detalle marca "Sin stock al sincronizar" en el renglón que no
   tenía lote y muestra el código de barras de cada producto.
 - **Anular** una venta cierra sus avisos abiertos ("Venta anulada").
+
+## Sesiones sin conexión (SISTEMA-66)
+
+- **Entrar sin conexión** (`lib/acceso-sin-conexion.ts`): al entrar con conexión escribiendo la contraseña, la PC guarda en `acceso|usuario` el perfil y una huella PBKDF2-SHA256 (150.000 iteraciones, sal propia), nunca la contraseña. Sin internet, el ingreso verifica la contraseña contra esa huella. Sólo vale si ese usuario sincronizó en la PC hace menos de 24 horas. Después de 5 intentos fallidos hay que esperar 30 segundos. La contraseña queda en memoria sólo hasta que vuelve la conexión, para iniciar la sesión real sola.
+- **Varias personas por PC**: cada una conserva su copia local mientras pueda volver a entrar (24 h); después se borran su copia y su acceso, nunca sus ventas sin enviar.
+- **Cerrar sesión** deja la copia y el acceso. La app ya no se abre sola, y se puede cerrar sesión con ventas sin enviar. Si no hay conexión, el servidor se entera al volver.
+- **Al volver la conexión**: quien entró con contraseña sin conexión inicia su sesión real. Si había una sesión guardada, se recupera sólo si es de la misma persona; nunca se cambia de usuario por la cookie de otro (vuelve al ingreso con un aviso).
+- **Ventas de otros usuarios** (`lib/firma-ventas.ts`): cada usuario tiene en cada PC una clave ECDSA P-256 que el navegador no deja exportar. La pública se registra en `POST auth/offline-key` al entrar con conexión (tabla `OfflineDeviceKey`). Cada venta sin conexión guarda el texto exacto enviado (`payload`), quién la hizo y su firma.
+  - La sesión conectada manda también las de otros por `POST sales/offline/firmada`.
+  - El servidor verifica la firma, valida el texto como cualquier venta sin conexión y la registra a nombre de quien la hizo. Audita `SINCRONIZADA_POR_OTRO` con quién la envió.
+  - Sin acceso a la sucursal (403/404) o sin clave registrada todavía (409), la venta queda para su dueño. Una firma inválida queda rechazada para revisar.
+- El stock en pantalla y el bloqueo de cierre de caja cuentan las ventas pendientes de todos los usuarios de la PC.
+- **Ventas igual que con internet**: cobrar sin conexión abre la misma confirmación de venta, con el comprobante provisorio para ver e imprimir. El historial muestra lo que había hasta el corte más lo vendido en la PC sin enviar ("Por enviar"), que se puede reimprimir. Las ventas con Factura se emiten solas en ARCA al volver la conexión (cola fiscal).
+- **Copia local**: desde SISTEMA-66 se guardan todas las consultas de datos de la farmacia (`/organizations/...`), no una lista fija. Cualquier pantalla abierta alguna vez con conexión se puede consultar sin ella; las de sesión y plataforma nunca se guardan.
 
 ## Cómo probarlo
 
