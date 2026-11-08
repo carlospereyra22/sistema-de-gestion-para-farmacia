@@ -7,6 +7,8 @@ import type {
   SaleFiscalCapabilities,
 } from "@gestion/contracts";
 import { withStockAvailability } from "./stock-availability";
+import { recordarEncabezado } from "./venta-sin-conexion";
+import { EnvioRechazado } from "./sincronizacion-ventas";
 
 export const apiBaseUrl =
   import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
@@ -2436,6 +2438,8 @@ export type Sale = {
     id: string;
     productId: string | null;
     description?: string | null;
+    /** Null en un renglón de producto: faltante de una venta sin conexión. */
+    lotId?: string | null;
     quantity: number;
     unitPriceMinor?: string;
     discountMinor?: string;
@@ -2443,6 +2447,13 @@ export type Sale = {
   payments: {
     method: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
     amountMinor: string;
+  }[];
+  /** Factura de producción de la venta (número de ARCA), si tiene. */
+  fiscalDocuments?: {
+    status: string;
+    point: number;
+    number: number | null;
+    voucherType: number;
   }[];
 };
 
@@ -2496,7 +2507,78 @@ export async function getSaleTicket(
   );
   if (!response.ok)
     throw await responseError(response, "No se pudo cargar el comprobante.");
+  const ticket =
+    (await response.json()) as import("@gestion/contracts").ThermalTicket;
+  // El encabezado queda guardado para el ticket provisorio sin conexión.
+  void recordarEncabezado(organizationId, branchId, ticket).catch(() => {});
+  return ticket;
+}
+
+/** Venta hecha sin conexión, al volver (SISTEMA-63/64). */
+export async function sendOfflineSale(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+): Promise<Sale & { offlineIssues: OfflineIssue[] }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/offline`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la venta sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
   return response.json();
+}
+
+export type OfflineIssue = {
+  id: string;
+  kind: string;
+  status: "OPEN" | "RESOLVED";
+  detail: Record<string, string | number | null>;
+  saleId: string | null;
+  saleTotalMinor?: string | null;
+  saleStatus?: "COMPLETED" | "CANCELLED" | null;
+  occurredAt?: string;
+  createdAt?: string;
+};
+
+/** Avisos "a revisar" de lo sincronizado sin conexión (abiertos). */
+export async function getOfflineIssues(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<OfflineIssue[]> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/offline-issues`,
+    { headers: authJson(token) },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron cargar los avisos.");
+  return response.json();
+}
+
+export async function resolveOfflineIssue(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  issueId: string,
+  note?: string,
+): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/offline-issues/${issueId}/resolve`,
+    {
+      method: "POST",
+      headers: authJson(token),
+      body: JSON.stringify(note ? { note } : {}),
+    },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo marcar como revisado.");
 }
 
 export async function getSales(

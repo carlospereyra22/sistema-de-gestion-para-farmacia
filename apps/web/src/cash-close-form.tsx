@@ -16,8 +16,10 @@ export function CashCloseForm({
   token,
   organizationId,
   branchId,
-  disabled = false,
+  disabled: disabledProp = false,
   pendingCollections = 0,
+  ventasSinEnviar = 0,
+  sinConexion = false,
   onClosed,
   onRejected,
 }: {
@@ -28,9 +30,16 @@ export function CashCloseForm({
   disabled?: boolean;
   /** Cobros asignados a esta caja que todavía no entraron a la sesión. */
   pendingCollections?: number;
+  /** Ventas cobradas sin conexión que faltan enviar: mientras haya, no se cierra. */
+  ventasSinEnviar?: number;
+  /** Cerrar caja necesita el servidor. */
+  sinConexion?: boolean;
   onClosed: () => void;
   onRejected?: () => void;
 }) {
+  // Una venta sin enviar es plata que ya está en el cajón pero todavía no en
+  // la caja del servidor: cerrar ahora daría un faltante falso.
+  const disabled = disabledProp || ventasSinEnviar > 0 || sinConexion;
   const pending = useRef(false);
   const [busy, setBusy] = useState(false);
   const [counted, setCounted] = useState("");
@@ -142,6 +151,25 @@ export function CashCloseForm({
           className="mt-1 h-10 w-full border px-3 text-sm disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
         />
       </label>
+      {sinConexion && (
+        <p
+          role="status"
+          className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
+        >
+          Para cerrar la caja hace falta conexión con el servidor.
+        </p>
+      )}
+      {ventasSinEnviar > 0 && (
+        <p
+          role="status"
+          className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800"
+        >
+          {ventasSinEnviar === 1
+            ? "Hay 1 venta cobrada sin conexión que todavía no se envió."
+            : `Hay ${ventasSinEnviar} ventas cobradas sin conexión que todavía no se enviaron.`}{" "}
+          Se envían solas; cuando lleguen vas a poder cerrar la caja.
+        </p>
+      )}
       {error && (
         <p role="alert" className="mt-3 text-sm text-rose-600">
           {error}

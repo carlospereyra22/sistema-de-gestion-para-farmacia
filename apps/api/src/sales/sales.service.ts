@@ -168,7 +168,21 @@ export class SalesService {
         where: { organizationId, branchId },
         orderBy: { createdAt: "desc" },
         take: 200,
-        include: { items: true, payments: true, fiscalTrial: true },
+        include: {
+          items: true,
+          payments: true,
+          fiscalTrial: true,
+          // El historial muestra el número de ARCA de la factura (SISTEMA-64).
+          fiscalDocuments: {
+            where: { kind: "INVOICE" },
+            select: {
+              status: true,
+              point: true,
+              number: true,
+              voucherType: true,
+            },
+          },
+        },
       })
       .then((sales) => sales.map((sale) => this.serialize(sale)));
   }
@@ -1558,6 +1572,17 @@ export class SalesService {
           where: { id: sale.id },
           data: { status: "CANCELLED" },
         });
+        // Una venta sin conexión anulada ya no tiene nada que revisar: sus
+        // avisos abiertos se cierran solos (SISTEMA-64).
+        const closedIssues = await tx.offlineSyncIssue.updateMany({
+          where: { organizationId, saleId: sale.id, status: "OPEN" },
+          data: {
+            status: "RESOLVED",
+            resolvedAt: new Date(),
+            resolvedById: actorId,
+            resolutionNote: "Venta anulada",
+          },
+        });
         await this.audit.recordInTransaction(tx, {
           organizationId,
           branchId,
@@ -1574,6 +1599,9 @@ export class SalesService {
             reason: reason.trim(),
             ...(change
               ? { changeReversedMinor: change.amountMinor.toString() }
+              : {}),
+            ...(closedIssues.count
+              ? { offlineIssuesResolved: closedIssues.count }
               : {}),
           },
         });

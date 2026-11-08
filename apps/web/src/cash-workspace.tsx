@@ -43,6 +43,8 @@ import {
   pendingCollectionsSummary,
 } from "./lib/cash-session-view";
 import { lotCostInput } from "./lib/lot-cost";
+import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
+import { useConectividad } from "./lib/conectividad";
 import { MoneyInput } from "./money-input";
 import { ClosureVisibility, RegisterManager } from "./record-maintenance";
 
@@ -61,6 +63,7 @@ export function CashWorkspace({
   registerId,
   onRegisterChange,
   session,
+  ventasSinEnviar = 0,
   done,
   error,
 }: {
@@ -75,9 +78,13 @@ export function CashWorkspace({
   registerId: string;
   onRegisterChange: (registerId: string) => void;
   session?: CashSession;
+  /** Ventas cobradas sin conexión en esta sucursal que todavía no llegaron. */
+  ventasSinEnviar?: number;
   done: () => void;
   error: (value: string) => void;
 }): ReactElement {
+  const { enLinea } = useConectividad();
+  const sinConexion = !enLinea || token === TOKEN_SIN_CONEXION;
   const [tab, setTab] = useState<"session" | "history" | "all">("session");
   const [opening, setOpening] = useState("");
   const [cashBusy, setCashBusy] = useState(false);
@@ -500,6 +507,8 @@ export function CashWorkspace({
                 organizationId={organizationId}
                 branchId={branchId}
                 disabled={!management?.canManage || cashBusy}
+                ventasSinEnviar={ventasSinEnviar}
+                sinConexion={sinConexion}
                 pendingCollections={
                   pendingRows?.filter(
                     (row) => row.destinationRegisterId === registerId,
@@ -539,14 +548,25 @@ export function CashWorkspace({
                 )}
                 <button
                   disabled={
-                    cashBusy || !management?.canManage || Boolean(ownOpenNotice)
+                    cashBusy ||
+                    sinConexion ||
+                    !management?.canManage ||
+                    Boolean(ownOpenNotice)
                   }
                   className="mt-5 w-full bg-teal-700 py-2 text-sm text-white disabled:opacity-50"
                 >
                   {register ? `Abrir ${register.name}` : "Abrir caja"}
                 </button>
-                {ownOpenNotice && (
-                  <p className="mt-3 text-xs text-amber-800">{ownOpenNotice}</p>
+                {sinConexion ? (
+                  <p className="mt-3 text-xs text-slate-600">
+                    Para abrir la caja hace falta conexión con el servidor.
+                  </p>
+                ) : (
+                  ownOpenNotice && (
+                    <p className="mt-3 text-xs text-amber-800">
+                      {ownOpenNotice}
+                    </p>
+                  )
                 )}
               </form>
             )}

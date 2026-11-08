@@ -12,9 +12,14 @@ const between = (start: string, end: string) =>
   );
 
 it("vuelve a Público general al terminar, vaciar o descartar la venta", () => {
+  expect(between("const limpiarVenta", "};")).toContain("resetSaleParties();");
   expect(
-    between("const completedSale = await createSale", "await loadHistory();"),
-  ).toContain("resetSaleParties();");
+    between("completedSale = await createSale", "await loadHistory();"),
+  ).toContain("limpiarVenta();");
+  // También al guardar la venta sin conexión.
+  expect(between("const cobrarSinConexion", "\n  };")).toContain(
+    "limpiarVenta();",
+  );
   expect(between("onClear={() => {", "focusProductSearch();")).toContain(
     "resetSaleParties();",
   );

@@ -10,6 +10,7 @@ import {
   marcarEnLinea,
   marcarSinConexion,
 } from "./conectividad";
+import { registrarHoraServidor } from "./venta-sin-conexion";
 
 /** Evento que avisa que la API cortó por el estado de la suscripción. */
 export const SUBSCRIPTION_RESTRICTED = "farmatec:suscripcion-restringida";
@@ -79,6 +80,10 @@ export async function apiFetch(
   if (response && !esFallaDeConexion(response)) {
     marcarEnLinea();
     marcarSincronizado();
+    // Hora del servidor para las ventas sin conexión (los dobles de prueba
+    // a veces no traen encabezados).
+    if (response.headers instanceof Headers)
+      registrarHoraServidor(response.headers.get("date"));
     if (response.status === 402 && typeof window !== "undefined")
       window.dispatchEvent(new Event(SUBSCRIPTION_RESTRICTED));
     if (metodo === "GET" && response.ok)

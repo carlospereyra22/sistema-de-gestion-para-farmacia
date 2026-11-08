@@ -27,6 +27,14 @@ export function SaleInvoiceDialog({
   const [confirmRequeue, setConfirmRequeue] = useState(false);
   const pending = useRef(false);
   const frame = useRef<HTMLIFrameElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
+    return () => {
+      if (element?.open) element.close();
+    };
+  }, []);
   useEffect(() => {
     let active = true;
     void saleInvoice(token, organizationId, branchId, saleId)
@@ -83,13 +91,18 @@ export function SaleInvoiceDialog({
     }
   }
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sale-invoice-title"
-        className="max-h-[95vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-5 shadow-xl"
-      >
+    // <dialog> modal propio: el navegador lo apila arriba del detalle de venta
+    // (otro <dialog> modal) y al cerrarlo se vuelve a ese detalle.
+    <dialog
+      ref={dialog}
+      aria-labelledby="sale-invoice-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      className="m-auto max-h-[95vh] w-[calc(100%-2rem)] max-w-md overflow-visible rounded-2xl border-0 bg-transparent p-0 backdrop:bg-slate-950/40"
+    >
+      <section className="max-h-[95vh] w-full overflow-auto rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-center justify-between gap-4">
           <h2 id="sale-invoice-title" className="text-lg font-semibold">
             Factura
@@ -236,7 +249,7 @@ export function SaleInvoiceDialog({
             </>
           )}
       </section>
-    </div>,
+    </dialog>,
     document.body,
   );
 }

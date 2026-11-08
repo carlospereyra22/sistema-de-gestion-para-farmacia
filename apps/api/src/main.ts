@@ -15,7 +15,13 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix("api/v1");
   app.use(helmet());
-  app.enableCors({ origin: environment.corsOrigin, credentials: true });
+  // Date se expone para que la web tome la hora del servidor (ventas sin
+  // conexión, SISTEMA-64) también cuando la API está en otro origen.
+  app.enableCors({
+    origin: environment.corsOrigin,
+    credentials: true,
+    exposedHeaders: ["Date"],
+  });
   app.use(cookieParser());
   app.use(requestIdMiddleware);
   app.useGlobalFilters(new ApiExceptionFilter());

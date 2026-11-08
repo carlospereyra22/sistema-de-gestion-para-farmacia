@@ -3,24 +3,25 @@ import { expect, it } from "vitest";
 import { CashCloseForm } from "./cash-close-form";
 import type { CashSession } from "./lib/api";
 
+const session: CashSession = {
+  id: "s",
+  cashRegisterId: "r",
+  openedAt: "2026-10-17T12:00:00Z",
+  closedAt: null,
+  openingAmountMinor: "1000000",
+  closingAmountMinor: null,
+  cashSalesMinor: "500000",
+  saleChangeMinor: "0",
+  cardMinor: "0",
+  transferMinor: "0",
+  manualInMinor: "200000",
+  manualOutMinor: "100000",
+  expectedAmountMinor: "1600000",
+  differenceMinor: null,
+  movements: [],
+};
+
 it("starts with an empty count and a disabled single-line reason, without submitting", () => {
-  const session: CashSession = {
-    id: "s",
-    cashRegisterId: "r",
-    openedAt: "2026-10-17T12:00:00Z",
-    closedAt: null,
-    openingAmountMinor: "1000000",
-    closingAmountMinor: null,
-    cashSalesMinor: "500000",
-    saleChangeMinor: "0",
-    cardMinor: "0",
-    transferMinor: "0",
-    manualInMinor: "200000",
-    manualOutMinor: "100000",
-    expectedAmountMinor: "1600000",
-    differenceMinor: null,
-    movements: [],
-  };
   const html = renderToStaticMarkup(
     <CashCloseForm
       session={session}
@@ -39,4 +40,22 @@ it("starts with an empty count and a disabled single-line reason, without submit
   expect(html).toMatch(/<input[^>]*disabled[^>]*placeholder="No corresponde"/);
   expect(html).toContain("Confirmar cierre");
   expect(html).toContain("disabled");
+  expect(html).not.toContain("sin conexión");
+});
+
+it("no deja cerrar mientras haya ventas sin conexión por enviar", () => {
+  const html = renderToStaticMarkup(
+    <CashCloseForm
+      session={session}
+      token="test"
+      organizationId="org"
+      branchId="branch"
+      ventasSinEnviar={2}
+      onClosed={() => {}}
+    />,
+  );
+  expect(html).toContain(
+    "Hay 2 ventas cobradas sin conexión que todavía no se enviaron.",
+  );
+  expect(html).toMatch(/<input[^>]*disabled[^>]*placeholder="0,00"/);
 });
