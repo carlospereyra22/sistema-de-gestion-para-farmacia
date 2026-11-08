@@ -214,6 +214,8 @@
 
 - En Ventas, seleccionar Cuenta corriente prepara automáticamente el saldo restante como financiación, conserva otros pagos y no duplica el importe al repetir la selección. La venta se registra únicamente al pulsar Confirmar venta; la API mantiene la validación del crédito.
 
+- Modo sin internet (07/11/2026, epic "Modo sin internet"): la farmacia sigue operando sin conexión y sincroniza al volver. Decisiones del usuario: las ventas hechas sin conexión que choquen al sincronizar (precio cambiado, stock que no alcanza, límite de crédito) se registran con el precio cobrado y quedan "a revisar", sin stock negativo; la factura C pedida sin conexión se emite con CAE al volver; el Ticket nunca va a ARCA; un cobro de cuenta corriente mayor a la deuda deja saldo a favor y aviso; una PC puede trabajar sin conexión hasta 24 h desde la última sincronización. Abrir/cerrar caja, compras, recepciones, transferencias y catálogo siguen necesitando conexión. Primer paso (SISTEMA-62): la app abre sin conexión en modo consulta. Ver `OFFLINE.md`.
+
 ## OPEN
 
 - Credential recovery policy for production.

@@ -8,4 +8,6 @@ La cookie tiene 400 días y su plazo se renueva en cada respuesta exitosa. La pe
 
 Solo un 401 explícito del endpoint de renovación limpia la sesión del frontend. Fallos de red/servidor conservan el estado y reintentan cada 15 segundos; las operaciones siguen necesitando autorización del servidor y no se simula éxito offline. La restauración inicial también reintenta ante fallos temporales. No se deshabilita la seguridad del backend.
 
+Modo sin internet (07/11/2026, SISTEMA-62): si la renovación falla por falta de conexión, la web puede abrir con el perfil guardado del último usuario de la PC (hasta 24 h desde la última sincronización) y un token local que nunca llega al servidor; sólo muestra datos guardados. Un 401 de renovación sigue cerrando la sesión y además borra la copia local. Ver `OFFLINE.md`.
+
 Aplicado en pruebas locales; producción requiere migración y despliegue. No se cambiaron credenciales ni se recuperaron sesiones revocadas.

@@ -6,6 +6,8 @@ import { App } from "./app";
 import "./index.css";
 import { localAppUrl } from "./lib/local-app-url";
 import { pwaInstall } from "./lib/pwa-install";
+import { registrarServiceWorker } from "./registrar-service-worker";
+import { VersionNuevaAviso } from "./version-nueva-aviso";
 
 pwaInstall.start(
   window,
@@ -18,11 +20,14 @@ const canonicalUrl = localAppUrl(
   import.meta.env.DEV,
 );
 if (canonicalUrl) window.location.replace(canonicalUrl);
-else
+else {
+  registrarServiceWorker();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <BrowserRouter>
         <App />
+        <VersionNuevaAviso />
       </BrowserRouter>
     </StrictMode>,
   );
+}

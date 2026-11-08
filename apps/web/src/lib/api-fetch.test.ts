@@ -1,5 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiFetch, SUBSCRIPTION_RESTRICTED } from "./api-fetch";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  apiFetch,
+  guardadaEl,
+  SinConexionError,
+  SUBSCRIPTION_RESTRICTED,
+} from "./api-fetch";
+import { almacenEnMemoria, usarAlmacen } from "./almacen-local";
+import { TOKEN_SIN_CONEXION, usarAlcance } from "./cache-local";
+import { conectividad, marcarEnLinea } from "./conectividad";
 
 describe("apiFetch", () => {
   afterEach(() => {
@@ -47,5 +55,116 @@ describe("apiFetch", () => {
     await apiFetch("/x", init);
 
     expect(fetch).toHaveBeenCalledWith("/x", init);
+  });
+});
+
+describe("apiFetch sin conexión", () => {
+  const stock =
+    "http://localhost:3000/api/v1/organizations/o1/branches/b1/inventory/stock";
+  const auth = (token: string) => ({
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  beforeEach(() => {
+    usarAlmacen(almacenEnMemoria());
+    usarAlcance("ana@farmacia.com");
+    marcarEnLinea();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    usarAlcance(undefined);
+  });
+
+  async function guardarStock() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response('[{"id":"lote"}]', {
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    await apiFetch(stock, auth("real"));
+    // La copia se guarda en segundo plano.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it("si la red falla, devuelve la copia local y marca sin conexión", async () => {
+    await guardarStock();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+
+    const response = await apiFetch(stock, auth("real"));
+
+    expect(await response.json()).toEqual([{ id: "lote" }]);
+    expect(guardadaEl(response)).toBeTypeOf("number");
+    expect(conectividad().enLinea).toBe(false);
+  });
+
+  it("el proxy sin servidor (502) también usa la copia", async () => {
+    await guardarStock();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("<html>Bad gateway</html>", {
+          status: 502,
+          headers: { "content-type": "text/html" },
+        }),
+      ),
+    );
+
+    expect(await (await apiFetch(stock, auth("real"))).json()).toEqual([
+      { id: "lote" },
+    ]);
+  });
+
+  it("con el token de sin conexión nunca sale a la red", async () => {
+    await guardarStock();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+
+    const response = await apiFetch(stock, auth(TOKEN_SIN_CONEXION));
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await response.json()).toEqual([{ id: "lote" }]);
+  });
+
+  it("sin conexión, las operaciones que escriben fallan con un mensaje claro", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+
+    await expect(
+      apiFetch(stock, { ...auth("real"), method: "POST" }),
+    ).rejects.toBeInstanceOf(SinConexionError);
+  });
+
+  it("sin copia guardada, una consulta falla con un mensaje claro", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+
+    await expect(apiFetch(stock, auth("real"))).rejects.toThrow(
+      "sin datos guardados",
+    );
+  });
+
+  it("un error de la API no es falta de conexión", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response('{"message":"x"}', {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    expect((await apiFetch(stock, auth("real"))).status).toBe(403);
+    expect(conectividad().enLinea).toBe(true);
   });
 });

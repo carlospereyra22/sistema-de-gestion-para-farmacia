@@ -29,6 +29,8 @@ import {
   logout,
   refreshSession,
   SessionExpiredError,
+  apiBaseUrl,
+  type CurrentUserProfile,
   type UserCreateOptions,
   type UserListItem,
   type BranchListItem,
@@ -41,6 +43,34 @@ const PlatformShell = lazy(() => import("./platform-shell"));
 import { LoginScreen } from "./login-screen";
 import { SubscriptionGate } from "./subscription-gate";
 import { useNavigate } from "react-router-dom";
+import {
+  TOKEN_SIN_CONEXION,
+  alcanceDe,
+  borrarCopiaLocal,
+  guardarSesion,
+  leerSesion,
+  sesionVigente,
+  usarAlcance,
+  usarSincronizacionGuardada,
+} from "./lib/cache-local";
+import { pedirPersistencia } from "./lib/almacen-local";
+import {
+  conectividad,
+  iniciarSondeo,
+  marcarSinConexion,
+  suscribirConectividad,
+} from "./lib/conectividad";
+import {
+  cierreDeSesionPendiente,
+  olvidarCierreDeSesion,
+  recordarCierreDeSesion,
+} from "./lib/cierre-sesion-pendiente";
+
+/** Sólo farmacias: la plataforma y el cambio de contraseña necesitan el servidor. */
+const puedeTrabajarSinConexion = (perfil: CurrentUserProfile) =>
+  !perfil.isPlatformAdmin &&
+  !perfil.mustChangePassword &&
+  perfil.organizations.length > 0;
 
 const permissionGroups = [
   {
@@ -111,6 +141,31 @@ export function App(): ReactElement {
 
   const startSession = async (token: string): Promise<void> => {
     const profile = await getCurrentUser(token);
+    if (puedeTrabajarSinConexion(profile)) {
+      usarAlcance(alcanceDe(profile));
+      void guardarSesion(profile).catch(() => {});
+      pedirPersistencia();
+    } else {
+      usarAlcance(undefined);
+      void borrarCopiaLocal().catch(() => {});
+    }
+    applyProfile(profile, token);
+  };
+  /** Abre con el último usuario de esta PC, si sincronizó hace menos de 24 h. */
+  const startOfflineSession = async (): Promise<boolean> => {
+    const sesion = await leerSesion().catch(() => undefined);
+    if (
+      !sesionVigente(sesion, Date.now()) ||
+      !puedeTrabajarSinConexion(sesion.perfil)
+    )
+      return false;
+    usarAlcance(sesion.alcance);
+    usarSincronizacionGuardada(sesion.ultimaSincronizacion);
+    marcarSinConexion();
+    applyProfile(sesion.perfil, TOKEN_SIN_CONEXION);
+    return true;
+  };
+  const applyProfile = (profile: CurrentUserProfile, token: string) => {
     setMustChangePassword(profile.mustChangePassword ?? false);
     setIsPlatformAdmin(profile.isPlatformAdmin ?? false);
     setUser(profile.email);
@@ -160,6 +215,8 @@ export function App(): ReactElement {
     setMessage(undefined);
     try {
       const result = await login(email, password);
+      // La sesión nueva reemplaza a la que quedó por cerrar: no se la revoca.
+      olvidarCierreDeSesion();
       // La dirección conserva la pantalla de la sesión anterior: se empieza por Inicio.
       navigate("/", { replace: true });
       await startSession(result.accessToken);
@@ -170,33 +227,77 @@ export function App(): ReactElement {
     }
   };
 
+  useEffect(() => iniciarSondeo(`${apiBaseUrl}/health`), []);
+
   useEffect(() => {
     let active = true;
     let timer: number | undefined;
+    let sinConexion = false;
+    let restoring = false;
     const restore = async () => {
+      if (restoring) return;
+      restoring = true;
+      window.clearTimeout(timer);
       try {
+        // Se cerró sesión sin conexión: primero se avisa al servidor.
+        if (cierreDeSesionPendiente()) {
+          try {
+            await logout();
+            olvidarCierreDeSesion();
+          } catch {
+            /* se reintenta en el próximo arranque */
+          }
+          if (active) setRestoringSession(false);
+          return;
+        }
         const { accessToken: token } = await refreshSession();
         if (!active) return;
         await startSession(token);
-        if (active) setRestoringSession(false);
+        sinConexion = false;
+        if (active) {
+          setRestoringSession(false);
+          setSessionRestoreFailed(false);
+        }
       } catch (cause) {
         if (!active) return;
-        if (cause instanceof SessionExpiredError) setRestoringSession(false);
-        else {
-          setSessionRestoreFailed(true);
+        if (cause instanceof SessionExpiredError) {
+          // La sesión ya no vale: sin conexión tampoco se puede seguir.
+          void borrarCopiaLocal().catch(() => {});
+          if (sinConexion) {
+            setUser(undefined);
+            setAccessToken(undefined);
+            setOrganizationId(undefined);
+            setMessage("La sesión venció. Iniciá sesión nuevamente.");
+          }
+          sinConexion = false;
+          setRestoringSession(false);
+        } else {
+          if (!sinConexion && (await startOfflineSession())) {
+            sinConexion = true;
+            if (active) setRestoringSession(false);
+          } else if (!sinConexion) setSessionRestoreFailed(true);
           timer = window.setTimeout(() => void restore(), 15000);
         }
+      } finally {
+        restoring = false;
       }
     };
     void restore();
+    // Sin conexión: apenas el servidor vuelve a responder, se recupera la sesión.
+    const dejar = suscribirConectividad(() => {
+      if (sinConexion && conectividad().enLinea) void restore();
+    });
     return () => {
       active = false;
+      dejar();
       window.clearTimeout(timer);
     };
-  }, []);
+    // Sólo al montar: las funciones de sesión usan setters estables.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!accessToken) return;
+    // Sin conexión no hay token que renovar: la sesión se recupera al volver.
+    if (!accessToken || accessToken === TOKEN_SIN_CONEXION) return;
 
     let refreshing = false;
     let active = true;
@@ -362,7 +463,13 @@ export function App(): ReactElement {
   };
 
   const endSession = () => {
-    void logout();
+    // La copia local se borra siempre: después de cerrar sesión no se puede
+    // abrir sin conexión. Si el servidor no responde, se le avisa al volver.
+    void borrarCopiaLocal().catch(() => {});
+    recordarCierreDeSesion();
+    void logout()
+      .then(olvidarCierreDeSesion)
+      .catch(() => {});
     setUser(undefined);
     setAccessToken(undefined);
     setOrganizationId(undefined);
