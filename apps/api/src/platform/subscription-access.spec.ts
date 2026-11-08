@@ -3,6 +3,7 @@ import {
   coveredUntil,
   nextCut,
   resolveSubscriptionAccess,
+  subscriptionAccessAt,
   type SubscriptionDates,
 } from "./subscription-access";
 
@@ -185,5 +186,40 @@ describe("nextCut", () => {
   it("al día o bloqueada no hay próximo corte", () => {
     expect(at("2026-10-20")).toBeNull();
     expect(at("2026-12-15")).toBeNull();
+  });
+});
+
+describe("subscriptionAccessAt (ventas hechas sin conexión)", () => {
+  it("una venta hecha antes del corte se acepta aunque hoy esté en solo lectura", () => {
+    expect(stage(base, "2026-11-15")).toBe("READ_ONLY");
+    expect(subscriptionAccessAt(base, noon("2026-11-10")).access).toBe("FULL");
+  });
+
+  it("una venta hecha con la farmacia ya en solo lectura no se acepta", () => {
+    expect(subscriptionAccessAt(base, noon("2026-11-13")).access).toBe(
+      "READ_ONLY",
+    );
+  });
+
+  it("la suspensión y la baja cuentan sólo desde que ocurrieron", () => {
+    const suspended = {
+      ...base,
+      paidThrough: date("2026-12-31"),
+      suspendedAt: noon("2026-11-20"),
+    };
+    expect(subscriptionAccessAt(suspended, noon("2026-11-19")).access).toBe(
+      "FULL",
+    );
+    expect(subscriptionAccessAt(suspended, noon("2026-11-21")).stage).toBe(
+      "SUSPENDED",
+    );
+    const cancelled = {
+      ...suspended,
+      suspendedAt: null,
+      cancelledAt: noon("2026-11-20"),
+    };
+    expect(subscriptionAccessAt(cancelled, noon("2026-11-21")).stage).toBe(
+      "CANCELLED",
+    );
   });
 });

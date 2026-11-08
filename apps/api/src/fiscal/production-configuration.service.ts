@@ -23,8 +23,18 @@ export class ProductionConfigurationService {
     private readonly connection: ArcaConnectionService,
     private readonly vault: CredentialVault,
   ) {}
-  async validate(tx: Prisma.TransactionClient, org: string, branch: string) {
-    assertProductionIssuance();
+  /**
+   * `requireIssuance: false` sólo para dejar en cola una factura pedida sin
+   * conexión: la venta ya ocurrió y la cola fiscal la envía cuando la emisión
+   * esté habilitada. Emitir siempre exige la bandera (process()).
+   */
+  async validate(
+    tx: Prisma.TransactionClient,
+    org: string,
+    branch: string,
+    requireIssuance = true,
+  ) {
+    if (requireIssuance) assertProductionIssuance();
     if (this.vault.provider() !== "AES256_GCM")
       throw new BadRequestException(
         "Producción requiere custodia AES recuperable.",

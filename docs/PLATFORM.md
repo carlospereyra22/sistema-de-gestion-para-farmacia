@@ -189,7 +189,9 @@ bloqueo frena todo, con 402 y código `SUBSCRIPTION_READ_ONLY` o `SUBSCRIPTION_B
   cortar a una farmacia que pagó. Las exentas, como Juncos, nunca se cortan.
 - **Excepciones marcadas en el código:** `@AllowWhenReadOnly` en lo que termina algo pendiente,
   `@AllowOwnerWhenBlocked` en las ventas y facturas que el dueño sigue viendo, y
-  `@AlwaysAvailable` en la consulta del estado. `subscription-routes.spec.ts` fija la lista
+  `@AlwaysAvailable` en la consulta del estado, y `@DecidedWhenOccurred` en las ventas hechas
+  sin conexión, que se aceptan según el estado que tenía la farmacia cuando ocurrieron
+  (`subscriptionAccessAt`; SISTEMA-63). `subscription-routes.spec.ts` fija la lista
   completa y falla si una ruta nueva no lleva `:organizationId` ni está entre las globales.
 - **Reactivar:** un pago o una prórroga reactivan al instante, porque el estado se calcula en
   cada pedido.

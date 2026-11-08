@@ -23,8 +23,8 @@ por etapas; este documento dice qué hay hoy y cómo funciona.
 | ------------------------------------------------------------- | ---------- |
 | SISTEMA-59 Facturas que no llegaron a ARCA no traban el punto | En main    |
 | SISTEMA-61 Cola fiscal automática                             | En main    |
-| SISTEMA-62 La app abre sin conexión (consulta)                | Esta etapa |
-| Recibir ventas hechas sin conexión (API)                      | Pendiente  |
+| SISTEMA-62 La app abre sin conexión (consulta)                | En main    |
+| SISTEMA-63 Recibir ventas hechas sin conexión (API)           | Esta etapa |
 | Vender sin conexión y sincronizar solo (web)                  | Pendiente  |
 | Caja y cuenta corriente sin conexión                          | Pendiente  |
 
@@ -59,6 +59,26 @@ por etapas; este documento dice qué hay hoy y cómo funciona.
   persona en la PC, se borra la copia del usuario anterior.
 - **Aviso**: "Sin conexión · datos de las HH:MM" en el encabezado; al tocarlo
   explica qué se puede hacer.
+
+## Recibir ventas hechas sin conexión (SISTEMA-63)
+
+`POST organizations/:org/branches/:branch/sales/offline` (SALE_MANAGE): el
+mismo cuerpo de una venta, más `clientOperationId` (obligatorio), `occurredAt`
+(ISO, cuándo se hizo) y `deviceId` (la PC). Cada renglón de producto lleva
+`expectedUnitPriceMinor` (el precio cobrado) y puede llevar `productName`.
+Responde la venta y `offlineIssues`. Reglas en `BUSINESS_RULES.md` (ventas sin
+conexión). Puntos técnicos:
+
+- Es `SalesService.complete()` con un contexto sin conexión: cada diferencia
+  sólo se activa en ese modo; la venta con conexión no cambia.
+- Idempotencia: `OfflineOperation` (id = `clientOperationId`) con
+  `requestHash`. También devuelve la venta si el mismo id ya se registró con
+  conexión (un envío que pareció fallar).
+- Suscripción: la ruta lleva `@DecidedWhenOccurred()` (regla `OFFLINE_SYNC`); el
+  servicio usa `subscriptionAccessAt` con la fecha de la venta.
+- Factura: no se envía en el momento; la cola fiscal (SISTEMA-61) la emite.
+- Avisos: `GET sales/offline-issues` (SALE_READ, `?todos=1` incluye revisados)
+  y `POST sales/offline-issues/:id/resolve` (SALE_MANAGE, nota opcional).
 
 ## Cómo probarlo
 
