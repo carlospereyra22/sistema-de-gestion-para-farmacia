@@ -21,6 +21,12 @@ import {
 } from "./production-document";
 import { fiscalQrUrl } from "./fiscal-qr";
 import {
+  actorAuditoria,
+  esAutomatico,
+  origenAuditoria,
+  type FiscalActor,
+} from "./actor-fiscal";
+import {
   ESPERA_PARA_LIBERAR_MS,
   comprobanteInexistente,
   decidirIncierto,
@@ -170,13 +176,14 @@ export class ProductionSalesService {
     return { ...document, qrUrl };
   }
   async process(
-    actor: string,
+    actor: FiscalActor,
     org: string,
     branch: string,
     saleId: string,
     documentId?: string,
   ) {
-    await this.organizations.authorizeFiscalSale(actor, org);
+    if (!esAutomatico(actor))
+      await this.organizations.authorizeFiscalSale(actor, org);
     const doc = await this.prisma.fiscalDocument.findFirst({
       where: {
         organizationId: org,
@@ -361,7 +368,7 @@ export class ProductionSalesService {
     }
   }
   private async finish(
-    actor: string,
+    actor: FiscalActor,
     doc: FiscalDocument,
     status: string,
     detail: string,
@@ -382,7 +389,7 @@ export class ProductionSalesService {
           data: {
             organizationId: doc.organizationId,
             branchId: doc.branchId,
-            actorId: actor,
+            actorId: actorAuditoria(actor),
             entityType: "FISCAL_DOCUMENT",
             entityId: doc.id,
             action: status,
@@ -392,13 +399,14 @@ export class ProductionSalesService {
               voucherType: doc.voucherType,
               number: doc.number,
               cae: cae ?? null,
+              ...origenAuditoria(actor),
             },
           },
         });
       return tx.fiscalDocument.findUniqueOrThrow({ where: { id: doc.id } });
     });
   }
-  private async reconcile(actor: string, doc: FiscalDocument) {
+  private async reconcile(actor: FiscalActor, doc: FiscalDocument) {
     if (
       Date.now() - doc.updatedAt.getTime() < 120000 &&
       doc.status === "PENDING"

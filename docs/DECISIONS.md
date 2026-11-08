@@ -214,6 +214,8 @@
 
 - En Ventas, seleccionar Cuenta corriente prepara automáticamente el saldo restante como financiación, conserva otros pagos y no duplica el importe al repetir la selección. La venta se registra únicamente al pulsar Confirmar venta; la API mantiene la validación del crédito.
 
+- Cola fiscal automática (07/11/2026, SISTEMA-61): las facturas y notas de crédito que quedan en cola o por confirmar se envían y concilian solas cada minuto, dentro del proceso de la API, sin servicios ni colas externas. Reemplaza la decisión anterior de "no hay worker". Es la base para facturar ventas hechas sin internet (epic "Modo sin internet"). Las facturas de ventas ya hechas se emiten aunque la farmacia esté bloqueada por falta de pago. No activa emisión productiva: en producción sólo corre con la bandera habilitada.
+
 ## OPEN
 
 - Credential recovery policy for production.

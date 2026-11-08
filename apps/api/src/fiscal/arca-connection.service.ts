@@ -11,6 +11,7 @@ import {
   assertFiscalEnvironment,
 } from "./fiscal-environment";
 import { CredentialVault } from "./credential-vault";
+import { esAutomatico, type FiscalActor } from "./actor-fiscal";
 import {
   ArcaSoap,
   obj,
@@ -40,7 +41,7 @@ export class ArcaConnectionService {
     private readonly soap: ArcaSoap,
   ) {}
   async access(
-    actor: string,
+    actor: FiscalActor,
     org: string,
     purpose: "setup" | "sale" = "setup",
     environment: FiscalEnvironment = "HOMOLOGATION",
@@ -51,7 +52,13 @@ export class ArcaConnectionService {
       throw new BadRequestException(
         "Producción requiere el custodio cifrado del servidor.",
       );
-    if (purpose === "sale")
+    // La cola fiscal sólo envía comprobantes de ventas ya autorizadas.
+    if (esAutomatico(actor)) {
+      if (purpose !== "sale")
+        throw new BadRequestException(
+          "El proceso automático sólo envía comprobantes de ventas.",
+        );
+    } else if (purpose === "sale")
       await this.organizations.authorizeFiscalSale(actor, org);
     else await this.organizations.authorizeFiscalManagement(actor, org);
     return this.prisma.$transaction(

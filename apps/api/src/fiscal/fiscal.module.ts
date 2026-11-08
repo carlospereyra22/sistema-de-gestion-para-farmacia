@@ -14,9 +14,11 @@ import { ProductionSalesService } from "./production-sales.service";
 import { ProductionConfigurationService } from "./production-configuration.service";
 import { ProductionCreditService } from "./production-credit.service";
 import { AccountsModule } from "../accounts/accounts.module";
+import { ColaFiscalService } from "./cola-fiscal.service";
 @Module({
   imports: [AuthModule, OrganizationsModule, AccountsModule],
   providers: [
+    ColaFiscalService,
     ProductionCreditService,
     ProductionSalesService,
     ProductionConfigurationService,

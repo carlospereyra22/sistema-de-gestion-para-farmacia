@@ -5,6 +5,8 @@ import { trialTicket } from "./lib/fiscal-trial-ticket";
 import { printTicketFrame } from "./lib/browser-ticket-print";
 import { SaleCreditNotes } from "./sale-credit-notes";
 
+const INVOICE_REFRESH_MS = 20_000;
+
 export function SaleInvoiceDialog({
   token,
   organizationId,
@@ -41,6 +43,24 @@ export function SaleInvoiceDialog({
       active = false;
     };
   }, [token, organizationId, branchId, saleId]);
+  // Mientras la factura espera, la cola fiscal la envía sola: se vuelve a
+  // consultar (sólo lectura, nunca envía) para mostrar el resultado.
+  const waiting =
+    trial?.status === "QUEUED" ||
+    trial?.status === "PENDING" ||
+    trial?.status === "UNCERTAIN";
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => {
+      if (pending.current) return;
+      void saleInvoice(token, organizationId, branchId, saleId)
+        .then((value) => {
+          if (!pending.current) setTrial(value);
+        })
+        .catch(() => {});
+    }, INVOICE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [waiting, token, organizationId, branchId, saleId]);
   async function refresh(process: boolean | "requeue") {
     if (pending.current) return;
     pending.current = true;
@@ -91,6 +111,8 @@ export function SaleInvoiceDialog({
         ) : (
           <p className="my-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
             Venta registrada. La factura está pendiente; no repitas la venta.
+            {waiting &&
+              " Se envía sola cuando ARCA responde; esta ventana se actualiza sola."}
           </p>
         )}
         {!trial && !error && <p role="status">Consultando comprobante…</p>}

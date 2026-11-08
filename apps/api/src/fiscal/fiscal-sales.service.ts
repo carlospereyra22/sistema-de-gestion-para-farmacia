@@ -12,6 +12,7 @@ import { fiscalReadiness } from "../organizations/fiscal-readiness";
 import { ArcaConnectionService } from "./arca-connection.service";
 import { argentinaDate, FiscalTrialService } from "./fiscal-trial.service";
 import { organizationTicketStore } from "../organizations/ticket-header";
+import type { FiscalActor } from "./actor-fiscal";
 
 export { fiscalRecipient } from "./fiscal-recipient";
 
@@ -160,7 +161,12 @@ export class FiscalSalesService {
   requeue(actor: string, org: string, branch: string, saleId: string) {
     return this.trials.requeue(actor, org, branch, saleId);
   }
-  async process(actor: string, org: string, branch: string, saleId: string) {
+  async process(
+    actor: FiscalActor,
+    org: string,
+    branch: string,
+    saleId: string,
+  ) {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, organizationId: org, branchId: branch },
       include: { fiscalTrial: true },
