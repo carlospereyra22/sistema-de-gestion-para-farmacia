@@ -7,7 +7,8 @@ import type {
 
 export const SUBSCRIPTION_RULE = "subscription-rule";
 
-export type SubscriptionRule = "READ_ONLY" | "OWNER_WHEN_BLOCKED" | "ALWAYS";
+export type SubscriptionRule =
+  "READ_ONLY" | "OWNER_WHEN_BLOCKED" | "ALWAYS" | "OFFLINE_SYNC";
 
 /** Sigue funcionando en solo lectura: termina algo pendiente sin abrir operaciones nuevas. */
 export const AllowWhenReadOnly = () =>
@@ -24,6 +25,14 @@ export const AllowOwnerWhenBlocked = () =>
 export const AlwaysAvailable = () =>
   SetMetadata(SUBSCRIPTION_RULE, "ALWAYS" satisfies SubscriptionRule);
 
+/**
+ * Operaciones hechas sin conexión que se sincronizan después: el servicio decide
+ * con el estado que tenía la farmacia cuando ocurrieron (`subscriptionAccessAt`),
+ * no con el de hoy. Una venta hecha antes del corte se acepta.
+ */
+export const DecidedWhenOccurred = () =>
+  SetMetadata(SUBSCRIPTION_RULE, "OFFLINE_SYNC" satisfies SubscriptionRule);
+
 export type SubscriptionRestriction =
   "NONE" | "READ_ONLY" | "BLOCKED" | "OWNER_ONLY";
 
@@ -36,7 +45,8 @@ export function subscriptionRestriction(
   method: string,
   rule: SubscriptionRule | undefined,
 ): SubscriptionRestriction {
-  if (access === "FULL" || rule === "ALWAYS") return "NONE";
+  if (access === "FULL" || rule === "ALWAYS" || rule === "OFFLINE_SYNC")
+    return "NONE";
   const read = method === "GET" || method === "HEAD";
   if (access === "READ_ONLY")
     return read || rule === "READ_ONLY" ? "NONE" : "READ_ONLY";

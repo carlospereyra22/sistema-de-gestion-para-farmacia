@@ -85,6 +85,25 @@ export function commercialToday(now: Date): string {
 }
 
 /**
+ * Acceso que tenía la farmacia en un momento pasado (ventas hechas sin conexión,
+ * SISTEMA-63). La suspensión y la baja sólo cuentan desde que ocurrieron; los
+ * pagos se toman como están hoy, así un pago posterior nunca rechaza una venta.
+ */
+export function subscriptionAccessAt(
+  subscription: SubscriptionDates,
+  at: Date,
+): ReturnType<typeof resolveSubscriptionAccess> {
+  if (subscription.cancelledAt && subscription.cancelledAt <= at)
+    return { stage: "CANCELLED", access: "BLOCKED", daysOverdue: 0 };
+  if (subscription.suspendedAt && subscription.suspendedAt <= at)
+    return { stage: "SUSPENDED", access: "BLOCKED", daysOverdue: 0 };
+  return resolveSubscriptionAccess(
+    { ...subscription, cancelledAt: null, suspendedAt: null },
+    at,
+  );
+}
+
+/**
  * El estado se calcula por fechas y no se guarda: el corte no depende de un proceso
  * programado y registrar un pago reactiva al instante.
  */

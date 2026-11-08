@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -15,6 +17,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
@@ -35,6 +38,7 @@ import { ProductionSalesService } from "../fiscal/production-sales.service";
 import {
   AllowOwnerWhenBlocked,
   AllowWhenReadOnly,
+  DecidedWhenOccurred,
 } from "../platform/subscription-gate";
 
 class SaleLineDto {
@@ -51,6 +55,8 @@ class SaleLineDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) discountMinor?: number;
   // Unidades de la línea vendidas como exhibidor cerrado.
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) packQuantity?: number;
+  // Sin conexión: nombre que vio la PC, por si el producto ya no se vende.
+  @IsOptional() @IsString() @MaxLength(200) productName?: string;
 }
 class PaymentDto {
   @IsEnum(PaymentMethod) method!: PaymentMethod;
@@ -79,6 +85,14 @@ class CompleteSaleDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentDto)
   payments!: PaymentDto[];
+}
+/** Venta hecha sin conexión (SISTEMA-63): la de siempre, más cuándo y dónde. */
+class OfflineSaleDto extends CompleteSaleDto {
+  @IsISO8601({ strict: true }) occurredAt!: string;
+  @IsUUID() deviceId!: string;
+}
+class ResolveOfflineIssueDto {
+  @IsOptional() @IsString() @MaxLength(300) note?: string;
 }
 class ReasonDto {
   @IsString() @MinLength(3) reason!: string;
@@ -259,6 +273,58 @@ export class SalesController {
       organizationId,
       branchId,
       body,
+    );
+  }
+  /** Venta hecha sin conexión que la PC sincroniza al volver (SISTEMA-63). */
+  @DecidedWhenOccurred()
+  @Post("offline")
+  completeOffline(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: OfflineSaleDto,
+  ) {
+    if (!body.clientOperationId)
+      throw new BadRequestException(
+        "La venta sin conexión necesita su identificador.",
+      );
+    return this.sales.completeOffline(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      { ...body, clientOperationId: body.clientOperationId },
+    );
+  }
+  /** Avisos "a revisar" de lo sincronizado sin conexión. */
+  @Get("offline-issues")
+  offlineIssues(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Query("todos") all?: string,
+  ) {
+    return this.sales.offlineIssues(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      all === "1",
+    );
+  }
+  @AllowWhenReadOnly()
+  @Post("offline-issues/:issueId/resolve")
+  resolveOfflineIssue(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Param("issueId", ParseUUIDPipe) issueId: string,
+    @Body() body: ResolveOfflineIssueDto,
+  ) {
+    return this.sales.resolveOfflineIssue(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      issueId,
+      body.note,
     );
   }
   @Post(":saleId/cancel")

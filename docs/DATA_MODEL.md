@@ -32,6 +32,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261107010000_subscription_billing` (SISTEMA-56): `SubscriptionCharge` guarda cada periodo cobrado, con importe y desglose congelados, y un indice unico por farmacia y fecha de inicio impide duplicarlo. `waivedAt` y `waiveReason` marcan la condonacion; `waivedById` queda vacio cuando la hace el proceso al reactivar una farmacia bloqueada. `SubscriptionPayment` guarda cada pago con `operationId` unico por farmacia y `requestHash` para los reintentos, y se anula con `voidedAt` sin borrarse. No hay tabla de imputaciones: la calcula `subscription-ledger.ts`, y `OrganizationSubscription.paidThrough` guarda el resultado.
 
+`20261108005020_offline_sales` (SISTEMA-63): `OfflineOperation` guarda cada operación hecha sin conexión y sincronizada después: id = `clientOperationId` de la PC, tipo (`SALE`, y a futuro `CASH_MOVEMENT` y `ACCOUNT_RECEIPT`, con CHECK), usuario, PC (`deviceId`), cuándo ocurrió y cuándo llegó, `requestHash` (sha256 del contenido de negocio, CHECK de 64 hex) y la entidad creada. `OfflineSyncIssue` guarda los avisos "a revisar" de cada operación (tipo con CHECK, estado `OPEN`/`RESOLVED` con CHECK de que la resolución tenga fecha y usuario), con FK compuestas a sucursal, operación y venta. Solo crea tablas. `SaleItem` no cambia: un renglón de producto con `lotId` nulo es el faltante de una venta sin conexión.
+
 `20261107020000_cost_read_permission` (SISTEMA-58): solo datos. Crea el permiso `COST_READ` (ver costos de los productos) y se lo da a los roles que tenian `INVENTORY_READ`, que hasta entonces veian los costos, salvo a los de codigo `EMPLEADO`.
 
 ## Operational MVP

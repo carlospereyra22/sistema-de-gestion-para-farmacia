@@ -59,9 +59,11 @@ export class ProductionSalesService {
       discountMinor: bigint;
     }[],
     options?: SaleFiscalOptions,
+    /** Venta hecha sin conexión: se encola aunque la emisión esté apagada. */
+    queueOnly = false,
   ) {
     const { organization, profile, configuration } =
-      await this.configurations.validate(tx, org, branch);
+      await this.configurations.validate(tx, org, branch, !queueOnly);
     if (total <= 0n || total > 2147483647n)
       throw new BadRequestException(
         "El total excede el rango implementado para facturación (hasta $21.474.836,47).",

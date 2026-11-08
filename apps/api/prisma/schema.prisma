@@ -606,6 +606,8 @@ model ProductPrice {
 }
 
 model Branch {
+  offlineOperations OfflineOperation[]
+  offlineSyncIssues OfflineSyncIssue[]
   supplierPayableInvoices SupplierPayableInvoice[]
   cashSettings CashSettings[]
   pendingCollections CashPendingCollection[]
@@ -1204,6 +1206,7 @@ model CashMovement {
 }
 
 model Sale {
+  offlineSyncIssues OfflineSyncIssue[]
   fiscalDocuments FiscalDocument[]
   documentType String @default("INTERNAL") @db.VarChar(20)
   fiscalTrial FiscalTrial?
@@ -1284,6 +1287,48 @@ model FiscalDocument {
   @@index([organizationId, status])
   @@index([sourceSaleId])
   @@index([originalId])
+}
+
+// Modo sin internet (SISTEMA-63): operación que una PC hizo sin conexión y
+// sincronizó después. El id es el clientOperationId que generó la PC: hace
+// idempotente el reenvío. requestHash detecta el mismo id con otro contenido.
+model OfflineOperation {
+  id String @id @db.Uuid
+  organizationId String @db.Uuid
+  branchId String @db.Uuid
+  kind String @db.VarChar(30)
+  actorId String @db.Uuid
+  deviceId String @db.Uuid
+  occurredAt DateTime @db.Timestamptz(6)
+  receivedAt DateTime @default(now()) @db.Timestamptz(6)
+  requestHash String @db.VarChar(64)
+  entityId String? @db.Uuid
+  branch Branch @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  issues OfflineSyncIssue[]
+  @@unique([id, organizationId])
+  @@index([organizationId, branchId, receivedAt])
+}
+
+// Aviso "a revisar" de una operación sincronizada: se registró igual, pero
+// algo había cambiado mientras no había conexión (precio, stock, caja...).
+model OfflineSyncIssue {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  branchId String @db.Uuid
+  operationId String @db.Uuid
+  saleId String? @db.Uuid
+  kind String @db.VarChar(40)
+  status String @default("OPEN") @db.VarChar(20)
+  detail Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  resolvedAt DateTime? @db.Timestamptz(6)
+  resolvedById String? @db.Uuid
+  resolutionNote String?
+  branch Branch @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  operation OfflineOperation @relation(fields: [operationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  sale Sale? @relation(fields: [saleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@index([organizationId, branchId, status, createdAt])
+  @@index([saleId])
 }
 
 model SaleItem {

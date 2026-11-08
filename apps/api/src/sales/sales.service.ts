@@ -5,11 +5,20 @@ import { recordPendingCollection } from "../cash/pending-collection";
 import { assertCollectionSession } from "../cash/cash-settings";
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
+import {
+  offlineConceptName,
+  offlineOccurredAt,
+  offlineRequestHash,
+  type OfflineSaleContext,
+} from "./offline-sale";
+import { subscriptionAccessAt } from "../platform/subscription-access";
+import { subscriptionDenied } from "../platform/subscription-gate";
 import { CashMovementType, PaymentMethod, Prisma } from "@prisma/client";
 
 import { AuditService } from "../audit/audit.service";
@@ -51,12 +60,20 @@ type SaleInput = {
     expectedUnitPriceMinor?: string;
     requestedUnitPriceMinor?: number;
     packQuantity?: number;
+    /** Sin conexión: nombre visto en la PC, por si el producto ya no se vende. */
+    productName?: string;
   }[];
   payments: {
     method: PaymentMethod;
     amountMinor: number;
     cashSessionId?: string;
   }[];
+};
+
+export type OfflineSaleInput = SaleInput & {
+  clientOperationId: string;
+  occurredAt: string;
+  deviceId: string;
 };
 
 @Injectable()
@@ -412,11 +429,139 @@ export class SalesService {
     };
   }
 
+  /**
+   * Venta hecha sin conexión que la PC manda al volver (SISTEMA-63). Se acepta
+   * según el estado de la farmacia cuando ocurrió, queda con su fecha real y
+   * lo que haya cambiado mientras tanto se registra como aviso "a revisar".
+   */
+  async completeOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    input: OfflineSaleInput,
+  ) {
+    await this.assert(actorId, organizationId, "SALE_MANAGE");
+    const occurredAt = offlineOccurredAt(input.occurredAt, new Date());
+    const subscription = await this.prisma.organizationSubscription.findUnique({
+      where: { organizationId },
+    });
+    if (subscription) {
+      const { access, stage } = subscriptionAccessAt(subscription, occurredAt);
+      if (access !== "FULL")
+        throw subscriptionDenied(
+          access === "READ_ONLY" ? "READ_ONLY" : "BLOCKED",
+          stage,
+        );
+    }
+    const sale = await this.complete(actorId, organizationId, branchId, input, {
+      occurredAt,
+      deviceId: input.deviceId,
+      requestHash: offlineRequestHash(input),
+      issues: [],
+    });
+    const issues = await this.prisma.offlineSyncIssue.findMany({
+      where: { organizationId, operationId: input.clientOperationId },
+      orderBy: { createdAt: "asc" },
+    });
+    return {
+      ...sale,
+      offlineIssues: issues.map((issue) => ({
+        id: issue.id,
+        kind: issue.kind,
+        status: issue.status,
+        detail: issue.detail,
+      })),
+    };
+  }
+
+  /** Avisos de lo sincronizado sin conexión; por defecto, sólo los abiertos. */
+  async offlineIssues(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    includeResolved = false,
+  ) {
+    await this.assert(actorId, organizationId, "SALE_READ");
+    const issues = await this.prisma.offlineSyncIssue.findMany({
+      where: {
+        organizationId,
+        branchId,
+        ...(includeResolved ? {} : { status: "OPEN" }),
+      },
+      include: {
+        operation: { select: { occurredAt: true, deviceId: true } },
+        sale: { select: { totalMinor: true, status: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    return issues.map((issue) => ({
+      id: issue.id,
+      kind: issue.kind,
+      status: issue.status,
+      detail: issue.detail,
+      saleId: issue.saleId,
+      saleTotalMinor: issue.sale?.totalMinor.toString() ?? null,
+      saleStatus: issue.sale?.status ?? null,
+      occurredAt: issue.operation.occurredAt,
+      deviceId: issue.operation.deviceId,
+      createdAt: issue.createdAt,
+      resolvedAt: issue.resolvedAt,
+      resolutionNote: issue.resolutionNote,
+    }));
+  }
+
+  /** Marca un aviso como revisado. No cambia la venta ni el stock. */
+  async resolveOfflineIssue(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    issueId: string,
+    note?: string,
+  ) {
+    await this.assert(actorId, organizationId, "SALE_MANAGE");
+    return this.prisma.$transaction(async (tx) => {
+      const issue = await tx.offlineSyncIssue.findFirst({
+        where: { id: issueId, organizationId, branchId },
+      });
+      if (!issue) throw new NotFoundException("Aviso no encontrado.");
+      if (issue.status !== "OPEN")
+        throw new ConflictException("Este aviso ya estaba revisado.");
+      const resolutionNote = note?.trim() || null;
+      const resolved = await tx.offlineSyncIssue.update({
+        where: { id: issue.id },
+        data: {
+          status: "RESOLVED",
+          resolvedAt: new Date(),
+          resolvedById: actorId,
+          resolutionNote,
+        },
+      });
+      await this.audit.recordInTransaction(tx, {
+        organizationId,
+        branchId,
+        actorId,
+        entityType: "OFFLINE_SYNC_ISSUE",
+        entityId: issue.id,
+        action: "RESOLVED",
+        before: { status: issue.status },
+        after: { status: "RESOLVED", note: resolutionNote },
+      });
+      return {
+        id: resolved.id,
+        status: resolved.status,
+        resolvedAt: resolved.resolvedAt,
+        resolutionNote: resolved.resolutionNote,
+      };
+    });
+  }
+
   async complete(
     actorId: string,
     organizationId: string,
     branchId: string,
     input: SaleInput,
+    offline?: OfflineSaleContext,
   ) {
     await this.assert(actorId, organizationId, "SALE_MANAGE");
     const isProduction = input.fiscalEnvironment === "PRODUCTION";
@@ -427,7 +572,9 @@ export class SalesService {
           ? !this.production ||
             !input.confirmProduction ||
             input.confirmHomologation ||
-            !productionIssuanceAvailable()
+            // Sin conexión la factura queda en la cola fiscal: sale cuando
+            // la emisión esté habilitada.
+            (!offline && !productionIssuanceAvailable())
           : !this.fiscal ||
             !input.confirmHomologation ||
             input.confirmProduction))
@@ -448,8 +595,15 @@ export class SalesService {
     await this.ensureBranch(organizationId, branchId);
     const customer = input.customerId
       ? await this.prisma.customer.findFirst({
-          where: { id: input.customerId, organizationId, active: true },
+          where: {
+            id: input.customerId,
+            organizationId,
+            // Sin conexión la venta ya se hizo: un cliente dado de baja
+            // mientras tanto no la anula, queda como aviso.
+            ...(offline ? {} : { active: true }),
+          },
           select: {
+            active: true,
             priceListId: true,
             creditEnabled: true,
             creditLimitMinor: true,
@@ -458,6 +612,11 @@ export class SalesService {
       : undefined;
     if (input.customerId && !customer)
       throw new NotFoundException("El cliente no está disponible.");
+    if (offline && customer && !customer.active)
+      offline.issues.push({
+        kind: "CLIENTE_INACTIVO",
+        detail: { customerId: input.customerId ?? null },
+      });
     const generalPriceList = await this.prisma.priceList.findFirst({
       where: { organizationId, name: "Precio general", active: true },
       select: { id: true },
@@ -469,6 +628,24 @@ export class SalesService {
     try {
       const result = await this.prisma.$transaction(
         async (tx) => {
+          // Sin conexión: el mismo envío repetido devuelve la venta original;
+          // el mismo identificador con otro contenido es un error de la PC.
+          if (offline) {
+            const operation = await tx.offlineOperation.findFirst({
+              where: { id: input.clientOperationId, organizationId },
+            });
+            if (operation) {
+              if (operation.requestHash !== offline.requestHash)
+                throw new ConflictException(
+                  "Esta venta sin conexión ya se registró con otros datos. Revisala en el historial de ventas.",
+                );
+              const original = await tx.sale.findFirst({
+                where: { id: operation.entityId ?? undefined, organizationId },
+                include: { items: true, payments: true, fiscalTrial: true },
+              });
+              if (original) return this.serialize(original);
+            }
+          }
           if (input.clientOperationId) {
             const existing = await tx.sale.findFirst({
               where: {
@@ -504,18 +681,33 @@ export class SalesService {
           const selectedPriceList = await tx.priceList.findFirst({
             where: { id: priceListId, organizationId, active: true },
           });
+          let documentType = input.documentType ?? "INTERNAL";
           if (
-            input.documentType === "INVOICE" &&
+            documentType === "INVOICE" &&
             !isProduction &&
             (await tx.fiscalProductionConfiguration.findFirst({
               where: { organizationId, branchId, enabled: true },
             }))
-          )
-            throw new BadRequestException(
-              "Esta sucursal usa producción. Actualizá Ventas; no se registra una nueva factura de prueba.",
-            );
-          if (input.priceListId && !selectedPriceList)
-            throw new NotFoundException("Lista no disponible.");
+          ) {
+            const reason =
+              "Esta sucursal usa producción. Actualizá Ventas; no se registra una nueva factura de prueba.";
+            if (!offline) throw new BadRequestException(reason);
+            // Sin conexión se pidió factura de prueba y la sucursal pasó a
+            // producción: queda como ticket para facturarla a mano.
+            documentType = "INTERNAL";
+            offline.issues.push({
+              kind: "FACTURA_NO_PREPARADA",
+              detail: { motivo: reason },
+            });
+          }
+          if (input.priceListId && !selectedPriceList) {
+            if (!offline) throw new NotFoundException("Lista no disponible.");
+            // Los precios cobrados se respetan igual; sólo se avisa.
+            offline.issues.push({
+              kind: "LISTA_INACTIVA",
+              detail: { priceListId: input.priceListId },
+            });
+          }
           const fallbackPriceList = selectedPriceList?.fallbackPriceListId
             ? await tx.priceList.findFirst({
                 where: {
@@ -567,10 +759,41 @@ export class SalesService {
                 },
               },
             });
-            if (!product)
-              throw new BadRequestException(
-                "El producto ya no está disponible para vender en esta sucursal. Actualizá el catálogo.",
+            if (!product) {
+              if (!offline)
+                throw new BadRequestException(
+                  "El producto ya no está disponible para vender en esta sucursal. Actualizá el catálogo.",
+                );
+              // Se archivó o desactivó mientras no había conexión: se registra
+              // como concepto con el nombre y el precio cobrados, sin stock.
+              const charged = BigInt(
+                line.requestedUnitPriceMinor ??
+                  line.expectedUnitPriceMinor ??
+                  0,
               );
+              if (charged < 1n)
+                throw new BadRequestException(
+                  "Un producto que ya no se vende necesita su precio cobrado para registrar la venta sin conexión.",
+                );
+              const description = offlineConceptName(line.productName);
+              items.push({
+                productId: null,
+                lotId: null,
+                description,
+                quantity: line.quantity,
+                unitPriceMinor: charged,
+                discountMinor: BigInt(line.discountMinor ?? 0),
+              });
+              offline.issues.push({
+                kind: "PRODUCTO_NO_DISPONIBLE",
+                detail: {
+                  productId: line.productId ?? null,
+                  nombre: description,
+                  cantidad: line.quantity,
+                },
+              });
+              continue;
+            }
             const price =
               product?.prices[0] ??
               (product && fallbackPriceList
@@ -593,26 +816,51 @@ export class SalesService {
                     },
                   })
                 : null);
-            if (!product || !price)
-              throw new NotFoundException(
-                "Product or its price is unavailable.",
-              );
-            if (
-              line.expectedUnitPriceMinor !== undefined &&
-              line.expectedUnitPriceMinor !== price.amountMinor.toString()
-            )
-              throw new BadRequestException(
-                "El precio cambió. Actualizá los precios y revisá el cobro antes de confirmar.",
-              );
+            let basePriceMinor: bigint;
+            if (offline) {
+              // Sin conexión se respeta el precio cobrado; si cambió (por
+              // ejemplo, la actualización de las 9 o las 17), queda el aviso.
+              if (
+                line.expectedUnitPriceMinor === undefined ||
+                !/^\d+$/.test(line.expectedUnitPriceMinor)
+              )
+                throw new BadRequestException(
+                  "Falta el precio cobrado de un producto de la venta sin conexión.",
+                );
+              basePriceMinor = BigInt(line.expectedUnitPriceMinor);
+              if (!price || price.amountMinor !== basePriceMinor)
+                offline.issues.push({
+                  kind: "PRECIO_DISTINTO",
+                  detail: {
+                    productId: product.id,
+                    nombre: product.name,
+                    cobradoMinor: basePriceMinor.toString(),
+                    actualMinor: price?.amountMinor.toString() ?? null,
+                  },
+                });
+            } else {
+              if (!price)
+                throw new NotFoundException(
+                  "Product or its price is unavailable.",
+                );
+              if (
+                line.expectedUnitPriceMinor !== undefined &&
+                line.expectedUnitPriceMinor !== price.amountMinor.toString()
+              )
+                throw new BadRequestException(
+                  "El precio cambió. Actualizá los precios y revisá el cobro antes de confirmar.",
+                );
+              basePriceMinor = price.amountMinor;
+            }
             const unitPriceMinor = saleUnitPrice(
-              price.amountMinor,
+              basePriceMinor,
               line.requestedUnitPriceMinor,
-              line.expectedUnitPriceMinor,
+              offline ? basePriceMinor.toString() : line.expectedUnitPriceMinor,
             );
-            if (unitPriceMinor !== price.amountMinor)
+            if (unitPriceMinor !== basePriceMinor)
               priceOverrides.push({
                 productId: product.id,
-                originalUnitPriceMinor: price.amountMinor.toString(),
+                originalUnitPriceMinor: basePriceMinor.toString(),
                 unitPriceMinor: unitPriceMinor.toString(),
                 quantity: line.quantity,
                 reason: "Descuento especial por producto",
@@ -643,15 +891,19 @@ export class SalesService {
                 sum + stockAvailability(lot, checkedAt).expiredQuantity,
               0,
             );
-            if (
-              lots.reduce((total, lot) => total + lot.quantity, 0) < remaining
-            )
+            const available = lots.reduce(
+              (total, lot) => total + lot.quantity,
+              0,
+            );
+            if (available < remaining && !offline)
               throw new BadRequestException(
-                `${product.name}: stock vendible insuficiente. Disponibles: ${lots.reduce((sum, lot) => sum + lot.quantity, 0)}; solicitadas: ${remaining}.${expiredQuantity ? ` Hay ${expiredQuantity} unidades vencidas que no se pueden vender.` : " Actualizá el stock e intentá nuevamente."}`,
+                `${product.name}: stock vendible insuficiente. Disponibles: ${available}; solicitadas: ${remaining}.${expiredQuantity ? ` Hay ${expiredQuantity} unidades vencidas que no se pueden vender.` : " Actualizá el stock e intentá nuevamente."}`,
               );
+            // Sin conexión se descuenta lo que hay; el resto queda como
+            // faltante sin lote (nunca stock negativo) y con aviso.
             for (const { lot, quantity } of allocateSaleLots(
               lots,
-              remaining,
+              Math.min(available, remaining),
               line.packQuantity,
             )) {
               const lotDiscountMinor =
@@ -669,6 +921,24 @@ export class SalesService {
               });
               remaining -= quantity;
               if (!remaining) break;
+            }
+            if (remaining > 0 && offline) {
+              items.push({
+                productId: line.productId!,
+                lotId: null,
+                quantity: remaining,
+                unitPriceMinor,
+                discountMinor: lineDiscountMinor - assignedDiscountMinor,
+              });
+              offline.issues.push({
+                kind: "STOCK_FALTANTE",
+                detail: {
+                  productId: product.id,
+                  nombre: product.name,
+                  vendidas: line.quantity,
+                  faltantes: remaining,
+                },
+              });
             }
           }
           const total = items.reduce(
@@ -689,7 +959,8 @@ export class SalesService {
           const accountAmount = input.payments
             .filter((payment) => payment.method === PaymentMethod.ACCOUNT)
             .reduce((sum, payment) => sum + BigInt(payment.amountMinor), 0n);
-          const completedAt = new Date();
+          // Sin conexión, la venta queda con la fecha en que se hizo.
+          const completedAt = offline?.occurredAt ?? new Date();
           let dueDate: Date | null = null;
           if (accountAmount > 0n) {
             if (paid !== total)
@@ -697,12 +968,30 @@ export class SalesService {
                 "Una venta a cuenta corriente no puede generar vuelto.",
               );
             const currentCustomer = await tx.customer.findFirst({
-              where: { id: input.customerId, organizationId, active: true },
+              where: {
+                id: input.customerId,
+                organizationId,
+                ...(offline ? {} : { active: true }),
+              },
             });
-            if (!input.customerId || !currentCustomer?.creditEnabled)
+            if (!input.customerId || !currentCustomer)
               throw new BadRequestException(
                 "Seleccioná un cliente con cuenta corriente habilitada.",
               );
+            if (!currentCustomer.creditEnabled) {
+              if (!offline)
+                throw new BadRequestException(
+                  "Seleccioná un cliente con cuenta corriente habilitada.",
+                );
+              offline.issues.push({
+                kind: "LIMITE_CREDITO",
+                detail: {
+                  customerId: input.customerId,
+                  motivo: "La cuenta corriente del cliente está deshabilitada.",
+                  importeMinor: accountAmount.toString(),
+                },
+              });
+            }
             dueDate = accountDueDate(
               completedAt,
               currentCustomer.accountTermDays,
@@ -722,10 +1011,21 @@ export class SalesService {
             if (
               currentCustomer.creditLimitMinor !== null &&
               balance + accountAmount > currentCustomer.creditLimitMinor
-            )
-              throw new BadRequestException(
-                "El importe a cuenta corriente supera el crédito disponible del cliente. Reducí ese importe o utilizá otro medio de pago.",
-              );
+            ) {
+              if (!offline)
+                throw new BadRequestException(
+                  "El importe a cuenta corriente supera el crédito disponible del cliente. Reducí ese importe o utilizá otro medio de pago.",
+                );
+              offline.issues.push({
+                kind: "LIMITE_CREDITO",
+                detail: {
+                  customerId: input.customerId,
+                  saldoMinor: balance.toString(),
+                  limiteMinor: currentCustomer.creditLimitMinor.toString(),
+                  importeMinor: accountAmount.toString(),
+                },
+              });
+            }
           }
           const changeMinor = paid - total;
           const cashPaid = input.payments
@@ -746,66 +1046,124 @@ export class SalesService {
             throw new BadRequestException(
               "Los cobros de una venta deben usar la misma sesión de caja.",
             );
-          const collectionSessionId = collectionSessions[0];
-          await assertCollectionSession(
-            tx,
-            branchId,
-            collectionSessionId,
-            input.payments.every(
-              (payment) => payment.method === PaymentMethod.ACCOUNT,
-            ),
-          );
-          for (const payment of input.payments) {
-            if (!payment.cashSessionId) continue;
-            await lockCashSession(tx, payment.cashSessionId);
+          let collectionSessionId = collectionSessions[0];
+          // Sin conexión la venta ya se cobró: la regla de exigir caja abierta
+          // no la frena; sin caja el cobro queda pendiente de asignar.
+          if (!offline)
+            await assertCollectionSession(
+              tx,
+              branchId,
+              collectionSessionId,
+              input.payments.every(
+                (payment) => payment.method === PaymentMethod.ACCOUNT,
+              ),
+            );
+          if (collectionSessionId) {
+            await lockCashSession(tx, collectionSessionId);
             const session = await tx.cashSession.findFirst({
-              where: { id: payment.cashSessionId, closedAt: null },
+              where: {
+                id: collectionSessionId,
+                closedAt: null,
+                // La caja tenía que estar abierta cuando se hizo la venta.
+                ...(offline ? { openedAt: { lte: completedAt } } : {}),
+              },
             });
             const register = session
               ? await tx.cashRegister.findFirst({
                   where: { id: session.cashRegisterId, branchId },
                 })
               : null;
-            if (!register)
-              throw new BadRequestException(
-                "La sesión de caja no está abierta en esta sucursal.",
-              );
+            if (!register) {
+              if (!offline)
+                throw new BadRequestException(
+                  "La sesión de caja no está abierta en esta sucursal.",
+                );
+              // Se cerró mientras no había conexión: el cobro va a pendientes
+              // de asignar, el circuito de siempre para cobros sin caja.
+              offline.issues.push({
+                kind: "CAJA_CERRADA",
+                detail: { cashSessionId: collectionSessionId },
+              });
+              collectionSessionId = undefined;
+            }
           }
+          // Sin conexión, los registros llevan la fecha real de la venta.
+          const occurred = offline ? { createdAt: completedAt } : {};
           const sale = await tx.sale.create({
             data: {
+              // Sin conexión el id es el que generó la PC: el número del ticket
+              // provisorio coincide con el de la venta registrada.
+              ...(offline ? { id: input.clientOperationId } : {}),
               organizationId,
               branchId,
               customerId: input.customerId,
               clientOperationId: input.clientOperationId,
               status: "COMPLETED",
-              documentType: input.documentType ?? "INTERNAL",
+              documentType,
               totalMinor: total,
               completedAt,
               accountDueDate: dueDate,
             },
           });
-          if (input.documentType === "INVOICE")
-            await (isProduction ? this.production! : this.fiscal!).enqueue(
-              tx,
-              actorId,
-              organizationId,
-              branchId,
-              sale.id,
-              input.customerId,
-              total,
-              items,
-              input.fiscalOptions,
-            );
+          if (documentType === "INVOICE") {
+            try {
+              if (isProduction)
+                await this.production!.enqueue(
+                  tx,
+                  actorId,
+                  organizationId,
+                  branchId,
+                  sale.id,
+                  input.customerId,
+                  total,
+                  items,
+                  input.fiscalOptions,
+                  Boolean(offline),
+                );
+              else
+                await this.fiscal!.enqueue(
+                  tx,
+                  actorId,
+                  organizationId,
+                  branchId,
+                  sale.id,
+                  input.customerId,
+                  total,
+                  items,
+                  input.fiscalOptions,
+                );
+            } catch (cause) {
+              // Sólo errores de validación (antes de escribir): un error de
+              // la base deja la transacción inutilizable y se propaga.
+              if (
+                !offline ||
+                (cause instanceof Prisma.PrismaClientKnownRequestError &&
+                  cause.code !== "P2025")
+              )
+                throw cause;
+              documentType = "INTERNAL";
+              await tx.sale.update({
+                where: { id: sale.id },
+                data: { documentType },
+              });
+              offline.issues.push({
+                kind: "FACTURA_NO_PREPARADA",
+                detail: {
+                  motivo:
+                    cause instanceof Error
+                      ? cause.message.slice(0, 300)
+                      : "No se pudo preparar la factura.",
+                },
+              });
+            }
+          }
           for (const item of items) {
             await tx.saleItem.create({ data: { saleId: sale.id, ...item } });
-            if (
-              item.description &&
-              item.productId === null &&
-              item.lotId === null
-            )
-              continue;
+            // Conceptos manuales y faltantes sin conexión: no hay lote que
+            // descontar.
+            if (item.lotId === null) continue;
             await tx.productLot.update({
-              where: { id: item.lotId! },
+              where: { id: item.lotId },
               data: { quantity: { decrement: item.quantity } },
             });
             await tx.inventoryMovement.create({
@@ -813,12 +1171,13 @@ export class SalesService {
                 organizationId,
                 branchId,
                 productId: item.productId!,
-                lotId: item.lotId!,
+                lotId: item.lotId,
                 type: "SALE",
                 quantity: -item.quantity,
                 actorId,
                 referenceType: "SALE",
                 referenceId: sale.id,
+                ...(offline ? { occurredAt: completedAt } : {}),
               },
             });
           }
@@ -831,6 +1190,7 @@ export class SalesService {
                 payment.method === PaymentMethod.ACCOUNT
                   ? undefined
                   : collectionSessionId,
+              ...occurred,
             })),
           });
           if (accountAmount > 0n && input.customerId) {
@@ -844,6 +1204,7 @@ export class SalesService {
                 amountMinor: accountAmount,
                 note: `Sale ${sale.id}`,
                 actorId,
+                ...occurred,
               },
             });
           }
@@ -856,6 +1217,7 @@ export class SalesService {
                 actorId,
                 sourceType: "SALE",
                 sourceId: sale.id,
+                ...(offline ? { collectedAt: completedAt } : {}),
               },
               input.payments,
               changeMinor,
@@ -873,8 +1235,35 @@ export class SalesService {
                 amountMinor: changeMinor,
                 reason: `Vuelto de venta ${sale.id}`,
                 actorId,
+                ...occurred,
               },
             });
+          }
+          if (offline) {
+            await tx.offlineOperation.create({
+              data: {
+                id: input.clientOperationId!,
+                organizationId,
+                branchId,
+                kind: "SALE",
+                actorId,
+                deviceId: offline.deviceId,
+                occurredAt: completedAt,
+                requestHash: offline.requestHash,
+                entityId: sale.id,
+              },
+            });
+            if (offline.issues.length)
+              await tx.offlineSyncIssue.createMany({
+                data: offline.issues.map((issue) => ({
+                  organizationId,
+                  branchId,
+                  operationId: input.clientOperationId!,
+                  saleId: sale.id,
+                  kind: issue.kind,
+                  detail: issue.detail,
+                })),
+              });
           }
           await this.audit.recordInTransaction(tx, {
             organizationId,
@@ -906,6 +1295,15 @@ export class SalesService {
                     : (collectionSessionId ?? null),
               })),
               changeMinor: changeMinor.toString(),
+              ...(offline
+                ? {
+                    offline: {
+                      occurredAt: completedAt.toISOString(),
+                      deviceId: offline.deviceId,
+                      issues: offline.issues.map((issue) => issue.kind),
+                    },
+                  }
+                : {}),
             },
           });
           return this.serialize(
@@ -917,7 +1315,9 @@ export class SalesService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
-      if (result.documentType === "INVOICE" && this.fiscal) {
+      // Sin conexión no se envía acá: la cola fiscal las emite en orden, sin
+      // demorar la sincronización.
+      if (result.documentType === "INVOICE" && this.fiscal && !offline) {
         try {
           if (isProduction && this.production)
             return {
@@ -1052,6 +1452,9 @@ export class SalesService {
         }
         for (const item of sale.items) {
           if (!item.productId && item.description) continue;
+          // Faltante de una venta sin conexión: nunca se descontó de un lote,
+          // así que anular no repone nada.
+          if (item.productId && !item.lotId) continue;
           if (!item.lotId || !item.productId)
             throw new BadRequestException(
               "The original lot is unavailable for cancellation.",

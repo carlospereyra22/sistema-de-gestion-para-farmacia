@@ -83,6 +83,10 @@ const EXCEPTIONS = [
   `READ_ONLY POST ${sales}/:saleId/invoice/process`,
   // Volver a emitir la factura de una venta ya hecha, igual que invoice/process (07/11/2026).
   `READ_ONLY POST ${sales}/:saleId/invoice/reencolar`,
+  // Ventas hechas sin conexión: se deciden con el estado que tenía la farmacia
+  // cuando ocurrieron; marcar un aviso como revisado termina algo pendiente (SISTEMA-63).
+  `OFFLINE_SYNC POST ${sales}/offline`,
+  `READ_ONLY POST ${sales}/offline-issues/:issueId/resolve`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/printing/jobs/:id/retry`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/transfers/:id/receive`,
   `READ_ONLY POST organizations/:organizationId/catalog/default-categories`,

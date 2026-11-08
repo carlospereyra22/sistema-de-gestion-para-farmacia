@@ -30,6 +30,8 @@ export async function recordPendingCollection(
     actorId: string;
     sourceType: "SALE" | "RECEIPT";
     sourceId: string;
+    /** Cobro hecho sin conexión: cuándo ocurrió de verdad. */
+    collectedAt?: Date;
   },
   payments: readonly { method: string; amountMinor: number | bigint }[],
   changeMinor = 0n,
