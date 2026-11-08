@@ -126,6 +126,8 @@ export async function changeOwnPassword(
 }
 
 export type CurrentUserProfile = {
+  /** Id del usuario: firma sus ventas sin conexión (SISTEMA-66). */
+  id?: string;
   email: string;
   mustChangePassword?: boolean;
   isPlatformAdmin?: boolean;
@@ -2578,6 +2580,52 @@ export async function sendOfflineSale(
     throw new EnvioRechazado(error.message, response.status);
   }
   return response.json();
+}
+
+/**
+ * Venta sin conexión de otro usuario de esta PC (SISTEMA-66): va el texto
+ * exacto que firmó, y el servidor la registra a su nombre.
+ */
+export async function sendSignedOfflineSale(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: {
+    sellerId: string;
+    deviceId: string;
+    payload: string;
+    signature: string;
+  },
+): Promise<Sale & { offlineIssues: OfflineIssue[] }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/offline/firmada`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la venta sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return response.json();
+}
+
+/** Registra la clave con la que esta PC firma las ventas del usuario. */
+export async function registerOfflineKey(
+  token: string,
+  body: { deviceId: string; publicKey: string },
+) {
+  const response = await fetch(`${apiBaseUrl}/auth/offline-key`, {
+    method: "POST",
+    headers: authJson(token),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok)
+    throw await responseError(
+      response,
+      "No se pudo registrar la clave de la PC.",
+    );
 }
 
 export type OfflineIssue = {

@@ -99,7 +99,7 @@ describe("bandeja de ventas sin conexión", () => {
       }),
     );
     await guardarVentaPendiente(ventaDePrueba({ id: "pendiente" }));
-    await olvidarEnviadasViejas("ana@farmacia.ar", ahora);
+    await olvidarEnviadasViejas(ahora);
     expect(
       (await ventasDe("ana@farmacia.ar")).map((venta) => venta.id).sort(),
     ).toEqual(["pendiente", "reciente"]);

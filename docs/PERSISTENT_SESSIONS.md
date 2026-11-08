@@ -11,3 +11,7 @@ Solo un 401 explícito del endpoint de renovación limpia la sesión del fronten
 Modo sin internet (07/11/2026, SISTEMA-62): si la renovación falla por falta de conexión, la web puede abrir con el perfil guardado del último usuario de la PC (hasta 24 h desde la última sincronización) y un token local que nunca llega al servidor; sólo muestra datos guardados. Un 401 de renovación sigue cerrando la sesión y además borra la copia local. Ver `OFFLINE.md`.
 
 Aplicado en pruebas locales; producción requiere migración y despliegue. No se cambiaron credenciales ni se recuperaron sesiones revocadas.
+
+## Sin conexión (08/11/2026, SISTEMA-66)
+
+Sin internet se puede entrar con la contraseña de quien usó la PC con conexión en las últimas 24 horas (huella PBKDF2 guardada en la PC, nunca la contraseña). Cerrar sesión conserva esa copia y el servidor revoca la sesión al volver la conexión. Al reconectar se inicia la sesión real de quien está trabajando: nunca se adopta la cookie de otro usuario. Ver OFFLINE.md.

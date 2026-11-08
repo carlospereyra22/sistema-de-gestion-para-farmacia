@@ -15,20 +15,20 @@ export const ENCABEZADO_COPIA_LOCAL = "x-gestion-copia-local";
 
 const TAMANO_MAXIMO = 8 * 1024 * 1024;
 const CLAVE_SESION = "sesion";
+/**
+ * Datos para volver a entrar sin conexión, uno por usuario de la PC
+ * (SISTEMA-66): perfil, última sincronización y huella de la contraseña.
+ */
+export const PREFIJO_ACCESO = "acceso|";
 const CADA_CUANTO_ANOTAR_MS = 60_000;
 
-/** Consultas que se guardan (ruta relativa a /api/v1, sin parámetros). */
-const RUTAS_GUARDADAS = [
-  /^\/organizations\/[^/]+\/branches$/,
-  /^\/organizations\/[^/]+\/catalog\/(products|price-lists|effective-prices|medicine-references\/packs)$/,
-  /^\/organizations\/[^/]+\/customers$/,
-  /^\/organizations\/[^/]+\/branches\/[^/]+\/(inventory\/stock|cash|customer-accounts|sales\/fiscal-options)$/,
-  // Pantalla de Caja: reglas, gestión, cierres, cobros pendientes y últimos
-  // movimientos, para consultarla sin conexión (SISTEMA-64).
-  /^\/organizations\/[^/]+\/branches\/[^/]+\/cash\/(management|settings|closures|pending-collections|registers\/[^/]+\/recent-activity)$/,
-  /^\/organizations\/[^/]+\/subscription\/status$/,
-  /^\/organizations\/[^/]+\/ticket-header$/,
-];
+/**
+ * Consultas que se guardan (ruta relativa a /api/v1). Desde SISTEMA-66 todas
+ * las de datos de la farmacia, para que cualquier pantalla ya abierta con
+ * conexión se pueda consultar sin ella. Nunca las de sesión ni de plataforma
+ * (no están bajo /organizations).
+ */
+const RUTAS_GUARDADAS = [/^\/organizations\/[^/]+(\/.*)?$/];
 
 let alcance: string | undefined;
 let ultimaSincronizacion: number | undefined;
@@ -116,14 +116,70 @@ export async function guardarSesion(perfil: CurrentUserProfile) {
     ultimaSincronizacion: Date.now(),
   };
   const almacen = almacenLocal();
-  // Otra persona entró en esta PC: su copia no queda para el usuario anterior.
-  const anterior = await leerSesion();
-  if (anterior && anterior.alcance !== sesion.alcance)
-    for (const clave of await almacen.claves(`${anterior.alcance}|`))
-      await almacen.borrar(clave);
+  // Varias personas usan la PC (cambio de turno, SISTEMA-66): cada una
+  // conserva su copia mientras pueda volver a entrar sin conexión.
+  await olvidarUsuariosVencidos(sesion.ultimaSincronizacion, sesion.alcance);
+  await anotarAcceso(sesion.alcance, sesion.ultimaSincronizacion, perfil);
   ultimaSincronizacion = sesion.ultimaSincronizacion;
   ultimaAnotada = sesion.ultimaSincronizacion;
   await almacen.guardar(CLAVE_SESION, sesion);
+}
+
+/** Abre sin conexión a quien entró con su contraseña en la PC. */
+export async function activarSesionGuardada(sesion: SesionGuardada) {
+  ultimaSincronizacion = sesion.ultimaSincronizacion;
+  ultimaAnotada = sesion.ultimaSincronizacion;
+  await almacenLocal().guardar(CLAVE_SESION, sesion);
+}
+
+type AccesoParcial = {
+  perfil?: CurrentUserProfile;
+  ultimaSincronizacion?: number;
+};
+
+/** Actualiza el perfil y la sincronización del acceso del usuario, si tiene. */
+async function anotarAcceso(
+  dueno: string,
+  ahora: number,
+  perfil?: CurrentUserProfile,
+) {
+  const almacen = almacenLocal();
+  const acceso = await almacen.leer<AccesoParcial>(`${PREFIJO_ACCESO}${dueno}`);
+  if (!acceso) return;
+  await almacen.guardar(`${PREFIJO_ACCESO}${dueno}`, {
+    ...acceso,
+    ultimaSincronizacion: ahora,
+    ...(perfil ? { perfil } : {}),
+  });
+}
+
+/**
+ * Borra la copia y el acceso de quienes ya no pueden entrar sin conexión
+ * (más de 24 h sin sincronizar). Las ventas sin enviar nunca se borran acá.
+ */
+export async function olvidarUsuariosVencidos(ahora: number, actual?: string) {
+  const almacen = almacenLocal();
+  const todas = await almacen.claves("");
+  // Dueños: los que tienen acceso guardado y los que tienen copia (email|...).
+  const duenos = new Set<string>();
+  for (const clave of todas)
+    if (clave.startsWith(PREFIJO_ACCESO))
+      duenos.add(clave.slice(PREFIJO_ACCESO.length));
+    else if (/^[^|]+@[^|]+\|/.test(clave)) duenos.add(clave.split("|")[0]!);
+  for (const dueno of duenos) {
+    if (dueno === actual) continue;
+    const acceso = await almacen.leer<AccesoParcial>(
+      `${PREFIJO_ACCESO}${dueno}`,
+    );
+    if (
+      acceso?.ultimaSincronizacion &&
+      ahora - acceso.ultimaSincronizacion <= VIGENCIA_SIN_CONEXION_MS
+    )
+      continue;
+    await almacen.borrar(`${PREFIJO_ACCESO}${dueno}`);
+    for (const propia of todas)
+      if (propia.startsWith(`${dueno}|`)) await almacen.borrar(propia);
+  }
 }
 
 export function leerSesion() {
@@ -136,15 +192,17 @@ export function marcarSincronizado(ahora = Date.now()) {
   ultimaSincronizacion = ahora;
   if (ahora - ultimaAnotada < CADA_CUANTO_ANOTAR_MS) return;
   ultimaAnotada = ahora;
+  const dueno = alcance;
   void leerSesion()
     .then((sesion) =>
-      sesion && sesion.alcance === alcance
+      sesion && sesion.alcance === dueno
         ? almacenLocal().guardar(CLAVE_SESION, {
             ...sesion,
             ultimaSincronizacion: ahora,
           })
         : undefined,
     )
+    .then(() => anotarAcceso(dueno, ahora))
     .catch(() => {});
 }
 
@@ -158,15 +216,30 @@ export function usarSincronizacionGuardada(valor: number) {
   ultimaSincronizacion = valor;
 }
 
-/** Cerrar sesión: se borra la copia y ya no se puede abrir sin conexión. */
+/**
+ * Cerrar sesión (SISTEMA-66): la app deja de abrirse sola, pero la copia y el
+ * acceso quedan para volver a entrar con la contraseña, aun sin conexión.
+ */
+export async function cerrarSesionLocal() {
+  await almacenLocal().borrar(CLAVE_SESION);
+  usarAlcance(undefined);
+  ultimaSincronizacion = undefined;
+}
+
+/**
+ * La sesión venció o el usuario no trabaja sin conexión: se borra su copia y
+ * su acceso; ya no puede abrir sin conexión.
+ */
 export async function borrarCopiaLocal() {
   const almacen = almacenLocal();
   const sesion = await leerSesion();
   const dueno = sesion?.alcance ?? alcance;
   await almacen.borrar(CLAVE_SESION);
-  if (dueno)
+  if (dueno) {
+    await almacen.borrar(`${PREFIJO_ACCESO}${dueno}`);
     for (const clave of await almacen.claves(`${dueno}|`))
       await almacen.borrar(clave);
+  }
   usarAlcance(undefined);
   ultimaSincronizacion = undefined;
 }

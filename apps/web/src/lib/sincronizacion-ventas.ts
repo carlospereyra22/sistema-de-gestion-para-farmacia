@@ -1,6 +1,6 @@
 import {
   actualizarVentaPendiente,
-  ventasDe,
+  ventasDeLaPc,
   type VentaPendiente,
 } from "./bandeja-ventas";
 
@@ -31,6 +31,23 @@ export function rechazoDefinitivo(status: number) {
   return status >= 400 && status < 500 && ![401, 408, 429].includes(status);
 }
 
+/**
+ * Venta de otro usuario de la PC que esta sesión no puede mandar: no tiene
+ * acceso a esa sucursal (403/404) o la PC todavía no registró la clave de su
+ * dueño (409). Queda pendiente para otro; no es un rechazo.
+ */
+export function quedaParaSuDueno(status: number) {
+  return [403, 404, 409].includes(status);
+}
+
+/** ¿Esta sesión puede mandar la venta? Las de otros, sólo firmadas. */
+export function sePuedeEnviar(venta: VentaPendiente, alcance: string) {
+  return (
+    venta.alcance === alcance ||
+    Boolean(venta.vendedorId && venta.payload && venta.firma)
+  );
+}
+
 export type ResultadoSincronizacion = {
   enviadas: number;
   rechazadas: number;
@@ -41,6 +58,10 @@ export type ResultadoSincronizacion = {
 export async function sincronizarVentas(opciones: {
   alcance: string;
   enviar: (venta: VentaPendiente) => Promise<{ offlineIssues?: unknown[] }>;
+  /** Venta firmada de otro usuario de la PC (SISTEMA-66). */
+  enviarDeOtro?: (
+    venta: VentaPendiente,
+  ) => Promise<{ offlineIssues?: unknown[] }>;
   ahora?: () => Date;
 }): Promise<ResultadoSincronizacion> {
   const ahora = opciones.ahora ?? (() => new Date());
@@ -49,12 +70,19 @@ export async function sincronizarVentas(opciones: {
     rechazadas: 0,
     interrumpida: false,
   };
-  const pendientes = (await ventasDe(opciones.alcance)).filter(
-    (venta) => venta.estado === "PENDIENTE",
+  const pendientes = (await ventasDeLaPc()).filter(
+    (venta) =>
+      venta.estado === "PENDIENTE" &&
+      (venta.alcance === opciones.alcance ||
+        (Boolean(opciones.enviarDeOtro) &&
+          sePuedeEnviar(venta, opciones.alcance))),
   );
   for (const venta of pendientes) {
+    const propia = venta.alcance === opciones.alcance;
     try {
-      const respuesta = await opciones.enviar(venta);
+      const respuesta = propia
+        ? await opciones.enviar(venta)
+        : await opciones.enviarDeOtro!(venta);
       await actualizarVentaPendiente({
         ...venta,
         estado: "ENVIADA",
@@ -67,6 +95,13 @@ export async function sincronizarVentas(opciones: {
     } catch (cause) {
       const mensaje =
         cause instanceof Error ? cause.message : "No se pudo enviar la venta.";
+      // De otro usuario y sin permiso o sin su clave: queda para su dueño.
+      if (
+        !propia &&
+        cause instanceof EnvioRechazado &&
+        quedaParaSuDueno(cause.status)
+      )
+        continue;
       if (cause instanceof EnvioRechazado && rechazoDefinitivo(cause.status)) {
         await actualizarVentaPendiente({
           ...venta,

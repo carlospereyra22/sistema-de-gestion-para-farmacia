@@ -12,7 +12,7 @@ import {
 import type { Response } from "express";
 
 import { AllowPendingPasswordChange } from "./allow-pending-password-change.decorator";
-import { ChangePasswordDto, LoginDto } from "./auth.dto";
+import { ChangePasswordDto, LoginDto, OfflineKeyDto } from "./auth.dto";
 import { AuthService } from "./auth.service";
 import { JwtAccessGuard } from "./jwt-access.guard";
 import type { AuthenticatedRequest } from "./auth.types";
@@ -75,6 +75,21 @@ export class AuthController {
     if (!profile) throw new UnauthorizedException("User is unavailable.");
     const { platformAdmin, ...user } = profile;
     return { ...user, isPlatformAdmin: platformAdmin?.active ?? false };
+  }
+
+  /** Clave de esta PC para firmar las ventas sin conexión (SISTEMA-66). */
+  @Post("offline-key")
+  @HttpCode(204)
+  @UseGuards(JwtAccessGuard)
+  async offlineKey(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: OfflineKeyDto,
+  ) {
+    await this.auth.registerOfflineKey(
+      request.auth!.sub,
+      body.deviceId,
+      body.publicKey,
+    );
   }
 
   @Post("change-password")

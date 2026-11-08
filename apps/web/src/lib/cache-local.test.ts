@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { almacenEnMemoria, usarAlmacen } from "./almacen-local";
+import { almacenEnMemoria, almacenLocal, usarAlmacen } from "./almacen-local";
 import {
+  PREFIJO_ACCESO,
   VIGENCIA_SIN_CONEXION_MS,
   borrarCopiaLocal,
+  cerrarSesionLocal,
   guardarRespuesta,
   guardarSesion,
   leerSesion,
@@ -46,15 +48,19 @@ describe("copia local", () => {
     });
   });
 
-  it("sólo guarda consultas de lo necesario para abrir y consultar", () => {
+  it("guarda las consultas de la farmacia, nunca las de sesión", () => {
     expect(seGuarda(stock, "GET")).toBe(true);
     expect(
       seGuarda(`${base}/organizations/o1/catalog/effective-prices?x=1`, "GET"),
     ).toBe(true);
     expect(seGuarda(stock, "POST")).toBe(false);
     expect(seGuarda(`${base}/organizations/o1/reports/overview`, "GET")).toBe(
-      false,
+      true,
     );
+    expect(seGuarda(`${base}/organizations/o1/catalog/categories`, "GET")).toBe(
+      true,
+    );
+    expect(seGuarda(`${base}/platform/organizations`, "GET")).toBe(false);
     expect(seGuarda(`${base}/auth/me`, "GET")).toBe(false);
   });
 
@@ -69,7 +75,9 @@ describe("copia local", () => {
     ])
       expect(seGuarda(`${caja}${ruta}`, "GET")).toBe(true);
     expect(seGuarda(`${caja}/sessions`, "POST")).toBe(false);
-    expect(seGuarda(`${caja}/closures/c1`, "GET")).toBe(false);
+    // El historial de ventas también se consulta sin conexión.
+    const ventas = `${base}/organizations/o1/branches/b1/sales`;
+    expect(seGuarda(ventas, "GET")).toBe(true);
   });
 
   it("devuelve lo guardado para el mismo usuario y nunca para otro", async () => {
@@ -123,13 +131,44 @@ describe("copia local", () => {
     expect(await respuestaGuardada(stock)).toBeUndefined();
   });
 
-  it("si entra otra persona en la PC, se borra la copia del anterior", async () => {
+  it("cambio de turno: la copia del anterior queda si puede volver a entrar", async () => {
     await guardarSesion(perfil("ana@farmacia.com"));
     usarAlcance("ana@farmacia.com");
     await guardarRespuesta(stock, json([1]));
+    await almacenLocal().guardar(`${PREFIJO_ACCESO}ana@farmacia.com`, {
+      ultimaSincronizacion: Date.now(),
+    });
     await guardarSesion(perfil("beto@farmacia.com"));
     expect((await leerSesion())?.alcance).toBe("beto@farmacia.com");
     usarAlcance("ana@farmacia.com");
+    expect(await respuestaGuardada(stock)).toBeDefined();
+  });
+
+  it("borra la copia de quien ya no puede entrar sin conexión, nunca sus ventas", async () => {
+    usarAlcance("ana@farmacia.com");
+    await guardarRespuesta(stock, json([1]));
+    await almacenLocal().guardar("bandeja|ana@farmacia.com|v1", { id: "v1" });
+    await almacenLocal().guardar(`${PREFIJO_ACCESO}ana@farmacia.com`, {
+      ultimaSincronizacion: Date.now() - VIGENCIA_SIN_CONEXION_MS - 1,
+    });
+    await guardarSesion(perfil("beto@farmacia.com"));
+    usarAlcance("ana@farmacia.com");
     expect(await respuestaGuardada(stock)).toBeUndefined();
+    expect(
+      await almacenLocal().leer(`${PREFIJO_ACCESO}ana@farmacia.com`),
+    ).toBeUndefined();
+    expect(await almacenLocal().leer("bandeja|ana@farmacia.com|v1")).toEqual({
+      id: "v1",
+    });
+  });
+
+  it("cerrar sesión deja la copia para volver a entrar con la contraseña", async () => {
+    await guardarSesion(perfil("ana@farmacia.com"));
+    usarAlcance("ana@farmacia.com");
+    await guardarRespuesta(stock, json([1]));
+    await cerrarSesionLocal();
+    expect(await leerSesion()).toBeUndefined();
+    usarAlcance("ana@farmacia.com");
+    expect(await respuestaGuardada(stock)).toBeDefined();
   });
 });

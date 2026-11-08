@@ -48,6 +48,7 @@ import { FiscalSalesService } from "../fiscal/fiscal-sales.service";
 import { ProductionSalesService } from "../fiscal/production-sales.service";
 import { ProductionConfigurationService } from "../fiscal/production-configuration.service";
 import { productionIssuanceAvailable } from "../fiscal/production-document";
+import { firmaValida } from "./firma-venta";
 import { obj, str, list } from "../fiscal/arca-soap";
 
 type SaleInput = {
@@ -658,6 +659,91 @@ export class SalesService {
           }
         : {}),
     };
+  }
+
+  /**
+   * Venta sin conexión de otro usuario de la misma PC (SISTEMA-66): la manda
+   * quien esté conectado y queda a nombre de quien la hizo, si la firma de su
+   * clave en esa PC coincide con el texto exacto de la venta.
+   */
+  async completeOfflineSigned(
+    senderId: string,
+    organizationId: string,
+    branchId: string,
+    firma: {
+      sellerId: string;
+      deviceId: string;
+      payload: string;
+      signature: string;
+    },
+    input: OfflineSaleInput,
+  ) {
+    await this.assert(senderId, organizationId, "SALE_MANAGE");
+    if (firma.sellerId === senderId)
+      return this.completeOffline(senderId, organizationId, branchId, input);
+    const clave = await this.prisma.offlineDeviceKey.findUnique({
+      where: {
+        userId_deviceId: { userId: firma.sellerId, deviceId: firma.deviceId },
+      },
+    });
+    // Sin clave registrada todavía: la venta queda para que la mande su dueño.
+    if (!clave)
+      throw new ConflictException(
+        "Esta PC todavía no registró la clave de quien hizo la venta. La va a enviar esa persona al entrar con conexión.",
+      );
+    if (!firmaValida(clave.publicKey, firma.payload, firma.signature))
+      throw new BadRequestException(
+        "La firma de la venta no es válida: no se registra a nombre de otro usuario.",
+      );
+    // Quien hizo la venta tiene que poder vender en esta sucursal; si no, la
+    // venta queda para revisar a mano (no es un problema de quien la manda).
+    try {
+      await this.assert(firma.sellerId, organizationId, "SALE_MANAGE");
+    } catch {
+      throw new BadRequestException(
+        "Quien hizo la venta ya no puede vender en esta farmacia. Revisala a mano.",
+      );
+    }
+    if (
+      !(await this.prisma.userBranch.findFirst({
+        where: {
+          userId: firma.sellerId,
+          branchId,
+          branch: { organizationId, active: true },
+        },
+      }))
+    )
+      throw new BadRequestException(
+        "Quien hizo la venta ya no tiene acceso a esta sucursal. Revisala a mano.",
+      );
+    const sale = await this.completeOffline(
+      firma.sellerId,
+      organizationId,
+      branchId,
+      input,
+    );
+    if (
+      !(await this.prisma.auditLog.findFirst({
+        where: {
+          organizationId,
+          entityType: "SALE",
+          entityId: sale.id,
+          action: "SINCRONIZADA_POR_OTRO",
+        },
+      }))
+    )
+      await this.prisma.auditLog.create({
+        data: {
+          organizationId,
+          branchId,
+          actorId: senderId,
+          entityType: "SALE",
+          entityId: sale.id,
+          action: "SINCRONIZADA_POR_OTRO",
+          after: { vendedorId: firma.sellerId, deviceId: firma.deviceId },
+        },
+      });
+    return sale;
   }
 
   /**

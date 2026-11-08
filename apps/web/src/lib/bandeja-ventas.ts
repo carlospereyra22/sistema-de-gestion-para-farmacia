@@ -31,6 +31,13 @@ export type VentaPendiente = {
   enviadaEl?: string;
   /** Avisos "a revisar" que devolvió el servidor al registrarla. */
   avisos?: number;
+  /**
+   * Firma de quien la hizo (SISTEMA-66): con ella otro usuario de la PC puede
+   * mandarla al volver internet. `payload` es el texto exacto que se firmó.
+   */
+  vendedorId?: string;
+  payload?: string;
+  firma?: string;
 };
 
 const PREFIJO = "bandeja|";
@@ -90,6 +97,20 @@ export async function ventasDe(alcance: string): Promise<VentaPendiente[]> {
   );
 }
 
+/** Todas las ventas de la PC, de todos los usuarios, de la más vieja a la más nueva. */
+export async function ventasDeLaPc(): Promise<VentaPendiente[]> {
+  const almacen = almacenLocal();
+  const ventas: VentaPendiente[] = [];
+  for (const key of await almacen.claves(PREFIJO)) {
+    const venta = await almacen.leer<VentaPendiente>(key);
+    if (venta?.version === 1) ventas.push(venta);
+  }
+  return ventas.sort(
+    (a, b) =>
+      a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id),
+  );
+}
+
 /** Cuántas ventas sin enviar hay en la PC de otros usuarios. */
 export async function pendientesDeOtros(alcance: string) {
   const almacen = almacenLocal();
@@ -103,12 +124,10 @@ export async function pendientesDeOtros(alcance: string) {
 }
 
 /** Las enviadas se guardan una semana para reimprimir y después se borran. */
-export async function olvidarEnviadasViejas(
-  alcance: string,
-  ahora = Date.now(),
-) {
+export async function olvidarEnviadasViejas(ahora = Date.now()) {
   const almacen = almacenLocal();
-  for (const venta of await ventasDe(alcance))
+  // Las de todos los usuarios de la PC.
+  for (const venta of await ventasDeLaPc())
     if (
       venta.estado === "ENVIADA" &&
       venta.enviadaEl &&
@@ -141,11 +160,13 @@ export type ResumenBandeja = {
   pendientes: number;
   rechazadas: number;
   ventas: VentaPendiente[];
+  /** Las de todos los usuarios de la PC (cambio de turno, SISTEMA-66). */
+  deLaPc: VentaPendiente[];
 };
 
 export function resumirBandeja(
   ventas: readonly VentaPendiente[],
-): Omit<ResumenBandeja, "ventas"> {
+): Omit<ResumenBandeja, "ventas" | "deLaPc"> {
   return {
     pendientes: ventas.filter((venta) => venta.estado === "PENDIENTE").length,
     rechazadas: ventas.filter((venta) => venta.estado === "RECHAZADA").length,
@@ -154,17 +175,17 @@ export function resumirBandeja(
 
 /** Bandeja del usuario, al día con lo que pase en esta pestaña o en otra. */
 export function useBandejaVentas(alcance: string | undefined): ResumenBandeja {
-  const [ventas, setVentas] = useState<VentaPendiente[]>([]);
+  const [deLaPc, setDeLaPc] = useState<VentaPendiente[]>([]);
   useEffect(() => {
     if (!alcance) {
-      setVentas([]);
+      setDeLaPc([]);
       return;
     }
     let activo = true;
     const cargar = () =>
-      void ventasDe(alcance)
+      void ventasDeLaPc()
         .then((lista) => {
-          if (activo) setVentas(lista);
+          if (activo) setDeLaPc(lista);
         })
         .catch(() => {});
     cargar();
@@ -174,5 +195,6 @@ export function useBandejaVentas(alcance: string | undefined): ResumenBandeja {
       dejar();
     };
   }, [alcance]);
-  return { ...resumirBandeja(ventas), ventas };
+  const ventas = deLaPc.filter((venta) => venta.alcance === alcance);
+  return { ...resumirBandeja(ventas), ventas, deLaPc };
 }

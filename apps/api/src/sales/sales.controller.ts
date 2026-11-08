@@ -10,7 +10,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { Type } from "class-transformer";
+import { Type, plainToInstance } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -25,6 +25,7 @@ import {
   MinLength,
   MaxLength,
   ValidateNested,
+  validate,
 } from "class-validator";
 import { PaymentMethod } from "@prisma/client";
 
@@ -101,6 +102,14 @@ class InvoiceInternalDto {
 class OfflineSaleDto extends CompleteSaleDto {
   @IsISO8601({ strict: true }) occurredAt!: string;
   @IsUUID() deviceId!: string;
+}
+/** Venta sin conexión de otro usuario de la PC, firmada por él (SISTEMA-66). */
+class SignedOfflineSaleDto {
+  @IsUUID() sellerId!: string;
+  @IsUUID() deviceId!: string;
+  /** Texto exacto de la venta (JSON), el mismo que se firmó. */
+  @IsString() @MaxLength(200000) payload!: string;
+  @IsString() @MaxLength(200) signature!: string;
 }
 class ResolveOfflineIssueDto {
   @IsOptional() @IsString() @MaxLength(300) note?: string;
@@ -315,6 +324,47 @@ export class SalesController {
       organizationId,
       branchId,
       { ...body, clientOperationId: body.clientOperationId },
+    );
+  }
+  /**
+   * Venta sin conexión de otro usuario de esta PC (SISTEMA-66): se valida el
+   * texto firmado como cualquier venta sin conexión y queda a nombre de quien
+   * la hizo.
+   */
+  @DecidedWhenOccurred()
+  @Post("offline/firmada")
+  async completeOfflineSigned(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: SignedOfflineSaleDto,
+  ) {
+    let datos: unknown;
+    try {
+      datos = JSON.parse(body.payload);
+    } catch {
+      throw new BadRequestException("La venta firmada no se puede leer.");
+    }
+    const input = plainToInstance(OfflineSaleDto, datos);
+    const errores = await validate(input, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    if (errores.length || !input.clientOperationId)
+      throw new BadRequestException("La venta firmada tiene datos inválidos.");
+    if (input.deviceId !== body.deviceId)
+      throw new BadRequestException("La venta no corresponde a esa PC.");
+    return this.sales.completeOfflineSigned(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      {
+        sellerId: body.sellerId,
+        deviceId: body.deviceId,
+        payload: body.payload,
+        signature: body.signature,
+      },
+      { ...input, clientOperationId: input.clientOperationId },
     );
   }
   /** Avisos "a revisar" de lo sincronizado sin conexión. */

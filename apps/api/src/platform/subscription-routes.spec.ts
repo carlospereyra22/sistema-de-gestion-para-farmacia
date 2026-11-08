@@ -86,6 +86,8 @@ const EXCEPTIONS = [
   // Ventas hechas sin conexión: se deciden con el estado que tenía la farmacia
   // cuando ocurrieron; marcar un aviso como revisado termina algo pendiente (SISTEMA-63).
   `OFFLINE_SYNC POST ${sales}/offline`,
+  // Venta sin conexión de otro usuario de la PC (SISTEMA-66).
+  `OFFLINE_SYNC POST ${sales}/offline/firmada`,
   `READ_ONLY POST ${sales}/offline-issues/:issueId/resolve`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/printing/jobs/:id/retry`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/transfers/:id/receive`,

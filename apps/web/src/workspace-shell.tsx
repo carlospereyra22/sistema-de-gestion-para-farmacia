@@ -99,9 +99,18 @@ import type {
 } from "@gestion/contracts";
 import { SaleInvoiceDialog } from "./sale-invoice-dialog";
 import { EnviarAArca } from "./enviar-a-arca";
+import {
+  historialConPendientes,
+  type VentaDelHistorial,
+} from "./lib/historial-con-pendientes";
 import { getSubscriptionStatus } from "./lib/subscription-status";
 import { SinConexionError } from "./lib/api-fetch";
-import { alcanceDe, horaUltimaSincronizacion } from "./lib/cache-local";
+import {
+  alcanceDe,
+  horaUltimaSincronizacion,
+  leerSesion,
+} from "./lib/cache-local";
+import { firmarVenta } from "./lib/firma-ventas";
 import { conectividad } from "./lib/conectividad";
 import {
   guardarVentaPendiente,
@@ -930,13 +939,9 @@ export function WorkspaceShell({
               branches.find((item) => item.id === branchId)?.name ?? "Cargando…"
             }
             onLogout={() => {
-              // Las ventas sin enviar sólo las puede mandar esta sesión.
-              if (bandeja.pendientes)
-                setMessage(
-                  `Tenés ${bandeja.pendientes === 1 ? "1 venta" : `${bandeja.pendientes} ventas`} sin enviar. Se envían solas cuando vuelve internet; esperá a que terminen antes de cerrar sesión.`,
-                );
-              else if (pendingSale)
-                setPendingSaleConfirmation({ action: "logout" });
+              // Las ventas sin enviar quedan guardadas y firmadas en la PC: las
+              // manda quien entre cuando vuelva internet (SISTEMA-66).
+              if (pendingSale) setPendingSaleConfirmation({ action: "logout" });
               else onLogout();
             }}
           />
@@ -1224,7 +1229,8 @@ export function WorkspaceShell({
               onRegisterChange={chooseRegister}
               session={cashSession}
               ventasSinEnviar={
-                bandeja.ventas.filter(
+                // De todos los usuarios de la PC: la plata ya está en el cajón.
+                bandeja.deLaPc.filter(
                   (venta) =>
                     venta.estado === "PENDIENTE" &&
                     venta.organizationId === organizationId &&
@@ -5066,6 +5072,8 @@ function Sales({
   };
   type Receipt = {
     sale: Sale;
+    /** Venta sin conexión: el comprobante provisorio ya armado en la PC. */
+    ticketLocal?: ThermalTicket;
     customerName: string;
     lines: ReceiptLine[];
     subtotalMinor: number;
@@ -5304,8 +5312,9 @@ function Sales({
   const alcance = alcanceDe({ email: userKey });
   const bandeja = useBandejaVentas(alcance);
   const pendientesLocales = useMemo(
-    () => unidadesPendientes(bandeja.ventas, organizationId, branchId),
-    [bandeja.ventas, organizationId, branchId],
+    // Lo vendido en la PC por cualquiera y todavía no enviado.
+    () => unidadesPendientes(bandeja.deLaPc, organizationId, branchId),
+    [bandeja.deLaPc, organizationId, branchId],
   );
   const [ticketSinConexion, setTicketSinConexion] = useState<ThermalTicket>();
   const [ventaGuardada, setVentaGuardada] = useState("");
@@ -5677,6 +5686,9 @@ function Sales({
     try {
       setHistory(await getSales(token, organizationId, branchId));
     } catch (cause) {
+      // Sin conexión el historial ya muestra lo vendido en la PC: no hace
+      // falta avisar que falta la copia del servidor (SISTEMA-66).
+      if (cause instanceof SinConexionError) return;
       error(
         cause instanceof Error
           ? cause.message
@@ -5863,6 +5875,26 @@ function Sales({
       pagos: finalPayments,
       factura: documentType === "INVOICE",
     });
+    const cuerpoGuardado = {
+      ...cuerpo,
+      items: cuerpo.items.map((item) =>
+        item.productId
+          ? { ...item, productName: nombre(item.productId) }
+          : item,
+      ),
+      occurredAt,
+      deviceId: idDeEstaPc(),
+    };
+    // Firmada por quien vende: si cambia el turno antes de que vuelva
+    // internet, la manda el siguiente y queda a su nombre (SISTEMA-66). Sin
+    // firma sólo la puede mandar esta persona.
+    const payload = JSON.stringify(cuerpoGuardado);
+    const sesion = await leerSesion().catch(() => undefined);
+    const vendedorId =
+      sesion?.alcance === alcance ? sesion.perfil.id : undefined;
+    const firma = vendedorId
+      ? await firmarVenta(alcance, payload).catch(() => undefined)
+      : undefined;
     await guardarVentaPendiente({
       version: 1,
       id: clientOperationId,
@@ -5872,16 +5904,8 @@ function Sales({
       occurredAt,
       totalMinor: String(total),
       documentType,
-      cuerpo: {
-        ...cuerpo,
-        items: cuerpo.items.map((item) =>
-          item.productId
-            ? { ...item, productName: nombre(item.productId) }
-            : item,
-        ),
-        occurredAt,
-        deviceId: idDeEstaPc(),
-      },
+      cuerpo: cuerpoGuardado,
+      ...(vendedorId && firma ? { vendedorId, payload, firma } : {}),
       unidades: lines
         .filter((line) => !line.description)
         .map((line) => ({
@@ -5892,8 +5916,24 @@ function Sales({
       estado: "PENDIENTE",
       intentos: 0,
     });
+    // Termina como cualquier venta: confirmación con el comprobante para ver
+    // e imprimir, armado en la PC (SISTEMA-66).
+    setReceipt({
+      ...armarRecibo(
+        {
+          id: clientOperationId,
+          documentType,
+          status: "COMPLETED",
+          totalMinor: String(total),
+          completedAt: occurredAt,
+          items: [],
+          payments: [],
+        },
+        finalPayments,
+      ),
+      ticketLocal: ticket,
+    });
     limpiarVenta();
-    setTicketSinConexion(ticket);
     setVentaGuardada(
       documentType === "INVOICE"
         ? "Venta guardada sin conexión. Se envía sola cuando vuelva internet y ahí se emite la factura."
@@ -6001,31 +6041,7 @@ function Sales({
         !facturaEsperaCaja(completedSale)
       )
         setInvoiceSaleId(completedSale.id);
-      else
-        setReceipt({
-          sale: completedSale,
-          customerName:
-            customers.find((customer) => customer.id === customerId)?.name ??
-            "Público general",
-          lines: lines.map((line) => ({
-            name:
-              line.description ??
-              products.find((product) => product.id === line.productId)?.name ??
-              "Producto",
-            quantity: line.quantity,
-            unitPriceMinor: Number(
-              line.requestedUnitPriceMinor ??
-                line.unitPriceMinor ??
-                products.find((product) => product.id === line.productId)
-                  ?.prices[0]?.amountMinor ??
-                0,
-            ),
-            discountMinor: line.discountMinor,
-          })),
-          subtotalMinor: subtotal,
-          discountMinor,
-          payments: finalPayments,
-        });
+      else setReceipt(armarRecibo(completedSale, finalPayments));
       limpiarVenta();
       await loadHistory();
       done();
@@ -6040,6 +6056,36 @@ function Sales({
       setSubmitting(false);
     }
   };
+  /** Datos de la confirmación de venta, con o sin conexión. */
+  function armarRecibo(
+    sale: Sale,
+    finalPayments: Receipt["payments"],
+  ): Receipt {
+    return {
+      sale,
+      customerName:
+        customers.find((customer) => customer.id === customerId)?.name ??
+        "Público general",
+      lines: lines.map((line) => ({
+        name:
+          line.description ??
+          products.find((product) => product.id === line.productId)?.name ??
+          "Producto",
+        quantity: line.quantity,
+        unitPriceMinor: Number(
+          line.requestedUnitPriceMinor ??
+            line.unitPriceMinor ??
+            products.find((product) => product.id === line.productId)?.prices[0]
+              ?.amountMinor ??
+            0,
+        ),
+        discountMinor: line.discountMinor,
+      })),
+      subtotalMinor: subtotal,
+      discountMinor,
+      payments: finalPayments,
+    };
+  }
   const [ticketSaleId, setTicketSaleId] = useState<string>();
   const loadTicket = useCallback(
     () => getSaleTicket(token, organizationId, branchId, ticketSaleId!),
@@ -6062,7 +6108,8 @@ function Sales({
     />
   ) : null;
   const printReceipt = () => {
-    if (receipt) setTicketSaleId(receipt.sale.id);
+    if (receipt?.ticketLocal) setTicketSinConexion(receipt.ticketLocal);
+    else if (receipt) setTicketSaleId(receipt.sale.id);
   };
   // Plantilla A4 y formato de impresión de esta sucursal; se recarga al volver a
   // Ventas por si cambió en Organización. Sin respuesta se imprime ticket.
@@ -6083,9 +6130,13 @@ function Sales({
     };
   }, [active, token, organizationId, branchId]);
   const receiptSaleId = receipt?.sale.id;
+  const ticketLocalDelRecibo = receipt?.ticketLocal;
   const loadReceiptTicket = useCallback(
-    () => getSaleTicket(token, organizationId, branchId, receiptSaleId!),
-    [token, organizationId, branchId, receiptSaleId],
+    () =>
+      ticketLocalDelRecibo
+        ? Promise.resolve(ticketLocalDelRecibo)
+        : getSaleTicket(token, organizationId, branchId, receiptSaleId!),
+    [token, organizationId, branchId, receiptSaleId, ticketLocalDelRecibo],
   );
   // Ticket provisorio de una venta sin conexión: ya está armado en la PC.
   const cargarTicketSinConexion = useCallback(
@@ -6187,7 +6238,12 @@ function Sales({
           token={token}
           organizationId={organizationId}
           branchId={branchId}
-          sales={history}
+          sales={historialConPendientes(
+            history,
+            bandeja.deLaPc,
+            organizationId,
+            branchId,
+          )}
           products={products}
           customers={customers}
           operationReason={operationReason}
@@ -6196,9 +6252,11 @@ function Sales({
           onCancel={cancel}
           onReturn={returnAll}
           onPrint={(sale) =>
-            sale.documentType === "INVOICE"
-              ? setInvoiceSaleId(sale.id)
-              : setTicketSaleId(sale.id)
+            sale.ticketLocal
+              ? setTicketSinConexion(sale.ticketLocal)
+              : sale.documentType === "INVOICE"
+                ? setInvoiceSaleId(sale.id)
+                : setTicketSaleId(sale.id)
           }
           fiscalCapabilities={fiscalCapabilities}
           onInvoiced={(sale) => {
@@ -6897,7 +6955,8 @@ function SalesHistory({
   token: string;
   organizationId: string;
   branchId: string;
-  sales: Sale[];
+  /** Incluye las vendidas sin conexión que todavía no llegaron (SISTEMA-66). */
+  sales: VentaDelHistorial[];
   products: CatalogProduct[];
   customers: Party[];
   operationReason: string;
@@ -6905,7 +6964,7 @@ function SalesHistory({
   onBack: () => void;
   onCancel: (sale: Sale) => Promise<string>;
   onReturn: (sale: Sale) => Promise<string>;
-  onPrint: (sale: Sale) => void;
+  onPrint: (sale: VentaDelHistorial) => void;
   /** Para "Enviar a ARCA" un comprobante interno (SISTEMA-65). */
   fiscalCapabilities?: SaleFiscalCapabilities | null;
   onInvoiced: (sale: Sale) => void;
@@ -6993,7 +7052,11 @@ function SalesHistory({
         customerName(sale),
         money(sale.totalMinor),
         paymentName(sale),
-        sale.status === "COMPLETED" ? "Confirmada" : "Anulada",
+        sale.porEnviar
+          ? "Por enviar"
+          : sale.status === "COMPLETED"
+            ? "Confirmada"
+            : "Anulada",
       ];
     });
     const csv = [
@@ -7161,9 +7224,13 @@ function SalesHistory({
                     <td className="px-4 py-3">{paymentName(sale)}</td>
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${sale.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${sale.porEnviar ? "bg-amber-100 text-amber-800" : sale.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
                       >
-                        {sale.status === "COMPLETED" ? "Confirmada" : "Anulada"}
+                        {sale.porEnviar
+                          ? "Por enviar"
+                          : sale.status === "COMPLETED"
+                            ? "Confirmada"
+                            : "Anulada"}
                       </span>
                     </td>
                   </tr>
@@ -7281,89 +7348,116 @@ function SalesHistory({
                 <SalePaymentSummary payments={selectedSale.payments} />
               </div>
               <aside className="space-y-4">
-                {actionMessage && (
-                  <p role="status" className="mb-3 text-sm text-teal-800">
-                    {actionMessage}
-                  </p>
-                )}
-                <SaleDetailTotal
-                  total={money(selectedSale.totalMinor)}
-                  status={selectedSale.status}
-                  documentType={selectedSale.documentType}
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onPrint(selectedSale)}
-                    className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50"
-                  >
-                    <ReceiptText size={17} aria-hidden="true" />
-                    {selectedSale.documentType === "INVOICE"
-                      ? "Ver / imprimir factura"
-                      : "Imprimir comprobante"}
-                  </button>
-                  {selectedSale.documentType === "INVOICE" && (
-                    <SaleCreditActions
-                      key={`${organizationId}:${branchId}:${selectedSale.id}`}
+                {selectedSale.porEnviar ? (
+                  // Vendida sin conexión: todavía no está en el servidor, así
+                  // que no se puede anular, devolver ni facturar (SISTEMA-66).
+                  <>
+                    <SaleDetailTotal
+                      total={money(selectedSale.totalMinor)}
+                      status={selectedSale.status}
+                      documentType={selectedSale.documentType}
+                    />
+                    <p className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
+                      Venta hecha sin conexión: está guardada en esta PC y se
+                      envía sola cuando vuelve internet. Después se puede anular
+                      o facturar como cualquier otra.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onPrint(selectedSale)}
+                      className="flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50"
+                    >
+                      <ReceiptText size={17} aria-hidden="true" />
+                      Imprimir comprobante
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {actionMessage && (
+                      <p role="status" className="mb-3 text-sm text-teal-800">
+                        {actionMessage}
+                      </p>
+                    )}
+                    <SaleDetailTotal
+                      total={money(selectedSale.totalMinor)}
+                      status={selectedSale.status}
+                      documentType={selectedSale.documentType}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onPrint(selectedSale)}
+                        className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50"
+                      >
+                        <ReceiptText size={17} aria-hidden="true" />
+                        {selectedSale.documentType === "INVOICE"
+                          ? "Ver / imprimir factura"
+                          : "Imprimir comprobante"}
+                      </button>
+                      {selectedSale.documentType === "INVOICE" && (
+                        <SaleCreditActions
+                          key={`${organizationId}:${branchId}:${selectedSale.id}`}
+                          token={token}
+                          organizationId={organizationId}
+                          branchId={branchId}
+                          saleId={selectedSale.id}
+                        />
+                      )}
+                    </div>
+                    <EnviarAArca
+                      key={`arca:${selectedSale.id}`}
                       token={token}
                       organizationId={organizationId}
                       branchId={branchId}
-                      saleId={selectedSale.id}
+                      sale={selectedSale}
+                      capabilities={fiscalCapabilities}
+                      customerName={
+                        customers.find(
+                          (customer) => customer.id === selectedSale.customerId,
+                        )?.name
+                      }
+                      onSent={() => onInvoiced(selectedSale)}
                     />
-                  )}
-                </div>
-                <EnviarAArca
-                  key={`arca:${selectedSale.id}`}
-                  token={token}
-                  organizationId={organizationId}
-                  branchId={branchId}
-                  sale={selectedSale}
-                  capabilities={fiscalCapabilities}
-                  customerName={
-                    customers.find(
-                      (customer) => customer.id === selectedSale.customerId,
-                    )?.name
-                  }
-                  onSent={() => onInvoiced(selectedSale)}
-                />
-                {selectedSale.status === "COMPLETED" ? (
-                  <details className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                    <summary className="cursor-pointer text-sm font-medium text-slate-600 focus-visible:outline-2 focus-visible:outline-teal-700">
-                      Anulación o devolución
-                    </summary>
-                    <Input
-                      label="Motivo para anulación o devolución"
-                      value={operationReason}
-                      onChange={onReasonChange}
-                      required={false}
-                    />
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        disabled={actionBusy}
-                        onClick={() =>
-                          void runAction(() => onCancel(selectedSale))
-                        }
-                        className="border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-700"
-                      >
-                        Anular
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actionBusy}
-                        onClick={() =>
-                          void runAction(() => onReturn(selectedSale))
-                        }
-                        className="border border-teal-200 bg-white py-2 text-xs font-semibold text-teal-700"
-                      >
-                        Devolver
-                      </button>
-                    </div>
-                  </details>
-                ) : (
-                  <p className="mt-4 text-xs text-slate-500">
-                    Venta anulada: se conserva para trazabilidad.
-                  </p>
+                    {selectedSale.status === "COMPLETED" ? (
+                      <details className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                        <summary className="cursor-pointer text-sm font-medium text-slate-600 focus-visible:outline-2 focus-visible:outline-teal-700">
+                          Anulación o devolución
+                        </summary>
+                        <Input
+                          label="Motivo para anulación o devolución"
+                          value={operationReason}
+                          onChange={onReasonChange}
+                          required={false}
+                        />
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={() =>
+                              void runAction(() => onCancel(selectedSale))
+                            }
+                            className="border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-700"
+                          >
+                            Anular
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={() =>
+                              void runAction(() => onReturn(selectedSale))
+                            }
+                            className="border border-teal-200 bg-white py-2 text-xs font-semibold text-teal-700"
+                          >
+                            Devolver
+                          </button>
+                        </div>
+                      </details>
+                    ) : (
+                      <p className="mt-4 text-xs text-slate-500">
+                        Venta anulada: se conserva para trazabilidad.
+                      </p>
+                    )}
+                  </>
                 )}
               </aside>
             </div>

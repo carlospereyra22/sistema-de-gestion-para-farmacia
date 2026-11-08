@@ -669,6 +669,20 @@ model User {
   branches      UserBranch[]
   sessions      AuthSession[]
   platformAdmin PlatformAdmin?
+  offlineDeviceKeys OfflineDeviceKey[]
+}
+
+/// Clave con la que una PC firma las ventas sin conexión de un usuario (SISTEMA-66).
+model OfflineDeviceKey {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  deviceId  String   @db.Uuid
+  /// ECDSA P-256, SPKI en base64.
+  publicKey String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@unique([userId, deviceId])
 }
 
 model UserOrganization {

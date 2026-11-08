@@ -1,15 +1,16 @@
 import { useEffect, useRef } from "react";
-import { sendOfflineSale } from "./api";
+import { sendOfflineSale, sendSignedOfflineSale } from "./api";
 import {
   olvidarEnviadasViejas,
   suscribirBandeja,
-  ventasDe,
+  ventasDeLaPc,
 } from "./bandeja-ventas";
 import { TOKEN_SIN_CONEXION } from "./cache-local";
 import { useConectividad } from "./conectividad";
 import {
   VENTAS_SINCRONIZADAS,
   conCandado,
+  sePuedeEnviar,
   sincronizarVentas,
 } from "./sincronizacion-ventas";
 
@@ -45,22 +46,33 @@ export function useSincronizarVentas(
               venta.branchId,
               venta.cuerpo,
             ),
+          // Las de otros usuarios de la PC van firmadas por ellos (SISTEMA-66).
+          enviarDeOtro: (venta) =>
+            sendSignedOfflineSale(token, venta.organizationId, venta.branchId, {
+              sellerId: venta.vendedorId!,
+              deviceId: String(venta.cuerpo.deviceId),
+              payload: venta.payload!,
+              signature: venta.firma!,
+            }),
         });
-        await olvidarEnviadasViejas(alcance);
+        await olvidarEnviadasViejas();
         if (resultado.enviadas && typeof window !== "undefined")
           window.dispatchEvent(new Event(VENTAS_SINCRONIZADAS));
       }).catch(() => {});
     intentar();
-    const dejar = suscribirBandeja(() => {
-      void ventasDe(alcance).then((ventas) => {
-        if (ventas.some((venta) => venta.estado === "PENDIENTE")) intentar();
+    // Hay algo para mandar: propio o firmado por otro usuario de la PC.
+    const siHayPendientes = () =>
+      void ventasDeLaPc().then((ventas) => {
+        if (
+          ventas.some(
+            (venta) =>
+              venta.estado === "PENDIENTE" && sePuedeEnviar(venta, alcance),
+          )
+        )
+          intentar();
       });
-    });
-    const timer = window.setInterval(() => {
-      void ventasDe(alcance).then((ventas) => {
-        if (ventas.some((venta) => venta.estado === "PENDIENTE")) intentar();
-      });
-    }, CADA_MS);
+    const dejar = suscribirBandeja(siHayPendientes);
+    const timer = window.setInterval(siHayPendientes, CADA_MS);
     return () => {
       activo = false;
       dejar();

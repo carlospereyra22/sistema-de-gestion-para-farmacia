@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactElement } from "react";
+import { useConectividad } from "./lib/conectividad";
 import {
   ArrowLeft,
   CalendarClock,
@@ -69,6 +70,7 @@ export function LoginScreen({
   const [visible, setVisible] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { enLinea } = useConectividad();
 
   return (
     <main className="grid min-h-screen bg-[#f4f8fa] lg:grid-cols-[1.05fr_1fr]">
@@ -260,6 +262,16 @@ export function LoginScreen({
                     className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
                   >
                     {message}
+                  </p>
+                ) : !enLinea ? (
+                  // Sin internet se entra con la contraseña guardada en la PC
+                  // (SISTEMA-66).
+                  <p
+                    role="status"
+                    className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                  >
+                    Sin conexión: pueden entrar quienes usaron esta PC con
+                    internet en las últimas 24 horas.
                   </p>
                 ) : null}
                 <button

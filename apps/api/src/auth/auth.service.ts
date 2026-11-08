@@ -10,6 +10,7 @@ import { randomBytes } from "node:crypto";
 import { EnvironmentService } from "../config/environment.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { AccessTokenPayload } from "./auth.types";
+import { clavePublicaValida } from "../sales/firma-venta";
 
 @Injectable()
 export class AuthService {
@@ -28,6 +29,25 @@ export class AuthService {
     if (!user?.active || !(await verify(user.passwordHash, password)))
       throw new UnauthorizedException("Invalid email or password.");
     return this.createSession(user.id, user.email);
+  }
+
+  /**
+   * Guarda la clave con la que esta PC firma las ventas sin conexión del
+   * usuario (SISTEMA-66). Se registra al entrar con conexión; volver a
+   * registrarla la reemplaza.
+   */
+  async registerOfflineKey(
+    userId: string,
+    deviceId: string,
+    publicKey: string,
+  ) {
+    if (!clavePublicaValida(publicKey))
+      throw new BadRequestException("La clave de la PC no es válida.");
+    await this.prisma.offlineDeviceKey.upsert({
+      where: { userId_deviceId: { userId, deviceId } },
+      create: { userId, deviceId, publicKey },
+      update: { publicKey },
+    });
   }
 
   async getProfile(userId: string) {
