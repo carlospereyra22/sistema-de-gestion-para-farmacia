@@ -926,6 +926,41 @@ export class CashService {
       };
     });
   }
+  /**
+   * Estado de cada caja activa de la sucursal para Inicio (SISTEMA-85): abierta o
+   * cerrada y, si está abierta, el efectivo esperado con el mismo cálculo que Caja.
+   * Solo lectura; el permiso y la sucursal los valida quien llama.
+   */
+  async branchRegistersStatus(branchId: string) {
+    // La sucursal ya viene validada contra la organización (BranchAccessGuard).
+    const registers = await this.prisma.cashRegister.findMany({
+      where: { branchId, active: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    const sessions = await this.prisma.cashSession.findMany({
+      where: {
+        closedAt: null,
+        cashRegisterId: { in: registers.map((register) => register.id) },
+      },
+      include: { movements: { orderBy: { createdAt: "asc" } } },
+    });
+    const summaries = new Map(
+      (await this.summarizeSessions(sessions)).map((session) => [
+        session.cashRegisterId,
+        session,
+      ]),
+    );
+    return registers.map((register) => {
+      const session = summaries.get(register.id);
+      return {
+        id: register.id,
+        name: register.name,
+        open: Boolean(session),
+        expectedAmountMinor: session?.expectedAmountMinor ?? null,
+      };
+    });
+  }
   async closureDetail(
     actorId: string,
     organizationId: string,

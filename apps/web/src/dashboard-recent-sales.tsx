@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { ArrowRight, Clock3, ReceiptText } from "lucide-react";
 import { getSales, type Sale } from "./lib/api";
 
@@ -8,12 +8,15 @@ export function DashboardRecentSales({
   branchId,
   onOpenHistory,
   active = true,
+  skeleton = false,
 }: {
   token: string;
   organizationId: string;
   branchId: string;
   onOpenHistory: () => void;
   active?: boolean;
+  /** Con conexión: filas de esqueleto mientras carga (SISTEMA-85). */
+  skeleton?: boolean;
 }) {
   const scope = `${organizationId}:${branchId}`;
   const [snapshot, setSnapshot] = useState<{ scope: string; sales: Sale[] }>();
@@ -46,17 +49,17 @@ export function DashboardRecentSales({
     };
   }, [active, token, organizationId, branchId, scope]);
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_4px_18px_-10px_rgba(15,60,80,0.18)]">
+    <section className="cash-card flex h-full flex-col p-0! overflow-hidden">
       <div className="flex items-center justify-between gap-2 px-5 py-3.5">
         <div className="flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100/70">
-            <Clock3 size={21} />
+          <span className="cash-icon">
+            <Clock3 size={20} aria-hidden="true" />
           </span>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-sm font-semibold text-slate-900">
               Últimas ventas
-            </h3>
-            <p className="text-[11px] text-slate-500">
+            </h2>
+            <p className="text-xs text-slate-500">
               Actividad reciente de la sucursal.
             </p>
           </div>
@@ -64,15 +67,15 @@ export function DashboardRecentSales({
         <button
           type="button"
           onClick={onOpenHistory}
-          className="inline-flex items-center gap-2 rounded-lg border border-teal-100 bg-teal-50/50 px-3 py-2 text-xs font-medium text-teal-700 transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-teal-600"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm! font-medium text-teal-700 shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-teal-600"
         >
           Ver historial
           <ArrowRight size={14} />
         </button>
       </div>
       <div className="overflow-x-auto px-3 pb-2">
-        <table className="w-full min-w-[520px] text-left text-xs">
-          <thead className="border-y border-slate-100 bg-slate-50/80 text-[10px] uppercase tracking-wider text-slate-500">
+        <table className="w-full min-w-[520px] text-left text-sm">
+          <thead className="border-y border-slate-100 bg-slate-50/80 text-xs text-slate-500">
             <tr>
               {["Fecha y hora", "Venta / comprobante", "Estado", "Importe"].map(
                 (label) => (
@@ -87,12 +90,34 @@ export function DashboardRecentSales({
             </tr>
           </thead>
           <tbody>
-            {sales?.map((sale) => (
+            {!sales &&
+              !error &&
+              skeleton &&
+              [0, 1, 2, 3].map((row) => (
+                <tr
+                  key={`esqueleto-${row}`}
+                  aria-hidden="true"
+                  className="border-b border-slate-100 last:border-0"
+                >
+                  {["w-16", "w-36", "w-20", "w-20 text-right"].map((width) => (
+                    <td
+                      key={width}
+                      className={`px-3 py-3.5 ${width.includes("text-right") ? "text-right" : ""}`}
+                    >
+                      <span
+                        className={`dashboard-skeleton ${width.replace(" text-right", "")}`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            {sales?.map((sale, index) => (
               <tr
                 key={sale.id}
-                className="border-b border-slate-100 transition-colors even:bg-slate-50/30 last:border-0 hover:bg-teal-50/40"
+                style={{ "--orden": index } as CSSProperties}
+                className="dashboard-entrada border-b border-slate-100 transition-colors even:bg-slate-50/30 last:border-0 hover:bg-teal-50/40"
               >
-                <td className="w-[23%] whitespace-nowrap px-3 py-2.5 text-xs font-medium tabular-nums text-slate-700">
+                <td className="w-[23%] whitespace-nowrap px-3 py-2.5 text-sm font-medium tabular-nums text-slate-700">
                   {sale.completedAt
                     ? new Date(sale.completedAt).toLocaleString("es-AR", {
                         timeZone: "America/Argentina/Buenos_Aires",
@@ -100,7 +125,7 @@ export function DashboardRecentSales({
                       })
                     : "Sin fecha"}
                   {sale.completedAt && (
-                    <span className="mt-0.5 block text-[10px] font-normal text-slate-400">
+                    <span className="mt-0.5 block text-xs font-normal text-slate-400">
                       {new Date(sale.completedAt).toLocaleTimeString("es-AR", {
                         timeZone: "America/Argentina/Buenos_Aires",
                         hour: "2-digit",
@@ -122,7 +147,7 @@ export function DashboardRecentSales({
                       <span className="font-semibold text-slate-700">
                         Venta {sale.id.slice(0, 8).toUpperCase()}
                       </span>
-                      <span className="mt-0.5 block text-[10px] text-slate-400">
+                      <span className="mt-0.5 block text-xs text-slate-500">
                         {sale.items.length}{" "}
                         {sale.items.length === 1 ? "artículo" : "artículos"}
                       </span>
@@ -131,7 +156,7 @@ export function DashboardRecentSales({
                 </td>
                 <td className="px-3 py-2.5">
                   <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium ring-1 ring-inset ${sale.status === "CANCELLED" ? "bg-rose-50 text-rose-700 ring-rose-100" : "bg-emerald-50 text-emerald-700 ring-emerald-100"}`}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${sale.status === "CANCELLED" ? "bg-rose-50 text-rose-700 ring-rose-100" : "bg-emerald-50 text-emerald-700 ring-emerald-100"}`}
                   >
                     <span
                       aria-hidden="true"
@@ -140,7 +165,7 @@ export function DashboardRecentSales({
                     {sale.status === "CANCELLED" ? "Anulada" : "Completada"}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right text-[13px] font-semibold tabular-nums text-slate-800">
+                <td className="whitespace-nowrap px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-slate-800">
                   {(Number(sale.totalMinor) / 100).toLocaleString("es-AR", {
                     style: "currency",
                     currency: "ARS",
@@ -150,8 +175,8 @@ export function DashboardRecentSales({
             ))}
           </tbody>
         </table>
-        {(!sales?.length || error) && (
-          <p role="status" className="py-6 text-center text-xs text-slate-500">
+        {((sales && !sales.length) || error || (!sales && !skeleton)) && (
+          <p role="status" className="py-8 text-center text-sm text-slate-500">
             {error ||
               (!sales
                 ? "Cargando actividad…"

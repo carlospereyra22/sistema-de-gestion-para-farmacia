@@ -2,9 +2,20 @@ import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { cashClosureSummary } from "./report-cash-closures";
 import { dashboardDays } from "./dashboard-days";
+import {
+  averageTicketMinor,
+  customerReceivables,
+  supplierDebt,
+} from "./dashboard-debts";
+import { payableToday } from "../supplier-payables/payable-rules";
+import { CashService } from "../cash/cash.service";
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Opcional para los tests que solo usan `detail`; Nest siempre lo inyecta.
+    private readonly cash?: CashService,
+  ) {}
   async summary(actorId: string, organizationId: string, branchId: string) {
     await this.assert(actorId, organizationId);
     const days = dashboardDays();
@@ -12,67 +23,99 @@ export class ReportsService {
     const start = today.start;
     const limit = new Date();
     limit.setDate(limit.getDate() + 90);
-    const [sales, lots, expiring, purchases, registers, ...history] =
-      await this.prisma.$transaction([
+    const [
+      sales,
+      lots,
+      expiring,
+      purchases,
+      registers,
+      receivables,
+      payableDues,
+      ...history
+    ] = await this.prisma.$transaction([
+      this.prisma.sale.aggregate({
+        where: {
+          organizationId,
+          branchId,
+          status: "COMPLETED",
+          completedAt: { gte: start, lt: today.end },
+        },
+        _sum: { totalMinor: true },
+        _count: true,
+      }),
+      this.prisma.productLot.aggregate({
+        where: { organizationId, branchId, quantity: { gt: 0 } },
+        _sum: { quantity: true },
+        _count: true,
+      }),
+      this.prisma.productLot.count({
+        where: {
+          organizationId,
+          branchId,
+          quantity: { gt: 0 },
+          expiresAt: { lte: limit },
+        },
+      }),
+      this.prisma.purchase.count({
+        where: {
+          organizationId,
+          branchId,
+          status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] },
+        },
+      }),
+      this.prisma.cashSession.count({
+        where: {
+          closedAt: null,
+          cashRegisterId: {
+            in: (
+              await this.prisma.cashRegister.findMany({
+                where: { branchId },
+                select: { id: true },
+              })
+            ).map((register) => register.id),
+          },
+        },
+      }),
+      // Clientes y cuentas corrientes son de la organización, no de la sucursal.
+      this.prisma.$queryRaw<{ saldo: bigint }[]>`SELECT
+            COALESCE(SUM(CASE WHEN type = 'DEBIT' THEN "amountMinor" ELSE -"amountMinor" END), 0)::bigint AS saldo
+          FROM "CustomerAccountMovement"
+          WHERE "organizationId" = ${organizationId}::uuid
+          GROUP BY "customerId"`,
+      // Saldo por cuota: lo imputado por pagos no anulados, como en Cuentas por pagar.
+      this.prisma.$queryRaw<
+        { invoiceId: string; dueOn: Date | null; saldo: bigint }[]
+      >`SELECT d."invoiceId", d."dueOn",
+            (d."amountMinor" - COALESCE(SUM(a."amountMinor") FILTER (WHERE p."voidedAt" IS NULL), 0))::bigint AS saldo
+          FROM "SupplierPayableDue" d
+          JOIN "SupplierPayableInvoice" i ON i.id = d."invoiceId"
+          LEFT JOIN "SupplierPayableAllocation" a ON a."dueId" = d.id
+          LEFT JOIN "SupplierPayablePayment" p ON p.id = a."paymentId"
+          WHERE i."organizationId" = ${organizationId}::uuid
+            AND i."branchId" = ${branchId}::uuid
+          GROUP BY d.id`,
+      ...days.slice(0, 6).map((day) =>
         this.prisma.sale.aggregate({
           where: {
             organizationId,
             branchId,
             status: "COMPLETED",
-            completedAt: { gte: start, lt: today.end },
+            completedAt: { gte: day.start, lt: day.end },
           },
           _sum: { totalMinor: true },
           _count: true,
         }),
-        this.prisma.productLot.aggregate({
-          where: { organizationId, branchId, quantity: { gt: 0 } },
-          _sum: { quantity: true },
-          _count: true,
-        }),
-        this.prisma.productLot.count({
-          where: {
-            organizationId,
-            branchId,
-            quantity: { gt: 0 },
-            expiresAt: { lte: limit },
-          },
-        }),
-        this.prisma.purchase.count({
-          where: {
-            organizationId,
-            branchId,
-            status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] },
-          },
-        }),
-        this.prisma.cashSession.count({
-          where: {
-            closedAt: null,
-            cashRegisterId: {
-              in: (
-                await this.prisma.cashRegister.findMany({
-                  where: { branchId },
-                  select: { id: true },
-                })
-              ).map((register) => register.id),
-            },
-          },
-        }),
-        ...days.slice(0, 6).map((day) =>
-          this.prisma.sale.aggregate({
-            where: {
-              organizationId,
-              branchId,
-              status: "COMPLETED",
-              completedAt: { gte: day.start, lt: day.end },
-            },
-            _sum: { totalMinor: true },
-            _count: true,
-          }),
-        ),
-      ]);
+      ),
+    ]);
     return {
       salesTodayCount: sales._count,
       salesTodayMinor: (sales._sum.totalMinor ?? 0n).toString(),
+      averageTicketMinor: averageTicketMinor(
+        sales._sum.totalMinor ?? 0n,
+        sales._count,
+      ),
+      customerReceivables: customerReceivables(receivables),
+      supplierDebt: supplierDebt(payableDues, payableToday()),
       salesTrend: [...history, sales].map((day, index) => ({
         date: days[index]!.date,
         totalMinor: (day._sum.totalMinor ?? 0n).toString(),
@@ -83,6 +126,7 @@ export class ReportsService {
       expiringLots: expiring,
       pendingPurchases: purchases,
       openCashSessions: registers,
+      cashRegisters: await this.cash?.branchRegistersStatus(branchId),
     };
   }
   async detail(

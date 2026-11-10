@@ -1,352 +1,231 @@
 import {
-  ArrowDownToLine,
-  ArrowLeftRight,
-  ArrowUpRight,
   Banknote,
-  BellRing,
-  Boxes,
-  CheckCircle2,
-  Clock3,
   CalendarClock,
-  PackageSearch,
+  CalendarX2,
+  ChevronRight,
+  HandCoins,
+  PackageMinus,
+  PackageX,
   ReceiptText,
-  ShoppingCart,
   TriangleAlert,
-  Zap,
+  Truck,
   Users,
   Wallet,
-  ChartNoAxesCombined,
-  ChevronRight,
+  type LucideIcon,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 import type { WorkspaceView } from "./lib/workspace-location";
+import type { CatalogMetricKey } from "./lib/product-catalog-metrics";
+import type {
+  DashboardMetric,
+  DashboardMetricKey,
+  DashboardMetricTone,
+} from "./lib/dashboard-metrics";
+import { metricValueClass } from "./lib/dashboard-metrics";
 import { DashboardKpiTrend } from "./dashboard-kpi-trend";
-import { DashboardInventoryChart } from "./dashboard-inventory-chart";
-export type DashboardAlert = {
-  title: string;
-  status: string;
-  tone: string;
-  note?: string;
-  view?: WorkspaceView;
+import { reportCardClass } from "./report-states";
+
+const metricIcons: Record<DashboardMetricKey, LucideIcon> = {
+  sales: Banknote,
+  averageTicket: ReceiptText,
+  receivables: Users,
+  cash: Wallet,
+  supplierDebt: HandCoins,
+  purchases: Truck,
 };
+
+// Icono redondo de color suave, como las tarjetas de Reportes y Productos.
+const tones: Record<DashboardMetricTone, { wash: string; ink: string }> = {
+  teal: { wash: "#e8faf5", ink: "#087f70" },
+  blue: { wash: "#eaf3ff", ink: "#1d64d8" },
+  indigo: { wash: "#eef0ff", ink: "#4f46e5" },
+  emerald: { wash: "#e7f8ef", ink: "#04875a" },
+  slate: { wash: "#f1f5f9", ink: "#64748b" },
+  amber: { wash: "#fff4e0", ink: "#c26a06" },
+  rose: { wash: "#fff1f4", ink: "#e11d48" },
+  violet: { wash: "#f3effe", ink: "#7c5cd6" },
+};
+
 export function DashboardOverview({
-  sales,
-  tickets,
-  outOfStock,
-  expiring,
-  alerts,
-  onNavigate,
+  metrics,
   salesTrend,
-  inventoryBars,
+  loading = false,
 }: {
-  sales: string;
-  tickets: string;
-  outOfStock: number;
-  expiring: number;
-  alerts: DashboardAlert[];
-  onNavigate: (view: WorkspaceView) => void;
+  metrics: DashboardMetric[];
   salesTrend?: { date: string; totalMinor: string; count: number }[];
-  inventoryBars?: {
-    missing: { label: string; value: number }[];
-    expiry: { label: string; value: number }[];
-  };
+  /** Mientras llega el resumen: esqueleto del mismo tamaño que el dato. */
+  loading?: boolean;
 }) {
-  const metrics = [
-    {
-      label: "Ventas hoy",
-      value: sales,
-      note: "Importe vendido en el día",
-      icon: Banknote,
-      color: "#008b75",
-      view: "Reportes" as const,
-    },
-    {
-      label: "Tickets",
-      value: tickets,
-      note: "Comprobantes emitidos hoy",
-      icon: ReceiptText,
-      color: "#1673ed",
-      view: "Reportes" as const,
-    },
-    {
-      label: "Sin stock",
-      value: String(outOfStock),
-      note: "Productos sin existencias",
-      icon: PackageSearch,
-      color: "#e88013",
-      view: "Inventario" as const,
-    },
-    {
-      label: "Vencen pronto",
-      value: String(expiring),
-      note: "Lotes · hasta 30 días y vencidos",
-      icon: CalendarClock,
-      color: "#8b45ee",
-      view: "Inventario" as const,
-    },
-  ];
-  const shortcuts = [
-    {
-      label: "Nueva venta",
-      note: "Buscá productos y cobrá",
-      view: "Ventas",
-      icon: ShoppingCart,
-      tone: "bg-emerald-50 text-emerald-600",
-    },
-    {
-      label: "Nueva compra",
-      note: "Registrá compras y recepciones",
-      view: "Compras",
-      icon: ArrowDownToLine,
-      tone: "bg-blue-50 text-blue-600",
-    },
-    {
-      label: "Clientes",
-      note: "Consultá y gestioná tus clientes",
-      view: "Clientes",
-      icon: Users,
-      tone: "bg-blue-50 text-blue-600",
-    },
-    {
-      label: "Cuentas corrientes",
-      note: "Cobros y saldos pendientes",
-      view: "Cuentas corrientes",
-      icon: Wallet,
-      tone: "bg-indigo-50 text-indigo-600",
-    },
-    {
-      label: "Transferir",
-      note: "Mové stock entre sucursales",
-      view: "Transferencias",
-      icon: ArrowLeftRight,
-      tone: "bg-violet-50 text-violet-600",
-    },
-    {
-      label: "Inventario",
-      note: "Consultá existencias y lotes",
-      view: "Inventario",
-      icon: Boxes,
-      tone: "bg-amber-50 text-amber-600",
-    },
-    {
-      label: "Caja",
-      note: "Sesiones y movimientos de caja",
-      view: "Caja",
-      icon: Banknote,
-      tone: "bg-teal-50 text-teal-600",
-    },
-    {
-      label: "Reportes",
-      note: "Revisá los resultados del negocio",
-      view: "Reportes",
-      icon: ChartNoAxesCombined,
-      tone: "bg-rose-50 text-rose-600",
-    },
-  ] satisfies {
-    label: string;
-    note: string;
-    view: WorkspaceView;
-    icon: typeof ShoppingCart;
-    tone: string;
-  }[];
   return (
-    <div className="space-y-3">
-      <div
-        aria-label="Resumen de la sucursal"
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        {metrics.map(({ label, value, note, icon: Icon, color }) => (
+    <div
+      aria-label="Resumen de la sucursal"
+      aria-busy={loading}
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
+    >
+      {metrics.map(({ key, label, value, note, tone, rows }, index) => {
+        const Icon = metricIcons[key];
+        const color = tones[tone];
+        const trend = key === "sales" && salesTrend && salesTrend.length >= 2;
+        return (
           <article
-            key={label}
-            className="relative rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_5px_20px_-12px_rgba(15,60,80,0.18)]"
+            key={key}
+            style={{ "--orden": index + 2 } as CSSProperties}
+            className={`${reportCardClass} dashboard-entrada flex min-w-0 flex-col px-4 py-3.5 sm:min-h-[10.5rem]`}
           >
             <div className="flex items-center gap-3">
               <span
-                className="grid size-9 shrink-0 place-items-center rounded-xl text-white shadow-sm ring-1 ring-inset ring-white/25"
-                style={{
-                  backgroundColor: color,
-                  backgroundImage:
-                    "linear-gradient(135deg,rgba(255,255,255,.25),transparent 65%)",
-                }}
+                className="grid size-10 shrink-0 place-items-center rounded-full"
+                style={{ backgroundColor: color.wash, color: color.ink }}
               >
-                <Icon size={21} strokeWidth={1.8} aria-hidden="true" />
+                <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
               </span>
-              <h2 className="min-w-0 flex-1 text-xs font-semibold leading-4 text-slate-700">
+              <h2 className="min-w-0 text-[13px] font-semibold leading-4 text-slate-600">
                 {label}
               </h2>
             </div>
-            {salesTrend &&
-            salesTrend.length >= 2 &&
-            (label === "Ventas hoy" || label === "Tickets") ? (
-              <DashboardKpiTrend
-                days={salesTrend}
-                kind={label === "Ventas hoy" ? "sales" : "tickets"}
-                color={color}
-                value={value}
-              />
+            {loading ? (
+              <div className="mt-2 min-w-0" aria-hidden="true">
+                <p className="leading-8">
+                  <span className="dashboard-skeleton w-28 text-2xl" />
+                </p>
+                <p className="mt-0.5 leading-4">
+                  <span className="dashboard-skeleton w-20 text-xs" />
+                </p>
+              </div>
+            ) : trend ? (
+              <div key={value} className="dashboard-dato">
+                <DashboardKpiTrend
+                  days={salesTrend}
+                  kind="sales"
+                  color={color.ink}
+                  value={value}
+                  note={note}
+                />
+              </div>
             ) : (
-              <div className="mt-2 flex items-end justify-between gap-3">
-                <div className="min-w-0">
-                  <p
-                    className="break-words text-[28px] font-bold leading-8 tracking-tight tabular-nums"
-                    style={{ color }}
-                  >
-                    {value}
-                  </p>
-                  <p className="mt-1 text-[10px] leading-4 text-slate-500">
-                    {note}
-                  </p>
-                </div>
-                {inventoryBars &&
-                  (label === "Sin stock" || label === "Vencen pronto") && (
-                    <DashboardInventoryChart
-                      kind={label === "Sin stock" ? "missing" : "expiry"}
-                      color={color}
-                      rows={
-                        label === "Sin stock"
-                          ? inventoryBars.missing
-                          : inventoryBars.expiry
-                      }
-                    />
-                  )}
+              <div key={value} className="dashboard-dato mt-2 min-w-0">
+                <p
+                  className={`whitespace-nowrap font-bold leading-8 tracking-tight tabular-nums text-slate-900 ${metricValueClass(value)}`}
+                >
+                  {value}
+                </p>
+                {rows && (
+                  <ul className="mt-1 space-y-0.5">
+                    {rows.map((row) => (
+                      <li
+                        key={row.label}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`size-1.5 shrink-0 rounded-full ${row.open ? "bg-emerald-500" : "bg-slate-300"}`}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-slate-600">
+                          {row.label}
+                        </span>
+                        <span
+                          className={`shrink-0 tabular-nums ${row.open ? "font-semibold text-slate-800" : "text-slate-400"}`}
+                        >
+                          {row.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-0.5 text-xs text-slate-500">{note}</p>
               </div>
             )}
           </article>
-        ))}
+        );
+      })}
+    </div>
+  );
+}
+
+const inventoryRows: {
+  key: CatalogMetricKey;
+  label: string;
+  icon: LucideIcon;
+  tone: DashboardMetricTone;
+}[] = [
+  { key: "out", label: "Sin stock", icon: PackageX, tone: "rose" },
+  { key: "low", label: "Stock bajo", icon: PackageMinus, tone: "amber" },
+  {
+    key: "expiring",
+    label: "Por vencer (90 días)",
+    icon: CalendarClock,
+    tone: "violet",
+  },
+  { key: "expired", label: "Vencidos", icon: CalendarX2, tone: "rose" },
+];
+
+/** Mismos contadores que Productos (`catalogMetricCounts`). */
+export function DashboardInventoryAlerts({
+  counts,
+  onNavigate,
+}: {
+  counts: Record<CatalogMetricKey, number>;
+  onNavigate: (view: WorkspaceView) => void;
+}) {
+  return (
+    <section
+      aria-labelledby="dashboard-inventory-title"
+      className="cash-card flex h-full flex-col"
+    >
+      <div className="cash-card-heading">
+        <span className="cash-icon bg-amber-50! text-amber-600!">
+          <TriangleAlert size={20} aria-hidden="true" />
+        </span>
+        <div>
+          <h2 id="dashboard-inventory-title">Alertas de inventario</h2>
+          <p className="text-xs text-slate-500">
+            Productos que necesitan atención.
+          </p>
+        </div>
       </div>
-      <div className="grid gap-3 lg:grid-cols-[1.05fr_1fr]">
-        <section
-          aria-labelledby="dashboard-alerts-title"
-          className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm"
-        >
-          <div className="flex items-center gap-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-600">
-              <BellRing size={20} />
-            </span>
-            <div>
-              <h3
-                id="dashboard-alerts-title"
-                className="text-sm font-semibold text-slate-900"
-              >
-                Alertas y pendientes de la sucursal
-              </h3>
-              <p className="text-[11px] text-slate-500">
-                Lo que necesita tu atención.
-              </p>
-            </div>
-          </div>
-          <ul className="mt-3 space-y-2">
-            {alerts.map((alert) => {
-              const normal = alert.status === "Normal";
-              const Icon = normal
-                ? CheckCircle2
-                : alert.status === "Crítico"
-                  ? TriangleAlert
-                  : Clock3;
-              const content = (
-                <>
-                  <Icon
-                    size={19}
-                    aria-hidden="true"
-                    className={`shrink-0 ${normal ? "text-emerald-600" : alert.status === "Crítico" ? "text-rose-600" : "text-amber-600"}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold">
-                      {alert.title}
-                    </span>
-                    {alert.note && (
-                      <span className="mt-0.5 block text-[10px] text-slate-500">
-                        {alert.note}
-                      </span>
-                    )}
-                  </span>
-                  {!normal && (
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ${alert.tone}`}
-                    >
-                      {alert.status}
-                    </span>
-                  )}
-                  {alert.view && (
-                    <ChevronRight
-                      size={14}
-                      className="shrink-0 text-slate-400"
-                    />
-                  )}
-                </>
-              );
-              const classes = `flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left ${normal ? "bg-slate-50 text-slate-600" : alert.status === "Crítico" ? "bg-rose-50/80 text-rose-900" : alert.status === "Pendiente" ? "bg-blue-50/70 text-slate-800" : "bg-amber-50/70 text-amber-900"}`;
-              return (
-                <li key={alert.title}>
-                  {alert.view ? (
-                    <button
-                      type="button"
-                      onClick={() => onNavigate(alert.view!)}
-                      className={
-                        classes +
-                        " hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-teal-600"
-                      }
-                    >
-                      {content}
-                    </button>
-                  ) : (
-                    <div className={classes}>{content}</div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-        <section
-          aria-labelledby="dashboard-shortcuts-title"
-          className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm"
-        >
-          <div className="flex items-center gap-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
-              <Zap size={20} />
-            </span>
-            <div>
-              <h3
-                id="dashboard-shortcuts-title"
-                className="text-sm font-semibold text-slate-900"
-              >
-                Accesos rápidos
-              </h3>
-              <p className="text-[11px] text-slate-500">
-                Opciones frecuentes para tu operación diaria.
-              </p>
-            </div>
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {shortcuts.map(({ label, note, view, icon: Icon, tone }) => (
+      <ul className="mt-3 flex flex-1 flex-col gap-2">
+        {inventoryRows.map(({ key, label, icon: Icon, tone }) => {
+          const count = counts[key];
+          const color = tones[count ? tone : "slate"];
+          return (
+            <li key={key}>
               <button
-                key={view}
                 type="button"
-                onClick={() => onNavigate(view)}
-                className="group flex items-center gap-2.5 rounded-lg border border-slate-200/80 bg-slate-50/30 px-2.5 py-2 text-left transition-colors hover:border-teal-200 hover:bg-teal-50/50 focus-visible:outline-2 focus-visible:outline-teal-600"
+                onClick={() => onNavigate("Inventario")}
+                className="group flex w-full items-center gap-3 rounded-xl border border-[#e8edf2] bg-white px-3 py-2.5 text-left transition-colors hover:border-teal-200 hover:bg-teal-50/40 focus-visible:outline-2 focus-visible:outline-teal-600"
               >
                 <span
-                  className={`grid size-8 shrink-0 place-items-center rounded-lg ${tone}`}
+                  className="grid size-9 shrink-0 place-items-center rounded-full"
+                  style={{ backgroundColor: color.wash, color: color.ink }}
                 >
-                  <Icon size={18} aria-hidden="true" />
+                  <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-semibold text-slate-800">
+                  <span className="block text-sm font-medium text-slate-800">
                     {label}
                   </span>
-                  <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">
-                    {note}
+                  <span className="block text-xs text-slate-500">
+                    {count
+                      ? `${count} ${count === 1 ? "producto" : "productos"}`
+                      : "Sin productos"}
                   </span>
                 </span>
-                <ArrowUpRight
-                  size={13}
-                  className="shrink-0 text-slate-400 group-hover:text-teal-600"
+                <span
+                  className="text-xl font-semibold tabular-nums"
+                  style={{ color: count ? color.ink : "#94a3b8" }}
+                >
+                  {count.toLocaleString("es-AR")}
+                </span>
+                <ChevronRight
+                  size={16}
                   aria-hidden="true"
+                  className="shrink-0 text-slate-400 group-hover:text-teal-600"
                 />
               </button>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

@@ -82,7 +82,7 @@ import { FractionalPriceFields } from "./fractional-price-fields";
 import { fractionalPricePreview } from "./lib/fractional-price-preview";
 import { toggleFractionalPrice } from "./lib/toggle-fractional-price";
 import { parsePrice } from "./lib/price-lists-api";
-import { dashboardInventoryBars } from "./lib/dashboard-inventory-bars";
+import { dashboardMetrics } from "./lib/dashboard-metrics";
 import {
   getEffectivePrices,
   type EffectivePrices,
@@ -151,7 +151,10 @@ import {
 } from "./lib/workspace-location";
 import { CustomerAccounts } from "./customer-accounts";
 import { DashboardMedicineSearch } from "./dashboard-medicine-search";
-import { DashboardOverview, type DashboardAlert } from "./dashboard-overview";
+import {
+  DashboardInventoryAlerts,
+  DashboardOverview,
+} from "./dashboard-overview";
 import { DashboardWelcome, DashboardDate } from "./dashboard-welcome";
 import { ReportsWorkspace } from "./reports-workspace";
 import { DashboardRecentSales } from "./dashboard-recent-sales";
@@ -184,6 +187,7 @@ import {
 } from "./data-table";
 import {
   activeCatalogMetric,
+  catalogMetricCounts,
   catalogStockTone,
   catalogStockTotals,
   toggleCatalogMetric,
@@ -299,7 +303,7 @@ import { AlfaBetaMedicineCard } from "./alfabeta-medicine-card";
 import { distributeSaleDiscount } from "./lib/sale-discount";
 import { prepareAccountPayment } from "./lib/account-payment";
 import { withStockAvailability } from "./lib/stock-availability";
-import type { FormEvent, ReactElement } from "react";
+import type { CSSProperties, FormEvent, ReactElement } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -1700,6 +1704,7 @@ function Home({
 }): ReactElement {
   const [summary, setSummary] = useState<ReportSummary>();
   const [summaryError, setSummaryError] = useState("");
+  const { enLinea } = useConectividad();
   useEffect(() => {
     if (!active || !canReadReports) return;
     let current = true;
@@ -1757,78 +1762,30 @@ function Home({
         : "bg-slate-100 text-slate-600",
     },
   ];
-  const expiringInThirtyDays = stock.filter(
-    (lot) =>
-      lot.expiresAt &&
-      new Date(lot.expiresAt) < new Date(Date.now() + 30 * 86400000),
-  ).length;
-  const outOfStockProductCount = products.filter(
-    (product) => !stock.some((lot) => lot.productId === product.id),
-  ).length;
   const dashboardV2Enabled = Boolean(onNavigate);
   if (dashboardV2Enabled) {
-    const alerts: DashboardAlert[] = [
-      {
-        note: "Revisá las existencias para evitar faltantes.",
-        view: "Inventario",
-        title: outOfStockProductCount
-          ? `${outOfStockProductCount} producto${outOfStockProductCount === 1 ? "" : "s"} sin stock`
-          : "Sin productos sin stock",
-        status: outOfStockProductCount ? "Crítico" : "Normal",
-        tone: outOfStockProductCount
-          ? "bg-rose-100 text-rose-700"
-          : "bg-emerald-100 text-emerald-700",
-      },
-      {
-        note: "Consultá fechas y lotes en inventario.",
-        view: "Inventario",
-        title: expiringInThirtyDays
-          ? `${expiringInThirtyDays} lote${expiringInThirtyDays === 1 ? "" : "s"} vence dentro de 30 días`
-          : "Sin vencimientos durante los próximos 30 días",
-        status: expiringInThirtyDays ? "Revisar" : "Normal",
-        tone: expiringInThirtyDays
-          ? "bg-amber-100 text-amber-800"
-          : "bg-emerald-100 text-emerald-700",
-      },
-      {
-        note: "Controlá las compras por recibir.",
-        view: "Compras",
-        title: !summary
-          ? "Compras pendientes: sin información"
-          : summary.pendingPurchases
-            ? `${summary.pendingPurchases} compra${summary.pendingPurchases === 1 ? "" : "s"} pendiente${summary.pendingPurchases === 1 ? "" : "s"}`
-            : "No hay compras pendientes",
-        status: summary?.pendingPurchases ? "Pendiente" : "Normal",
-        tone: summary?.pendingPurchases
-          ? "bg-sky-100 text-sky-700"
-          : "bg-emerald-100 text-emerald-700",
-      },
-      {
-        title: session ? `Caja abierta en ${branchName}` : "Sin caja abierta",
-        note: session
-          ? "Consultá la sesión y sus movimientos."
-          : "Abrí una sesión para operar en efectivo.",
-        status: session ? "Normal" : "Revisar",
-        tone: session
-          ? "bg-emerald-100 text-emerald-700"
-          : "bg-amber-100 text-amber-800",
-        view: "Caja",
-      },
-    ];
+    // Sin conexión el resumen no llega: nada de esqueletos ni animaciones.
+    const summaryLoading =
+      enLinea && canReadReports && !summary && !summaryError;
     return (
-      <div className="dashboard-home space-y-3 pb-2">
+      <div
+        className={`dashboard-home space-y-3 pb-2 ${enLinea ? "dashboard-animado" : ""}`}
+      >
         {summaryError && (
           <p role="status" className="text-xs text-amber-700">
             {summaryError}
           </p>
         )}
-        <div className="relative max-sm:[&_.dashboard-welcome]:pt-10">
+        <div className="dashboard-entrada relative max-sm:[&_.dashboard-welcome]:pt-10">
           <div className="absolute right-0 top-0 z-20">
             <DashboardDate />
           </div>
           <DashboardWelcome branchName={branchName} />
         </div>
-        <div>
+        <div
+          className="dashboard-entrada"
+          style={{ "--orden": 1 } as CSSProperties}
+        >
           <DashboardMedicineSearch
             key={organizationId}
             token={token}
@@ -1836,22 +1793,27 @@ function Home({
           />
         </div>
         <DashboardOverview
+          metrics={dashboardMetrics(summary, session)}
           salesTrend={summary?.salesTrend}
-          inventoryBars={dashboardInventoryBars(products, stock)}
-          sales={summary ? money(summary.salesTodayMinor) : "—"}
-          tickets={summary ? String(summary.salesTodayCount) : "—"}
-          outOfStock={outOfStockProductCount}
-          expiring={expiringInThirtyDays}
-          alerts={alerts}
-          onNavigate={onNavigate}
+          loading={summaryLoading}
         />
-        <DashboardRecentSales
-          active={active}
-          token={token}
-          organizationId={organizationId}
-          branchId={branchId}
-          onOpenHistory={onOpenSalesHistory}
-        />
+        <div
+          className="dashboard-entrada grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]"
+          style={{ "--orden": 8 } as CSSProperties}
+        >
+          <DashboardInventoryAlerts
+            counts={catalogMetricCounts(products, stock)}
+            onNavigate={onNavigate}
+          />
+          <DashboardRecentSales
+            active={active}
+            token={token}
+            organizationId={organizationId}
+            branchId={branchId}
+            onOpenHistory={onOpenSalesHistory}
+            skeleton={enLinea}
+          />
+        </div>
       </div>
     );
   }
