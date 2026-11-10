@@ -72,19 +72,43 @@ const clave = (venta: Pick<VentaPendiente, "alcance" | "id">) =>
 const oyentes = new Set<() => void>();
 let canal: BroadcastChannel | undefined;
 
+/**
+ * La bandeja en memoria (SISTEMA-74): se lee una vez y se reutiliza hasta que
+ * cambie (en esta pestaña o en otra). Antes cada consulta la leía clave por
+ * clave, y cuanto más se trabajaba sin conexión más lenta era cada pantalla.
+ */
+let enMemoria: Promise<VentaPendiente[]> | undefined;
+/** Almacén del que salió la bandeja en memoria: si cambia, se vuelve a leer. */
+let almacenDeLaMemoria: unknown;
+
 function canalEntrePestanas() {
   if (canal || typeof BroadcastChannel === "undefined") return canal;
   canal = new BroadcastChannel(CANAL);
   canal.onmessage = () => {
+    enMemoria = undefined;
     for (const oyente of oyentes) oyente();
   };
   return canal;
 }
 
 function avisarCambio() {
+  enMemoria = undefined;
   for (const oyente of oyentes) oyente();
   canalEntrePestanas()?.postMessage("cambio");
 }
+
+/** Olvida la bandeja en memoria (cambio de almacén en los tests). */
+export function olvidarBandejaEnMemoria() {
+  enMemoria = undefined;
+}
+
+const ordenar = (ventas: VentaPendiente[]) =>
+  ventas
+    .filter((venta) => venta?.version === 1)
+    .sort(
+      (a, b) =>
+        a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id),
+    );
 
 /** Avisa cuando cambia la bandeja (en esta pestaña o en otra). */
 export function suscribirBandeja(oyente: () => void) {
@@ -107,42 +131,32 @@ export async function actualizarVentaPendiente(venta: VentaPendiente) {
 
 /** Ventas de un usuario, de la más vieja a la más nueva. */
 export async function ventasDe(alcance: string): Promise<VentaPendiente[]> {
-  const almacen = almacenLocal();
-  const ventas: VentaPendiente[] = [];
-  for (const key of await almacen.claves(`${PREFIJO}${alcance}|`)) {
-    const venta = await almacen.leer<VentaPendiente>(key);
-    if (venta?.version === 1) ventas.push(venta);
-  }
-  return ventas.sort(
-    (a, b) =>
-      a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id),
-  );
+  return (await ventasDeLaPc()).filter((venta) => venta.alcance === alcance);
 }
 
 /** Todas las ventas de la PC, de todos los usuarios, de la más vieja a la más nueva. */
-export async function ventasDeLaPc(): Promise<VentaPendiente[]> {
+export function ventasDeLaPc(): Promise<VentaPendiente[]> {
   const almacen = almacenLocal();
-  const ventas: VentaPendiente[] = [];
-  for (const key of await almacen.claves(PREFIJO)) {
-    const venta = await almacen.leer<VentaPendiente>(key);
-    if (venta?.version === 1) ventas.push(venta);
+  if (almacenDeLaMemoria !== almacen) {
+    enMemoria = undefined;
+    almacenDeLaMemoria = almacen;
   }
-  return ventas.sort(
-    (a, b) =>
-      a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id),
-  );
+  const lectura = (enMemoria ??= almacen
+    .valores<VentaPendiente>(PREFIJO)
+    .then(ordenar));
+  // Si falla, la próxima vez se vuelve a leer.
+  lectura.catch(() => {
+    if (enMemoria === lectura) enMemoria = undefined;
+  });
+  // Una copia de la lista: quien la recibe puede ordenarla o filtrarla.
+  return lectura.then((ventas) => [...ventas]);
 }
 
 /** Cuántas ventas sin enviar hay en la PC de otros usuarios. */
 export async function pendientesDeOtros(alcance: string) {
-  const almacen = almacenLocal();
-  let total = 0;
-  for (const key of await almacen.claves(PREFIJO)) {
-    if (key.startsWith(`${PREFIJO}${alcance}|`)) continue;
-    const venta = await almacen.leer<VentaPendiente>(key);
-    if (venta?.estado === "PENDIENTE") total++;
-  }
-  return total;
+  return (await ventasDeLaPc()).filter(
+    (venta) => venta.alcance !== alcance && venta.estado === "PENDIENTE",
+  ).length;
 }
 
 /** Las enviadas se guardan una semana para reimprimir y después se borran. */
@@ -156,6 +170,7 @@ export async function olvidarEnviadasViejas(ahora = Date.now()) {
       ahora - Date.parse(venta.enviadaEl) > ENVIADAS_SE_GUARDAN_MS
     )
       await almacen.borrar(clave(venta));
+  enMemoria = undefined;
 }
 
 /** Unidades vendidas sin conexión que todavía no llegaron al servidor. */

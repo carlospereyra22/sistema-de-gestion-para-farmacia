@@ -12,6 +12,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SupplierPayablesService } from "../supplier-payables/supplier-payables.service";
 import { hidePurchaseCosts } from "./purchase-cost-visibility";
 import { payableToday } from "../supplier-payables/payable-rules";
+import { rangoDeHistorial } from "../common/db/rango-historial";
 import { offlineOccurredAt } from "../sales/offline-sale";
 import { verificarOperacionDeOtro } from "../sales/operacion-firmada";
 import { subscriptionAccessAt } from "../platform/subscription-access";
@@ -49,14 +50,34 @@ export class PurchasesService {
       audit,
     ),
   ) {}
-  async list(actorId: string, organizationId: string, branchId: string) {
+  /**
+   * Compras de la sucursal: los pedidos abiertos siempre y las demás del rango
+   * pedido, por defecto los últimos 90 días (SISTEMA-74). La fecha es la del
+   * pedido, o la de creación si nunca se pidió.
+   */
+  async list(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    filtro: { desde?: string; hasta?: string } = {},
+  ) {
     const { seesCosts, canRegisterDebt } = await this.viewAccess(
       actorId,
       organizationId,
       branchId,
     );
+    const { inicio, fin } = rangoDeHistorial(filtro);
+    const enRango = { gte: inicio, ...(fin ? { lte: fin } : {}) };
     const purchases = await this.prisma.purchase.findMany({
-      where: { organizationId, branchId },
+      where: {
+        organizationId,
+        branchId,
+        OR: [
+          { status: { in: ["DRAFT", "ORDERED", "PARTIALLY_RECEIVED"] } },
+          { orderedAt: enRango },
+          { orderedAt: null, createdAt: enRango },
+        ],
+      },
       include: {
         items: true,
         _count: { select: { payableInvoices: { where: { receiptId: null } } } },

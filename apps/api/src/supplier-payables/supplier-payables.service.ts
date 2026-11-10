@@ -343,11 +343,25 @@ export class SupplierPayablesService {
         },
         orderBy: { name: "asc" },
       }),
-      this.prisma.purchase.findMany({
-        where: { organizationId: org, branchId: branch },
-        include: { items: true },
-        orderBy: { createdAt: "desc" },
-      }),
+      // El importe estimado se suma en la base (SISTEMA-74): traer todos los
+      // renglones de todas las compras tardaba segundos con miles de compras.
+      this.prisma.$queryRaw<
+        {
+          id: string;
+          supplierId: string;
+          reference: string | null;
+          status: string;
+          createdAt: Date;
+          amountMinor: bigint;
+        }[]
+      >(Prisma.sql`
+        SELECT p.id, p."supplierId", p.reference, p.status::text AS status, p."createdAt",
+          COALESCE(SUM(i."orderedQuantity"::bigint * i."unitCostMinor"), 0)::bigint AS "amountMinor"
+        FROM "Purchase" p
+        LEFT JOIN "PurchaseItem" i ON i."purchaseId" = p.id
+        WHERE p."organizationId" = ${org}::uuid AND p."branchId" = ${branch}::uuid
+        GROUP BY p.id
+        ORDER BY p."createdAt" DESC`),
     ]);
     return {
       canCreate: codes.has("PAYABLE_MANAGE"),
@@ -360,12 +374,7 @@ export class SupplierPayablesService {
         reference: p.reference,
         status: p.status,
         createdAt: p.createdAt.toISOString(),
-        amountMinor: p.items
-          .reduce(
-            (sum, i) => sum + BigInt(i.orderedQuantity) * i.unitCostMinor,
-            0n,
-          )
-          .toString(),
+        amountMinor: p.amountMinor.toString(),
       })),
     };
   }

@@ -1,4 +1,5 @@
 import type { CatalogProduct } from "./api";
+import { textoEnCache } from "./indice-productos";
 
 export type SaleCatalogStock = { available: number; expired: number };
 export type SaleCatalogFilters = {
@@ -53,17 +54,22 @@ export function filterSaleCatalog<T extends SaleCatalogProduct>(
     (product) =>
       (!filters.categoryId || product.category?.id === filters.categoryId) &&
       (!filters.inStockOnly || stockOf(product.id).available > 0) &&
-      (!term ||
-        [
-          product.name,
-          product.activeIngredient ?? "",
-          ...product.barcodes.map((barcode) => barcode.code),
-        ]
-          .join(" ")
-          .toLocaleLowerCase("es-AR")
-          .includes(term)),
+      (!term || textoDeVenta(product).includes(term)),
   );
 }
+
+/** Texto buscable de cada producto, armado una vez (SISTEMA-74). */
+const textosDeVenta = new WeakMap<SaleCatalogProduct, string>();
+const textoDeVenta = (product: SaleCatalogProduct) =>
+  textoEnCache(textosDeVenta, product, (p) =>
+    [
+      p.name,
+      p.activeIngredient ?? "",
+      ...p.barcodes.map((barcode) => barcode.code),
+    ]
+      .join(" ")
+      .toLocaleLowerCase("es-AR"),
+  );
 
 export function saleCategoryOptions(
   products: readonly SaleCatalogProduct[],

@@ -1,3 +1,4 @@
+import { productoPorId } from "./lib/indice-productos";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -440,7 +441,7 @@ export function PriceListsWorkspace({
                       <strong className="font-semibold tabular-nums text-slate-800">
                         {
                           list.prices.filter((price) =>
-                            products.some((p) => p.id === price.productId),
+                            Boolean(productoPorId(products, price.productId)),
                           ).length
                         }
                       </strong>{" "}
@@ -1026,7 +1027,7 @@ export function PriceListsWorkspace({
                 className={`${primary} mt-4`}
                 onClick={() => {
                   for (const id of addIds) {
-                    const price = products.find((p) => p.id === id)?.prices[0]
+                    const price = productoPorId(products, id)?.prices[0]
                       ?.amountMinor;
                     if (price !== undefined) changePrice(id, price);
                   }
@@ -1108,9 +1109,7 @@ export function PriceListsWorkspace({
                       ? preview
                       : increaseIds.map((id) => ({
                           productId: id,
-                          name:
-                            products.find((p) => p.id === id)?.name ??
-                            "Producto",
+                          name: productoPorId(products, id)?.name ?? "Producto",
                           expectedMinor:
                             selected?.prices.find((p) => p.productId === id)
                               ?.amountMinor ?? null,

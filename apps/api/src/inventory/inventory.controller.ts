@@ -6,6 +6,7 @@ import {
   Patch,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -25,6 +26,7 @@ import {
 } from "class-validator";
 
 import type { AuthenticatedRequest } from "../auth/auth.types";
+import { HistorialQueryDto } from "../common/db/historial-query.dto";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { InventoryService } from "./inventory.service";
@@ -122,11 +124,17 @@ export class InventoryController {
 
   @Get("history")
   history(
+    @Query() filtro: HistorialQueryDto,
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,
   ) {
-    return this.inventory.history(request.auth!.sub, organizationId, branchId);
+    return this.inventory.history(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      filtro,
+    );
   }
 
   @Post("receipts")

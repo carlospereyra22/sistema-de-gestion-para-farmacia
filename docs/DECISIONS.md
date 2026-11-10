@@ -2,6 +2,21 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-74): Rendimiento con catálogos e historiales grandes (60.000
+  productos o más). El catálogo se sincroniza por partes: 256 partes por los dos primeros
+  caracteres del id, cada una con una versión que resume su contenido
+  (`GET catalog/products/versiones` y `catalog/products/partes`); la PC las guarda en
+  IndexedDB y sólo pide las que cambiaron. Se descartó invalidar todo el catálogo con una
+  versión única (la corrida de precios y cada edición forzaban bajar 46 MB) y llevar
+  historial de cambios por producto (las eliminaciones y los cambios de códigos no dejan
+  rastro). Las relaciones de Prisma con claves de varias columnas no se usan para listados
+  grandes: arman una condición por fila que PostgreSQL rechaza con unos miles. Compras e
+  historial de Inventario traen por defecto los últimos 90 días (Compras, además, los
+  pedidos abiertos); para lo anterior se eligen fechas (decisión del usuario). Sin conexión
+  conocida la web no sale a la red y responde con la copia; con conexión cada pedido tiene
+  un tiempo máximo de 30 s. nginx comprime el JSON menos en `/auth/`. Detalle y mediciones
+  en `RENDIMIENTO.md`.
+
 - 07/11/2026 (SISTEMA-58, arreglos de la prueba): El menú muestra solo las pantallas cuyo
   permiso de lectura tiene el rol, con el mismo permiso que pide la API al cargarlas
   (`lib/workspace-permissions.ts`). Categorías y Listas de precios piden administrar el

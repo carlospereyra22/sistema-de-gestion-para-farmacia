@@ -1,3 +1,4 @@
+import { productoPorId } from "./lib/indice-productos";
 import { PurchasePackPicker } from "./purchase-pack-picker";
 import type { MedicineReference } from "./lib/api";
 import {
@@ -427,7 +428,7 @@ export function PurchaseExcelReview({
   );
   const header = sheetData[headerRow] ?? [];
   const productName = (id: string) =>
-    products.find((p) => p.id === id)?.name ?? "Producto";
+    productoPorId(products, id)?.name ?? "Producto";
   const lines = purchaseExcelLines(rows, selected, assigned, existingLines);
   const chosen = rows.filter(
     (r) =>

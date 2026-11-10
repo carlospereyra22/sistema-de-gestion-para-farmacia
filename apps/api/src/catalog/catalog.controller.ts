@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -25,9 +26,11 @@ import {
   Min,
   MinLength,
   MaxLength,
+  Matches,
   Max,
 } from "class-validator";
 import type { AuthenticatedRequest } from "../auth/auth.types";
+import { partesPedidas } from "./catalogo-por-partes";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { CatalogPriceRefreshService } from "./catalog-price-refresh.service";
 import { CatalogService } from "./catalog.service";
@@ -123,6 +126,16 @@ class BranchProductChangeDto {
 class CatalogBranchQuery {
   @IsOptional() @IsUUID() branchId?: string;
 }
+/** Catálogo por partes (SISTEMA-74): versión del diccionario que tiene la PC. */
+class CatalogVersionsQuery extends CatalogBranchQuery {
+  @IsOptional() @IsString() @MaxLength(40) diccionario?: string;
+}
+/** Partes pedidas: "0a,1f,..." (hasta 32). */
+class CatalogPartsQuery extends CatalogBranchQuery {
+  @IsString()
+  @Matches(/^[0-9a-f]{2}(,[0-9a-f]{2}){0,31}$/)
+  partes!: string;
+}
 class UpdateProductDto {
   @IsOptional() @IsBoolean() generateInternalBarcode?: boolean;
   @IsOptional() @IsString() @MaxLength(120) brand?: string | null;
@@ -161,6 +174,40 @@ export class CatalogController {
     private readonly priceRefresh: CatalogPriceRefreshService,
     private readonly priceUpdates: PriceListUpdates,
   ) {}
+  /** Versión de cada parte del catálogo, para que la PC pida sólo lo que cambió. */
+  @Get("products/versiones") catalogVersions(
+    @Param("organizationId") id: string,
+    @Req() request: AuthenticatedRequest,
+    @Query() query: CatalogVersionsQuery,
+  ) {
+    return this.catalog.catalogVersions(
+      request.auth!.sub,
+      id,
+      query.branchId,
+      query.diccionario,
+    );
+  }
+  /** Productos de algunas partes del catálogo (SISTEMA-74). */
+  @Get("products/partes") catalogParts(
+    @Param("organizationId") id: string,
+    @Req() request: AuthenticatedRequest,
+    @Query() query: CatalogPartsQuery,
+  ) {
+    let partes: string[];
+    try {
+      partes = partesPedidas(query.partes);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Partes inválidas.",
+      );
+    }
+    return this.catalog.catalogParts(
+      request.auth!.sub,
+      id,
+      query.branchId,
+      partes,
+    );
+  }
   @Get("products") list(
     @Param("organizationId") id: string,
     @Req() request: AuthenticatedRequest,

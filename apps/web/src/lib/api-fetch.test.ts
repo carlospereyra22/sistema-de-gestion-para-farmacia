@@ -7,7 +7,7 @@ import {
 } from "./api-fetch";
 import { almacenEnMemoria, usarAlmacen } from "./almacen-local";
 import { TOKEN_SIN_CONEXION, usarAlcance } from "./cache-local";
-import { conectividad, marcarEnLinea } from "./conectividad";
+import { conectividad, marcarEnLinea, marcarSinConexion } from "./conectividad";
 
 describe("apiFetch", () => {
   afterEach(() => {
@@ -54,7 +54,22 @@ describe("apiFetch", () => {
 
     await apiFetch("/x", init);
 
-    expect(fetch).toHaveBeenCalledWith("/x", init);
+    // Con un tiempo máximo, para que un pedido colgado no trabe todo (SISTEMA-74).
+    expect(fetch).toHaveBeenCalledWith(
+      "/x",
+      expect.objectContaining({ ...init, signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("respeta la cancelación de quien llama", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("{}"));
+    vi.stubGlobal("fetch", fetch);
+    const controller = new AbortController();
+    await apiFetch("/x", { signal: controller.signal });
+    const { signal } = fetch.mock.calls[0]![1] as { signal: AbortSignal };
+    expect(signal.aborted).toBe(false);
+    controller.abort();
+    expect(signal.aborted).toBe(true);
   });
 });
 
@@ -101,6 +116,21 @@ describe("apiFetch sin conexión", () => {
     expect(await response.json()).toEqual([{ id: "lote" }]);
     expect(guardadaEl(response)).toBeTypeOf("number");
     expect(conectividad().enLinea).toBe(false);
+  });
+
+  it("con la falta de conexión ya conocida no sale a la red (SISTEMA-74)", async () => {
+    await guardarStock();
+    marcarSinConexion();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+
+    const response = await apiFetch(stock, auth("real"));
+
+    expect(await response.json()).toEqual([{ id: "lote" }]);
+    await expect(
+      apiFetch(stock, { ...auth("real"), method: "POST" }),
+    ).rejects.toBeInstanceOf(SinConexionError);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("el proxy sin servidor (502) también usa la copia", async () => {

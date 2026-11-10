@@ -419,6 +419,7 @@ describe("base de medicamentos para la PC (SISTEMA-69)", () => {
   const prisma = () => {
     const findMany = jest.fn().mockResolvedValue([
       {
+        id: "sertal",
         name: "Sertal Compuesto",
         presentation: "comp. x 10",
         laboratory: "Roemmers",
@@ -430,7 +431,6 @@ describe("base de medicamentos para la PC (SISTEMA-69)", () => {
         priceMinor: 150000n,
         priceUpdatedAt: actualizado,
         officialDelisted: false,
-        barcodes: [{ barcode: "7795345124001" }, { barcode: "7795345124001" }],
       },
     ]);
     return {
@@ -443,6 +443,13 @@ describe("base de medicamentos para la PC (SISTEMA-69)", () => {
               _max: { updatedAt: actualizado, priceUpdatedAt: actualizado },
             }),
             findMany,
+          },
+          // Los códigos llegan aparte, por medicamento (SISTEMA-74).
+          medicineCatalogBarcode: {
+            findMany: jest.fn().mockResolvedValue([
+              { itemId: "sertal", barcode: "7795345124001", gtin: null },
+              { itemId: "sertal", barcode: "7795345124001", gtin: null },
+            ]),
           },
           medicineCatalogPack: {
             findMany: jest.fn().mockResolvedValue([

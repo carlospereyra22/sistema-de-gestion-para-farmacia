@@ -1,5 +1,7 @@
 # Architecture
 
+Rendimiento con catálogos grandes (10/11/2026, SISTEMA-74): el catálogo se sincroniza por partes (256, por prefijo del id) con versiones por contenido calculadas en PostgreSQL (`md5(string_agg(...))` por parte); la web las guarda en IndexedDB (`lib/catalogo-local.ts`) y es también la copia sin conexión del catálogo. Las consultas de listados grandes no usan relaciones de Prisma con claves de varias columnas ni un `IN` por fila (`common/db/en-tandas.ts` parte listas de ids). `apiFetch` tiene un tiempo máximo de 30 s y, sin conexión conocida, no sale a la red. La bandeja de la PC se lee de una vez y queda en memoria. nginx comprime JSON salvo en `/auth/`. Sin servicios ni dependencias nuevas. Ver `RENDIMIENTO.md`.
+
 Preproducción (01/11/2026): `gestion_preprod` y `gestion-preprod-api` son un
 ambiente de prueba aislado en el mismo VPS, bajo el puerto loopback 3001 y el
 prefijo HTTPS `/preprod/api/v1/`. Tiene rol, JWT, organización, datos y respaldos

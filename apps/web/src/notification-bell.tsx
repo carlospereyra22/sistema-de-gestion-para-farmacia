@@ -9,9 +9,7 @@ import {
   X,
 } from "lucide-react";
 import {
-  getCatalogProducts,
   getOfflineIssues,
-  getStock,
   type CatalogProduct,
   type StockLot,
 } from "./lib/api";
@@ -39,6 +37,8 @@ export function NotificationBell({
   branchId,
   branchName,
   userKey,
+  products,
+  lots,
   onNavigate,
 }: {
   token: string;
@@ -46,6 +46,13 @@ export function NotificationBell({
   branchId: string;
   branchName: string;
   userKey: string;
+  /**
+   * Catálogo y stock que ya tiene la pantalla (SISTEMA-74): la campanita no
+   * los vuelve a pedir. Bajarlos cada minuto en cada PC era lo más pesado del
+   * sistema con catálogos grandes.
+   */
+  products: CatalogProduct[];
+  lots: StockLot[];
   onNavigate: (view: WorkspaceView) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -71,10 +78,6 @@ export function NotificationBell({
   const [openedVersions, setOpenedVersions] = useState<string[]>([]);
   const [minimum, setMinimum] = useState(LOW_STOCK_UNITS);
   const [rows, setRows] = useState<AccountDueRow[]>([]);
-  const [stock, setStock] = useState<{
-    products: CatalogProduct[];
-    lots: StockLot[];
-  }>();
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [updated, setUpdated] = useState<Date>();
@@ -105,12 +108,8 @@ export function NotificationBell({
     pending.current = true;
     setLoading(true);
     try {
-      const [due, inventory, offlineIssues] = await Promise.allSettled([
+      const [due, offlineIssues] = await Promise.allSettled([
         getAccountDueDates(token, organizationId, branchId),
-        Promise.all([
-          getCatalogProducts(token, organizationId, branchId),
-          getStock(token, organizationId, branchId),
-        ]),
         token === TOKEN_SIN_CONEXION
           ? Promise.reject(new Error("Sin conexión"))
           : getOfflineIssues(token, organizationId, branchId),
@@ -125,14 +124,6 @@ export function NotificationBell({
         setRows([]);
         failed.push(
           "No se pudieron consultar las cuentas corrientes. Revisá la conexión y tus permisos.",
-        );
-      }
-      if (inventory.status === "fulfilled")
-        setStock({ products: inventory.value[0], lots: inventory.value[1] });
-      else {
-        setStock(undefined);
-        failed.push(
-          "No se pudo consultar el inventario. Revisá la conexión y tus permisos.",
         );
       }
       setErrors(failed);
@@ -172,7 +163,7 @@ export function NotificationBell({
   }, [open]);
   const alerts = [
     ...accountAlerts(rows),
-    ...(stock ? stockAlerts(stock.products, stock.lots, minimum) : []),
+    ...(products.length ? stockAlerts(products, lots, minimum) : []),
   ];
   const unread = alerts.filter((alert) => !seen.includes(alertVersion(alert)));
   const unreadSnapshot = JSON.stringify(unread);

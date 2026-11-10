@@ -271,6 +271,31 @@ export class MedicineCatalogService {
    * sólo si cambió desde la versión que ya tiene la PC (la actualización de
    * precios de las 9 y las 17 la cambia). Claves cortas: son ~18.000 filas.
    */
+  /**
+   * Códigos de toda la base, por medicamento. Se piden aparte: como relación,
+   * Prisma arma un `IN` con un id por medicamento, que PostgreSQL rechaza
+   * pasados los 32.767 (SISTEMA-74).
+   */
+  private async codigosPorMedicamento() {
+    const codigos = new Map<
+      string,
+      { barcode: string; gtin: string | null }[]
+    >();
+    for (const {
+      itemId,
+      barcode,
+      gtin,
+    } of await this.prisma.medicineCatalogBarcode.findMany({
+      select: { itemId: true, barcode: true, gtin: true },
+      orderBy: { id: "asc" },
+    })) {
+      const lista = codigos.get(itemId);
+      if (lista) lista.push({ barcode, gtin });
+      else codigos.set(itemId, [{ barcode, gtin }]);
+    }
+    return codigos;
+  }
+
   async baseLocal(versionDeLaPc?: string): Promise<BaseLocalMedicamentos> {
     const [resumen, packs] = await Promise.all([
       this.prisma.medicineCatalogItem.aggregate({
@@ -290,10 +315,12 @@ export class MedicineCatalogService {
       packs.reduce((suma, pack) => suma + pack.factor, 0),
     ].join("-");
     if (versionDeLaPc === version) return { version, items: null, packs: null };
-    const items = await this.prisma.medicineCatalogItem.findMany({
-      include: { barcodes: { select: { barcode: true } } },
-      orderBy: [{ name: "asc" }, { presentation: "asc" }],
-    });
+    const [items, codigos] = await Promise.all([
+      this.prisma.medicineCatalogItem.findMany({
+        orderBy: [{ name: "asc" }, { presentation: "asc" }],
+      }),
+      this.codigosPorMedicamento(),
+    ]);
     return {
       version,
       packs,
@@ -308,7 +335,9 @@ export class MedicineCatalogService {
         o: item.priceSource,
         pr: String(item.priceMinor),
         u: item.priceUpdatedAt.toISOString(),
-        b: [...new Set(item.barcodes.map((code) => code.barcode))],
+        b: [
+          ...new Set((codigos.get(item.id) ?? []).map((code) => code.barcode)),
+        ],
         ...(item.officialDelisted ? { x: 1 as const } : {}),
       })),
     };
@@ -317,12 +346,13 @@ export class MedicineCatalogService {
   // Referencias de toda la base, una por código distinto: las usa la corrida
   // para actualizar los productos vinculados.
   async references(): Promise<MedicineReference[]> {
-    const items = await this.prisma.medicineCatalogItem.findMany({
-      include: { barcodes: true },
-    });
+    const [items, codigos] = await Promise.all([
+      this.prisma.medicineCatalogItem.findMany(),
+      this.codigosPorMedicamento(),
+    ]);
     return items.flatMap((item) => {
       const codes = new Map<string, string>();
-      for (const { barcode, gtin } of item.barcodes)
+      for (const { barcode, gtin } of codigos.get(item.id) ?? [])
         if (!codes.has(gtin ?? barcode)) codes.set(gtin ?? barcode, barcode);
       return (codes.size ? [...codes.values()] : [""]).map((barcode) =>
         referenceFromCatalog(item, barcode),

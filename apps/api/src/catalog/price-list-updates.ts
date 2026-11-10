@@ -115,17 +115,34 @@ export class PriceListUpdates {
     const lists = [custom?.id, fallback?.id, general?.id].filter(
       (id): id is string => Boolean(id),
     );
-    const products = await this.prisma.product.findMany({
-      where: { organizationId, active: true },
-      select: { id: true, prices: { where: { priceListId: { in: lists } } } },
-    });
+    // Catálogo grande (SISTEMA-74): productos y precios en consultas separadas,
+    // sin una lista de ids por producto que PostgreSQL rechaza con miles.
+    const [products, prices] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { organizationId, active: true },
+        select: { id: true },
+      }),
+      this.prisma.productPrice.findMany({
+        where: { priceListId: { in: lists } },
+        select: { productId: true, priceListId: true, amountMinor: true },
+      }),
+    ]);
+    const porLista = (id?: string) =>
+      new Map(
+        prices
+          .filter((p) => id && p.priceListId === id)
+          .map((p) => [p.productId, p]),
+      );
+    const deLista = porLista(custom?.id),
+      deRespaldo = porLista(fallback?.id),
+      generales = porLista(general?.id);
     return {
       listName: custom?.name ?? "Precio general",
       prices: products.map((product) => {
         const selected =
-          product.prices.find((p) => p.priceListId === custom?.id) ??
-          product.prices.find((p) => p.priceListId === fallback?.id) ??
-          product.prices.find((p) => p.priceListId === general?.id);
+          deLista.get(product.id) ??
+          deRespaldo.get(product.id) ??
+          generales.get(product.id);
         return {
           productId: product.id,
           amountMinor: selected?.amountMinor.toString() ?? null,

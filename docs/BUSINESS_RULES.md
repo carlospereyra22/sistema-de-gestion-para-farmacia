@@ -46,6 +46,8 @@ Nuevo y Editar producto comparten el popup de código interno y etiquetas. Gener
 
 ## Inventory and purchases
 
+- Historiales acotados (10/11/2026, SISTEMA-74; decisión del usuario): Compras muestra todos los pedidos abiertos y las demás compras de los últimos 90 días; el historial de Inventario, los movimientos de los últimos 90 días. Para ver lo anterior se eligen las fechas Desde y Hasta y se consulta ese rango. Las fechas son días civiles de Argentina; en Compras cuenta la fecha del pedido (o la de creación si nunca se pidió). No cambia ningún registro.
+
 - Proveedores: eliminación recuperable mediante baja lógica con PARTY_MANAGE, bloqueo de ficha y auditoría transaccional. Restaurar vuelve a habilitarlo. No elimina historial ni cancela deudas, pagos o compras pendientes.
 - Compras ofrece Cancelar compra / Cancelar pendiente desde el listado, con motivo obligatorio y saldo esperado. Usa el cierre de saldo existente; conserva lo recibido y las obligaciones registradas. Las compras totalmente recibidas no ofrecen cancelación de pendiente.
 

@@ -123,16 +123,16 @@ it("effective prices use custom prices including zero, falling back per product"
   tx.priceList.findFirst
     .mockResolvedValueOnce({ id: "general", name: "Precio general" })
     .mockResolvedValueOnce({ id: "custom", name: "Convenios" });
+  // Productos y precios llegan en consultas separadas (SISTEMA-74).
   tx.product.findMany.mockResolvedValue([
-    {
-      id: "p",
-      prices: [
-        { priceListId: "general", amountMinor: 1000n },
-        { priceListId: "custom", amountMinor: 0n },
-      ],
-    },
-    { id: "q", prices: [{ priceListId: "general", amountMinor: 500n }] },
-    { id: "r", prices: [] },
+    { id: "p" },
+    { id: "q" },
+    { id: "r" },
+  ]);
+  tx.productPrice.findMany.mockResolvedValue([
+    { productId: "p", priceListId: "general", amountMinor: 1000n },
+    { productId: "p", priceListId: "custom", amountMinor: 0n },
+    { productId: "q", priceListId: "general", amountMinor: 500n },
   ]);
   expect(await service.effective("actor", "org", "client")).toEqual({
     listName: "Convenios",
@@ -145,7 +145,8 @@ it("effective prices use custom prices including zero, falling back per product"
 });
 it("handles unpriced products without a customer or custom list", async () => {
   const { service, tx } = setup();
-  tx.product.findMany.mockResolvedValue([{ id: "p", prices: [] }]);
+  tx.product.findMany.mockResolvedValue([{ id: "p" }]);
+  tx.productPrice.findMany.mockResolvedValue([]);
   expect((await service.effective("actor", "org")).prices).toEqual([
     { productId: "p", amountMinor: null, source: "Precio general" },
   ]);

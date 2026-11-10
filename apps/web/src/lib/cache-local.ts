@@ -30,6 +30,12 @@ const CADA_CUANTO_ANOTAR_MS = 60_000;
  */
 const RUTAS_GUARDADAS = [/^\/organizations\/[^/]+(\/.*)?$/];
 
+/**
+ * El catálogo por partes lo guarda `catalogo-local.ts`, parte por parte
+ * (SISTEMA-74): copiarlo además acá duplicaría decenas de MB.
+ */
+const RUTAS_NO_GUARDADAS = [/\/catalog\/products\/(partes|versiones)$/];
+
 let alcance: string | undefined;
 let ultimaSincronizacion: number | undefined;
 let ultimaAnotada = 0;
@@ -37,6 +43,11 @@ let ultimaAnotada = 0;
 /** Usuario dueño de la copia local en uso (vacío: no se guarda nada). */
 export function usarAlcance(valor: string | undefined) {
   alcance = valor?.trim().toLowerCase() || undefined;
+}
+
+/** Usuario dueño de la copia local en uso, si hay sesión. */
+export function alcanceActual() {
+  return alcance;
 }
 
 export function alcanceDe(perfil: Pick<CurrentUserProfile, "email">) {
@@ -55,7 +66,10 @@ export function rutaApi(url: string): { ruta: string; consulta: string } {
 export function seGuarda(url: string, metodo: string) {
   if (metodo !== "GET") return false;
   const { ruta } = rutaApi(url);
-  return RUTAS_GUARDADAS.some((patron) => patron.test(ruta));
+  return (
+    RUTAS_GUARDADAS.some((patron) => patron.test(ruta)) &&
+    !RUTAS_NO_GUARDADAS.some((patron) => patron.test(ruta))
+  );
 }
 
 function claveDe(url: string) {

@@ -1,3 +1,4 @@
+import { enTandas } from "../common/db/en-tandas";
 import type { Prisma } from "@prisma/client";
 
 // Carga o devolución de un lote. supplierId null: sin proveedor.
@@ -71,25 +72,31 @@ export async function loadLotHistories(
     lotIds.map((id) => [id, { receipts: [], returns: [] }]),
   );
   if (!lotIds.length) return histories;
+  // Por tandas: con decenas de miles de lotes un solo `IN` excede el límite
+  // de parámetros de PostgreSQL (SISTEMA-74).
   const [movements, returns] = await Promise.all([
-    db.inventoryMovement.findMany({
-      where: {
-        lotId: { in: lotIds },
-        OR: [
-          { type: { in: ["PURCHASE_RECEIPT", "TRANSFER_IN"] } },
-          {
-            type: { in: ["ADJUSTMENT_IN", "ADJUSTMENT_OUT"] },
-            referenceType: SUPPLIER_ADJUSTMENT,
-          },
-        ],
-      },
-      orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
-      select: { lotId: true, supplierId: true, quantity: true, type: true },
-    }),
-    db.supplierReturn.findMany({
-      where: { lotId: { in: lotIds } },
-      select: { lotId: true, supplierId: true, quantity: true },
-    }),
+    enTandas(lotIds, (tanda) =>
+      db.inventoryMovement.findMany({
+        where: {
+          lotId: { in: tanda },
+          OR: [
+            { type: { in: ["PURCHASE_RECEIPT", "TRANSFER_IN"] } },
+            {
+              type: { in: ["ADJUSTMENT_IN", "ADJUSTMENT_OUT"] },
+              referenceType: SUPPLIER_ADJUSTMENT,
+            },
+          ],
+        },
+        orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+        select: { lotId: true, supplierId: true, quantity: true, type: true },
+      }),
+    ),
+    enTandas(lotIds, (tanda) =>
+      db.supplierReturn.findMany({
+        where: { lotId: { in: tanda } },
+        select: { lotId: true, supplierId: true, quantity: true },
+      }),
+    ),
   ]);
   // Un ajuste que suma es otra carga; uno que resta sale como una devolución.
   for (const { lotId, type, supplierId, quantity } of movements) {

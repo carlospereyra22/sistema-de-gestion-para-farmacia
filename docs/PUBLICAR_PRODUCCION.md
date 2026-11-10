@@ -1,5 +1,7 @@
 # Publicar desde Windows
 
+Compresión en nginx (SISTEMA-74): `deploy/oracle/gestion-api.nginx` y `gestion-preprod-api.nginx` activan `gzip` para JSON (menos en `/auth/`). El publicador no instala la configuración de nginx: hay que copiarla al VPS, revisar con `sudo nginx -t` y recargar con `sudo systemctl reload nginx`, con autorización y fuera del horario de cobros.
+
 Los informes fechados de publicaciones anteriores se archivaron en
 `%LOCALAPPDATA%/FarmaciaJuncos/RespaldosLocales/catalogo-retirado/docs`.
 Este documento conserva el procedimiento vigente. Último registro archivado,

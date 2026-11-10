@@ -1,16 +1,19 @@
+import { lotesDelProducto, textoEnCache } from "./indice-productos";
 import type { CatalogProduct, StockLot } from "./api";
 
+type ProductoFiltrable = Pick<
+  CatalogProduct,
+  | "id"
+  | "name"
+  | "brand"
+  | "barcodes"
+  | "laboratory"
+  | "externalReferenceSource"
+  | "externalReferenceName"
+>;
+
 export function matchesCatalogExtras(
-  product: Pick<
-    CatalogProduct,
-    | "id"
-    | "name"
-    | "brand"
-    | "barcodes"
-    | "laboratory"
-    | "externalReferenceSource"
-    | "externalReferenceName"
-  >,
+  product: ProductoFiltrable,
   stock: Pick<
     StockLot,
     "productId" | "quantity" | "expiresAt" | "expiryStatus"
@@ -20,13 +23,13 @@ export function matchesCatalogExtras(
   reference: string,
   now = new Date(),
 ) {
-  const text = `${product.name} ${product.brand ?? ""} ${product.laboratory?.name ?? ""} ${product.barcodes.map((b) => b.code).join(" ")}`;
-  const normalize = (value: string) =>
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLocaleLowerCase("es");
-  if (!normalize(text).includes(normalize(query.trim()))) return false;
+  // El texto normalizado de cada producto se arma una vez (SISTEMA-74).
+  const text = textoEnCache(textos, product, (p) =>
+    normalize(
+      `${p.name} ${p.brand ?? ""} ${p.laboratory?.name ?? ""} ${p.barcodes.map((b) => b.code).join(" ")}`,
+    ),
+  );
+  if (!text.includes(normalize(query.trim()))) return false;
   const linked = Boolean(
     product.externalReferenceSource && product.externalReferenceName,
   );
@@ -36,10 +39,18 @@ export function matchesCatalogExtras(
   )
     return false;
   if (!expiry) return true;
-  return stock.some(
-    (lot) => lot.productId === product.id && lotMatchesExpiry(lot, expiry, now),
+  // Sólo los lotes del producto, no todo el stock (SISTEMA-74).
+  return lotesDelProducto(stock, product.id).some((lot) =>
+    lotMatchesExpiry(lot, expiry, now),
   );
 }
+
+const textos = new WeakMap<ProductoFiltrable, string>();
+const normalize = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es");
 
 // Criterio del filtro Vencimiento para un lote; también decide qué lotes se
 // ven en el detalle desplegable de Productos.
