@@ -1,6 +1,29 @@
-import { apiFetch as fetch } from "../lib/api-fetch";
+import { apiFetch as fetch, SinConexionError } from "../lib/api-fetch";
 import { formatAmountTyping } from "../lib/amount-typing";
-import { apiBaseUrl } from "../lib/api";
+import {
+  apiBaseUrl,
+  bandejaDeLaPc,
+  puedeOperarSinConexion,
+  type DondeQuedo,
+} from "../lib/api";
+import type { VentaPendiente } from "../lib/bandeja-ventas";
+import { TOKEN_SIN_CONEXION } from "../lib/cache-local";
+import { conectividad } from "../lib/conectividad";
+import {
+  deudaConPendientes,
+  deudasConPendientes,
+  guardarOperacionPagar,
+  hoyEnArgentina,
+  paginaDeDeudas,
+  type CopiaDeudas,
+  type DeudaVisible,
+  type FiltrosDeudas,
+} from "../lib/pagar-sin-conexion";
+import {
+  proveedoresConPendientes,
+  proveedorSinEnviar,
+} from "../lib/proveedores-sin-conexion";
+import { ahoraSegunServidor } from "../lib/venta-sin-conexion";
 
 export type PayableScope = {
   token: string;
@@ -34,7 +57,11 @@ export type Invoice = {
     voidedByName: string | null;
     voidReason: string | null;
     allocations: { dueId: string; amountMinor: string }[];
+    /** Hecho sin conexión y todavía no enviado (SISTEMA-73). */
+    porEnviar?: boolean;
   }[];
+  /** Cargada o modificada sin conexión y todavía no enviada (SISTEMA-73). */
+  porEnviar?: boolean;
   receiptId?: string | null;
   id: string;
   branchId: string;
@@ -217,4 +244,262 @@ export function purchaseAmountInput(amountMinor?: string): string {
   if (amountMinor === undefined) return "";
   const amount = BigInt(amountMinor);
   return `${amount / 100n},${String(amount % 100n).padStart(2, "0")}`;
+}
+
+// --- Cuentas por pagar sin conexión (SISTEMA-73) ---
+// Las consultas parten de la copia de la PC (`base-local`) más lo hecho sin
+// enviar cuando no hay conexión o hay algo pendiente; si no, van al servidor
+// como siempre. Las escrituras que no llegan quedan en la PC y se mandan solas.
+
+/** ¿Hay que armar la vista en la PC? Sin conexión o con algo sin enviar. */
+function vistaEnLaPc(scope: PayableScope, bandeja: VentaPendiente[]) {
+  return (
+    scope.token === TOKEN_SIN_CONEXION ||
+    !conectividad().enLinea ||
+    bandeja.some(
+      (item) =>
+        item.estado === "PENDIENTE" &&
+        item.organizationId === scope.organizationId &&
+        item.branchId === scope.branchId &&
+        (item.operacion === "PAGAR" ||
+          (item.operacion === "COMPRA" &&
+            Boolean(
+              (item.cuerpo.cuerpo as { debt?: unknown } | undefined)?.debt,
+            ))),
+    )
+  );
+}
+
+/** Copia de las deudas que guarda la PC; con conexión se actualiza. */
+export function getPayableCopy(scope: PayableScope) {
+  return payableRequest<CopiaDeudas>(scope, "/base-local");
+}
+
+async function deudasEnLaPc(scope: PayableScope, bandeja: VentaPendiente[]) {
+  const [copia, opciones] = await Promise.all([
+    getPayableCopy(scope),
+    getPayableOptions(scope).catch(() => undefined),
+  ]);
+  const hoy = hoyEnArgentina(ahoraSegunServidor());
+  return {
+    copia: { ...copia, today: hoy },
+    deudas: deudasConPendientes(
+      copia.items,
+      bandeja,
+      scope.organizationId,
+      scope.branchId,
+      hoy,
+      {
+        proveedores: opciones?.suppliers ?? [],
+        compras: opciones?.purchases ?? [],
+      },
+    ),
+  };
+}
+
+/** Opciones (proveedores, compras y permisos) con los proveedores sin enviar. */
+export async function getPayableOptions(
+  scope: PayableScope,
+  signal?: AbortSignal,
+): Promise<PayableOptions> {
+  const opciones = await payableRequest<PayableOptions>(
+    scope,
+    "/options",
+    undefined,
+    signal,
+  );
+  const proveedores = proveedoresConPendientes(
+    opciones.suppliers.map((s) => ({ ...s, active: true })),
+    await bandejaDeLaPc(),
+    scope.organizationId,
+  ).filter((s) => s.active);
+  return {
+    ...opciones,
+    // Sin conexión, la fecha de hoy es la del servidor según la PC.
+    today: conectividad().enLinea
+      ? opciones.today
+      : hoyEnArgentina(ahoraSegunServidor()),
+    suppliers: proveedores.map((s) => ({
+      id: s.id,
+      name: s.name,
+      accountEnabled: s.accountEnabled,
+      accountTermDays: s.accountTermDays,
+    })),
+  };
+}
+
+/** Página del listado: del servidor, o armada en la PC con lo pendiente. */
+export async function getPayablePage(
+  scope: PayableScope,
+  filtros: FiltrosDeudas,
+  signal?: AbortSignal,
+): Promise<InvoicePage> {
+  const bandeja = await bandejaDeLaPc();
+  if (!vistaEnLaPc(scope, bandeja))
+    try {
+      const query = new URLSearchParams({
+        search: filtros.search ?? "",
+        supplierId: filtros.supplierId ?? "",
+        due: filtros.due ?? "ALL",
+        payment: filtros.payment ?? "ALL",
+        page: String(filtros.page ?? 1),
+      });
+      const pagina = await payableRequest<InvoicePage>(
+        scope,
+        `?${query}`,
+        undefined,
+        signal,
+      );
+      // Si se cortó en el medio, la respuesta puede ser una copia vieja.
+      if (conectividad().enLinea) return pagina;
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  const { copia, deudas } = await deudasEnLaPc(scope, bandeja);
+  return paginaDeDeudas(deudas, filtros, copia);
+}
+
+/** Detalle de una deuda, con lo hecho en la PC que todavía no llegó. */
+export async function getPayableDetail(
+  scope: PayableScope,
+  id: string,
+): Promise<DeudaVisible> {
+  const bandeja = await bandejaDeLaPc();
+  if (!vistaEnLaPc(scope, bandeja))
+    try {
+      const detalle = await payableRequest<Invoice>(scope, `/${id}`);
+      if (conectividad().enLinea) return detalle;
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  const { deudas } = await deudasEnLaPc(scope, bandeja);
+  const deuda = deudas.find((d) => d.id === id);
+  if (!deuda)
+    throw new SinConexionError(
+      "Sin conexión y sin datos guardados de esta deuda. Se ve cuando vuelva internet.",
+    );
+  return deuda;
+}
+
+/**
+ * Manda la operación al servidor; si no hay conexión (o debe esperar detrás
+ * de algo sin enviar), la guarda en la PC.
+ */
+async function pagarConRespaldo<T>(
+  scope: PayableScope,
+  enEspera: boolean,
+  enLinea: () => Promise<T>,
+  enLaPc: () => Promise<void>,
+): Promise<{ donde: DondeQuedo; resultado?: T }> {
+  if (enEspera && scope.token !== TOKEN_SIN_CONEXION) {
+    await enLaPc();
+    return { donde: "PC" };
+  }
+  if (scope.token !== TOKEN_SIN_CONEXION)
+    try {
+      return { donde: "SERVIDOR", resultado: await enLinea() };
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  await puedeOperarSinConexion(scope.token, scope.organizationId);
+  await enLaPc();
+  return { donde: "PC" };
+}
+
+/** Registrar una deuda. Devuelve el id: sin conexión, la clave de la PC. */
+export async function createPayable(scope: PayableScope, body: InvoiceInput) {
+  const bandeja = await bandejaDeLaPc();
+  const { organizationId: org, branchId } = scope;
+  // Un proveedor o una compra hechos sin conexión todavía no están en el
+  // servidor: la deuda espera detrás de ellos.
+  const enEspera =
+    proveedorSinEnviar(bandeja, org, body.supplierId) ||
+    Boolean(
+      body.purchaseId &&
+      bandeja.some(
+        (item) =>
+          item.operacion === "COMPRA" &&
+          item.estado === "PENDIENTE" &&
+          item.id === body.purchaseId,
+      ),
+    );
+  const { donde, resultado } = await pagarConRespaldo(
+    scope,
+    enEspera,
+    () => payableRequest<{ id: string }>(scope, "", body),
+    async () => {
+      await guardarOperacionPagar(org, branchId, {
+        tipo: "DEUDA",
+        cuerpo: body,
+      });
+    },
+  );
+  return { donde, id: resultado?.id ?? body.operationId };
+}
+
+/** Registrar un pago. Sin conexión no se paga más de lo que la PC ve que se debe. */
+export async function paySupplier(
+  scope: PayableScope,
+  invoice: Pick<Invoice, "id" | "balanceMinor">,
+  body: SupplierPaymentInput,
+) {
+  const bandeja = await bandejaDeLaPc();
+  const { organizationId: org, branchId } = scope;
+  const { donde } = await pagarConRespaldo(
+    scope,
+    deudaConPendientes(bandeja, org, branchId, invoice.id),
+    () => payableRequest(scope, `/${invoice.id}/payments`, body),
+    async () => {
+      if (BigInt(body.amountMinor) > BigInt(invoice.balanceMinor))
+        throw new Error(
+          "Sin conexión: el pago no puede superar el saldo que ve esta PC.",
+        );
+      await guardarOperacionPagar(org, branchId, {
+        tipo: "PAGO",
+        invoiceId: invoice.id,
+        cuerpo: body,
+      });
+    },
+  );
+  return donde;
+}
+
+/** Anular un pago: sin conexión queda en la PC. */
+export async function voidSupplierPayment(
+  scope: PayableScope,
+  invoiceId: string,
+  paymentId: string,
+  reason: string,
+) {
+  const bandeja = await bandejaDeLaPc();
+  const { organizationId: org, branchId } = scope;
+  const { donde } = await pagarConRespaldo(
+    scope,
+    deudaConPendientes(bandeja, org, branchId, invoiceId),
+    () =>
+      payableRequest(scope, `/${invoiceId}/payments/${paymentId}/void`, {
+        reason,
+      }),
+    async () => {
+      await guardarOperacionPagar(org, branchId, {
+        tipo: "ANULAR",
+        invoiceId,
+        paymentId,
+        cuerpo: { reason: reason.trim() },
+      });
+    },
+  );
+  return donde;
+}
+
+/**
+ * Precarga (cada 10 minutos con conexión): la copia de las deudas y las
+ * opciones, así Cuentas por pagar se usa sin conexión aunque nadie haya
+ * entrado antes.
+ */
+export async function precargarCuentasPorPagar(scope: PayableScope) {
+  await Promise.all([
+    payableRequest(scope, "/base-local"),
+    payableRequest(scope, "/options"),
+  ]);
 }

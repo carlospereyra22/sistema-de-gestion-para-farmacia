@@ -5,8 +5,8 @@ import {
   dateLabel,
   moneyAmount,
   moneyInputMinor,
-  payableRequest,
   PayableError,
+  paySupplier,
   paymentMethods,
   type Invoice,
   type PayableScope,
@@ -16,6 +16,7 @@ import { ProductFilterSelect } from "../product-filter-select";
 import { MoneyInput } from "../money-input";
 import { field, moneyLabel, primary, secondary, PayableDialog } from "./dialog";
 import { PaymentConfirm } from "./payment-confirm";
+import type { DondeQuedo } from "../lib/api";
 
 export function PaymentEditor({
   invoice,
@@ -30,7 +31,7 @@ export function PaymentEditor({
   today: string;
   storageKey: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (donde: DondeQuedo) => void;
 }) {
   const [locked, setLocked] = useState<SupplierPaymentInput | undefined>(() => {
     const raw = sessionStorage.getItem(storageKey);
@@ -107,9 +108,9 @@ export function PaymentEditor({
       gate.current = true;
       setBusy(true);
       setError("");
-      await payableRequest(scope, `/${invoice.id}/payments`, body);
+      const donde = await paySupplier(scope, invoice, body);
       sessionStorage.removeItem(storageKey);
-      onSaved();
+      onSaved(donde);
     } catch (e) {
       if (
         e instanceof PayableError &&

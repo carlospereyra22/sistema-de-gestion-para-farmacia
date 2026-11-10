@@ -21,7 +21,9 @@ import {
   dueLabels,
   paymentLabels,
   paymentMethods,
-  payableRequest,
+  getPayableDetail,
+  getPayableOptions,
+  getPayablePage,
   type Invoice,
   type InvoicePage,
   type PayableOptions,
@@ -31,6 +33,20 @@ import { InvoiceEditor } from "./invoice-editor";
 import { PaymentEditor } from "./payment-editor";
 import { VoidPayment } from "./void-payment";
 import { primary, secondary, PayableDialog } from "./dialog";
+import { suscribirBandeja } from "../lib/bandeja-ventas";
+import type { DondeQuedo } from "../lib/api";
+
+/** Aviso de lo que quedó en la PC sin conexión (SISTEMA-73). */
+const EN_LA_PC =
+  "Guardado sin conexión: se envía solo cuando vuelva internet, con la hora en que lo hiciste.";
+
+function PorEnviar() {
+  return (
+    <span className="ml-2 inline-flex whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+      Por enviar
+    </span>
+  );
+}
 const dueFilters = [
   ["ALL", "Todos"],
   ["OVERDUE", "Vencidas"],
@@ -90,12 +106,12 @@ export function SupplierPayablesWorkspace({
   const [hasDraft, setHasDraft] = useState(() =>
     Boolean(sessionStorage.getItem(storageKey)),
   );
+  // Lo hecho sin conexión cambia la vista: al guardarse o al enviarse.
+  useEffect(() => suscribirBandeja(() => setRevision((r) => r + 1)), []);
   useEffect(() => {
     const controller = new AbortController();
-    void payableRequest<PayableOptions>(
+    void getPayableOptions(
       { token, organizationId, branchId },
-      "/options",
-      undefined,
       controller.signal,
     )
       .then(setOptions)
@@ -113,17 +129,9 @@ export function SupplierPayablesWorkspace({
     const controller = new AbortController();
     setLoading(true);
     const timer = window.setTimeout(() => {
-      const query = new URLSearchParams({
-        search,
-        supplierId: supplier,
-        due,
-        payment: paymentFilter,
-        page: String(page),
-      });
-      void payableRequest<InvoicePage>(
+      void getPayablePage(
         { token, organizationId, branchId },
-        `?${query}`,
-        undefined,
+        { search, supplierId: supplier, due, payment: paymentFilter, page },
         controller.signal,
       )
         .then((result) => {
@@ -169,7 +177,7 @@ export function SupplierPayablesWorkspace({
   const openDetail = async (id: string) => {
     setError("");
     try {
-      setDetail(await payableRequest<Invoice>(scope, `/${id}`));
+      setDetail(await getPayableDetail(scope, id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo abrir la factura.");
     }
@@ -181,7 +189,7 @@ export function SupplierPayablesWorkspace({
   };
   const openPayment = async (id: string) => {
     try {
-      const invoice = await payableRequest<Invoice>(scope, `/${id}`);
+      const invoice = await getPayableDetail(scope, id);
       setDetail(undefined);
       setPaying(invoice);
     } catch (e) {
@@ -339,6 +347,7 @@ export function SupplierPayablesWorkspace({
                   <td className="px-5 py-2.5">
                     <p className="font-semibold text-slate-800">
                       {invoice.supplierName}
+                      {invoice.porEnviar && <PorEnviar />}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
                       {invoice.documentNumber
@@ -453,9 +462,13 @@ export function SupplierPayablesWorkspace({
           storageKey={storageKey}
           initialPurchaseId={related}
           onClose={closeEditor}
-          onSaved={(id) => {
+          onSaved={(id, donde: DondeQuedo) => {
             closeEditor();
-            setNotice("Factura registrada. No se modificó stock ni Caja.");
+            setNotice(
+              donde === "PC"
+                ? EN_LA_PC
+                : "Factura registrada. No se modificó stock ni Caja.",
+            );
             setRevision((r) => r + 1);
             void openDetail(id);
           }}
@@ -469,10 +482,14 @@ export function SupplierPayablesWorkspace({
           today={options.today}
           storageKey={paymentKey(paying.id)}
           onClose={() => setPaying(undefined)}
-          onSaved={() => {
+          onSaved={(donde: DondeQuedo) => {
             setPaying(undefined);
             setRevision((r) => r + 1);
-            setNotice("Pago registrado. No se modificó Caja ni stock.");
+            setNotice(
+              donde === "PC"
+                ? EN_LA_PC
+                : "Pago registrado. No se modificó Caja ni stock.",
+            );
           }}
         />
       )}
@@ -482,9 +499,10 @@ export function SupplierPayablesWorkspace({
           paymentId={voiding}
           scope={scope}
           onClose={() => setVoiding(undefined)}
-          onSaved={() => {
+          onSaved={(donde: DondeQuedo) => {
             setVoiding(undefined);
             setRevision((r) => r + 1);
+            if (donde === "PC") setNotice(EN_LA_PC);
             void openDetail(detail.id);
           }}
         />
@@ -501,7 +519,10 @@ export function SupplierPayablesWorkspace({
           {toast}
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="font-semibold">{detail.supplierName}</h3>
+              <h3 className="font-semibold">
+                {detail.supplierName}
+                {detail.porEnviar && <PorEnviar />}
+              </h3>
               <p className="mt-1 text-sm text-slate-500">
                 Emisión {dateLabel(detail.issuedOn)} · {branchName}
               </p>
@@ -570,6 +591,7 @@ export function SupplierPayablesWorkspace({
                         className={`text-base font-medium ${p.voidedAt ? "text-slate-400 line-through" : "text-teal-800"}`}
                       >
                         {ars(p.amountMinor)}
+                        {p.porEnviar && <PorEnviar />}
                       </span>
                       <span className="text-sm text-slate-500">
                         {dateLabel(p.paidOn)} · {paymentMethods[p.method]}

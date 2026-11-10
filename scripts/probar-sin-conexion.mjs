@@ -362,7 +362,8 @@ try {
     );
 
   // 4. Cada pantalla, recargando sin conexión.
-  // Cuentas por pagar y Reportes son sólo con conexión (decisión del 09/11/2026).
+  // Reportes es sólo con conexión (decisión del 09/11/2026). Cuentas por pagar
+  // funciona sin conexión desde SISTEMA-73.
   const pantallas = [
     "inicio",
     "ventas",
@@ -375,6 +376,7 @@ try {
     "productos",
     "precios",
     "proveedores",
+    "pagar",
   ];
   for (const [i, p] of pantallas.entries()) {
     fallidos.length = 0;

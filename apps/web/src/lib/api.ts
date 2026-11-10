@@ -30,6 +30,12 @@ import {
   unidadesDeTransferencia,
 } from "./transferencias-sin-conexion";
 import {
+  camposCambiados,
+  guardarOperacionProveedor,
+  proveedorConPendientes,
+  proveedoresConPendientes,
+} from "./proveedores-sin-conexion";
+import {
   aImputaciones,
   clienteConPendientes,
   clientesConPendientes,
@@ -1682,7 +1688,41 @@ async function createPartyEnLinea(
   return response.json() as Promise<{ id: string }>;
 }
 
+/**
+ * Editar un proveedor: sin conexión (o si tiene algo sin enviar) queda en la
+ * PC con los campos que cambiaron (SISTEMA-73).
+ */
 export async function updateSupplierTerms(
+  token: string,
+  organizationId: string,
+  supplier: Party,
+  terms: SupplierProfileInput,
+  branchId?: string,
+): Promise<DondeQuedo> {
+  const enLinea = () =>
+    updateSupplierTermsEnLinea(token, organizationId, supplier, terms);
+  if (!branchId) {
+    await enLinea();
+    return "SERVIDOR";
+  }
+  return proveedorConRespaldo(
+    token,
+    organizationId,
+    supplier.id,
+    enLinea,
+    async () => {
+      const cuerpo = camposCambiados(supplier, terms);
+      if (!Object.keys(cuerpo).length) return;
+      await guardarOperacionProveedor(organizationId, branchId, {
+        tipo: "EDICION",
+        supplierId: supplier.id,
+        cuerpo,
+      });
+    },
+  );
+}
+
+async function updateSupplierTermsEnLinea(
   token: string,
   organizationId: string,
   supplier: Party,
@@ -1724,7 +1764,30 @@ async function updateCustomerBillingEnLinea(
     );
 }
 
+/** Dar de baja o restaurar: sin conexión queda en la PC (SISTEMA-73). */
 export async function setSupplierActive(
+  token: string,
+  organizationId: string,
+  supplierId: string,
+  active: boolean,
+  branchId?: string,
+): Promise<DondeQuedo> {
+  const enLinea = () =>
+    setSupplierActiveEnLinea(token, organizationId, supplierId, active);
+  if (!branchId) {
+    await enLinea();
+    return "SERVIDOR";
+  }
+  return proveedorConRespaldo(token, organizationId, supplierId, enLinea, () =>
+    guardarOperacionProveedor(organizationId, branchId, {
+      tipo: "ESTADO",
+      supplierId,
+      cuerpo: { active },
+    }).then(() => undefined),
+  );
+}
+
+async function setSupplierActiveEnLinea(
   token: string,
   organizationId: string,
   supplierId: string,
@@ -3604,10 +3667,11 @@ export async function getReportDetail(
 // mandan solas al volver. Lo de un cliente que ya tiene algo sin enviar
 // también espera en la PC, para llegar en orden.
 
-const bandejaDeLaPc = () => ventasDeLaPc().catch(() => [] as VentaPendiente[]);
+export const bandejaDeLaPc = () =>
+  ventasDeLaPc().catch(() => [] as VentaPendiente[]);
 
 /** Sin conexión no se opera pasadas 24 h o con la farmacia en solo lectura. */
-async function puedeOperarSinConexion(
+export async function puedeOperarSinConexion(
   token: string,
   organizationId: string,
   /** Termina algo pendiente (recibir): con conexión se permite en solo lectura. */
@@ -3676,7 +3740,7 @@ export async function getParties(
   const lista = await getPartiesDelServidor(token, organizationId, type);
   return type === "customers"
     ? clientesConPendientes(lista, await bandejaDeLaPc(), organizationId)
-    : lista;
+    : proveedoresConPendientes(lista, await bandejaDeLaPc(), organizationId);
 }
 
 export async function getAccountItems(
@@ -4138,7 +4202,7 @@ export async function createParty(
   supplierTerms?: SupplierProfileInput,
   /** Sucursal desde la que se da de alta: sin conexión, el cliente queda en la PC. */
   branchId?: string,
-): Promise<{ id: string }> {
+): Promise<{ id: string; donde?: DondeQuedo }> {
   const enLinea = () =>
     createPartyEnLinea(
       token,
@@ -4150,7 +4214,7 @@ export async function createParty(
       billing,
       supplierTerms,
     );
-  if (type !== "customers" || !branchId) return enLinea();
+  if (!branchId) return enLinea();
   if (token !== TOKEN_SIN_CONEXION)
     try {
       return await enLinea();
@@ -4158,6 +4222,18 @@ export async function createParty(
       if (!(cause instanceof SinConexionError)) throw cause;
     }
   await puedeOperarSinConexion(token, organizationId);
+  if (type === "suppliers") {
+    // El proveedor nuevo se usa enseguida: su id es el de la PC (SISTEMA-73).
+    const alta = await guardarOperacionProveedor(organizationId, branchId, {
+      tipo: "ALTA",
+      cuerpo: {
+        ...supplierTerms,
+        name: name.trim(),
+        ...(document ? { document } : {}),
+      },
+    });
+    return { id: alta.clientOperationId, donde: "PC" };
+  }
   const alta = await guardarAltaCliente(organizationId, branchId, {
     name: name.trim(),
     ...(document ? { document } : {}),
@@ -4309,4 +4385,94 @@ export async function buscarCuitEnArca(
   if (!response.ok)
     throw await responseError(response, "No se pudo buscar el CUIT en ARCA.");
   return (await response.json()) as DatosDePadron;
+}
+
+// --- Proveedores sin conexión (SISTEMA-73) ---
+
+/**
+ * Manda la operación de proveedor al servidor; si no hay conexión (o el
+ * proveedor tiene algo sin enviar), la guarda en la PC.
+ */
+async function proveedorConRespaldo(
+  token: string,
+  organizationId: string,
+  supplierId: string,
+  enLinea: () => Promise<void>,
+  enLaPc: () => Promise<void>,
+): Promise<DondeQuedo> {
+  if (
+    token !== TOKEN_SIN_CONEXION &&
+    proveedorConPendientes(await bandejaDeLaPc(), organizationId, supplierId)
+  ) {
+    await enLaPc();
+    return "PC";
+  }
+  if (token !== TOKEN_SIN_CONEXION)
+    try {
+      await enLinea();
+      return "SERVIDOR";
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  await puedeOperarSinConexion(token, organizationId);
+  await enLaPc();
+  return "PC";
+}
+
+/** Proveedor dado de alta, editado o dado de baja sin conexión (SISTEMA-73). */
+export function sendOfflineSupplier(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/suppliers/offline`,
+    body,
+    "El servidor no aceptó el proveedor guardado sin conexión.",
+  );
+}
+
+export function sendSignedOfflineSupplier(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: EnvioFirmado,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/suppliers/offline/firmada`,
+    body,
+    "El servidor no aceptó el proveedor guardado sin conexión.",
+  );
+}
+
+/** Deuda, pago o anulación de cuentas por pagar hecho sin conexión (SISTEMA-73). */
+export function sendOfflinePayable(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/supplier-payables/offline`,
+    body,
+    "El servidor no aceptó la operación de cuentas por pagar sin conexión.",
+  );
+}
+
+export function sendSignedOfflinePayable(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: EnvioFirmado,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/supplier-payables/offline/firmada`,
+    body,
+    "El servidor no aceptó la operación de cuentas por pagar sin conexión.",
+  );
 }

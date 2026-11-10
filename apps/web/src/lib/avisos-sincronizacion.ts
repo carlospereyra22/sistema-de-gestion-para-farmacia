@@ -124,6 +124,12 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
           .join(" "),
       };
     case "CONFIGURACION_PISADA":
+      if (d.proveedor)
+        return {
+          titulo: `Proveedor cambiado en otra PC: ${texto(d.proveedor)}`,
+          detalle:
+            texto(d.motivo) || "Otra PC lo cambió después: quedó ese cambio.",
+        };
       return {
         titulo: `Cuenta configurada en otra PC: ${texto(d.cliente) || "cliente"}`,
         detalle:
@@ -149,6 +155,35 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
         detalle:
           texto(d.motivo) ||
           "Otra PC ya la había recibido: no se sumó stock otra vez.",
+      };
+    // Proveedores y cuentas por pagar sin conexión (SISTEMA-73).
+    case "PROVEEDOR_INACTIVO":
+      return {
+        titulo: `Proveedor dado de baja: ${texto(d.proveedor) || "proveedor"}`,
+        detalle:
+          texto(d.motivo) ||
+          "El proveedor estaba dado de baja cuando llegó: se registró igual.",
+      };
+    case "COMPROBANTE_REPETIDO":
+      return {
+        titulo:
+          `Comprobante repetido: ${texto(d.proveedor) || "proveedor"} ${texto(d.comprobante)}`.trim(),
+        detalle:
+          texto(d.motivo) ||
+          "Ese comprobante ya estaba cargado con otros datos: revisá las dos deudas.",
+      };
+    case "PAGO_SUPERA_SALDO":
+      return {
+        titulo: `Pago mayor al saldo: ${texto(d.proveedor) || "proveedor"}`,
+        detalle:
+          `${texto(d.motivo)} Se pagaron ${pesos(d.pagadoMinor)}, se registraron ${pesos(d.registradoMinor)} y quedaron sin registrar ${pesos(d.sobraMinor)}.`.trim(),
+      };
+    case "PAGO_YA_ANULADO":
+      return {
+        titulo: `Pago ya anulado: ${texto(d.proveedor) || "proveedor"}`,
+        detalle:
+          texto(d.motivo) ||
+          "Otra PC ya había anulado este pago: no se anuló otra vez.",
       };
     default:
       return {

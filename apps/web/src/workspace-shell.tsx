@@ -4,6 +4,7 @@ import { precargarCompras } from "./lib/precarga-compras";
 import { precargarCuentas } from "./lib/precarga-cuentas";
 import { precargarModulos } from "./lib/precargar-modulos";
 import { precargarCaja } from "./lib/precarga-caja";
+import { precargarCuentasPorPagar } from "./supplier-payables/api";
 import { enviarExhibidoresPendientes } from "./lib/base-medicamentos-local";
 import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
@@ -748,6 +749,45 @@ export function WorkspaceShell({
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal, veCaja, accessToken, organizationId, branchId]);
+  // Proveedores y Cuentas por pagar (SISTEMA-73): la ficha de proveedores y la
+  // copia de las deudas, para usarlos sin conexión aunque nadie haya entrado
+  // antes a esas pantallas.
+  const veProveedores = canOpenView("Proveedores", permissionCodes);
+  const vePagar = canOpenView("Cuentas por pagar", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !(veProveedores || vePagar) ||
+      !organizationId ||
+      !branchId
+    )
+      return;
+    const precargar = () => {
+      if (veProveedores)
+        void getParties(accessToken, organizationId, "suppliers").catch(
+          () => {},
+        );
+      if (vePagar)
+        void precargarCuentasPorPagar({
+          token: accessToken,
+          organizationId,
+          branchId,
+        }).catch(() => {});
+    };
+    precargar();
+    const timer = window.setInterval(precargar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [
+    enLinea,
+    sesionReal,
+    veProveedores,
+    vePagar,
+    accessToken,
+    organizationId,
+    branchId,
+  ]);
   // Lector de PDF, Excel y Reportes listos para usar sin conexión aunque el
   // service worker todavía no controle la pestaña (SISTEMA-72).
   useEffect(() => {
@@ -1326,9 +1366,12 @@ export function WorkspaceShell({
               }
               ventasSinEnviar={
                 // De todos los usuarios de la PC: la plata ya está en el cajón.
+                // Proveedores y cuentas por pagar no mueven Caja (SISTEMA-73).
                 bandeja.deLaPc.filter(
                   (venta) =>
                     venta.estado === "PENDIENTE" &&
+                    venta.operacion !== "PROVEEDOR" &&
+                    venta.operacion !== "PAGAR" &&
                     venta.organizationId === organizationId &&
                     venta.branchId === branchId,
                 ).length
@@ -1373,6 +1416,7 @@ export function WorkspaceShell({
               key={`suppliers:${organizationId}`}
               token={accessToken!}
               organizationId={organizationId!}
+              branchId={branchId}
             />
           ) : null}
           {accessToken && organizationId && view === "Organización" ? (

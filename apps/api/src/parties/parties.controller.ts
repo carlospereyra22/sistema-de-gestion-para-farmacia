@@ -40,6 +40,7 @@ import {
   PartiesService,
   type OperacionClienteSinConexion,
 } from "./parties.service";
+import type { OperacionProveedorSinConexion } from "./proveedor-sin-conexion";
 class CreatePartyDto {
   @IsString() @MinLength(2) name!: string;
   @IsOptional() @IsString() document?: string;
@@ -162,6 +163,98 @@ export class PartiesOfflineController {
     if (op.deviceId !== body.deviceId)
       throw new BadRequestException("La operación no corresponde a esa PC.");
     return this.parties.customerOfflineSigned(
+      req.auth!.sub,
+      org,
+      branch,
+      body,
+      op,
+    );
+  }
+}
+
+// --- Proveedores sin conexión (SISTEMA-73) ---
+/** Edición hecha sin conexión: sólo los campos que se cambiaron. */
+class SupplierEditOfflineDto extends SupplierProfileDto {
+  @IsOptional() @IsBoolean() accountEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(3650) accountTermDays?: number | null;
+}
+class SupplierStateOfflineDto {
+  @IsBoolean() active!: boolean;
+}
+const CUERPO_PROVEEDOR = {
+  ALTA: CreateSupplierDto,
+  EDICION: SupplierEditOfflineDto,
+  ESTADO: SupplierStateOfflineDto,
+} as const;
+class OfflineSupplierDto {
+  @IsIn(Object.keys(CUERPO_PROVEEDOR))
+  tipo!: OperacionProveedorSinConexion["tipo"];
+  @IsOptional() @IsUUID() supplierId?: string;
+  @IsUUID() clientOperationId!: string;
+  @IsISO8601({ strict: true }) occurredAt!: string;
+  @IsUUID() deviceId!: string;
+  /** El mismo cuerpo que con conexión, en el formato de su tipo. */
+  @IsObject() cuerpo!: Record<string, unknown>;
+}
+/** Valida la operación y su cuerpo con el DTO de su tipo. */
+async function operacionDeProveedor(
+  datos: unknown,
+): Promise<OperacionProveedorSinConexion> {
+  const opciones = { whitelist: true, forbidNonWhitelisted: true };
+  const op = plainToInstance(OfflineSupplierDto, datos ?? {});
+  const DTO = CUERPO_PROVEEDOR[op.tipo] as (new () => object) | undefined;
+  const cuerpo = DTO ? plainToInstance(DTO, op.cuerpo ?? {}) : null;
+  if (
+    (await validate(op, opciones)).length ||
+    !cuerpo ||
+    (await validate(cuerpo, opciones)).length ||
+    (op.tipo !== "ALTA" && !op.supplierId)
+  )
+    throw new BadRequestException(
+      "El proveedor guardado sin conexión tiene datos inválidos.",
+    );
+  return { ...op, cuerpo } as unknown as OperacionProveedorSinConexion;
+}
+
+@Controller("organizations/:organizationId/branches/:branchId/suppliers")
+@UseGuards(JwtAccessGuard, BranchAccessGuard)
+export class SuppliersOfflineController {
+  constructor(private readonly parties: PartiesService) {}
+  /** Proveedor dado de alta, editado, dado de baja o restaurado sin conexión. */
+  @DecidedWhenOccurred()
+  @Post("offline")
+  async offline(
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() body: OfflineSupplierDto,
+  ) {
+    return this.parties.supplierOffline(
+      req.auth!.sub,
+      org,
+      branch,
+      await operacionDeProveedor(body),
+    );
+  }
+  /** El de otro usuario de esta PC: queda a nombre de quien lo hizo. */
+  @DecidedWhenOccurred()
+  @Post("offline/firmada")
+  async offlineSigned(
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() body: SignedOfflineCustomerDto,
+  ) {
+    let datos: unknown;
+    try {
+      datos = JSON.parse(body.payload);
+    } catch {
+      throw new BadRequestException("La operación firmada no se puede leer.");
+    }
+    const op = await operacionDeProveedor(datos);
+    if (op.deviceId !== body.deviceId)
+      throw new BadRequestException("La operación no corresponde a esa PC.");
+    return this.parties.supplierOfflineSigned(
       req.auth!.sub,
       org,
       branch,
