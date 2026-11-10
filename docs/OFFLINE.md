@@ -55,8 +55,8 @@ necesita conexión.
 | SISTEMA-71 Transferencias sin conexión                        | En main    |
 | SISTEMA-72 Todo listo sin conexión desde la primera visita    | En main    |
 | SISTEMA-73 Proveedores y cuentas por pagar sin conexión       | En main    |
-| SISTEMA-79 Productos e inventario sin conexión                | Esta etapa |
-| Listas de precios sin conexión                                | Pendiente  |
+| SISTEMA-79 Productos e inventario sin conexión                | En main    |
+| SISTEMA-80 Categorías, laboratorios, listas y reportes        | Esta etapa |
 | Prueba completa con dos PCs                                   | Pendiente  |
 
 ## Cómo funciona (SISTEMA-62)
@@ -249,7 +249,18 @@ Problema encontrado en preprod (09/11/2026): sin conexión fallaban el lector de
 - **Worker del lector de PDF en memoria** (SISTEMA-76, `lib/worker-pdf.ts`): el lector de PDF crea su worker pidiendo el archivo cada vez que lee un PDF, así que precargarlo no alcanzaba: sin conexión y sin service worker (en desarrollo, o antes de que tome la pestaña) fallaba con "Setting up fake worker failed". Ahora el código del worker se carga una vez como parte de la app (`?raw`, el archivo tal cual) y queda en memoria como blob; el worker se crea desde ahí, sin red. Si no se pudo cargar, se usa la dirección del archivo como antes. Probado en Edge, en desarrollo y en la versión compilada, leyendo una factura con el servidor prendido y después de apagarlo.
 - **Caja** (`lib/precarga-caja.ts`): con conexión, al entrar y cada 10 minutos, se guardan permisos y reglas de la caja, cobros pendientes, el historial del período por defecto y los últimos movimientos de cada caja. Sin eso no se podía cerrar sin conexión.
 - **Prueba en navegador real** (`scripts/probar-sin-conexion.mjs`, obligatoria antes de publicar en preprod un cambio del modo sin internet; ver skill `cerrar-tarea`): Edge con un perfil nuevo contra la versión compilada como preprod. Entra con conexión con un usuario de prueba que crea sólo en `gestion_dev`, apaga el servidor y recorre cada pantalla, carga cada parte que se baja aparte y cierra la caja; el cierre queda en la bandeja de la PC. Resultado y capturas en `.cache/prueba-sin-conexion/`.
-- **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73, y productos e inventario en SISTEMA-79.
+- **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73, productos e inventario en SISTEMA-79, y categorías, laboratorios, listas de precios y reportes (copia del servidor) en SISTEMA-80.
+
+## Categorías, laboratorios, listas de precios y reportes sin conexión (SISTEMA-80)
+
+Pedido del usuario (10/11/2026): que funcionen bien sin internet. Reglas en `BUSINESS_RULES.md`.
+
+- **Categorías y laboratorios**: crear (con ícono y color), renombrar, mover, eliminar, cambiar el ícono y el logo quedan como `operacion: "CATALOGO"` con los tipos `OPCION`, `OPCION_EDICION`, `OPCION_BAJA`, `OPCION_ICONO` y `LOGO` (`createCatalogNamedItem`, `changeCatalogNamedItem`, `updateCategoryIcon` y `laboratoryLogo`). Las opciones (`opcionesConPendientes`) y los productos muestran los nombres, las rutas y los logos nuevos enseguida.
+- **Listas de precios**: crear (con todos los productos), renombrar o cambiar la lista de respaldo, y guardar precios quedan como `LISTA_ALTA`, `LISTA_EDICION` y `LISTA_PRECIOS` (`createPriceList`, `renamePriceList`, `saveListChanges`). La vista previa de un ajuste por porcentaje o monto se calcula en la PC (`precioAjustado`, la misma fórmula que el servidor). `getPriceLists` y los precios que usa la venta (`getEffectivePrices`) suman lo pendiente.
+- **El servidor** (`catalog/catalogo-sin-conexion.service.ts`): precio por precio, si el que había no es el que vio la PC y otra PC lo cambió después (según la hora real guardada en `PRICE_LIST_UPDATED`), queda ese y avisa; si no, aplica el de la PC. Nombres repetidos: no se cambian (`NOMBRE_REPETIDO`). Eliminar con productos asociados: rechazo (422).
+- **Reportes** (decisión del usuario): copia del servidor. Con conexión, a los 20 segundos de entrar y cada 15 minutos, la PC guarda el Resumen de Hoy, Ayer, Últimos 7 días, Últimos 30 días y Este mes, de todas las sucursales y de la actual (`precargarReportes`). Sin conexión, el Resumen muestra "Sin conexión: datos al …" y avisa que no incluye lo hecho sin conexión; otro período responde que no está guardado.
+- **Precarga**: categorías, laboratorios y proveedores para quien ve Productos, Inventario, Categorías y laboratorios o Listas de precios; listas de precios y el catálogo de la organización (por partes) para quien ve Listas de precios.
+- Migración `20261111200000_offline_options_price_lists`: tipos de operación y el aviso `NOMBRE_REPETIDO`.
 
 ## Productos e inventario sin conexión (SISTEMA-79)
 
@@ -262,7 +273,7 @@ Decisión del usuario (10/11/2026): "tiene que funcionar todo de producto y todo
 - **El servidor** (`catalog/catalogo-sin-conexion.service.ts`, `catalog/producto-sin-conexion.ts`, `inventory/inventario-sin-conexion.ts` y `InventoryService.inventoryOffline`): registra cada operación una sola vez, en una transacción con su auditoría (`origen: SIN_CONEXION`) y sus avisos; usa la hora real en los movimientos de inventario; resuelve la categoría o el laboratorio creado sin conexión aunque se haya usado uno existente.
 - **Rechazos**: eliminar de la sucursal con un stock distinto al que se vio, eliminar un producto que se usó mientras tanto, o una operación sobre un producto o lote que ya no existe responden 422 y quedan "Rechazada" en el panel. No se usa 404/409, que en la bandeja significan "queda para su dueño".
 - **Caja**: productos e inventario no mueven Caja, así que lo pendiente de ellos no bloquea el cierre.
-- **Fuera de alcance**: listas de precios, la pantalla Categorías y laboratorios (renombrar, íconos, logos) y buscar datos de un producto en internet (referencias externas) siguen necesitando conexión. La búsqueda de medicamentos usa la base de la PC (SISTEMA-69).
+- **Fuera de alcance**: buscar datos de un producto en internet (referencias externas) sigue necesitando conexión. La búsqueda de medicamentos usa la base de la PC (SISTEMA-69). Categorías, laboratorios y listas de precios: SISTEMA-80.
 - Migración `20261111100000_offline_catalog_inventory`: tipos de operación y de aviso.
 
 ## Proveedores y cuentas por pagar sin conexión (SISTEMA-73)

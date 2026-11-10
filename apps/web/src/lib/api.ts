@@ -22,6 +22,8 @@ import {
 import { copiaAlDia } from "./copia-por-partes";
 import { productoPorId } from "./indice-productos";
 import {
+  listasConPendientes,
+  logoPendiente,
   camposCambiadosDelProducto,
   guardarOperacionCatalogo,
   opcionesConPendientes,
@@ -633,7 +635,7 @@ export type CatalogNamedOption = {
   logoUpdatedAt?: string | null;
 };
 
-export async function laboratoryLogo(
+async function laboratoryLogoEnLinea(
   token: string,
   organizationId: string,
   id: string,
@@ -1220,7 +1222,7 @@ async function createCatalogNamedItemEnLinea(
   return response.json() as Promise<CatalogOptions["categories"][number]>;
 }
 
-export async function updateCategoryIcon(
+async function updateCategoryIconEnLinea(
   token: string,
   organizationId: string,
   id: string,
@@ -1246,7 +1248,7 @@ export type PriceList = {
   name: string;
   prices: { productId: string; amountMinor: string }[];
 };
-export async function changeCatalogNamedItem(
+async function changeCatalogNamedItemEnLinea(
   token: string,
   organizationId: string,
   type: "categories" | "laboratories",
@@ -1277,7 +1279,7 @@ export async function changeCatalogNamedItem(
       "No se pudo actualizar la categoría o laboratorio.",
     );
 }
-export async function getPriceLists(
+async function getPriceListsDelServidor(
   token: string,
   organizationId: string,
 ): Promise<PriceList[]> {
@@ -1294,7 +1296,7 @@ export async function getPriceLists(
     );
   return (await response.json()) as PriceList[];
 }
-export async function createPriceList(
+async function createPriceListEnLinea(
   token: string,
   organizationId: string,
   name: string,
@@ -4876,7 +4878,10 @@ export async function getCatalogProducts(
   const pendientes = pendientesDeCatalogo(bandeja, organizationId);
   if (!pendientes.some(({ op }) => op.tipo !== "OPCION")) return catalogo;
   const opciones = pendientes.some(
-    ({ op }) => op.tipo === "ALTA" || op.tipo === "EDICION",
+    ({ op }) =>
+      op.tipo === "ALTA" ||
+      op.tipo === "EDICION" ||
+      op.tipo === "OPCION_EDICION",
   )
     ? await getCatalogOptionsDelServidor(token, organizationId).catch(
         () => undefined,
@@ -5191,7 +5196,13 @@ export async function createCatalogNamedItem(
           cuerpo: {
             type,
             name: name.trim(),
-            ...(type === "categories" ? { parentId: parentId ?? null } : {}),
+            ...(type === "categories"
+              ? {
+                  parentId: parentId ?? null,
+                  ...(icon ? { icon } : {}),
+                  ...(color ? { color } : {}),
+                }
+              : {}),
           },
         },
         id,
@@ -5391,4 +5402,191 @@ export function sendSignedOfflineInventory(
     body,
     "El servidor no aceptó el movimiento de inventario guardado sin conexión.",
   );
+}
+
+// --- Categorías, laboratorios y listas de precios sin conexión (SISTEMA-80) ---
+
+export async function changeCatalogNamedItem(
+  token: string,
+  organizationId: string,
+  type: "categories" | "laboratories",
+  id: string,
+  name?: string,
+  parentId?: string | null,
+  /** Sin conexión, el cambio queda en la PC. */
+  branchId?: string,
+): Promise<void> {
+  const enLinea = () =>
+    changeCatalogNamedItemEnLinea(
+      token,
+      organizationId,
+      type,
+      id,
+      name,
+      parentId,
+    );
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, id, parentId),
+    enLinea,
+    async () => {
+      await guardarOperacionCatalogo(
+        organizationId,
+        branchId,
+        name === undefined
+          ? { tipo: "OPCION_BAJA", cuerpo: { type, id } }
+          : {
+              tipo: "OPCION_EDICION",
+              cuerpo: {
+                type,
+                id,
+                name: name.trim(),
+                ...(type === "categories" && parentId !== undefined
+                  ? { parentId }
+                  : {}),
+              },
+            },
+      );
+    },
+  );
+}
+
+export async function updateCategoryIcon(
+  token: string,
+  organizationId: string,
+  id: string,
+  icon: import("@gestion/contracts").CategoryIcon,
+  color?: import("@gestion/contracts").CategoryColor,
+  branchId?: string,
+): Promise<void> {
+  const enLinea = () =>
+    updateCategoryIconEnLinea(token, organizationId, id, icon, color);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, id),
+    enLinea,
+    async () => {
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "OPCION_ICONO",
+        cuerpo: { id, icon, ...(color ? { color } : {}) },
+      });
+    },
+  );
+}
+
+/**
+ * Logo de un laboratorio: sin `value` lo lee; con un dato lo guarda y con
+ * null lo quita. Sin conexión, el cambio queda en la PC y se ve enseguida.
+ */
+export async function laboratoryLogo(
+  token: string,
+  organizationId: string,
+  id: string,
+  value?: string | null,
+  signal?: AbortSignal,
+  branchId?: string,
+): Promise<string | undefined> {
+  if (value === undefined) {
+    const pendiente = logoPendiente(await bandejaDeLaPc(), organizationId, id);
+    if (pendiente !== undefined) {
+      if (pendiente === null) throw new Error("El laboratorio no tiene logo.");
+      return pendiente;
+    }
+    return laboratoryLogoEnLinea(token, organizationId, id, value, signal);
+  }
+  const enLinea = () =>
+    laboratoryLogoEnLinea(token, organizationId, id, value, signal);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, id),
+    enLinea,
+    async () => {
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "LOGO",
+        cuerpo: { id, dataUrl: value },
+      });
+      return undefined;
+    },
+  );
+}
+
+/** Listas de precios con lo hecho en la PC que todavía no llegó. */
+export async function getPriceLists(
+  token: string,
+  organizationId: string,
+): Promise<PriceList[]> {
+  const [listas, bandeja] = await Promise.all([
+    getPriceListsDelServidor(token, organizationId),
+    bandejaDeLaPc(),
+  ]);
+  return listasConPendientes(listas, bandeja, organizationId);
+}
+
+export async function createPriceList(
+  token: string,
+  organizationId: string,
+  name: string,
+  includeAll = false,
+  /** Sin conexión, la lista nueva queda en la PC y se usa enseguida. */
+  branchId?: string,
+): Promise<{ id: string }> {
+  const enLinea = () =>
+    createPriceListEnLinea(token, organizationId, name, includeAll);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(token, organizationId, false, enLinea, async () => {
+    const id = crypto.randomUUID();
+    await guardarOperacionCatalogo(
+      organizationId,
+      branchId,
+      { tipo: "LISTA_ALTA", cuerpo: { name: name.trim(), includeAll } },
+      id,
+    );
+    return { id };
+  });
+}
+
+/** ¿La lista se creó o se cambió en la PC y todavía no llegó? */
+export async function listaEnEspera(organizationId: string, listId: string) {
+  return pendientesDeCatalogo(await bandejaDeLaPc(), organizationId).some(
+    ({ op }) =>
+      (op.tipo === "LISTA_ALTA" && op.clientOperationId === listId) ||
+      ((op.tipo === "LISTA_EDICION" || op.tipo === "LISTA_PRECIOS") &&
+        op.cuerpo.priceListId === listId),
+  );
+}
+
+/** Guarda en la PC un cambio de una lista de precios hecho sin conexión. */
+export async function guardarCambioDeLista(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  datos:
+    | {
+        tipo: "LISTA_EDICION";
+        cuerpo: {
+          priceListId: string;
+          name: string;
+          fallbackPriceListId?: string | null;
+        };
+      }
+    | {
+        tipo: "LISTA_PRECIOS";
+        cuerpo: {
+          priceListId: string;
+          changes: {
+            productId: string;
+            expectedMinor: string | null;
+            amountMinor: string | null;
+          }[];
+        };
+      },
+) {
+  await puedeOperarSinConexion(token, organizationId);
+  await guardarOperacionCatalogo(organizationId, branchId, datos);
 }

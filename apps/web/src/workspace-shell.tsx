@@ -215,6 +215,7 @@ import {
 import { ProductLotsDetail } from "./product-lots-detail";
 import { ProductLotCell } from "./product-lot-cell";
 import { PorEnviar } from "./por-enviar";
+import { precargarReportes } from "./lib/reports-api";
 import { ProductCatalogToolbar } from "./product-catalog-toolbar";
 import { matchesCatalogExtras } from "./lib/product-catalog-filters";
 import {
@@ -729,9 +730,13 @@ export function WorkspaceShell({
   // Productos e inventario (SISTEMA-79): categorías, laboratorios y
   // proveedores guardados en la PC, para dar de alta o editar un producto y
   // cargar stock sin conexión aunque nadie haya entrado antes a esas pantallas.
+  // También Categorías y laboratorios y Listas de precios (SISTEMA-80).
   const veProductos =
     canOpenView("Productos", permissionCodes) ||
-    canOpenView("Inventario", permissionCodes);
+    canOpenView("Inventario", permissionCodes) ||
+    canOpenView("Categorías y laboratorios", permissionCodes) ||
+    canOpenView("Listas de precios", permissionCodes);
+  const veListas = canOpenView("Listas de precios", permissionCodes);
   useEffect(() => {
     if (
       !enLinea ||
@@ -745,11 +750,43 @@ export function WorkspaceShell({
       void Promise.all([
         getCatalogOptions(accessToken, organizationId),
         getParties(accessToken, organizationId, "suppliers"),
+        // Listas de precios y el catálogo de la organización (por partes:
+        // sólo baja lo que cambió) para editarlas sin conexión (SISTEMA-80).
+        ...(veListas
+          ? [
+              getPriceLists(accessToken, organizationId),
+              getCatalogProducts(accessToken, organizationId),
+            ]
+          : []),
       ]).catch(() => {});
     precargar();
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
-  }, [enLinea, sesionReal, veProductos, accessToken, organizationId]);
+  }, [enLinea, sesionReal, veProductos, veListas, accessToken, organizationId]);
+  // Reportes (SISTEMA-80, decisión del usuario): sin conexión se ve la copia
+  // del servidor de los períodos habituales. Se guarda cada 15 minutos.
+  const veReportes = canOpenView("Reportes", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !veReportes ||
+      !organizationId ||
+      !branchId
+    )
+      return;
+    const precargar = () =>
+      void precargarReportes(accessToken, organizationId, branchId).catch(
+        () => {},
+      );
+    const inicio = window.setTimeout(precargar, 20_000);
+    const timer = window.setInterval(precargar, 15 * 60_000);
+    return () => {
+      window.clearTimeout(inicio);
+      window.clearInterval(timer);
+    };
+  }, [enLinea, sesionReal, veReportes, accessToken, organizationId, branchId]);
   // Lo mismo con la cuenta corriente (SISTEMA-70): clientes, saldos y
   // artículos pendientes para vender a cuenta y cobrar sin conexión.
   const veCuentas =
@@ -1333,6 +1370,7 @@ export function WorkspaceShell({
               key={`catalog-options:${organizationId}`}
               token={accessToken!}
               organizationId={organizationId!}
+              branchId={branchId}
               onError={setMessage}
             />
           ) : null}
@@ -1343,6 +1381,7 @@ export function WorkspaceShell({
               token={accessToken!}
               organizationId={organizationId!}
               products={organizationProducts}
+              branchId={branchId}
               onError={setMessage}
               onEditProduct={setListEditingProduct}
             />

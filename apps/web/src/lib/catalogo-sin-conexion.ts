@@ -1,6 +1,7 @@
 import type { CatalogOptions, CatalogProduct } from "./api";
 import type { VentaPendiente } from "./bandeja-ventas";
 import { guardarEnLaPc } from "./guardar-en-la-pc";
+import { categoryPath } from "./category-tree";
 
 // Productos sin conexión (SISTEMA-79). Sin internet se puede dar de alta y
 // editar un producto (precio general y foto incluidos), cambiar su estado en
@@ -93,6 +94,47 @@ export type OperacionCatalogo = Base &
           type: "categories" | "laboratories";
           name: string;
           parentId?: string | null;
+          icon?: string;
+          color?: string;
+        };
+      }
+    // Categorías, laboratorios y listas de precios (SISTEMA-80).
+    | {
+        tipo: "OPCION_EDICION";
+        cuerpo: {
+          type: "categories" | "laboratories";
+          id: string;
+          name: string;
+          parentId?: string | null;
+        };
+      }
+    | {
+        tipo: "OPCION_BAJA";
+        cuerpo: { type: "categories" | "laboratories"; id: string };
+      }
+    | {
+        tipo: "OPCION_ICONO";
+        cuerpo: { id: string; icon: string; color?: string };
+      }
+    | { tipo: "LOGO"; cuerpo: { id: string; dataUrl: string | null } }
+    | { tipo: "LISTA_ALTA"; cuerpo: { name: string; includeAll?: boolean } }
+    | {
+        tipo: "LISTA_EDICION";
+        cuerpo: {
+          priceListId: string;
+          name: string;
+          fallbackPriceListId?: string | null;
+        };
+      }
+    | {
+        tipo: "LISTA_PRECIOS";
+        cuerpo: {
+          priceListId: string;
+          changes: {
+            productId: string;
+            expectedMinor: string | null;
+            amountMinor: string | null;
+          }[];
         };
       }
   );
@@ -124,9 +166,9 @@ export function pendientesDeCatalogo(
 const productoDe = (op: OperacionCatalogo) =>
   op.tipo === "ALTA"
     ? op.clientOperationId
-    : op.tipo === "OPCION"
-      ? undefined
-      : op.productId;
+    : "productId" in op
+      ? op.productId
+      : undefined;
 
 /**
  * ¿El producto tiene algo sin enviar (o se dio de alta sin conexión)? Lo
@@ -226,33 +268,199 @@ export function opcionesConPendientes(
   bandeja: readonly VentaPendiente[],
   org: string,
 ): CatalogOptions {
-  const pendientes = pendientesDeCatalogo(bandeja, org).filter(
-    ({ op }) => op.tipo === "OPCION",
+  const pendientes = pendientesDeCatalogo(bandeja, org).filter(({ op }) =>
+    TIPOS_DE_OPCION.has(op.tipo),
   );
   if (!pendientes.length) return opciones;
   const r: CatalogOptions = {
-    categories: [...opciones.categories],
-    laboratories: [...opciones.laboratories],
+    categories: opciones.categories.map((o) => ({ ...o })),
+    laboratories: opciones.laboratories.map((o) => ({ ...o })),
   };
   for (const { op } of pendientes) {
-    if (op.tipo !== "OPCION") continue;
-    const lista = r[op.cuerpo.type];
-    if (lista.some((o) => o.id === op.clientOperationId)) continue;
-    const padre = r.categories.find((c) => c.id === op.cuerpo.parentId);
-    lista.push({
-      id: op.clientOperationId,
-      name: op.cuerpo.name.trim(),
-      ...(op.cuerpo.type === "categories"
-        ? {
-            parentId: op.cuerpo.parentId ?? null,
-            path: padre
-              ? `${padre.path ?? padre.name} › ${op.cuerpo.name.trim()}`
-              : op.cuerpo.name.trim(),
-          }
-        : {}),
-    });
+    switch (op.tipo) {
+      case "OPCION": {
+        const lista = r[op.cuerpo.type];
+        if (lista.some((o) => o.id === op.clientOperationId)) break;
+        lista.push({
+          id: op.clientOperationId,
+          name: op.cuerpo.name.trim(),
+          ...(op.cuerpo.type === "categories"
+            ? {
+                parentId: op.cuerpo.parentId ?? null,
+                ...(op.cuerpo.icon ? { icon: op.cuerpo.icon as never } : {}),
+                ...(op.cuerpo.color ? { color: op.cuerpo.color as never } : {}),
+              }
+            : {}),
+        });
+        break;
+      }
+      case "OPCION_EDICION": {
+        const item = r[op.cuerpo.type].find((o) => o.id === op.cuerpo.id);
+        if (!item) break;
+        item.name = op.cuerpo.name.trim();
+        if (op.cuerpo.type === "categories" && op.cuerpo.parentId !== undefined)
+          item.parentId = op.cuerpo.parentId;
+        break;
+      }
+      case "OPCION_BAJA":
+        r[op.cuerpo.type] = r[op.cuerpo.type].filter(
+          (o) => o.id !== op.cuerpo.id,
+        );
+        break;
+      case "OPCION_ICONO": {
+        const item = r.categories.find((o) => o.id === op.cuerpo.id);
+        if (!item) break;
+        item.icon = op.cuerpo.icon as never;
+        if (op.cuerpo.color) item.color = op.cuerpo.color as never;
+        break;
+      }
+      case "LOGO": {
+        const item = r.laboratories.find((o) => o.id === op.cuerpo.id);
+        if (item)
+          item.logoUpdatedAt =
+            op.cuerpo.dataUrl === null ? null : op.occurredAt;
+        break;
+      }
+    }
   }
+  // Las rutas ("Medicamentos › Analgésicos") con los nombres y padres nuevos.
+  r.categories = r.categories.map((c) => ({
+    ...c,
+    path: categoryPath(c, r.categories),
+  }));
   return r;
+}
+
+/** Operaciones que cambian categorías o laboratorios. */
+const TIPOS_DE_OPCION = new Set<OperacionCatalogo["tipo"]>([
+  "OPCION",
+  "OPCION_EDICION",
+  "OPCION_BAJA",
+  "OPCION_ICONO",
+  "LOGO",
+]);
+/** Operaciones que cambian lo que se ve de un producto. */
+const TIPOS_DE_PRODUCTO = new Set<OperacionCatalogo["tipo"]>([
+  "ALTA",
+  "EDICION",
+  "ESTADO_SUCURSAL",
+  "CODIGO_AGREGAR",
+  "CODIGO_QUITAR",
+  "ELIMINAR",
+  "OPCION_EDICION",
+  "OPCION_BAJA",
+]);
+
+/** Logo de un laboratorio cambiado en la PC: el nuevo, o null si se quitó. */
+export function logoPendiente(
+  bandeja: readonly VentaPendiente[],
+  org: string,
+  laboratoryId: string,
+): string | null | undefined {
+  let logo: string | null | undefined;
+  for (const { op } of pendientesDeCatalogo(bandeja, org))
+    if (op.tipo === "LOGO" && op.cuerpo.id === laboratoryId)
+      logo = op.cuerpo.dataUrl;
+  return logo;
+}
+
+type ListaDePrecios = {
+  id: string;
+  name: string;
+  fallbackPriceListId?: string | null;
+  updatedAt?: string;
+  prices: { productId: string; amountMinor: string }[];
+};
+
+/**
+ * Las listas de precios con lo hecho en la PC que todavía no llegó: listas
+ * nuevas (con todos los productos si se pidió), nombres y precios.
+ */
+export function listasConPendientes<T extends ListaDePrecios>(
+  listas: readonly T[],
+  bandeja: readonly VentaPendiente[],
+  org: string,
+): T[] {
+  const pendientes = pendientesDeCatalogo(bandeja, org).filter(({ op }) =>
+    op.tipo.startsWith("LISTA_"),
+  );
+  if (!pendientes.length) return listas as T[];
+  const r = listas.map((l) => ({ ...l, prices: [...l.prices] }));
+  for (const { op } of pendientes) {
+    if (op.tipo === "LISTA_ALTA") {
+      if (r.some((l) => l.id === op.clientOperationId)) continue;
+      const general = r.find((l) => l.name === "Precio general");
+      r.push({
+        id: op.clientOperationId,
+        name: op.cuerpo.name.trim(),
+        fallbackPriceListId: null,
+        prices: op.cuerpo.includeAll ? [...(general?.prices ?? [])] : [],
+        porEnviar: true,
+      } as unknown as T & { prices: T["prices"] });
+      continue;
+    }
+    if (op.tipo !== "LISTA_EDICION" && op.tipo !== "LISTA_PRECIOS") continue;
+    const lista = r.find((l) => l.id === op.cuerpo.priceListId);
+    if (!lista) continue;
+    (lista as { porEnviar?: boolean }).porEnviar = true;
+    if (op.tipo === "LISTA_EDICION") {
+      lista.name = op.cuerpo.name.trim();
+      if (op.cuerpo.fallbackPriceListId !== undefined)
+        lista.fallbackPriceListId = op.cuerpo.fallbackPriceListId;
+      continue;
+    }
+    for (const cambio of op.cuerpo.changes) {
+      lista.prices = lista.prices.filter(
+        (p) => p.productId !== cambio.productId,
+      );
+      if (cambio.amountMinor !== null)
+        lista.prices.push({
+          productId: cambio.productId,
+          amountMinor: cambio.amountMinor,
+        });
+    }
+  }
+  return r.sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+/** Precios de una lista cambiados en la PC que todavía no llegaron. */
+export function preciosPendientesDeLista(
+  bandeja: readonly VentaPendiente[],
+  org: string,
+  priceListId: string,
+) {
+  const precios = new Map<string, string | null>();
+  for (const { op } of pendientesDeCatalogo(bandeja, org))
+    if (op.tipo === "LISTA_PRECIOS" && op.cuerpo.priceListId === priceListId)
+      for (const c of op.cuerpo.changes)
+        precios.set(c.productId, c.amountMinor);
+  return precios;
+}
+
+/**
+ * Ajuste de precios (porcentaje en centésimos o monto fijo en centavos),
+ * igual que en el servidor, para la vista previa sin conexión.
+ */
+export function precioAjustado(
+  amount: bigint,
+  mode: "PERCENT" | "FIXED",
+  value: number,
+) {
+  if (!Number.isSafeInteger(value) || Math.abs(value) > 999999999999)
+    throw new Error("Ajuste inválido.");
+  if (mode === "PERCENT" && value < -10000)
+    throw new Error("La reducción no puede superar el 100%.");
+  const result =
+    mode === "PERCENT"
+      ? (amount * (10000n + BigInt(value)) + 5000n) / 10000n
+      : amount + BigInt(value);
+  if (result > 999999999999n)
+    throw new Error("El precio supera el máximo permitido.");
+  if (result < 0n)
+    throw new Error(
+      "El ajuste dejaría un precio negativo. Reducí el monto de la baja.",
+    );
+  return result;
 }
 
 type Opcion = { id: string; name: string; path?: string };
@@ -270,7 +478,7 @@ export function productosConPendientes(
   opciones?: CatalogOptions,
 ): CatalogProduct[] {
   const pendientes = pendientesDeCatalogo(bandeja, org);
-  if (!pendientes.some(({ op }) => op.tipo !== "OPCION"))
+  if (!pendientes.some(({ op }) => TIPOS_DE_PRODUCTO.has(op.tipo)))
     return catalogo as CatalogProduct[];
   const conPendientes = opciones
     ? opcionesConPendientes(opciones, bandeja, org)
@@ -439,8 +647,32 @@ export function productosConPendientes(
       case "ELIMINAR":
         lista.delete(op.productId);
         break;
-      case "OPCION":
+      default:
         break;
+    }
+  }
+  // Categorías y laboratorios renombrados o eliminados en la PC (SISTEMA-80).
+  if (
+    pendientes.some(
+      ({ op }) => op.tipo === "OPCION_EDICION" || op.tipo === "OPCION_BAJA",
+    )
+  ) {
+    const bajas = new Set(
+      pendientes.flatMap(({ op }) =>
+        op.tipo === "OPCION_BAJA" ? [op.cuerpo.id] : [],
+      ),
+    );
+    const al = (mapa: Map<string, Opcion>, o: Opcion | null) =>
+      o && !bajas.has(o.id) ? (mapa.get(o.id) ?? o) : null;
+    for (const [id, p] of lista) {
+      const category = al(categorias, p.category);
+      const laboratory = al(laboratorios, p.laboratory);
+      if (
+        category?.name !== p.category?.name ||
+        category?.path !== p.category?.path ||
+        laboratory?.name !== p.laboratory?.name
+      )
+        lista.set(id, { ...p, category, laboratory });
     }
   }
   return [...lista.values()].sort(
@@ -471,5 +703,21 @@ export function operacionCatalogoTexto(item: VentaPendiente) {
       return "Eliminación de producto";
     case "OPCION":
       return `${op.cuerpo.type === "categories" ? "Categoría" : "Laboratorio"} nuevo · ${op.cuerpo.name.trim()}`;
+    case "OPCION_EDICION":
+      return `${op.cuerpo.type === "categories" ? "Categoría" : "Laboratorio"} editado · ${op.cuerpo.name.trim()}`;
+    case "OPCION_BAJA":
+      return `${op.cuerpo.type === "categories" ? "Categoría" : "Laboratorio"} eliminado`;
+    case "OPCION_ICONO":
+      return "Ícono de categoría";
+    case "LOGO":
+      return op.cuerpo.dataUrl
+        ? "Logo de laboratorio"
+        : "Quitar logo de laboratorio";
+    case "LISTA_ALTA":
+      return `Lista de precios nueva · ${op.cuerpo.name.trim()}`;
+    case "LISTA_EDICION":
+      return `Lista de precios · ${op.cuerpo.name.trim()}`;
+    case "LISTA_PRECIOS":
+      return `Precios de lista · ${op.cuerpo.changes.length} producto(s)`;
   }
 }

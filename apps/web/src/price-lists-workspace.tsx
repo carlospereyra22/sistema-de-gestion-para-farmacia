@@ -92,10 +92,13 @@ export function PriceListsWorkspace({
   products,
   onError,
   onEditProduct,
+  branchId,
 }: {
   active: boolean;
   token: string;
   organizationId: string;
+  /** Sin conexión, los cambios quedan en la PC (SISTEMA-80). */
+  branchId?: string;
   products: CatalogProduct[];
   onError: (message: string) => void;
   onEditProduct: (product: CatalogProduct) => void;
@@ -354,6 +357,7 @@ export function PriceListsWorkspace({
         selectedId,
         requestId.current,
         changes,
+        branchId,
       );
       setDraft({});
       requestId.current = crypto.randomUUID();
@@ -822,6 +826,7 @@ export function PriceListsWorkspace({
                     selectedId,
                     name.trim(),
                     fallbackListId || null,
+                    branchId,
                   );
                   await load();
                   setModal(null);
@@ -905,6 +910,7 @@ export function PriceListsWorkspace({
                     organizationId,
                     name,
                     includeAll,
+                    branchId,
                   );
                   const next = await getPriceLists(token, organizationId);
                   setLists(next);

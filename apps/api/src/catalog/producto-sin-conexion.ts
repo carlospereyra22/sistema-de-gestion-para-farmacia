@@ -1,6 +1,7 @@
 import type { BranchProductChange } from "./branch-product-lifecycle";
 
-// Productos sin conexión (SISTEMA-79). Sin internet se puede dar de alta y
+// Productos sin conexión (SISTEMA-79; categorías, laboratorios y listas de
+// precios en SISTEMA-80). Sin internet se puede dar de alta y
 // editar un producto (incluido su precio general y su foto), cambiar su estado
 // en la sucursal, agregar o quitar códigos equivalentes, eliminar uno sin uso
 // y crear una categoría o un laboratorio desde el formulario. Al volver se
@@ -93,6 +94,48 @@ export type OperacionCatalogoSinConexion = Base &
           type: "categories" | "laboratories";
           name: string;
           parentId?: string | null;
+          icon?: string;
+          color?: string;
+        };
+      }
+    // Categorías y laboratorios (SISTEMA-80).
+    | {
+        tipo: "OPCION_EDICION";
+        cuerpo: {
+          type: "categories" | "laboratories";
+          id: string;
+          name: string;
+          parentId?: string | null;
+        };
+      }
+    | {
+        tipo: "OPCION_BAJA";
+        cuerpo: { type: "categories" | "laboratories"; id: string };
+      }
+    | {
+        tipo: "OPCION_ICONO";
+        cuerpo: { id: string; icon: string; color?: string };
+      }
+    | { tipo: "LOGO"; cuerpo: { id: string; dataUrl: string | null } }
+    // Listas de precios (SISTEMA-80).
+    | { tipo: "LISTA_ALTA"; cuerpo: { name: string; includeAll?: boolean } }
+    | {
+        tipo: "LISTA_EDICION";
+        cuerpo: {
+          priceListId: string;
+          name: string;
+          fallbackPriceListId?: string | null;
+        };
+      }
+    | {
+        tipo: "LISTA_PRECIOS";
+        cuerpo: {
+          priceListId: string;
+          changes: {
+            productId: string;
+            expectedMinor: string | null;
+            amountMinor: string | null;
+          }[];
         };
       }
   );
@@ -105,7 +148,45 @@ export const KIND_CATALOGO = {
   CODIGO_QUITAR: "CATALOG_BARCODE_REMOVE",
   ELIMINAR: "CATALOG_PRODUCT_DELETE",
   OPCION: "CATALOG_OPTION_CREATE",
+  OPCION_EDICION: "CATALOG_OPTION_UPDATE",
+  OPCION_BAJA: "CATALOG_OPTION_DELETE",
+  OPCION_ICONO: "CATALOG_OPTION_ICON",
+  LOGO: "CATALOG_LAB_LOGO",
+  LISTA_ALTA: "CATALOG_PRICE_LIST_CREATE",
+  LISTA_EDICION: "CATALOG_PRICE_LIST_UPDATE",
+  LISTA_PRECIOS: "CATALOG_PRICE_LIST_PRICES",
 } as const;
+
+/**
+ * Precios de la lista que otra PC cambió después del cambio hecho sin
+ * conexión (según la hora real de cada cambio): esos quedan como están, porque
+ * el más reciente gana (decisión del usuario, SISTEMA-80).
+ */
+export function preciosPisados(
+  registros: readonly { createdAt: Date; after: unknown }[],
+  cuando: Date,
+  productos: readonly string[],
+) {
+  const pisados = new Set<string>();
+  for (const registro of registros) {
+    const after =
+      registro.after && typeof registro.after === "object"
+        ? (registro.after as { occurredAt?: unknown; changes?: unknown })
+        : {};
+    const hora =
+      typeof after.occurredAt === "string"
+        ? new Date(after.occurredAt)
+        : registro.createdAt;
+    if (hora <= cuando || !Array.isArray(after.changes)) continue;
+    for (const cambio of after.changes as { productId?: unknown }[])
+      if (
+        typeof cambio?.productId === "string" &&
+        productos.includes(cambio.productId)
+      )
+        pisados.add(cambio.productId);
+  }
+  return [...pisados];
+}
 
 /** Columnas del producto que se comparan para saber qué cambió una edición. */
 export const COLUMNAS_DEL_PRODUCTO = [
