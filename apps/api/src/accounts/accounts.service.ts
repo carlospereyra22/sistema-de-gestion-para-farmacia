@@ -143,13 +143,35 @@ export class AccountsService {
   ) {}
   async list(actorId: string, organizationId: string) {
     await this.assert(actorId, organizationId, "ACCOUNT_READ");
+    // Sin los movimientos: el saldo, la cantidad y el último pago se calculan
+    // en la base; los movimientos se piden al abrir un cliente (SISTEMA-75).
     const customers = await this.prisma.customer.findMany({
       where: { organizationId },
-      include: {
-        accountMovements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-      },
       orderBy: { name: "asc" },
     });
+    const resumen = new Map(
+      (
+        await this.prisma.$queryRaw<
+          { customerId: string; saldo: bigint; cantidad: bigint }[]
+        >`SELECT "customerId",
+            COALESCE(SUM(CASE WHEN type = 'DEBIT' THEN "amountMinor" ELSE -"amountMinor" END), 0)::bigint AS saldo,
+            COUNT(*)::bigint AS cantidad
+          FROM "CustomerAccountMovement"
+          WHERE "organizationId" = ${organizationId}::uuid
+          GROUP BY "customerId"`
+      ).map((r) => [r.customerId, r]),
+    );
+    const ultimosPagos = new Map(
+      (
+        await this.prisma.$queryRaw<
+          { customerId: string; amountMinor: bigint; createdAt: Date }[]
+        >`SELECT DISTINCT ON ("customerId") "customerId", "amountMinor", "createdAt"
+          FROM "CustomerAccountMovement"
+          WHERE "organizationId" = ${organizationId}::uuid
+            AND type = 'CREDIT' AND "saleId" IS NULL
+          ORDER BY "customerId", "createdAt" DESC, id DESC`
+      ).map((r) => [r.customerId, r]),
+    );
     const actors = customerAccountActors(
       await this.prisma.auditLog.findMany({
         where: {
@@ -178,15 +200,9 @@ export class AccountsService {
       where: { organizationId, userId: { in: [...new Set(actorIds)] } },
       select: { userId: true, displayName: true },
     });
+    const nombres = new Map(members.map((m) => [m.userId, m.displayName]));
     const actorOf = (id: string | null | undefined) =>
-      id
-        ? {
-            id,
-            name:
-              members.find((member) => member.userId === id)?.displayName ??
-              null,
-          }
-        : null;
+      id ? { id, name: nombres.get(id) ?? null } : null;
     return customers.map((customer) => ({
       id: customer.id,
       name: customer.name,
@@ -201,18 +217,49 @@ export class AccountsService {
       active: customer.active,
       creditLimitMinor: customer.creditLimitMinor?.toString() ?? null,
       accountTermDays: customer.accountTermDays,
-      balanceMinor: this.balance(customer.accountMovements).toString(),
-      movements: customer.accountMovements.map((movement) => ({
-        ...movement,
-        isPriceAdjustment: priceAdjustments(movement.allocations).length > 0,
-        isDebtAdjustment: Boolean(
-          movement.allocations &&
-          typeof movement.allocations === "object" &&
-          !Array.isArray(movement.allocations) &&
-          movement.allocations.kind === "MANUAL_DEBT_ADJUSTMENT",
-        ),
-        amountMinor: movement.amountMinor.toString(),
-      })),
+      balanceMinor: (resumen.get(customer.id)?.saldo ?? 0n).toString(),
+      movementCount: Number(resumen.get(customer.id)?.cantidad ?? 0n),
+      lastPayment: ultimosPagos.has(customer.id)
+        ? {
+            amountMinor: ultimosPagos.get(customer.id)!.amountMinor.toString(),
+            createdAt: ultimosPagos.get(customer.id)!.createdAt,
+          }
+        : null,
+    }));
+  }
+  /** Movimientos de la cuenta de un cliente, al abrirlo (SISTEMA-75). */
+  async movements(actorId: string, organizationId: string, customerId: string) {
+    await this.assert(actorId, organizationId, "ACCOUNT_READ");
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: customerId, organizationId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException("No se encontró el cliente.");
+    const movements = await this.prisma.customerAccountMovement.findMany({
+      where: { organizationId, customerId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        type: true,
+        amountMinor: true,
+        note: true,
+        createdAt: true,
+        paymentMethod: true,
+        saleId: true,
+        clientOperationId: true,
+        allocations: true,
+      },
+    });
+    return movements.map(({ allocations, ...movement }) => ({
+      ...movement,
+      isPriceAdjustment: priceAdjustments(allocations).length > 0,
+      isDebtAdjustment: Boolean(
+        allocations &&
+        typeof allocations === "object" &&
+        !Array.isArray(allocations) &&
+        allocations.kind === "MANUAL_DEBT_ADJUSTMENT",
+      ),
+      amountMinor: movement.amountMinor.toString(),
     }));
   }
   async statement(actorId: string, organizationId: string, branchId: string) {

@@ -9,6 +9,7 @@ import {
   clienteConPendientes,
   clientesConPendientes,
   cuentasConPendientes,
+  movimientosConPendientes,
   detalleDeVentaLocal,
   guardarAltaCliente,
   guardarEdicionCliente,
@@ -171,7 +172,7 @@ describe("cuenta corriente sin conexión", () => {
     ]);
     const cuentas = cuentasConPendientes([cuenta()], [venta], "o1");
     expect(cuentas[0]!.balanceMinor).toBe("2000");
-    expect(cuentas[0]!.movements.at(-1)).toMatchObject({
+    expect(cuentas[0]!.movements!.at(-1)).toMatchObject({
       type: "DEBIT",
       saleId: "s9",
       porEnviar: true,
@@ -205,6 +206,43 @@ describe("cuenta corriente sin conexión", () => {
         "o1",
       )[0]!.balanceMinor,
     ).toBe("2000");
+  });
+
+  it("sin los movimientos del servidor suma lo pendiente al saldo y a la cantidad", () => {
+    const venta = ventaACuentaPendiente("s9", [
+      { productId: "p2", productName: "Amoxicilina", precio: 500, cantidad: 2 },
+    ]);
+    const [resumen] = cuentasConPendientes(
+      [cuenta({ movements: undefined, movementCount: 3 })],
+      [venta],
+      "o1",
+    );
+    expect(resumen).toMatchObject({ balanceMinor: "2000", movementCount: 4 });
+    expect(resumen!.movements).toBeUndefined();
+  });
+
+  it("los movimientos de un cliente suman lo pendiente sin repetir lo que ya llegó", () => {
+    const venta = ventaACuentaPendiente("s9", [
+      { productId: "p2", productName: "Amoxicilina", precio: 500, cantidad: 2 },
+    ]);
+    const llegado = {
+      id: "m",
+      type: "DEBIT" as const,
+      amountMinor: "1000",
+      saleId: "s9",
+      note: null,
+      createdAt: "",
+    };
+    expect(movimientosConPendientes([], [venta], "o1", "c1")).toEqual([
+      expect.objectContaining({ saleId: "s9", porEnviar: true }),
+    ]);
+    expect(
+      movimientosConPendientes([], [venta], "o1", "c1")[0],
+    ).not.toHaveProperty("branchId");
+    expect(movimientosConPendientes([llegado], [venta], "o1", "c1")).toEqual([
+      llegado,
+    ]);
+    expect(movimientosConPendientes([], [venta], "o1", "otro")).toEqual([]);
   });
 
   it("una venta mixta sin conexión queda para asignar sus artículos", () => {
@@ -263,7 +301,7 @@ describe("cuenta corriente sin conexión", () => {
     expect(detalle.balanceMinor).toBe("0");
     const cuentas = cuentasConPendientes([cuenta()], [cobro], "o1");
     expect(cuentas[0]!.balanceMinor).toBe("0");
-    expect(cuentas[0]!.movements.map((m) => m.type)).toEqual([
+    expect(cuentas[0]!.movements!.map((m) => m.type)).toEqual([
       "CREDIT",
       "CREDIT",
     ]);

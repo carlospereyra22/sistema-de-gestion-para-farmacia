@@ -354,9 +354,8 @@ export function AccountCustomerProfile({
   const tooltipId = useId();
   const [activeHint, setActiveHint] = useState<string | null>(null);
   const balance = Number(account.balanceMinor);
-  const lastPayment = account.movements
-    .filter((item) => item.type === "CREDIT" && !item.saleId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  // El último cobro lo calcula el servidor (SISTEMA-75).
+  const lastPayment = account.lastPayment;
   const cards = [
     {
       label: balance < 0 ? "Saldo a favor" : "Saldo pendiente",

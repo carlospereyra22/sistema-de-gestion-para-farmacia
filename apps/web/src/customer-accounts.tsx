@@ -51,7 +51,9 @@ import {
   configureCustomerAccount,
   createCustomerAccountReceipt,
   getAccountReceipt,
+  getCustomerAccountMovements,
   getCustomerAccounts,
+  type CustomerAccountMovement,
   getCash,
   getPriceLists,
   getAccountSaleDetail,
@@ -197,10 +199,41 @@ export function CustomerAccounts({
   const operation = useRef(crypto.randomUUID());
   const pending = useRef(false);
   const selected = accounts.find((account) => account.id === selectedId);
-  const historyRows = filterAccountHistory(
-    selected?.movements ?? [],
-    historyFilter,
-  );
+  // Los movimientos se piden al abrir el cliente y cada vez que se actualiza
+  // el listado (después de cobrar, por ejemplo) (SISTEMA-75).
+  const [movimientos, setMovimientos] = useState<{
+    customerId: string;
+    lista?: CustomerAccountMovement[];
+    error?: boolean;
+  }>();
+  useEffect(() => {
+    if (!selectedId) return;
+    let vigente = true;
+    void getCustomerAccountMovements(
+      token,
+      organizationId,
+      branchId,
+      selectedId,
+    )
+      .then((lista) => {
+        if (vigente) setMovimientos({ customerId: selectedId, lista });
+      })
+      .catch(() => {
+        if (vigente)
+          setMovimientos((previo) =>
+            previo?.customerId === selectedId && previo.lista
+              ? previo
+              : { customerId: selectedId, error: true },
+          );
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [token, organizationId, branchId, selectedId, accounts]);
+  const delCliente =
+    movimientos?.customerId === selectedId ? movimientos : undefined;
+  const selectedMovements = delCliente?.lista ?? [];
+  const historyRows = filterAccountHistory(selectedMovements, historyFilter);
   const [historyPagination, setHistoryPagination] = useState({
     scope: "",
     page: 1,
@@ -1139,14 +1172,25 @@ export function CustomerAccounts({
                           ))}
                         </tbody>
                       </table>
-                      {selected.movements.length > 0 && !historyRows.length && (
+                      {!delCliente && (
+                        <p className="py-10 text-center text-sm text-slate-500">
+                          Cargando movimientos…
+                        </p>
+                      )}
+                      {delCliente?.error && (
+                        <p className="py-10 text-center text-sm text-slate-500">
+                          No se pudieron cargar los movimientos. Revisá la
+                          conexión y volvé a abrir el cliente.
+                        </p>
+                      )}
+                      {selectedMovements.length > 0 && !historyRows.length && (
                         <p className="py-10 text-center text-sm text-slate-500">
                           No hay{" "}
                           {historyFilter === "receipts" ? "cobros" : "ventas"}{" "}
                           para mostrar.
                         </p>
                       )}
-                      {!selected.movements.length && (
+                      {delCliente?.lista && !selectedMovements.length && (
                         <div className="flex flex-col items-center py-10 text-center">
                           <span className="mb-3 rounded-full bg-slate-50 p-4 text-slate-400">
                             <ReceiptText size={25} />

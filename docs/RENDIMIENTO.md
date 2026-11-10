@@ -58,11 +58,18 @@ Sin conexión el catálogo se arma con las partes guardadas. Si la API todavía 
 tiene estas rutas (la web se publica aparte), la web pide el catálogo completo
 como antes. `GET catalog/products` se conserva.
 
+## Cuentas corrientes (SISTEMA-75)
+
+El listado trae saldo, cantidad de movimientos y último cobro calculados en
+PostgreSQL; los movimientos se piden al abrir un cliente. Con 3.000 clientes de
+20 movimientos: de 1,4 s y 27 MB a 0,14 s y 1 MB.
+
 ## Pendiente
 
-- Cuentas corrientes trae todos los clientes con todos sus movimientos (3.000
-  clientes: 1,4 s y 27 MB). Decisión del usuario: calcular saldos en el servidor
-  y pedir los movimientos al abrir un cliente, en una tarea propia.
+- El estado de cuenta de la sucursal (`customer-accounts/statement`, para
+  imprimir resúmenes) trae todos los movimientos de la sucursal: con 3.000
+  clientes de 20 movimientos, 1,2 s y 11,5 MB. La precarga lo pide cada 10
+  minutos para tenerlo sin conexión.
 - El stock de la sucursal (10 MB con 20.000 lotes) se sigue pidiendo entero.
 - Costos de inventario (5 MB) se calculan con todo el historial de recepciones.
 - Prueba con varias PCs y sucursales reales al mismo tiempo.

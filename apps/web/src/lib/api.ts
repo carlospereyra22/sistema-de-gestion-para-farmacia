@@ -45,8 +45,11 @@ import {
   aImputaciones,
   clienteConPendientes,
   clientesConPendientes,
+  clientesConMovimientosPendientes,
   cuentasConPendientes,
   detalleDeVentaLocal,
+  movimientosConPendientes,
+  pendientesDelCliente,
   guardarAltaCliente,
   guardarEdicionCliente,
   guardarOperacionCuenta,
@@ -1361,20 +1364,30 @@ export type CustomerAccount = {
   balanceMinor: string;
   /** Dado de alta sin conexión y todavía no enviado (SISTEMA-70). */
   porEnviar?: boolean;
-  movements: {
-    /** Hecho sin conexión y todavía no enviado (SISTEMA-70). */
-    porEnviar?: boolean;
-    clientOperationId?: string | null;
-    isPriceAdjustment?: boolean;
-    isDebtAdjustment?: boolean;
-    id: string;
-    type: "DEBIT" | "CREDIT";
-    amountMinor: string;
-    note: string | null;
-    createdAt: string;
-    paymentMethod?: string | null;
-    saleId?: string | null;
-  }[];
+  /** Cantidad de movimientos (SISTEMA-75). */
+  movementCount?: number;
+  /** Último cobro de la cuenta (SISTEMA-75). */
+  lastPayment?: { amountMinor: string; createdAt: string } | null;
+  /**
+   * El listado ya no trae los movimientos: se piden al abrir el cliente
+   * (`getCustomerAccountMovements`). Sólo vienen cuando hicieron falta para
+   * no contar dos veces lo que la PC ya envió (SISTEMA-75).
+   */
+  movements?: CustomerAccountMovement[];
+};
+export type CustomerAccountMovement = {
+  /** Hecho sin conexión y todavía no enviado (SISTEMA-70). */
+  porEnviar?: boolean;
+  clientOperationId?: string | null;
+  isPriceAdjustment?: boolean;
+  isDebtAdjustment?: boolean;
+  id: string;
+  type: "DEBIT" | "CREDIT";
+  amountMinor: string;
+  note: string | null;
+  createdAt: string;
+  paymentMethod?: string | null;
+  saleId?: string | null;
 };
 export type ItemAllocation = {
   saleItemId: string;
@@ -1593,6 +1606,23 @@ async function getCustomerAccountsDelServidor(
       "No se pudieron cargar las cuentas corrientes.",
     );
   return (await response.json()) as CustomerAccount[];
+}
+async function getCustomerAccountMovementsDelServidor(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  customerId: string,
+): Promise<CustomerAccountMovement[]> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/customer-accounts/${customerId}/movements`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(
+      response,
+      "No se pudieron cargar los movimientos del cliente.",
+    );
+  return (await response.json()) as CustomerAccountMovement[];
 }
 async function configureCustomerAccountEnLinea(
   token: string,
@@ -3792,10 +3822,60 @@ export async function getCustomerAccounts(
   organizationId: string,
   branchId: string,
 ): Promise<CustomerAccount[]> {
-  return cuentasConPendientes(
-    await getCustomerAccountsDelServidor(token, organizationId, branchId),
-    await bandejaDeLaPc(),
+  const [cuentas, bandeja] = await Promise.all([
+    getCustomerAccountsDelServidor(token, organizationId, branchId),
+    bandejaDeLaPc(),
+  ]);
+  // Para no contar dos veces lo que la PC envió y el servidor ya tiene, se
+  // piden los movimientos de los clientes con algo pendiente (pocos).
+  const conPendientes = new Set(
+    clientesConMovimientosPendientes(bandeja, organizationId),
+  );
+  const conMovimientos = await Promise.all(
+    cuentas.map(async (cuenta) =>
+      conPendientes.has(cuenta.id)
+        ? {
+            ...cuenta,
+            movements: await getCustomerAccountMovementsDelServidor(
+              token,
+              organizationId,
+              branchId,
+              cuenta.id,
+            ).catch(() => undefined),
+          }
+        : cuenta,
+    ),
+  );
+  return cuentasConPendientes(conMovimientos, bandeja, organizationId);
+}
+
+/**
+ * Movimientos de un cliente, con lo hecho en la PC que todavía no llegó
+ * (SISTEMA-75).
+ */
+export async function getCustomerAccountMovements(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  customerId: string,
+): Promise<CustomerAccountMovement[]> {
+  const bandeja = await bandejaDeLaPc();
+  const servidor = await getCustomerAccountMovementsDelServidor(
+    token,
     organizationId,
+    branchId,
+    customerId,
+  ).catch((cause: unknown) => {
+    // Un cliente dado de alta sin conexión todavía no existe en el servidor.
+    if (pendientesDelCliente(bandeja, organizationId, customerId).length)
+      return [] as CustomerAccountMovement[];
+    throw cause;
+  });
+  return movimientosConPendientes(
+    servidor,
+    bandeja,
+    organizationId,
+    customerId,
   );
 }
 
