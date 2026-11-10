@@ -104,6 +104,11 @@ export function TransferList({
                         >
                           {status.label}
                         </span>
+                        {transfer.porEnviar && (
+                          <span className="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            Por enviar
+                          </span>
+                        )}
                         <time
                           dateTime={transfer.createdAt}
                           className="text-xs text-slate-500"

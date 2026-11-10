@@ -25,7 +25,8 @@ Reemplaza la lista de "solo con conexión" de arriba:
   ventas se suman a esa sesión y queda un aviso. El cierre sin conexión se
   confirma al llegar: el servidor recalcula el esperado y avisa si cambió.
 - Compras y recepciones, transferencias entre sucursales, y catálogo y precios
-  también se podrán usar sin conexión, cada uno en su etapa.
+  también se podrán usar sin conexión, cada uno en su etapa. Transferencias:
+  enviar, y recibir sólo lo que ya estaba en tránsito (SISTEMA-71).
 - Sesiones: cerrar sesión y entrar sin conexión (cambio de turno). Entrar sin
   conexión verifica la contraseña en la PC (huella PBKDF2 guardada al entrar
   con conexión, nunca la contraseña) y sólo vale para quien entró con conexión
@@ -49,9 +50,9 @@ necesita conexión.
 | SISTEMA-65 Comprobante interno a ARCA, factura en espera      | En main    |
 | SISTEMA-66 Sesiones: cerrar sesión y entrar sin conexión      | En main    |
 | SISTEMA-67 Caja sin conexión (abrir, movimientos, cerrar)     | En main    |
-| SISTEMA-70 Cuenta corriente sin conexión                      | Esta etapa |
 | SISTEMA-69 Compras y recepciones sin conexión                 | En main    |
-| Transferencias sin conexión                                   | Pendiente  |
+| SISTEMA-70 Cuenta corriente sin conexión                      | En main    |
+| SISTEMA-71 Transferencias sin conexión                        | Esta etapa |
 | Catálogo y precios sin conexión                               | Pendiente  |
 | Prueba completa con dos PCs                                   | Pendiente  |
 
@@ -217,6 +218,24 @@ Decisión del usuario (09/11/2026): toda la cuenta corriente funciona sin conexi
 - **Lector de PDF de compras**: el service worker también guarda los `.mjs` (pdf.worker). Un PDF escaneado necesita el OCR, que se baja de internet: sin conexión sólo se leen los PDF con texto.
 - Un cobro mixto conserva su desglose de medios de pago cuando después se le asignan artículos (también con conexión).
 - Migraciones `20261109120000_offline_accounts` y `20261109130000_offline_customer_update`: tipos de operación y de aviso.
+
+## Transferencias sin conexión (SISTEMA-71)
+
+Decisión del usuario (09/11/2026): sin conexión se puede enviar (preparar y despachar) y recibir sólo lo que ya estaba en tránsito cuando había internet. Reglas en `BUSINESS_RULES.md` (transferencias sin conexión).
+
+- **Bandeja**: preparar, despachar y recibir quedan como `operacion: "TRANSFERENCIA"` (`lib/transferencias-sin-conexion.ts`), firmadas por quien las hizo, y se mandan en orden con lo demás: `POST transfers/offline` (o `/offline/firmada`).
+- **Dónde se decide**: en el cliente de la API (`createTransfer`, `dispatchTransfer`, `receiveTransfer` de `lib/api.ts`). Intentan con conexión y, si no hay, quedan en la PC. Una transferencia con algo sin enviar, o armada con un lote recibido sin enviar, va directo a la PC para llegar en orden. Con conexión la PC también manda una clave (`clientOperationId`), así una respuesta perdida no la duplica.
+- **Lo que se ve**: la lista parte de la copia del servidor y suma lo pendiente: las preparadas como filas nuevas y los despachos y recepciones como cambio de estado, con la etiqueta "Por enviar". Despachar resta del stock de la PC (también en Ventas) y recibir suma. El formulario ofrece cada lote con lo que queda descontando lo despachado y vendido sin enviar, y suma los lotes recibidos en compras sin enviar. Un aviso (StatusToast) dice que quedó en la PC.
+- **Recibir sin conexión**: sólo si la copia del servidor guardada en la PC la tiene en tránsito hacia esta sucursal. Si el origen la despachó sin conexión, el destino la ve recién cuando el origen sincroniza.
+- **Precarga**: con conexión, cada 10 minutos y al reconectar, el shell guarda las transferencias de la sucursal; los lotes y las sucursales ya se guardaban. La lista (`GET transfers`) trae todas las en curso y sólo las últimas 50 terminadas, para que no crezca para siempre.
+- **El servidor** (`transfers/transferencia-sin-conexion.ts`, `common/offline/registro-sin-conexion.ts`):
+  - registra cada operación una sola vez (`OfflineOperation`); la transferencia preparada sin conexión lleva la clave de la PC en `Transfer.clientOperationId` y el despacho la nombra por esa clave;
+  - un renglón puede nombrar el lote por id o por producto y número (lote recibido sin conexión);
+  - usa la hora real en la transferencia y en los movimientos de stock;
+  - cada operación es una sola transacción, con auditoría (`origen: SIN_CONEXION`), avisos y la marca "sincronizada por otro": si algo falla se deshace entera;
+  - avisos nuevos: `TRANSFERENCIA_YA_DESPACHADA` y `TRANSFERENCIA_YA_RECIBIDA` (además de `STOCK_FALTANTE`).
+- Lo recibido sin conexión suma al stock del producto, pero no se puede volver a transferir hasta que llegue al servidor: la PC no conoce todavía su lote en destino.
+- Migración `20261109160000_offline_transfers`: clave de la PC en `Transfer` y tipos de operación y de aviso.
 
 ## Base de medicamentos en la PC (SISTEMA-69)
 

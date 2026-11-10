@@ -58,6 +58,8 @@ export async function contextoSinConexion(
     deviceId: string;
     negocio: unknown;
     reenviadaPor?: string;
+    /** Termina algo pendiente (recibir): se acepta también en solo lectura. */
+    permitirSoloLectura?: boolean;
   },
 ): Promise<ContextoSinConexion> {
   const occurredAt = offlineOccurredAt(datos.occurredAt, new Date());
@@ -66,7 +68,10 @@ export async function contextoSinConexion(
   });
   if (subscription) {
     const { access, stage } = subscriptionAccessAt(subscription, occurredAt);
-    if (access !== "FULL")
+    if (
+      access !== "FULL" &&
+      !(access === "READ_ONLY" && datos.permitirSoloLectura)
+    )
       throw subscriptionDenied(
         access === "READ_ONLY" ? "READ_ONLY" : "BLOCKED",
         stage,

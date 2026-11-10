@@ -20,6 +20,15 @@ import {
 } from "./cache-local";
 import { conectividad } from "./conectividad";
 import { ventasDeLaPc, type VentaPendiente } from "./bandeja-ventas";
+import { lotesConPendientes, lotesSinEnviar } from "./compras-sin-conexion";
+import {
+  guardarOperacionTransferencia,
+  lotesParaTransferir,
+  renglonesDeLotes,
+  transferenciaConPendientes,
+  transferenciasConPendientes,
+  unidadesDeTransferencia,
+} from "./transferencias-sin-conexion";
 import {
   aImputaciones,
   clienteConPendientes,
@@ -3194,34 +3203,143 @@ export async function receivePurchase(
 
 export type Transfer = {
   id: string;
+  /** Clave con que la preparó la PC (SISTEMA-71). */
+  clientOperationId?: string | null;
   sourceBranchId: string;
   destinationBranchId: string;
   status: "PREPARED" | "IN_TRANSIT" | "RECEIVED" | "CANCELLED";
   createdAt: string;
+  /** Hecha o cambiada sin conexión y todavía no enviada (SISTEMA-71). */
+  porEnviar?: boolean;
   items: {
     id: string;
     productId: string;
     lotId: string;
+    /** Sólo en las preparadas sin conexión, que la PC conoce por número. */
+    lotNumber?: string;
     quantity: number;
     receivedQuantity: number;
   }[];
 };
 
-export async function getTransfers(
+const rutaTransferencias = (organizationId: string, branchId: string) =>
+  `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/transfers`;
+
+async function getTransfersDelServidor(
   token: string,
   organizationId: string,
   branchId: string,
 ): Promise<Transfer[]> {
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/transfers`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const response = await fetch(rutaTransferencias(organizationId, branchId), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (!response.ok)
     throw await responseError(
       response,
       "No se pudieron cargar las transferencias.",
     );
   return (await response.json()) as Transfer[];
+}
+
+/** Las del servidor más lo hecho en la PC que todavía no llegó (SISTEMA-71). */
+export async function getTransfers(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<Transfer[]> {
+  return transferenciasConPendientes(
+    await getTransfersDelServidor(token, organizationId, branchId),
+    await bandejaDeLaPc(),
+    organizationId,
+    branchId,
+  );
+}
+
+// --- Transferencias sin conexión (SISTEMA-71) ---
+// Preparar y despachar funcionan sin internet; recibir, sólo una que ya estaba
+// en tránsito cuando había conexión. Lo de una transferencia que ya tiene algo
+// sin enviar también espera en la PC, para llegar en orden.
+
+/** Dónde quedó la operación: en el servidor o en la bandeja de la PC. */
+export type DondeQuedo = "SERVIDOR" | "PC";
+
+/** Manda la operación al servidor; si no hay conexión, la guarda en la PC. */
+async function transferenciaConRespaldo(
+  token: string,
+  organizationId: string,
+  enEspera: boolean,
+  enLinea: () => Promise<void>,
+  enLaPc: () => Promise<void>,
+  permitirSoloLectura = false,
+): Promise<DondeQuedo> {
+  if (enEspera && token !== TOKEN_SIN_CONEXION) {
+    await enLaPc();
+    return "PC";
+  }
+  if (token !== TOKEN_SIN_CONEXION)
+    try {
+      await enLinea();
+      return "SERVIDOR";
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  await puedeOperarSinConexion(token, organizationId, permitirSoloLectura);
+  await enLaPc();
+  return "PC";
+}
+
+type LoteDeLaPc = {
+  id: string;
+  productId: string;
+  number: string;
+  quantity: number;
+};
+
+/** Lotes de la sucursal con lo que se puede despachar desde la PC. */
+async function lotesDeLaPc(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  bandeja: VentaPendiente[],
+) {
+  const delServidor = await getStock(token, organizationId, branchId).catch(
+    () => [] as StockLot[],
+  );
+  return lotesParaTransferir(
+    lotesConPendientes<LoteDeLaPc>(
+      delServidor,
+      lotesSinEnviar(bandeja, organizationId, branchId),
+    ),
+    delServidor,
+    bandeja,
+    organizationId,
+    branchId,
+  );
+}
+
+/** Sin conexión no se despacha más de lo que la PC sabe que hay. */
+function revisarStockParaDespachar(
+  items: readonly {
+    productId: string;
+    lotId: string;
+    lotNumber?: string;
+    quantity: number;
+  }[],
+  lotes: readonly LoteDeLaPc[],
+) {
+  for (const item of items) {
+    const lote = lotes.find(
+      (l) =>
+        l.id === item.lotId ||
+        (item.lotNumber !== undefined &&
+          l.productId === item.productId &&
+          l.number === item.lotNumber),
+    );
+    if (!lote || lote.quantity < item.quantity)
+      throw new Error(
+        `Sin conexión: el lote ${lote?.number ?? item.lotNumber ?? ""} tiene ${lote?.quantity ?? 0} unidades disponibles en esta PC. Revisá la cantidad.`,
+      );
+  }
 }
 
 export async function createTransfer(
@@ -3232,47 +3350,175 @@ export async function createTransfer(
     destinationBranchId: string;
     items: { lotId: string; quantity: number }[];
   },
-): Promise<void> {
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/transfers`,
-    { method: "POST", headers: authJson(token), body: JSON.stringify(input) },
+): Promise<DondeQuedo> {
+  const clientOperationId = crypto.randomUUID();
+  return transferenciaConRespaldo(
+    token,
+    organizationId,
+    // Un lote recibido sin conexión todavía no existe en el servidor: espera
+    // en la PC detrás de su compra.
+    input.items.some((item) => item.lotId.startsWith("sin-enviar:")),
+    async () => {
+      const response = await fetch(
+        rutaTransferencias(organizationId, branchId),
+        {
+          method: "POST",
+          headers: authJson(token),
+          body: JSON.stringify({ ...input, clientOperationId }),
+        },
+      );
+      if (!response.ok)
+        throw await responseError(
+          response,
+          "No se pudo preparar la transferencia.",
+        );
+    },
+    async () => {
+      const bandeja = await bandejaDeLaPc();
+      const lotes = await lotesDeLaPc(token, organizationId, branchId, bandeja);
+      const items = renglonesDeLotes(input.items, lotes);
+      if (items.length !== input.items.length)
+        throw new Error(
+          "Sin conexión: un lote ya no está disponible en esta PC. Elegilo de nuevo.",
+        );
+      await guardarOperacionTransferencia(organizationId, branchId, {
+        tipo: "PREPARAR",
+        cuerpo: { destinationBranchId: input.destinationBranchId, items },
+      });
+    },
   );
-  if (!response.ok)
-    throw await responseError(
-      response,
-      "No se pudo preparar la transferencia.",
-    );
 }
 
 export async function dispatchTransfer(
   token: string,
   organizationId: string,
   branchId: string,
-  transferId: string,
-): Promise<void> {
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/transfers/${transferId}/dispatch`,
-    { method: "POST", headers: authJson(token) },
+  transfer: Transfer,
+): Promise<DondeQuedo> {
+  const bandeja = await bandejaDeLaPc();
+  return transferenciaConRespaldo(
+    token,
+    organizationId,
+    transferenciaConPendientes(bandeja, organizationId, branchId, transfer),
+    async () => {
+      const response = await fetch(
+        `${rutaTransferencias(organizationId, branchId)}/${transfer.id}/dispatch`,
+        { method: "POST", headers: authJson(token) },
+      );
+      if (!response.ok)
+        throw await responseError(
+          response,
+          "No se pudo despachar la transferencia.",
+        );
+    },
+    async () => {
+      const lotes = await lotesDeLaPc(token, organizationId, branchId, bandeja);
+      revisarStockParaDespachar(transfer.items, lotes);
+      await guardarOperacionTransferencia(
+        organizationId,
+        branchId,
+        { tipo: "DESPACHAR", cuerpo: { transferId: transfer.id } },
+        unidadesDeTransferencia("DESPACHAR", transfer, lotes),
+      );
+    },
   );
-  if (!response.ok)
-    throw await responseError(
-      response,
-      "No se pudo despachar la transferencia.",
-    );
 }
 
 export async function receiveTransfer(
   token: string,
   organizationId: string,
   branchId: string,
-  transferId: string,
-): Promise<void> {
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/transfers/${transferId}/receive`,
-    { method: "POST", headers: authJson(token) },
+  transfer: Transfer,
+): Promise<DondeQuedo> {
+  const bandeja = await bandejaDeLaPc();
+  return transferenciaConRespaldo(
+    token,
+    organizationId,
+    transferenciaConPendientes(bandeja, organizationId, branchId, transfer),
+    async () => {
+      const response = await fetch(
+        `${rutaTransferencias(organizationId, branchId)}/${transfer.id}/receive`,
+        { method: "POST", headers: authJson(token) },
+      );
+      if (!response.ok)
+        throw await responseError(
+          response,
+          "No se pudo recibir la transferencia.",
+        );
+    },
+    async () => {
+      // Sólo lo que ya estaba en camino cuando había conexión.
+      const guardadas = await getTransfersDelServidor(
+        token,
+        organizationId,
+        branchId,
+      ).catch(() => [] as Transfer[]);
+      const enCamino = guardadas.find(
+        (t) =>
+          t.id === transfer.id &&
+          t.status === "IN_TRANSIT" &&
+          t.destinationBranchId === branchId,
+      );
+      if (!enCamino)
+        throw new Error(
+          "Sin conexión sólo se puede recibir una transferencia que ya estaba en camino cuando había internet.",
+        );
+      await guardarOperacionTransferencia(
+        organizationId,
+        branchId,
+        { tipo: "RECIBIR", cuerpo: { transferId: transfer.id } },
+        unidadesDeTransferencia("RECIBIR", enCamino, []),
+      );
+    },
+    true,
   );
-  if (!response.ok)
-    throw await responseError(response, "No se pudo recibir la transferencia.");
+}
+
+/** Transferencia hecha sin conexión (SISTEMA-71). */
+export async function sendOfflineTransfer(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  const response = await fetch(
+    `${rutaTransferencias(organizationId, branchId)}/offline`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la transferencia sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return (await response.json()) as { offlineIssues?: unknown[] };
+}
+
+/** La de otro usuario de esta PC, firmada por él (SISTEMA-71). */
+export async function sendSignedOfflineTransfer(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: {
+    actorId: string;
+    deviceId: string;
+    payload: string;
+    signature: string;
+  },
+) {
+  const response = await fetch(
+    `${rutaTransferencias(organizationId, branchId)}/offline/firmada`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
+  );
+  if (!response.ok) {
+    const error = await responseError(
+      response,
+      "El servidor no aceptó la transferencia sin conexión.",
+    );
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return (await response.json()) as { offlineIssues?: unknown[] };
 }
 
 export type ReportSummary = {
@@ -3361,7 +3607,12 @@ export async function getReportDetail(
 const bandejaDeLaPc = () => ventasDeLaPc().catch(() => [] as VentaPendiente[]);
 
 /** Sin conexión no se opera pasadas 24 h o con la farmacia en solo lectura. */
-async function puedeOperarSinConexion(token: string, organizationId: string) {
+async function puedeOperarSinConexion(
+  token: string,
+  organizationId: string,
+  /** Termina algo pendiente (recibir): con conexión se permite en solo lectura. */
+  permitirSoloLectura = false,
+) {
   const ultima = horaUltimaSincronizacion();
   if (!ultima || Date.now() - ultima > VIGENCIA_SIN_CONEXION_MS)
     throw new SinConexionError(
@@ -3371,7 +3622,10 @@ async function puedeOperarSinConexion(token: string, organizationId: string) {
   const estado = await getSubscriptionStatus(token, organizationId).catch(
     () => undefined,
   );
-  if (estado?.access === "READ_ONLY" || estado?.access === "BLOCKED")
+  if (
+    (estado?.access === "READ_ONLY" && !permitirSoloLectura) ||
+    estado?.access === "BLOCKED"
+  )
     throw new SinConexionError(
       "La farmacia está en solo lectura o bloqueada: sin conexión no se pueden registrar operaciones.",
     );

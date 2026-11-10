@@ -1130,10 +1130,14 @@ model Transfer {
   sourceBranchId String @db.Uuid
   destinationBranchId String @db.Uuid
   status TransferStatus @default(DRAFT)
+  // Clave de la PC (SISTEMA-71): la misma transferencia no se crea dos veces y
+  // una preparada sin conexión se despacha nombrándola por esta clave.
+  clientOperationId String? @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
   items TransferItem[]
   @@index([organizationId, status])
+  @@unique([organizationId, clientOperationId])
 }
 
 model TransferItem {

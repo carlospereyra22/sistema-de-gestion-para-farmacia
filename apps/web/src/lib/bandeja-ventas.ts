@@ -39,9 +39,10 @@ export type VentaPendiente = {
    * Operación sin conexión que no es venta: de caja (SISTEMA-67: apertura,
    * movimiento o cierre) o de compras (SISTEMA-69: pedido, compra directa o
    * recepción) o de cuenta corriente (SISTEMA-70: cobros, ajustes y alta de
-   * clientes). Sin este campo es una venta.
+   * clientes) o de transferencias (SISTEMA-71: preparar, despachar o recibir).
+   * Sin este campo es una venta.
    */
-  operacion?: "CAJA" | "COMPRA" | "CUENTA" | "CLIENTE";
+  operacion?: "CAJA" | "COMPRA" | "CUENTA" | "CLIENTE" | "TRANSFERENCIA";
   /** Lo que la PC sabe de la operación para mostrarla (SISTEMA-70). */
   local?: DetalleLocal;
   /** Quién la hizo, para mostrarlo en la caja (nombre o email). */

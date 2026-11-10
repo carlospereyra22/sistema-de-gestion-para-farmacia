@@ -47,4 +47,20 @@ describe("TransferList", () => {
     );
     expect(source).not.toContain(">Recibir</button>");
   });
+
+  it("marca lo hecho sin conexión como por enviar y no ofrece recibirla otra vez", () => {
+    const html = renderToStaticMarkup(
+      <TransferList
+        transfers={[{ ...transfer, status: "RECEIVED", porEnviar: true }]}
+        branchId="destination"
+        branches={branches}
+        products={products}
+        busyId={null}
+        onAdvance={() => undefined}
+      />,
+    );
+    expect(html).toContain("Por enviar");
+    expect(html).toContain("Recibida");
+    expect(html).not.toContain(">Recibir</button>");
+  });
 });
