@@ -176,14 +176,15 @@ describe("dashboard medicine search", () => {
       <DashboardMedicineSearch token="test" organizationId="org" />,
     );
     expect(html).toContain('for="medicine-query"');
-    expect(html).toContain('for="medicine-source"');
+    expect(html).toContain('aria-label="Fuente"');
+    expect(html).not.toContain("<select");
     expect(html).not.toContain("Buscar no modifica");
     expect(html).not.toContain("Consulta externa:");
     expect(html).not.toContain("Las consultas pueden reutilizarse");
     expect(html).not.toContain("Escribí al menos dos caracteres");
     expect(html).toContain('role="status"');
     expect(html).toContain("disabled");
-    expect(html).toContain('value="alfabeta" selected=""');
+    expect(html).toContain("AlfaBeta · Principal");
     expect(html).not.toContain('target="_blank"');
     expect(html).not.toContain('action="https://');
     expect(html).not.toContain("sin salir del inicio");

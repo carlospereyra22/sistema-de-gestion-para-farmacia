@@ -1817,3 +1817,54 @@ textarea:focus {
     padding-right: 4px;
   }
 }
+
+/* Inicio (SISTEMA-85): carga suave. Las animaciones solo corren con conexión
+   (clase dashboard-animado en la raíz) y sin "reducir movimiento". Sin conexión
+   todo aparece directo y el esqueleto queda quieto. */
+.dashboard-skeleton {
+  display: inline-block;
+  height: 0.8em;
+  border-radius: 6px;
+  background: #edf2f6;
+  vertical-align: middle;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-animado .dashboard-entrada {
+    animation: dashboard-entrada 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--orden, 0) * 60ms);
+  }
+  .dashboard-animado .dashboard-dato {
+    animation: dashboard-dato 360ms ease-out both;
+  }
+  .dashboard-animado .dashboard-skeleton {
+    background: linear-gradient(90deg, #edf2f6 0%, #f7fafc 50%, #edf2f6 100%);
+    background-size: 200% 100%;
+    animation: dashboard-brillo 1.4s ease-in-out infinite;
+  }
+}
+@keyframes dashboard-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dashboard-dato {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes dashboard-brillo {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}

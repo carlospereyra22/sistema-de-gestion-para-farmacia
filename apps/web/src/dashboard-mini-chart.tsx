@@ -43,7 +43,7 @@ export function DashboardMiniChart({
     >
       <svg
         viewBox="0 0 100 52"
-        className="h-14 w-24 shrink-0 overflow-visible"
+        className="h-12 w-20 shrink-0 overflow-visible"
         role="img"
         aria-label={description}
       >

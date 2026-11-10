@@ -3884,6 +3884,24 @@ export type ReportSummary = {
   salesTrend?: { date: string; totalMinor: string; count: number }[];
   salesTodayCount: number;
   salesTodayMinor: string;
+  // Opcionales: una API anterior no los informa (SISTEMA-85).
+  averageTicketMinor?: string;
+  customerReceivables?: { count: number; totalMinor: string };
+  supplierDebt?: {
+    count: number;
+    totalMinor: string;
+    overdueMinor: string;
+    todayMinor: string;
+    next7Minor: string;
+    nextDueOn: string | null;
+  };
+  /** Cada caja activa de la sucursal; el esperado solo si está abierta. */
+  cashRegisters?: {
+    id: string;
+    name: string;
+    open: boolean;
+    expectedAmountMinor: string | null;
+  }[];
   stockLots: number;
   stockUnits: number;
   expiringLots: number;

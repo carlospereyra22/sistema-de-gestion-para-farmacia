@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, LoaderCircle, Search } from "lucide-react";
+import { ChevronDown, Database, LoaderCircle, Search } from "lucide-react";
+import { ProductFilterSelect } from "./product-filter-select";
 import {
   searchMedicineReferences,
   searchAlfaBeta,
@@ -176,84 +177,66 @@ export function DashboardMedicineSearch({
   }
 
   return (
-    <section
-      aria-labelledby="medicine-search-title"
-      className="overflow-hidden rounded-xl border border-teal-100 bg-white shadow-sm"
-    >
-      <div className="bg-gradient-to-r from-emerald-50/80 via-white to-teal-50/60 p-3.5">
-        <div className="flex items-center gap-3">
-          <span className="rounded-lg bg-gradient-to-br from-emerald-400 to-teal-700 p-2 text-white shadow-sm">
-            <Search size={19} aria-hidden="true" />
+    <section aria-labelledby="medicine-search-title" className="cash-card p-0!">
+      <div className="p-4">
+        <div className="cash-card-heading">
+          <span className="cash-icon">
+            <Search size={20} aria-hidden="true" />
           </span>
           <div>
-            <h2
-              id="medicine-search-title"
-              className="text-sm font-semibold text-slate-900"
-            >
-              Buscador de medicamentos
-            </h2>
-            <p className="text-[11px] text-slate-500">
+            <h2 id="medicine-search-title">Buscador de medicamentos</h2>
+            <p className="text-xs text-slate-500">
               Consultá precios, presentaciones y laboratorios.
             </p>
           </div>
         </div>
         <form
           onSubmit={(event) => void search(event)}
-          className="mt-2.5 flex flex-col items-end gap-2 md:flex-row"
+          className="mt-3 flex flex-col gap-3 md:flex-row md:items-center"
         >
-          <div className="w-full flex-1">
-            <label htmlFor="medicine-query" className="sr-only">
-              Nombre del medicamento
-            </label>
-            <div className="relative">
-              <Search
-                size={18}
-                aria-hidden="true"
-                className="absolute left-3 top-2.5 text-slate-400"
-              />
-              <input
-                id="medicine-query"
-                type="search"
-                value={query}
-                maxLength={120}
-                onChange={(event) => {
-                  resetResults();
-                  setQuery(event.target.value);
-                }}
-                placeholder="Ej.: Actron, ibuprofeno 400…"
-                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-              />
-            </div>
-          </div>
-          <div className="w-full md:w-48">
-            <label htmlFor="medicine-source" className="sr-only">
-              Fuente de consulta
-            </label>
-            <select
-              id="medicine-source"
-              value={source}
+          <label
+            htmlFor="medicine-query"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 shadow-sm focus-within:ring-2 focus-within:ring-teal-500"
+          >
+            <span className="sr-only">Nombre del medicamento</span>
+            <Search
+              size={17}
+              aria-hidden="true"
+              className="shrink-0 text-teal-600"
+            />
+            <input
+              id="medicine-query"
+              type="search"
+              value={query}
+              maxLength={120}
               onChange={(event) => {
                 resetResults();
-                setSource(
-                  event.target.value as
-                    MedicineReference["source"] | "alfabeta",
-                );
+                setQuery(event.target.value);
               }}
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs"
-            >
-              <option value="alfabeta">AlfaBeta · Principal</option>
-              {Object.entries(medicineSources)
-                .filter(([value]) => value !== "alfabeta")
-                .map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-            </select>
+              placeholder="Ej.: Actron, ibuprofeno 400…"
+              className="h-12 w-full min-w-0 border-0 bg-transparent p-0 !text-sm shadow-none outline-none"
+            />
+          </label>
+          <div className="w-full md:w-60">
+            <ProductFilterSelect
+              label="Fuente"
+              icon={<Database size={18} />}
+              value={source}
+              options={[
+                { value: "alfabeta", label: "AlfaBeta · Principal" },
+                ...Object.entries(medicineSources)
+                  .filter(([value]) => value !== "alfabeta")
+                  .map(([value, label]) => ({ value, label })),
+              ]}
+              onChange={(value) => {
+                resetResults();
+                setSource(value as MedicineReference["source"] | "alfabeta");
+              }}
+            />
           </div>
           <button
             disabled={loading || query.trim().length < 2}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-5 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-50 md:w-auto"
+            className="flex h-12! w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-6 text-sm! font-semibold text-white hover:bg-teal-800 disabled:opacity-50 md:w-auto"
           >
             {loading ? (
               <LoaderCircle
@@ -271,7 +254,7 @@ export function DashboardMedicineSearch({
       <div
         className={
           loading || searched || error
-            ? "border-t border-emerald-100 p-3 sm:p-4"
+            ? "border-t border-[#e8edf2] p-3 sm:p-4"
             : ""
         }
         aria-busy={loading}
