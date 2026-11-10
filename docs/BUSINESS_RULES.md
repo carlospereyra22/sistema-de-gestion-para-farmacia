@@ -122,6 +122,13 @@ Nuevo y Editar producto comparten el popup de código interno y etiquetas. Gener
   - Límite o plazo cambiado sin conexión: si otra PC lo cambió después, queda ese cambio (el más reciente) y aviso.
   - Editar un cliente sin conexión (lista de precios, facturación, contacto): se aplican los campos cambiados; si otra PC cambió alguno de esos campos después, queda ese cambio y aviso. Un DNI/CUIT repetido o una lista que ya no está se avisan, como en el alta.
   - Mientras un cliente tenga algo sin enviar, lo que se haga con él también queda en la PC, para que llegue en orden.
+- Transferencias sin conexión (09/11/2026, SISTEMA-71; decisión del usuario):
+  - Sin internet se puede enviar: preparar y despachar, también una preparada sin conexión. Despachar descuenta el stock en la PC enseguida.
+  - Sin internet sólo se recibe una transferencia que ya estaba en tránsito cuando había conexión. Recibir suma el stock en la PC enseguida. Se acepta también con la farmacia en solo lectura, como con conexión.
+  - La PC no deja despachar más de lo que tiene el lote, descontando lo despachado y vendido sin enviar. Todo se registra al volver, en orden, una sola vez y con su hora real.
+  - Si al llegar el despacho el lote de origen ya no tiene todo (otra PC vendió), el lote queda en cero, nunca negativo, la transferencia conserva lo enviado y queda aviso "stock faltante" para revisar el origen. Preparar sin stock suficiente se registra igual con aviso, porque preparar no mueve stock.
+  - Si otra PC ya despachó o recibió esa transferencia, no se mueve stock otra vez: queda registrada con aviso. Recibir una que en el servidor no está en tránsito se rechaza.
+  - Con conexión, despachar sin stock suficiente se rechaza con un mensaje claro.
 
 ## Data integrity
 

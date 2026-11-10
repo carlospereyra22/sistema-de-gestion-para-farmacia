@@ -48,6 +48,7 @@ import {
 import { DirectTicketPrint } from "./direct-ticket-print";
 import { SearchableSaleSelect } from "./searchable-sale-select";
 import { TransferList } from "./transfer-list";
+import { TransferStockSummary } from "./transfer-stock-summary";
 import { PendingSaleConfirmDialog } from "./pending-sale-confirm-dialog";
 import {
   findTransferProductsByBarcode,
@@ -134,6 +135,8 @@ import {
   ticketProvisorio,
 } from "./lib/venta-sin-conexion";
 import { VENTAS_SINCRONIZADAS } from "./lib/sincronizacion-ventas";
+import { lotesConPendientes, lotesSinEnviar } from "./lib/compras-sin-conexion";
+import { lotesParaTransferir } from "./lib/transferencias-sin-conexion";
 import { useSincronizarVentas } from "./lib/use-sincronizar-ventas";
 import { SaleCreditActions } from "./sale-credit-actions";
 import { SaleDetailTotal, SalePaymentSummary } from "./sale-detail-summary";
@@ -380,6 +383,7 @@ import {
   type Sale,
   type StockLot,
   type Transfer,
+  type DondeQuedo,
   type UserCreateOptions,
   type UserListItem,
   updateUser,
@@ -722,6 +726,33 @@ export function WorkspaceShell({
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal, veCuentas, accessToken, organizationId, branchId]);
+  // Transferencias de la sucursal (SISTEMA-71): sin conexión se despachan las
+  // preparadas y se reciben las que ya estaban en camino, aunque nadie haya
+  // entrado antes a Transferencias. Los lotes y las sucursales ya se guardan.
+  const veTransferencias = canOpenView("Transferencias", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !veTransferencias ||
+      !organizationId ||
+      !branchId
+    )
+      return;
+    const precargar = () =>
+      void getTransfers(accessToken, organizationId, branchId).catch(() => {});
+    precargar();
+    const timer = window.setInterval(precargar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [
+    enLinea,
+    sesionReal,
+    veTransferencias,
+    accessToken,
+    organizationId,
+    branchId,
+  ]);
   // Base de medicamentos en la PC para buscar sin conexión; se baja sólo si
   // cambió. Antes, los exhibidores armados sin conexión (SISTEMA-69).
   useEffect(() => {
@@ -1419,6 +1450,7 @@ export function WorkspaceShell({
               products={operationalProducts}
               sharedProducts={organizationProducts}
               stock={stock}
+              alcance={alcance}
               done={() => void refresh()}
               onError={setMessage}
             />
@@ -5374,12 +5406,13 @@ function Sales({
       });
     }
     for (const [productId, cantidad] of pendientesLocales) {
-      const current = totals.get(productId);
-      if (current)
-        totals.set(productId, {
-          ...current,
-          available: Math.max(0, current.available - cantidad),
-        });
+      // Lo recibido sin enviar (compras o transferencias) suma aunque el
+      // producto todavía no tenga lotes en la sucursal.
+      const current = totals.get(productId) ?? { available: 0, expired: 0 };
+      totals.set(productId, {
+        ...current,
+        available: Math.max(0, current.available - cantidad),
+      });
     }
     return totals;
   }, [stock, pendientesLocales]);
@@ -7528,6 +7561,7 @@ function Transfers({
   products,
   sharedProducts,
   stock,
+  alcance,
   done,
   onError,
 }: {
@@ -7538,17 +7572,37 @@ function Transfers({
   products: CatalogProduct[];
   sharedProducts: CatalogProduct[];
   stock: StockLot[];
+  alcance: string | undefined;
   done: () => void;
   onError: (value: string) => void;
 }): ReactElement {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [guardadaEnPc, setGuardadaEnPc] = useState("");
+  // Sin conexión (SISTEMA-71): el stock que se ve resta lo despachado y lo
+  // vendido sin enviar, y suma los lotes recibidos en compras sin enviar.
+  const bandeja = useBandejaVentas(alcance);
   const [destinationBranchId, setDestinationBranchId] = useState("");
   const [barcode, setBarcode] = useState("");
   const [productId, setProductId] = useState("");
   const [lotId, setLotId] = useState("");
   const [quantity, setQuantity] = useState("1");
-  const availableLots = stock.filter((lot) => lot.quantity > 0);
+  const availableLots = useMemo(
+    () =>
+      lotesParaTransferir(
+        lotesConPendientes(
+          stock,
+          lotesSinEnviar(bandeja.deLaPc, organizationId, branchId).map(
+            (lot) => ({ ...lot, unitCostMinor: "0" }) as StockLot,
+          ),
+        ),
+        stock,
+        bandeja.deLaPc,
+        organizationId,
+        branchId,
+      ),
+    [stock, bandeja.deLaPc, organizationId, branchId],
+  );
   const availableProductIds = new Set(
     availableLots.map((lot) => lot.productId),
   );
@@ -7576,7 +7630,16 @@ function Transfers({
   };
   useEffect(() => {
     void load();
-  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [branchId, bandeja.deLaPc]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Otro lote (o lo que quedó después de despachar): la cantidad no supera el máximo.
+  const maximoDelLote = selectedLot?.quantity;
+  useEffect(() => {
+    if (maximoDelLote !== undefined && Number(quantity) > maximoDelLote)
+      setQuantity(String(maximoDelLote));
+  }, [maximoDelLote]); // eslint-disable-line react-hooks/exhaustive-deps
+  const avisarSiQuedoEnPc = (donde: DondeQuedo, texto: string) => {
+    if (donde === "PC") setGuardadaEnPc(texto);
+  };
   const create = async (event: FormEvent) => {
     event.preventDefault();
     const destination = branches.find(
@@ -7594,10 +7657,13 @@ function Transfers({
         "Elegí una sucursal destino, un lote y una cantidad disponible para transferir.",
       );
     try {
-      await createTransfer(token, organizationId, branchId, {
-        destinationBranchId,
-        items: [{ lotId, quantity: Number(quantity) }],
-      });
+      avisarSiQuedoEnPc(
+        await createTransfer(token, organizationId, branchId, {
+          destinationBranchId,
+          items: [{ lotId, quantity: Number(quantity) }],
+        }),
+        "La transferencia quedó preparada en esta PC. Se envía sola cuando vuelva internet.",
+      );
       setBarcode("");
       setProductId("");
       setLotId("");
@@ -7619,12 +7685,18 @@ function Transfers({
         transfer.status === "PREPARED" &&
         transfer.sourceBranchId === branchId
       )
-        await dispatchTransfer(token, organizationId, branchId, transfer.id);
+        avisarSiQuedoEnPc(
+          await dispatchTransfer(token, organizationId, branchId, transfer),
+          "La transferencia quedó despachada en esta PC y el stock ya se descontó. Se envía sola cuando vuelva internet.",
+        );
       if (
         transfer.status === "IN_TRANSIT" &&
         transfer.destinationBranchId === branchId
       )
-        await receiveTransfer(token, organizationId, branchId, transfer.id);
+        avisarSiQuedoEnPc(
+          await receiveTransfer(token, organizationId, branchId, transfer),
+          "La transferencia quedó recibida en esta PC y el stock ya se sumó. Se envía sola cuando vuelva internet.",
+        );
       await Promise.all([load(), Promise.resolve(done())]);
     } catch (cause) {
       onError(
@@ -7638,6 +7710,13 @@ function Transfers({
   };
   return (
     <div className="workspace-split mt-1 grid flex-1 items-stretch gap-5">
+      {guardadaEnPc && (
+        <StatusToast
+          title="Sin conexión"
+          message={guardadaEnPc}
+          onClose={() => setGuardadaEnPc("")}
+        />
+      )}
       <TransferList
         transfers={transfers}
         branchId={branchId}
@@ -7768,32 +7847,63 @@ function Transfers({
             }
             floatingOptions
             disabled={!productId}
+            // Sólo el lote y su vencimiento: las unidades se ven en Cantidad.
             options={availableLots
               .filter((lot) => lot.productId === productId)
               .map((lot) => ({
                 value: lot.id,
-                label: `Lote ${lot.number} · ${lot.quantity} un.`,
+                label: `Lote ${lot.number}${lot.expiresAt ? ` · vence ${new Date(`${lot.expiresAt.slice(0, 10)}T12:00:00`).toLocaleDateString("es-AR", { month: "2-digit", year: "numeric" })}` : ""}`,
               }))}
           />
+        </div>
+        <div className="mt-4">
+          <label
+            htmlFor="transfer-quantity"
+            className="text-xs font-semibold text-slate-600"
+          >
+            Cantidad a enviar
+          </label>
+          <div className="mt-1 flex gap-2">
+            <input
+              id="transfer-quantity"
+              type="number"
+              min={1}
+              max={selectedLot?.quantity}
+              step={1}
+              required
+              disabled={!selectedLot}
+              value={quantity}
+              onChange={(event) => {
+                const value = event.target.value;
+                // No se puede pedir más de lo que tiene el lote.
+                setQuantity(
+                  selectedLot && Number(value) > selectedLot.quantity
+                    ? String(selectedLot.quantity)
+                    : value,
+                );
+              }}
+              placeholder={selectedLot ? `Máx. ${selectedLot.quantity}` : ""}
+              className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal tabular-nums text-slate-800 outline-none focus:border-teal-500 disabled:bg-slate-50 disabled:text-slate-400"
+            />
+            <button
+              type="button"
+              disabled={!selectedLot}
+              onClick={() =>
+                selectedLot && setQuantity(String(selectedLot.quantity))
+              }
+              aria-label="Enviar todo el lote"
+              className="h-10 shrink-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-teal-700 shadow-sm hover:border-teal-300 hover:bg-teal-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-white"
+            >
+              Todo
+            </button>
+          </div>
           {selectedLot && (
-            <p className="mt-1.5 text-xs text-slate-500">
-              Disponible: {selectedLot.quantity} unidades
-            </p>
+            <TransferStockSummary
+              available={selectedLot.quantity}
+              sending={Number(quantity) || 0}
+            />
           )}
         </div>
-        <label className="mt-4 block text-xs font-semibold text-slate-600">
-          Cantidad
-          <input
-            type="number"
-            min={1}
-            max={selectedLot?.quantity}
-            step={1}
-            required
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-800 outline-none focus:border-teal-500"
-          />
-        </label>
         <div className="mt-auto pt-5">
           <button className="h-10 w-full rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white shadow-sm hover:bg-teal-800">
             Preparar transferencia

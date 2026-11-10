@@ -20,6 +20,7 @@ import {
 } from "./lib/bandeja-ventas";
 import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { operacionCuentaTexto } from "./lib/cuenta-sin-conexion";
+import { operacionTransferenciaTexto } from "./lib/transferencias-sin-conexion";
 import { useConectividad } from "./lib/conectividad";
 
 /** Qué operación de caja es (SISTEMA-67). */
@@ -198,11 +199,13 @@ export function SincronizacionPanel({
                         {venta.operacion === "CUENTA" ||
                         venta.operacion === "CLIENTE"
                           ? `Cuenta corriente · ${operacionCuentaTexto(venta)}${venta.operacion === "CUENTA" && BigInt(venta.totalMinor) > 0n ? ` · ${pesos(venta.totalMinor)}` : ""}`
-                          : venta.operacion === "COMPRA"
-                            ? `Compras · ${tipoDeCompraTexto((venta.cuerpo as OperacionCompra).tipo)}`
-                            : venta.operacion === "CAJA"
-                              ? `Caja · ${operacionDeCaja(venta)} · ${pesos(venta.totalMinor)}`
-                              : `${venta.id.slice(0, 8).toUpperCase()} · ${pesos(venta.totalMinor)}${venta.documentType === "INVOICE" ? " · con factura" : ""}`}
+                          : venta.operacion === "TRANSFERENCIA"
+                            ? `Transferencias · ${operacionTransferenciaTexto(venta)}`
+                            : venta.operacion === "COMPRA"
+                              ? `Compras · ${tipoDeCompraTexto((venta.cuerpo as OperacionCompra).tipo)}`
+                              : venta.operacion === "CAJA"
+                                ? `Caja · ${operacionDeCaja(venta)} · ${pesos(venta.totalMinor)}`
+                                : `${venta.id.slice(0, 8).toUpperCase()} · ${pesos(venta.totalMinor)}${venta.documentType === "INVOICE" ? " · con factura" : ""}`}
                       </p>
                       <p className="text-xs text-slate-500">
                         {hora(venta.occurredAt)}

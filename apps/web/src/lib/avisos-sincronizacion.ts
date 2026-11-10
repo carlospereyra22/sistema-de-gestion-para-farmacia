@@ -27,6 +27,15 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
         detalle: `Se cobró ${pesos(d.cobradoMinor)} y en el sistema estaba ${pesos(d.actualMinor)}. Se respetó lo cobrado.`,
       };
     case "STOCK_FALTANTE":
+      // Transferencia despachada o preparada sin conexión (SISTEMA-71).
+      if (d.enviado !== undefined || d.pedido !== undefined)
+        return {
+          titulo: `Stock que no alcanzó en una transferencia: ${nombre}`,
+          detalle:
+            d.enviado !== undefined
+              ? `Se despacharon ${texto(d.enviado)} y ${texto(d.faltan)} no estaban en el sistema: el lote quedó en cero. Revisá el stock de origen.`
+              : `Se prepararon ${texto(d.pedido)} y el lote tenía ${texto(d.disponible)}. Revisalo antes de despachar.`,
+        };
       return {
         titulo: `Stock que no alcanzó: ${nombre}`,
         detalle: `Se vendieron ${texto(d.vendidas)} y ${texto(d.faltantes)} no estaban en el sistema. Revisá el stock: puede faltar cargar una compra o un ajuste.`,
@@ -125,6 +134,21 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
       return {
         titulo: `Cliente repetido: ${texto(d.cliente) || "cliente"}`,
         detalle: texto(d.motivo) || "Ya había un cliente con ese DNI/CUIT.",
+      };
+    // Transferencias sin conexión (SISTEMA-71).
+    case "TRANSFERENCIA_YA_DESPACHADA":
+      return {
+        titulo: "Transferencia ya despachada en otra PC",
+        detalle:
+          texto(d.motivo) ||
+          "Otra PC ya la había despachado: no se descontó stock otra vez.",
+      };
+    case "TRANSFERENCIA_YA_RECIBIDA":
+      return {
+        titulo: "Transferencia ya recibida en otra PC",
+        detalle:
+          texto(d.motivo) ||
+          "Otra PC ya la había recibido: no se sumó stock otra vez.",
       };
     default:
       return {

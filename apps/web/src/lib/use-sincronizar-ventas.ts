@@ -5,11 +5,13 @@ import {
   sendOfflineCustomer,
   sendOfflinePurchase,
   sendOfflineSale,
+  sendOfflineTransfer,
   sendSignedOfflineAccount,
   sendSignedOfflineCash,
   sendSignedOfflineCustomer,
   sendSignedOfflinePurchase,
   sendSignedOfflineSale,
+  sendSignedOfflineTransfer,
 } from "./api";
 import {
   olvidarEnviadasViejas,
@@ -61,8 +63,11 @@ export function useSincronizarVentas(
                   venta.branchId,
                   venta.cuerpo,
                 )
-              : venta.operacion === "COMPRA"
-                ? sendOfflinePurchase(
+              : venta.operacion === "COMPRA" ||
+                  venta.operacion === "TRANSFERENCIA"
+                ? (venta.operacion === "COMPRA"
+                    ? sendOfflinePurchase
+                    : sendOfflineTransfer)(
                     token,
                     venta.organizationId,
                     venta.branchId,
@@ -97,13 +102,18 @@ export function useSincronizarVentas(
                 ...firmada,
                 actorId: venta.vendedorId!,
               });
-            if (venta.operacion === "COMPRA")
-              return sendSignedOfflinePurchase(
-                token,
-                venta.organizationId,
-                venta.branchId,
-                { ...firmada, actorId: venta.vendedorId! },
-              );
+            if (
+              venta.operacion === "COMPRA" ||
+              venta.operacion === "TRANSFERENCIA"
+            )
+              return (
+                venta.operacion === "COMPRA"
+                  ? sendSignedOfflinePurchase
+                  : sendSignedOfflineTransfer
+              )(token, venta.organizationId, venta.branchId, {
+                ...firmada,
+                actorId: venta.vendedorId!,
+              });
             return venta.operacion === "CAJA"
               ? sendSignedOfflineCash(
                   token,
