@@ -60,11 +60,8 @@ import {
 } from "./lib/transfer-product-lookup";
 import { NavigationRail } from "./navigation-rail";
 import { SidebarToggle } from "./sidebar-toggle";
-import { RolePermissionPicker } from "./role-permission-picker";
-import {
-  rolePermissionLabel,
-  toggleRolePermission,
-} from "./lib/role-permissions";
+import { RolesPanel } from "./roles-panel";
+import { UsersPanel } from "./users-panel";
 import { useWorkspaceSidebar } from "./use-workspace-sidebar";
 import { ProductInternalBarcode } from "./product-internal-barcode";
 import { canDismissProductBackdrop } from "./lib/product-backdrop";
@@ -144,7 +141,6 @@ import { lotesParaTransferir } from "./lib/transferencias-sin-conexion";
 import { useSincronizarVentas } from "./lib/use-sincronizar-ventas";
 import { SaleCreditActions } from "./sale-credit-actions";
 import { SaleDetailTotal, SalePaymentSummary } from "./sale-detail-summary";
-import { UserTicketNameDialog, UserTicketNameField } from "./user-ticket-names";
 import { Pagination } from "./pagination";
 import { getSaleTicket } from "./lib/api";
 import { useSearchParams } from "react-router-dom";
@@ -252,7 +248,6 @@ import {
 } from "./lib/inventory-search";
 import { ProductFormSection } from "./product-form-section";
 import { StatusToast } from "./status-toast";
-import { UserPasswordDialog } from "./user-password-dialog";
 import { OperationHistory } from "./operation-history";
 import {
   canOpenAdministrationTab,
@@ -340,9 +335,6 @@ import {
 
 import {
   createCatalogProduct,
-  createRole,
-  updateRolePermissions,
-  createUser,
   createSale,
   cancelSale,
   createCustomerReturn,
@@ -392,7 +384,6 @@ import {
   type DondeQuedo,
   type UserCreateOptions,
   type UserListItem,
-  updateUser,
   actualizarBaseMedicamentos,
   enviarExhibidor,
 } from "./lib/api";
@@ -8190,346 +8181,6 @@ function Administration({
         />
       ) : null}
     </div>
-  );
-}
-
-function UsersPanel({
-  token,
-  organizationId,
-  users,
-  options,
-  onDone,
-  onError,
-}: {
-  token: string;
-  organizationId: string;
-  users: UserListItem[];
-  options?: UserCreateOptions;
-  onDone: () => void;
-  onError: (value: string) => void;
-}): ReactElement {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [roleId, setRoleId] = useState("");
-  const [branchId, setBranchId] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
-  const [passwordUser, setPasswordUser] = useState<UserListItem | null>(null);
-  const [notice, setNotice] = useState("");
-  const deactivate = async (item: UserListItem): Promise<void> => {
-    try {
-      await updateUser(token, organizationId, item.user.id, {
-        active: false,
-        roleIds: item.roles.map(({ role }) => role.id),
-        branchIds: item.branches.map(({ branch }) => branch.id),
-      });
-      onDone();
-    } catch (cause) {
-      onError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudo actualizar el usuario.",
-      );
-    }
-  };
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    try {
-      if (!roleId || !branchId)
-        return onError("Seleccioná un rol y una sucursal.");
-      await createUser(token, organizationId, {
-        email,
-        password,
-        displayName,
-        roleIds: [roleId],
-        branchIds: [branchId],
-      });
-      setEmail("");
-      setPassword("");
-      setDisplayName("");
-      onDone();
-    } catch (cause) {
-      onError(
-        cause instanceof Error ? cause.message : "No se pudo crear el usuario.",
-      );
-    }
-  };
-  return (
-    <div className="workspace-split mt-6 grid gap-6">
-      {editingUser && (
-        <UserTicketNameDialog
-          key={`${organizationId}:${editingUser.user.id}`}
-          token={token}
-          organizationId={organizationId}
-          user={editingUser}
-          onDone={onDone}
-          onClose={() => setEditingUser(null)}
-        />
-      )}
-      {passwordUser && (
-        <UserPasswordDialog
-          key={`${organizationId}:${passwordUser.user.id}`}
-          token={token}
-          organizationId={organizationId}
-          user={passwordUser}
-          onDone={(value) => {
-            setNotice(value);
-            onDone();
-          }}
-          onClose={() => setPasswordUser(null)}
-        />
-      )}
-      {notice ? (
-        <StatusToast
-          key={notice}
-          message={notice}
-          onClose={() => setNotice("")}
-        />
-      ) : null}
-      <div className="border bg-white">
-        {users.map((item) => (
-          <div
-            key={item.user.id}
-            className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4 break-words"
-          >
-            <div>
-              <p>{item.displayName || item.user.email}</p>
-              {item.displayName && (
-                <p className="text-xs text-slate-500">{item.user.email}</p>
-              )}
-            </div>
-            <span>{item.roles.map(({ role }) => role.code).join(", ")}</span>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setEditingUser(item)}
-                aria-label={`Editar usuario ${item.user.email}`}
-                className="rounded-lg border px-3 py-2 text-sm text-teal-700"
-              >
-                Editar
-              </button>
-              <button
-                type="button"
-                onClick={() => setPasswordUser(item)}
-                aria-label={`Restablecer contraseña de ${item.user.email}`}
-                className="rounded-lg border px-3 py-2 text-sm text-teal-700"
-              >
-                Contraseña
-              </button>
-              {item.active ? (
-                <button
-                  type="button"
-                  onClick={() => void deactivate(item)}
-                  className="text-sm text-teal-700"
-                >
-                  Desactivar
-                </button>
-              ) : (
-                <span className="text-sm text-slate-400">Inactivo</span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      <form
-        onSubmit={(event) => void save(event)}
-        className="inventory-side-form border bg-white p-5"
-      >
-        <h2 className="font-semibold">Nuevo usuario</h2>
-        <UserTicketNameField value={displayName} onChange={setDisplayName} />
-        <Input label="Email" type="email" value={email} onChange={setEmail} />
-        <Input
-          label="Contraseña"
-          type="password"
-          value={password}
-          onChange={setPassword}
-        />
-        <Select
-          label="Sucursal"
-          value={branchId}
-          onChange={setBranchId}
-          options={options?.branches ?? []}
-        />
-        <Select
-          label="Rol"
-          value={roleId}
-          onChange={setRoleId}
-          options={options?.roles ?? []}
-        />
-        <button className="mt-5 w-full bg-teal-700 py-2 text-sm text-white">
-          Crear usuario
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function RolesPanel({
-  token,
-  organizationId,
-  roles,
-  onDone,
-  onError,
-}: {
-  token: string;
-  organizationId: string;
-  roles: RoleListItem[];
-  onDone: () => void;
-  onError: (value: string) => void;
-}): ReactElement {
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [permissionCodes, setPermissionCodes] = useState<string[]>([]);
-  const [editing, setEditing] = useState<RoleListItem>();
-  const reset = () => {
-    setEditing(undefined);
-    setName("");
-    setCode("");
-    setPermissionCodes([]);
-  };
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    try {
-      if (editing)
-        await updateRolePermissions(
-          token,
-          organizationId,
-          editing.id,
-          permissionCodes,
-        );
-      else
-        await createRole(token, organizationId, {
-          name,
-          code: code.toUpperCase(),
-          permissionCodes,
-        });
-      reset();
-      onDone();
-    } catch (cause) {
-      onError(
-        cause instanceof Error ? cause.message : "No se pudo guardar el rol.",
-      );
-    }
-  };
-  return (
-    <div className="workspace-split mt-6 grid gap-6">
-      <div className="border bg-white">
-        {roles.map((role) => (
-          <div key={role.id} className="border-b px-5 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-medium">{role.name}</p>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">
-                {role.code}
-              </span>
-            </div>
-            {role.code !== "OWNER" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(role);
-                  setPermissionCodes(
-                    role.permissions.map(({ permission }) => permission.code),
-                  );
-                }}
-                className="mt-2 text-sm font-medium text-teal-700 hover:text-teal-900"
-              >
-                Editar permisos
-              </button>
-            )}
-            {role.permissions.length ? (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {role.permissions.map(({ permission }) => (
-                  <span
-                    key={permission.code}
-                    className="rounded-full bg-teal-50 px-2.5 py-1 text-xs text-teal-800"
-                  >
-                    {rolePermissionLabel(permission.code)}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-slate-500">
-                Sin permisos asignados.
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-      <form
-        onSubmit={(event) => void save(event)}
-        className="inventory-side-form border bg-white p-5"
-      >
-        <h2 className="font-semibold">
-          {editing ? `Permisos de ${editing.name}` : "Nuevo rol"}
-        </h2>
-        {!editing && (
-          <>
-            <Input label="Nombre" value={name} onChange={setName} />
-            <Input label="Código" value={code} onChange={setCode} />
-          </>
-        )}
-        <fieldset className="mt-5">
-          <legend className="text-sm font-semibold">
-            Qué puede hacer este rol
-          </legend>
-          <p className="mt-1 text-xs text-slate-500">
-            Elegí las tareas que esta persona podrá realizar en el sistema.
-          </p>
-          <RolePermissionPicker
-            value={permissionCodes}
-            onChange={(permission, enabled) =>
-              setPermissionCodes((current) =>
-                toggleRolePermission(current, permission, enabled),
-              )
-            }
-          />
-        </fieldset>
-        <button className="mt-5 w-full bg-teal-700 py-2 text-sm text-white">
-          {editing ? "Guardar permisos" : "Crear rol"}
-        </button>
-        {editing && (
-          <button
-            type="button"
-            onClick={reset}
-            className="mt-2 w-full border py-2 text-sm"
-          >
-            Cancelar
-          </button>
-        )}
-      </form>
-    </div>
-  );
-}
-
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { id: string; name: string; code?: string }[];
-}): ReactElement {
-  return (
-    <label className="mt-4 block text-sm">
-      {label}
-      <select
-        required
-        className="mt-1 h-10 w-full border px-3"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Seleccionar…</option>
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.name}
-            {option.code ? ` (${option.code})` : ""}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 

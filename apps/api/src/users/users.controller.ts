@@ -39,6 +39,11 @@ class CreateUserDto {
 
 class UpdateUserDto {
   @IsBoolean() active!: boolean;
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Matches(/^[^\p{Cc}]*$/u)
+  displayName?: string;
   @IsArray() @ArrayMinSize(1) @IsString({ each: true }) branchIds!: string[];
   @IsArray() @ArrayMinSize(1) @IsString({ each: true }) roleIds!: string[];
 }
@@ -125,13 +130,11 @@ export class UsersController {
     @Req() request: AuthenticatedRequest,
     @Body() body: UpdateUserDto,
   ) {
-    return this.users.update(
-      request.auth!.sub,
-      organizationId,
-      userId,
-      body.active,
-      body.branchIds,
-      body.roleIds,
-    );
+    return this.users.update(request.auth!.sub, organizationId, userId, {
+      active: body.active,
+      branchIds: body.branchIds,
+      roleIds: body.roleIds,
+      displayName: body.displayName,
+    });
   }
 }

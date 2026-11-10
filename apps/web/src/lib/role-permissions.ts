@@ -212,3 +212,39 @@ export function toggleRolePermission(
     ? [...new Set([...current, code])]
     : current.filter((permission) => permission !== code);
 }
+
+/** Permisos distintos que se pueden asignar (un mismo código puede estar en varios módulos). */
+export const rolePermissionCodes: readonly string[] = [
+  ...new Set(
+    permissionModules.flatMap((module) =>
+      module.permissions.map(({ code }) => code),
+    ),
+  ),
+];
+
+export function countRolePermissions(codes: readonly string[]): number {
+  const selected = new Set(codes);
+  return rolePermissionCodes.filter((code) => selected.has(code)).length;
+}
+
+/** Módulos que el rol puede usar: los que tienen al menos un permiso elegido. */
+export function roleModuleTitles(codes: readonly string[]): string[] {
+  const selected = new Set(codes);
+  return permissionModules
+    .filter((module) =>
+      module.permissions.some(({ code }) => selected.has(code)),
+    )
+    .map(({ title }) => title);
+}
+
+/** Sugiere un código a partir del nombre: "Cajero turno tarde" -> CAJERO_TURNO_TARDE. */
+export function suggestedRoleCode(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^[^A-Z]+/, "")
+    .replace(/_+$/, "")
+    .slice(0, 32);
+}

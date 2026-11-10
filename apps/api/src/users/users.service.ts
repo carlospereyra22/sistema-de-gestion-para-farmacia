@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from "@nestjs/common";
 import { hash } from "@node-rs/argon2";
 
@@ -60,6 +62,7 @@ export class UsersService {
     });
     return memberships.map(({ user, ...membership }) => ({
       ...membership,
+      isCurrentUser: user.id === actorId,
       user: { id: user.id, email: user.email, active: user.active },
       branches: user.branches,
     }));
@@ -97,72 +100,132 @@ export class UsersService {
     });
   }
 
+  /**
+   * Edita nombre, estado, roles y sucursales de un usuario de la farmacia en una
+   * sola transacción, con auditoría. Cada uno puede cambiarse el nombre, pero no
+   * sus propios roles, sucursales ni estado. La farmacia nunca se queda sin dueño.
+   */
   async update(
     actorId: string,
     organizationId: string,
     userId: string,
-    active: boolean,
-    branchIds: string[],
-    roleIds: string[],
+    input: {
+      active: boolean;
+      branchIds: string[];
+      roleIds: string[];
+      displayName?: string;
+    },
   ) {
     await this.assertPermission(actorId, organizationId, "USER_MANAGE");
-    if (actorId === userId)
-      throw new ForbiddenException("You cannot modify your own access.");
-    const membership = await this.prisma.userOrganization.findUnique({
-      where: { userId_organizationId: { userId, organizationId } },
-      include: { roles: { include: { role: true } } },
-    });
-    if (!membership)
-      throw new ForbiddenException("User is outside the organization.");
-    const [branches, roles] = await this.prisma.$transaction([
-      this.prisma.branch.findMany({
-        where: { id: { in: branchIds }, organizationId, active: true },
-      }),
-      this.prisma.role.findMany({
-        where: { id: { in: roleIds }, organizationId },
-      }),
-    ]);
-    if (branches.length !== branchIds.length || roles.length !== roleIds.length)
-      throw new ForbiddenException(
-        "Branch or role is outside the organization.",
-      );
-    const wasOwner = membership.roles.some(({ role }) => role.code === "OWNER");
-    const retainsOwner = active && roles.some((role) => role.code === "OWNER");
-    if (wasOwner && !retainsOwner) {
-      const owners = await this.prisma.userOrganization.count({
-        where: {
-          organizationId,
-          active: true,
-          roles: { some: { role: { code: "OWNER" } } },
+    const branchIds = [...new Set(input.branchIds)];
+    const roleIds = [...new Set(input.roleIds)];
+    return this.prisma.$transaction(async (tx) => {
+      const membership = await tx.userOrganization.findUnique({
+        where: { userId_organizationId: { userId, organizationId } },
+        include: {
+          roles: { include: { role: true } },
+          user: {
+            select: {
+              branches: {
+                where: { branch: { organizationId } },
+                select: { branchId: true },
+              },
+            },
+          },
         },
       });
-      if (owners <= 1)
+      if (!membership)
+        throw new NotFoundException("El usuario no pertenece a la farmacia.");
+      await tx.$queryRaw`SELECT id FROM "UserOrganization" WHERE id=${membership.id}::uuid FOR UPDATE`;
+      const [branches, roles] = await Promise.all([
+        tx.branch.findMany({
+          where: { id: { in: branchIds }, organizationId, active: true },
+        }),
+        tx.role.findMany({ where: { id: { in: roleIds }, organizationId } }),
+      ]);
+      if (branches.length !== branchIds.length)
+        throw new BadRequestException("Revisá las sucursales elegidas.");
+      if (roles.length !== roleIds.length)
+        throw new BadRequestException("Revisá los roles elegidos.");
+      const before = {
+        displayName: membership.displayName,
+        active: membership.active,
+        roleIds: membership.roles.map(({ roleId }) => roleId).sort(),
+        branchIds: membership.user.branches
+          .map(({ branchId }) => branchId)
+          .sort(),
+      };
+      const displayName =
+        input.displayName === undefined
+          ? membership.displayName
+          : input.displayName.trim() || null;
+      const after = {
+        displayName,
+        active: input.active,
+        roleIds: [...roleIds].sort(),
+        branchIds: [...branchIds].sort(),
+      };
+      const accessChanged =
+        before.active !== after.active ||
+        before.roleIds.join() !== after.roleIds.join() ||
+        before.branchIds.join() !== after.branchIds.join();
+      if (actorId === userId && accessChanged)
         throw new ForbiddenException(
-          "An organization must keep at least one active owner.",
+          "No podés cambiar tus propios roles, sucursales ni estado. Pedíselo a otro administrador.",
         );
-    }
-    await this.prisma.$transaction(async (tx) => {
-      if (active && !membership.active)
+      const wasOwner = membership.roles.some(
+        ({ role }) => role.code === "OWNER",
+      );
+      const retainsOwner =
+        input.active && roles.some((role) => role.code === "OWNER");
+      if (wasOwner && membership.active && !retainsOwner) {
+        const owners = await tx.userOrganization.count({
+          where: {
+            organizationId,
+            active: true,
+            roles: { some: { role: { code: "OWNER" } } },
+          },
+        });
+        if (owners <= 1)
+          throw new ForbiddenException(
+            "La farmacia tiene que conservar al menos un dueño activo.",
+          );
+      }
+      if (input.active && !membership.active)
         await assertQuotaAvailable(tx, organizationId, "users");
       await tx.userOrganization.update({
         where: { id: membership.id },
-        data: { active },
+        data: { active: input.active, displayName },
       });
-      await tx.userBranch.deleteMany({
-        where: { userId, branch: { organizationId } },
+      if (accessChanged) {
+        await tx.userBranch.deleteMany({
+          where: { userId, branch: { organizationId } },
+        });
+        await tx.userBranch.createMany({
+          data: branchIds.map((branchId) => ({ userId, branchId })),
+        });
+        await tx.userOrganizationRole.deleteMany({
+          where: { membershipId: membership.id },
+        });
+        await tx.userOrganizationRole.createMany({
+          data: roleIds.map((roleId) => ({
+            membershipId: membership.id,
+            roleId,
+          })),
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "USER",
+          entityId: userId,
+          action: "USER_UPDATED",
+          before,
+          after,
+        },
       });
-      await tx.userBranch.createMany({
-        data: branchIds.map((branchId) => ({ userId, branchId })),
-      });
-      await tx.userOrganizationRole.deleteMany({
-        where: { membershipId: membership.id },
-      });
-      await tx.userOrganizationRole.createMany({
-        data: roleIds.map((roleId) => ({
-          membershipId: membership.id,
-          roleId,
-        })),
-      });
+      return { id: userId, ...after };
     });
   }
 
