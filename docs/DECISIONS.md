@@ -2,6 +2,20 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-73): Proveedores y Cuentas por pagar funcionan sin conexión, con el
+  mismo circuito que los demás módulos: la operación queda en la bandeja de la PC, firmada,
+  y se registra al volver con `OfflineOperation` (rutas `suppliers/offline` y
+  `supplier-payables/offline`, más `/firmada`). Reemplaza la decisión del 09/11/2026 que las
+  dejaba sólo con conexión (Reportes sigue sólo con conexión). Para ver Cuentas por pagar sin
+  conexión la PC guarda una copia (`GET supplier-payables/base-local`: todas las deudas con
+  saldo y las últimas 100 saldadas) y arma el listado con el mismo cálculo y los mismos
+  filtros que el servidor; con conexión y sin nada pendiente se sigue usando el listado del
+  servidor. Proveedor, deuda y pago creados sin conexión usan la clave de la PC como id, y el
+  servidor acepta nombrar una deuda por su clave (`operationId`), así también se paga la
+  deuda de una recepción sin enviar. Los rechazos definitivos de estas rutas sin conexión
+  responden 422 y no 404/409, porque esos códigos significan "queda para su dueño" en la
+  bandeja y frenarían el envío del resto de la sucursal.
+
 - 07/11/2026 (SISTEMA-58, arreglos de la prueba): El menú muestra solo las pantallas cuyo
   permiso de lectura tiene el rol, con el mismo permiso que pide la API al cargarlas
   (`lib/workspace-permissions.ts`). Categorías y Listas de precios piden administrar el

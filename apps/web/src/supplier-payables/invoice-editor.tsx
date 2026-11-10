@@ -18,7 +18,7 @@ import {
   documentLabels,
   moneyAmount,
   moneyInputMinor,
-  payableRequest,
+  createPayable,
   PayableError,
   type InvoiceInput,
   type PayableOptions,
@@ -26,6 +26,7 @@ import {
 } from "./api";
 import { field, moneyLabel, primary, secondary, PayableDialog } from "./dialog";
 import { supplierInvoiceDue } from "./invoice-due";
+import type { DondeQuedo } from "../lib/api";
 
 type Draft = {
   dueEdited?: boolean;
@@ -93,7 +94,7 @@ export function InvoiceEditor({
   storageKey: string;
   initialPurchaseId?: string;
   onClose: () => void;
-  onSaved: (id: string) => void;
+  onSaved: (id: string, donde: DondeQuedo) => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => {
     try {
@@ -190,9 +191,9 @@ export function InvoiceEditor({
         JSON.stringify({ ...draft, locked: body }),
       );
       setDraft((d) => ({ ...d, locked: body }));
-      const result = await payableRequest<{ id: string }>(scope, "", body);
+      const result = await createPayable(scope, body);
       sessionStorage.removeItem(storageKey);
-      onSaved(result.id);
+      onSaved(result.id, result.donde);
     } catch (e) {
       if (
         e instanceof PayableError &&

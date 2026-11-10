@@ -18,6 +18,7 @@ import {
   getParties,
   updateSupplierTerms,
   setSupplierActive,
+  type DondeQuedo,
   type Party,
   type SupplierProfileInput,
 } from "./lib/api";
@@ -49,13 +50,20 @@ function AccountBadge({ enabled }: { enabled?: boolean }) {
     </span>
   );
 }
+/** Aviso de lo que quedó en la PC sin conexión (SISTEMA-73). */
+const EN_LA_PC =
+  "Guardado sin conexión: se envía solo cuando vuelva internet, con la hora en que lo hiciste.";
+
 export function SuppliersWorkspace({
   token,
   organizationId,
+  branchId,
   visible = true,
 }: {
   token: string;
   organizationId: string;
+  /** Sucursal desde la que se opera: sin conexión, lo hecho queda en la PC. */
+  branchId?: string;
   visible?: boolean;
 }) {
   const [items, setItems] = useState<Party[]>([]),
@@ -173,18 +181,22 @@ export function SuppliersWorkspace({
           }
           onClose={() => setLifecycle(undefined)}
           onConfirm={async () => {
-            await setSupplierActive(
+            const donde = await setSupplierActive(
               token,
               organizationId,
               lifecycle.id,
               !lifecycle.active,
+              branchId,
             );
             setSelectedId(undefined);
             setNotice({
               id: ++noticeSequence.current,
-              message: lifecycle.active
-                ? "Proveedor eliminado del listado activo."
-                : "Proveedor restaurado.",
+              message:
+                donde === "PC"
+                  ? EN_LA_PC
+                  : lifecycle.active
+                    ? "Proveedor eliminado del listado activo."
+                    : "Proveedor restaurado.",
             });
             await load();
           }}
@@ -330,6 +342,11 @@ export function SuppliersWorkspace({
                         >
                           {s.name}
                         </button>
+                        {s.porEnviar && (
+                          <span className="ml-2 inline-flex whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            Por enviar
+                          </span>
+                        )}
                         {s.taxId && (
                           <p className="mt-0.5 text-sm text-slate-400">
                             {s.taxId}
@@ -475,11 +492,12 @@ export function SuppliersWorkspace({
           {...editor}
           token={token}
           organizationId={organizationId}
+          branchId={branchId}
           onClose={() => setEditor(undefined)}
-          onSaved={() => {
+          onSaved={(donde) => {
             setEditor(undefined);
             setNotice({
-              message: "Proveedor guardado.",
+              message: donde === "PC" ? EN_LA_PC : "Proveedor guardado.",
               id: ++noticeSequence.current,
             });
             void load();
@@ -495,6 +513,7 @@ function SupplierEditor({
   readOnly,
   token,
   organizationId,
+  branchId,
   onClose,
   onSaved,
 }: {
@@ -502,8 +521,9 @@ function SupplierEditor({
   readOnly: boolean;
   token: string;
   organizationId: string;
+  branchId?: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (donde: DondeQuedo) => void;
 }) {
   const [viewing, setViewing] = useState(readOnly),
     [busy, setBusy] = useState(false),
@@ -526,10 +546,17 @@ function SupplierEditor({
     setError("");
     const profile = { ...value, phone: normalizePhone(value.phone) };
     try {
+      let donde: DondeQuedo = "SERVIDOR";
       if (supplier)
-        await updateSupplierTerms(token, organizationId, supplier, profile);
-      else
-        await createParty(
+        donde = await updateSupplierTerms(
+          token,
+          organizationId,
+          supplier,
+          profile,
+          branchId,
+        );
+      else {
+        const alta = await createParty(
           token,
           organizationId,
           "suppliers",
@@ -538,8 +565,11 @@ function SupplierEditor({
           undefined,
           undefined,
           profile,
+          branchId,
         );
-      onSaved();
+        donde = alta.donde ?? "SERVIDOR";
+      }
+      onSaved(donde);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");
     } finally {

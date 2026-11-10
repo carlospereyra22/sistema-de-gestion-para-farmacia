@@ -1,5 +1,11 @@
 import { useRef, useState } from "react";
-import { ars, payableRequest, type Invoice, type PayableScope } from "./api";
+import {
+  ars,
+  voidSupplierPayment,
+  type Invoice,
+  type PayableScope,
+} from "./api";
+import type { DondeQuedo } from "../lib/api";
 import { field, secondary, PayableDialog } from "./dialog";
 export function VoidPayment({
   invoice,
@@ -12,7 +18,7 @@ export function VoidPayment({
   paymentId: string;
   scope: PayableScope;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (donde: DondeQuedo) => void;
 }) {
   const [reason, setReason] = useState(""),
     [busy, setBusy] = useState(false),
@@ -61,12 +67,9 @@ export function VoidPayment({
             gate.current = true;
             setBusy(true);
             try {
-              await payableRequest(
-                scope,
-                `/${invoice.id}/payments/${paymentId}/void`,
-                { reason },
+              onSaved(
+                await voidSupplierPayment(scope, invoice.id, paymentId, reason),
               );
-              onSaved();
             } catch (e) {
               setError(e instanceof Error ? e.message : "No se pudo anular.");
             } finally {

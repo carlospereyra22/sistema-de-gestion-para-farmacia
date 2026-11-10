@@ -14,6 +14,10 @@ La pantalla presenta título con camión, búsqueda por nombre/contacto/correo/d
 
 El listado carga los proveedores de la organización y filtra/pagina en cliente; para catálogos de gran volumen se deberá migrar a paginación y búsqueda en servidor. No hay eliminación, mensajes automáticos, envíos de correo ni integración externa.
 
+## Sin conexión (10/11/2026, SISTEMA-73)
+
+Alta, edición, baja y restauración funcionan sin internet: quedan en la PC con la etiqueta "Por enviar" y se registran solas al volver, con su hora real. El proveedor nuevo se usa enseguida en Compras y Cuentas por pagar. Si otra PC cambió lo mismo después, queda ese cambio y un aviso. Ver `OFFLINE.md`.
+
 ## Verificación local
 
 Migración probada primero en esquema aislado y aplicada a gestion_dev después del respaldo `compras-v2-20261021-213020.dump` (387233 bytes, índice verificado; sin restauración completa). No se desplegó producción. Las pruebas de integración cubren contactos, permisos, versión esperada, auditoría y alta; las unitarias validan datos opcionales y límites. Edge headless a 1366×768, con API simulada, verificó listado, filtros, ficha, precarga/guardado de edición y apertura de alta. Capturas locales `.cache/suppliers-list.png` y `.cache/suppliers-editor.png`. Se retiraron las páginas temporales; no se crearon proveedores de prueba en los datos comerciales.

@@ -3,13 +3,17 @@ import {
   sendOfflineAccount,
   sendOfflineCash,
   sendOfflineCustomer,
+  sendOfflinePayable,
   sendOfflinePurchase,
+  sendOfflineSupplier,
   sendOfflineSale,
   sendOfflineTransfer,
   sendSignedOfflineAccount,
   sendSignedOfflineCash,
   sendSignedOfflineCustomer,
+  sendSignedOfflinePayable,
   sendSignedOfflinePurchase,
+  sendSignedOfflineSupplier,
   sendSignedOfflineSale,
   sendSignedOfflineTransfer,
 } from "./api";
@@ -54,38 +58,48 @@ export function useSincronizarVentas(
           alcance,
           // Ventas y operaciones de caja, en el orden en que pasaron.
           enviar: (venta) =>
-            venta.operacion === "CUENTA" || venta.operacion === "CLIENTE"
-              ? (venta.operacion === "CUENTA"
-                  ? sendOfflineAccount
-                  : sendOfflineCustomer)(
+            // Proveedores y cuentas por pagar (SISTEMA-73).
+            venta.operacion === "PROVEEDOR" || venta.operacion === "PAGAR"
+              ? (venta.operacion === "PROVEEDOR"
+                  ? sendOfflineSupplier
+                  : sendOfflinePayable)(
                   token,
                   venta.organizationId,
                   venta.branchId,
                   venta.cuerpo,
                 )
-              : venta.operacion === "COMPRA" ||
-                  venta.operacion === "TRANSFERENCIA"
-                ? (venta.operacion === "COMPRA"
-                    ? sendOfflinePurchase
-                    : sendOfflineTransfer)(
+              : venta.operacion === "CUENTA" || venta.operacion === "CLIENTE"
+                ? (venta.operacion === "CUENTA"
+                    ? sendOfflineAccount
+                    : sendOfflineCustomer)(
                     token,
                     venta.organizationId,
                     venta.branchId,
                     venta.cuerpo,
                   )
-                : venta.operacion === "CAJA"
-                  ? sendOfflineCash(
+                : venta.operacion === "COMPRA" ||
+                    venta.operacion === "TRANSFERENCIA"
+                  ? (venta.operacion === "COMPRA"
+                      ? sendOfflinePurchase
+                      : sendOfflineTransfer)(
                       token,
                       venta.organizationId,
                       venta.branchId,
                       venta.cuerpo,
                     )
-                  : sendOfflineSale(
-                      token,
-                      venta.organizationId,
-                      venta.branchId,
-                      venta.cuerpo,
-                    ),
+                  : venta.operacion === "CAJA"
+                    ? sendOfflineCash(
+                        token,
+                        venta.organizationId,
+                        venta.branchId,
+                        venta.cuerpo,
+                      )
+                    : sendOfflineSale(
+                        token,
+                        venta.organizationId,
+                        venta.branchId,
+                        venta.cuerpo,
+                      ),
           // Las de otros usuarios de la PC van firmadas por ellos (SISTEMA-66).
           enviarDeOtro: (venta) => {
             const firmada = {
@@ -93,6 +107,15 @@ export function useSincronizarVentas(
               payload: venta.payload!,
               signature: venta.firma!,
             };
+            if (venta.operacion === "PROVEEDOR" || venta.operacion === "PAGAR")
+              return (
+                venta.operacion === "PROVEEDOR"
+                  ? sendSignedOfflineSupplier
+                  : sendSignedOfflinePayable
+              )(token, venta.organizationId, venta.branchId, {
+                ...firmada,
+                actorId: venta.vendedorId!,
+              });
             if (venta.operacion === "CUENTA" || venta.operacion === "CLIENTE")
               return (
                 venta.operacion === "CUENTA"
