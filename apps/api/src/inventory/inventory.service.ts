@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { enTandas } from "../common/db/en-tandas";
+import { rangoDeParte } from "../catalog/catalogo-por-partes";
 import { rangoDeHistorial } from "../common/db/rango-historial";
 import {
   ForbiddenException,
@@ -181,19 +183,158 @@ export class InventoryService {
   }
 
   async stock(actorId: string, organizationId: string, branchId: string) {
+    const seesCosts = await this.puedeVerStock(
+      actorId,
+      organizationId,
+      branchId,
+    );
+    return this.armarStock(organizationId, branchId, seesCosts);
+  }
+
+  /** Permiso de stock y si ve costos: el mostrador consulta stock sin costos. */
+  private async puedeVerStock(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+  ) {
     await this.assert(actorId, organizationId, "INVENTORY_READ");
-    // El costo lo ve solo quien tiene permiso: el mostrador consulta stock sin costos.
     const seesCosts = (await this.permissionCodes(actorId, organizationId)).has(
       "COST_READ",
     );
     await this.branch(organizationId, branchId);
+    return seesCosts;
+  }
+
+  /**
+   * Stock por partes (SISTEMA-77), como el catálogo: la parte de un lote es la
+   * de su producto (dos primeros caracteres del id). La versión resume todo lo
+   * que cambia lo que se devuelve de cada lote: el lote, el nombre del
+   * producto, sus cargas y devoluciones por proveedor (de ahí sale de quién son
+   * las unidades), los proveedores y si se ven los costos.
+   */
+  async stockVersions(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+  ): Promise<{ partes: Record<string, string> }> {
+    const seesCosts = await this.puedeVerStock(
+      actorId,
+      organizationId,
+      branchId,
+    );
+    return {
+      partes: await this.versionesDeStock(organizationId, branchId, seesCosts),
+    };
+  }
+
+  /** Lotes de algunas partes del stock, con la versión de cada una. */
+  async stockParts(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    partes: string[],
+  ) {
+    const seesCosts = await this.puedeVerStock(
+      actorId,
+      organizationId,
+      branchId,
+    );
+    // La versión se lee antes que los lotes: si algo cambia en el medio, la
+    // PC queda con una versión vieja y la vuelve a pedir, nunca al revés.
+    const todas = await this.versionesDeStock(
+      organizationId,
+      branchId,
+      seesCosts,
+    );
+    const lotes = await this.armarStock(
+      organizationId,
+      branchId,
+      seesCosts,
+      partes,
+    );
+    return {
+      versiones: Object.fromEntries(
+        partes.map((parte) => [parte, todas[parte] ?? null]),
+      ),
+      lotes,
+    };
+  }
+
+  private async versionesDeStock(
+    organizationId: string,
+    branchId: string,
+    seesCosts: boolean,
+  ) {
+    const [filas, proveedores] = await Promise.all([
+      this.prisma.$queryRaw<{ parte: string; huella: string }[]>`
+        WITH lotes AS (
+          SELECT * FROM "ProductLot"
+          WHERE "organizationId" = ${organizationId}::uuid
+            AND "branchId" = ${branchId}::uuid
+            AND quantity > 0
+        ), cargas AS (
+          SELECT m."lotId", count(*) AS c, sum(m.quantity) AS s, max(m."occurredAt") AS u
+          FROM "InventoryMovement" m JOIN lotes ON lotes.id = m."lotId"
+          WHERE m.type IN ('PURCHASE_RECEIPT', 'TRANSFER_IN')
+             OR (m.type IN ('ADJUSTMENT_IN', 'ADJUSTMENT_OUT')
+                 AND m."referenceType" = ${SUPPLIER_ADJUSTMENT})
+          GROUP BY m."lotId"
+        ), devoluciones AS (
+          SELECT r."lotId", count(*) AS c, sum(r.quantity) AS s, max(r."createdAt") AS u
+          FROM "SupplierReturn" r JOIN lotes ON lotes.id = r."lotId"
+          GROUP BY r."lotId"
+        )
+        SELECT substr(lotes."productId"::text, 1, 2) AS parte,
+          md5(string_agg(concat(
+            lotes.id, ':', lotes.quantity, ':', lotes."expiresAt", ':', lotes.number, ':',
+            lotes."unitCostMinor", ':', lotes."packFactor", ':', lotes."packCount", ':',
+            lotes."metadataVersion", ':', lotes."createdAt", ':', p.name, ':',
+            cargas.c, ':', cargas.s, ':', cargas.u, ':',
+            devoluciones.c, ':', devoluciones.s, ':', devoluciones.u
+          ), ',' ORDER BY lotes.id)) AS huella
+        FROM lotes
+        LEFT JOIN "Product" p ON p.id = lotes."productId"
+        LEFT JOIN cargas ON cargas."lotId" = lotes.id
+        LEFT JOIN devoluciones ON devoluciones."lotId" = lotes.id
+        GROUP BY 1`,
+      this.prisma.$queryRaw<{ huella: string | null }[]>`
+        SELECT md5(string_agg(concat(id, ':', name, ':', active), ',' ORDER BY id)) AS huella
+        FROM "Supplier" WHERE "organizationId" = ${organizationId}::uuid`,
+    ]);
+    const contexto = `${seesCosts ? "costos" : "sin-costos"}|${proveedores[0]?.huella ?? "-"}`;
+    return Object.fromEntries(
+      filas.map(({ parte, huella }) => [
+        parte,
+        createHash("sha1")
+          .update(`${contexto}|${huella}`)
+          .digest("hex")
+          .slice(0, 20),
+      ]),
+    );
+  }
+
+  private async armarStock(
+    organizationId: string,
+    branchId: string,
+    seesCosts: boolean,
+    partes?: string[],
+  ) {
+    const rangos = partes?.map((parte) => rangoDeParte(parte));
     const lots = await this.prisma.productLot.findMany({
-      where: { organizationId, branchId, quantity: { gt: 0 } },
+      where: {
+        organizationId,
+        branchId,
+        quantity: { gt: 0 },
+        ...(rangos ? { OR: rangos.map((productId) => ({ productId })) } : {}),
+      },
       orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
     });
     // Los nombres por organización, no por una lista de ids (SISTEMA-74).
     const products = await this.prisma.product.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(rangos ? { OR: rangos.map((id) => ({ id })) } : {}),
+      },
       select: { id: true, name: true },
     });
     const names = new Map(

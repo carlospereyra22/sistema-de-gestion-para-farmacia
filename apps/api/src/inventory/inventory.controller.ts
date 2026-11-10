@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -30,6 +31,14 @@ import { HistorialQueryDto } from "../common/db/historial-query.dto";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { InventoryService } from "./inventory.service";
+import { partesPedidas } from "../catalog/catalogo-por-partes";
+
+/** Partes del stock pedidas: "0a,1f,..." (hasta 32) (SISTEMA-77). */
+class StockPartsQuery {
+  @IsString()
+  @Matches(/^[0-9a-f]{2}(,[0-9a-f]{2}){0,31}$/)
+  partes!: string;
+}
 
 class ReceiveStockDto {
   @IsString() productId!: string;
@@ -92,6 +101,44 @@ export class InventoryController {
       branchId,
       lotId,
       body,
+    );
+  }
+
+  /** Stock por partes (SISTEMA-77): la versión de cada parte. */
+  @Get("stock/versiones")
+  stockVersions(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+  ) {
+    return this.inventory.stockVersions(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+    );
+  }
+
+  /** Lotes de algunas partes del stock (SISTEMA-77). */
+  @Get("stock/partes")
+  stockParts(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Query() query: StockPartsQuery,
+  ) {
+    let partes: string[];
+    try {
+      partes = partesPedidas(query.partes);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Partes inválidas.",
+      );
+    }
+    return this.inventory.stockParts(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      partes,
     );
   }
 

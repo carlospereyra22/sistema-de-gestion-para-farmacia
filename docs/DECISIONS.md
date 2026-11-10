@@ -2,6 +2,15 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-77): El stock de la sucursal se sincroniza por partes, como el
+  catálogo (`GET inventory/stock/versiones` y `inventory/stock/partes`): la parte de un lote
+  es la de su producto. La versión resume también las cargas y devoluciones por proveedor
+  de cada lote, los proveedores y si se ven costos, porque cambian lo que se devuelve. La
+  copia por partes de la web es un módulo común (`lib/copia-por-partes.ts`) para catálogo y
+  stock. Lo que depende del día (vencido, por vencer) no se guarda: se calcula al armar.
+  Prueba de carga con 10 PCs y 60.000 productos: de 16 s a 1 s por actualización y de
+  2.829 MB a 4 MB en 5 vueltas (ver `RENDIMIENTO.md`).
+
 - 10/11/2026 (SISTEMA-76): El worker del lector de PDF (facturas de Compras y pedidos de
   Distribución) se crea desde una copia en memoria (blob) de su código, cargado como parte
   de la app con `?raw`, y no desde su dirección: pdf.js lo pide por red cada vez que lee un
