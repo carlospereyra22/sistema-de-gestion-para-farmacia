@@ -1,4 +1,4 @@
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { direccionDelWorkerPdf } from "./worker-pdf";
 import ocrWorkerUrl from "tesseract.js/dist/worker.min.js?url";
 import {
   invoiceEmptyMessage,
@@ -17,7 +17,8 @@ export async function readPurchaseInvoicePdf(
   progress: (message: string) => void,
 ): Promise<InvoiceLine[]> {
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  // Copia en memoria: anda sin conexión (SISTEMA-76).
+  pdfjs.GlobalWorkerOptions.workerSrc = await direccionDelWorkerPdf();
   const task = pdfjs.getDocument({
     data: new Uint8Array(await file.arrayBuffer()),
   });

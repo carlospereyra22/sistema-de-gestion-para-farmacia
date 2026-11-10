@@ -1,4 +1,4 @@
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { guardarWorkerPdf } from "./worker-pdf";
 
 // Partes de la app que se bajan aparte la primera vez que se usan (SISTEMA-72):
 // lector de PDF y su worker, Excel y Reportes. Con conexión se precargan en
@@ -20,12 +20,13 @@ let precargados: Promise<void> | undefined;
 /** Una vez por pestaña; de a uno para no competir con la pantalla. */
 export function precargarModulos(
   modulos: ReadonlyArray<() => Promise<unknown>> = MODULOS_APARTE,
-  bajar: (url: string) => Promise<unknown> = (url) => fetch(url),
+  guardarWorker: () => Promise<unknown> = () => guardarWorkerPdf(),
 ): Promise<void> {
   precargados ??= (async () => {
     for (const modulo of modulos) await modulo().catch(() => undefined);
-    // El worker del PDF se pide por dirección, no con import.
-    await bajar(pdfWorkerUrl).catch(() => undefined);
+    // El worker del PDF se pide por dirección, no con import: queda en
+    // memoria para crearlo sin red (SISTEMA-76).
+    await guardarWorker().catch(() => undefined);
   })();
   return precargados;
 }
