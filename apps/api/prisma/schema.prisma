@@ -721,6 +721,8 @@ model Role {
   organizationId String                 @db.Uuid
   code           String
   name           String
+  /// Texto libre que explica para quién es el rol (SISTEMA-83).
+  description    String?
   createdAt      DateTime               @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime               @updatedAt @db.Timestamptz(6)
   organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)

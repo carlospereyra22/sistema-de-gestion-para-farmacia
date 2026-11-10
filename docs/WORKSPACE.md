@@ -16,6 +16,10 @@ Administración muestra su título e icono en la barra superior, igual que Caja.
 pestañas de Usuarios y Roles y permisos quedan en una franja compacta dentro del
 contenido, sin repetir el título ni reservar espacio vacío arriba.
 
+Roles y permisos (SISTEMA-83): a la izquierda, tarjetas de rol con código, descripción, usuarios activos y los módulos habilitados (tres y "+N más"); a la derecha, el panel del rol elegido o de uno nuevo (nombre, código, descripción, "X de 28 permisos" y permisos por módulo). En escritorio el panel se mide para entrar entero en la pantalla: solo scrollea la lista de permisos y Guardar rol se ve sin bajar la página. El rol OWNER se ve pero no se edita; el código no se cambia después de crear el rol. La API edita nombre, descripción y permisos con `PATCH /organizations/:id/roles/:roleId` (auditoría `ROLE_UPDATED` o `ROLE_PERMISSIONS_UPDATED`).
+
+Usuarios (SISTEMA-83): mismo esquema. Tarjetas con iniciales, nombre, email, estado, roles y sucursales, y "Editar usuario"; el panel edita nombre, roles, sucursales y estado (activo o desactivado) y restablece la contraseña; en el alta pide email y contraseña. El email de ingreso no se cambia. Cada usuario puede cambiarse el nombre, pero no sus propios roles, sucursales ni estado, y la farmacia conserva siempre un dueño activo. `PATCH /organizations/:id/users/:userId` acepta `displayName` opcional, corre en una transacción y audita `USER_UPDATED` con el antes y el después.
+
 Documento consolidado; conserva las decisiones de implementación de cada apartado. El catálogo externo y sus imágenes se documentan en [EXTERNAL_PRODUCT_CATALOG.md](EXTERNAL_PRODUCT_CATALOG.md).
 
 ## Pantalla completa

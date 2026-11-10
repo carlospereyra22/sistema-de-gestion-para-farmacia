@@ -69,3 +69,23 @@ export function visibleCategoryTree<T extends Node>(
   }
   return result;
 }
+
+/**
+ * Productos de cada categoría sumando los de todas sus subcategorías: una
+ * categoría madre muestra lo que hay dentro de ella, no solo lo asignado
+ * directamente. Usa los conteos de la lista ya cargada, así funciona igual sin
+ * conexión. Un producto tiene una sola categoría, por eso no se cuenta dos veces.
+ */
+export function categoryProductTotals(
+  nodes: (Node & { _count?: { products: number } })[],
+): Map<string, number> {
+  const own = new Map(nodes.map((node) => [node.id, node._count?.products]));
+  const totals = new Map<string, number>();
+  for (const node of nodes) {
+    if (own.get(node.id) === undefined) continue;
+    let total = 0;
+    for (const id of categoryBranch(nodes, node.id)) total += own.get(id) ?? 0;
+    totals.set(node.id, total);
+  }
+  return totals;
+}

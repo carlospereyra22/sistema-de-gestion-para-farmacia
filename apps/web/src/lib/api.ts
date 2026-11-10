@@ -230,7 +230,9 @@ export type UserListItem = {
   displayName?: string | null;
   user: { id: string; email: string; active: boolean };
   active: boolean;
-  roles: { role: { id: string; code: string } }[];
+  /** Es quien está usando el sistema: no puede cambiar sus propios accesos. */
+  isCurrentUser?: boolean;
+  roles: { role: { id: string; code: string; name?: string } }[];
   branches: { branch: { id: string; name: string } }[];
 };
 
@@ -243,6 +245,9 @@ export type RoleListItem = {
   id: string;
   code: string;
   name: string;
+  description?: string | null;
+  /** Usuarios activos que tienen este rol. */
+  userCount?: number;
   permissions: { permission: { code: string } }[];
 };
 
@@ -403,23 +408,23 @@ export async function updateUser(
   accessToken: string,
   organizationId: string,
   userId: string,
-  input: { active: boolean; branchIds: string[]; roleIds: string[] },
+  input: {
+    active: boolean;
+    branchIds: string[];
+    roleIds: string[];
+    displayName?: string;
+  },
 ): Promise<void> {
   const response = await fetch(
     `${apiBaseUrl}/organizations/${organizationId}/users/${userId}`,
     {
       method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: authJson(accessToken),
       body: JSON.stringify(input),
     },
   );
-  if (!response.ok) {
-    const result = (await response.json()) as { message?: string };
-    throw new Error(result.message ?? "No se pudo actualizar el usuario.");
-  }
+  if (!response.ok)
+    throw await responseError(response, "No se pudo actualizar el usuario.");
 }
 
 export async function getRoles(
@@ -439,7 +444,12 @@ export async function getRoles(
 export async function createRole(
   accessToken: string,
   organizationId: string,
-  input: { name: string; code: string; permissionCodes: string[] },
+  input: {
+    name: string;
+    code: string;
+    description?: string;
+    permissionCodes: string[];
+  },
 ): Promise<void> {
   const response = await fetch(
     `${apiBaseUrl}/organizations/${organizationId}/roles`,
@@ -452,21 +462,23 @@ export async function createRole(
       body: JSON.stringify(input),
     },
   );
-  if (!response.ok) throw new Error("No se pudo crear el rol.");
+  if (!response.ok)
+    throw await responseError(response, "No se pudo crear el rol.");
 }
 
-export async function updateRolePermissions(
+/** Edita nombre, descripción y permisos de un rol. El código no cambia. */
+export async function updateRole(
   accessToken: string,
   organizationId: string,
   roleId: string,
-  permissionCodes: string[],
+  input: { name: string; description: string; permissionCodes: string[] },
 ): Promise<void> {
   const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/roles/${roleId}/permissions`,
+    `${apiBaseUrl}/organizations/${organizationId}/roles/${roleId}`,
     {
       method: "PATCH",
       headers: authJson(accessToken),
-      body: JSON.stringify({ permissionCodes }),
+      body: JSON.stringify(input),
     },
   );
   if (!response.ok)

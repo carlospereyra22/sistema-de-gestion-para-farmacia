@@ -13,8 +13,10 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsOptional,
   IsString,
   Matches,
+  MaxLength,
   MinLength,
 } from "class-validator";
 
@@ -23,12 +25,23 @@ import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { RolesService } from "./roles.service";
 
 class CreateRoleDto {
-  @IsString() @MinLength(2) name!: string;
+  @IsString() @MinLength(2) @MaxLength(60) name!: string;
+  @IsOptional() @IsString() @MaxLength(300) description?: string;
   @IsString() @Matches(/^[A-Z][A-Z0-9_]{1,31}$/) code!: string;
   @IsArray()
   @ArrayMinSize(1)
   @IsString({ each: true })
   permissionCodes!: string[];
+}
+
+class UpdateRoleDto {
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(60) name?: string;
+  @IsOptional() @IsString() @MaxLength(300) description?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  permissionCodes?: string[];
 }
 
 class UpdateRolePermissionsDto {
@@ -63,7 +76,18 @@ export class RolesController {
       body.name,
       body.code,
       body.permissionCodes,
+      body.description,
     );
+  }
+
+  @Patch(":roleId")
+  update(
+    @Param("organizationId") organizationId: string,
+    @Param("roleId", ParseUUIDPipe) roleId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: UpdateRoleDto,
+  ) {
+    return this.roles.update(request.auth!.sub, organizationId, roleId, body);
   }
 
   @Patch(":roleId/permissions")

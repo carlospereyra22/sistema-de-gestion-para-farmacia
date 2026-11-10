@@ -1801,3 +1801,19 @@ textarea:focus {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Roles y Usuarios (SISTEMA-83): el panel de configuración entra entero en la
+   pantalla (use-fit-to-viewport.ts mide su alto) y solo la lista interna scrollea,
+   así el botón de guardar se ve sin bajar la página. */
+@media (min-width: 1024px) {
+  .side-config-panel {
+    display: flex;
+    flex-direction: column;
+  }
+  .side-config-scroll {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+}

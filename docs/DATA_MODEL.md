@@ -50,6 +50,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261111300000_offline_cash_collections` (SISTEMA-81): `OfflineOperation` admite `CASH_COLLECTION_DESTINATION`, `CASH_COLLECTION_ASSIGN` y `CASH_COLLECTION_CLEAR`; `OfflineSyncIssue` suma `COBRO_YA_ASIGNADO`. Sólo cambia los CHECK.
 
+`20261111400000_role_description` (SISTEMA-83): `Role.description` (texto opcional) explica para quién es el rol. Los roles existentes quedan sin descripción. El código del rol no cambia después de creado (OWNER y ADMIN tienen reglas atadas a él).
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

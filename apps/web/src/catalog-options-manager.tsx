@@ -38,7 +38,11 @@ import {
   ChevronRight,
   ChevronDown,
 } from "lucide-react";
-import { categoryBranch, visibleCategoryTree } from "./lib/category-tree";
+import {
+  categoryBranch,
+  categoryProductTotals,
+  visibleCategoryTree,
+} from "./lib/category-tree";
 import { CatalogItemDialog } from "./catalog-item-dialog";
 import { ProductImageDialog } from "./product-image";
 export function CatalogOptionsTitle() {
@@ -623,6 +627,13 @@ export function CatalogOptionsManager({
         const primaryCount = category
           ? items?.filter((item) => !item.parentId).length
           : undefined;
+        // Las categorías muestran también los productos de sus subcategorías.
+        const productTotals = category
+          ? categoryProductTotals(items ?? [])
+          : undefined;
+        const parent = category
+          ? items?.find((item) => item.id === parentId)
+          : undefined;
         const visible = category
           ? visibleCategoryTree(items ?? [], expanded, search[type])
           : items
@@ -645,8 +656,15 @@ export function CatalogOptionsManager({
               <span className="grid size-11 place-items-center rounded-xl bg-teal-50 text-teal-700">
                 <Icon size={23} />
               </span>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">{title}</h2>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-slate-900">
+                  {parent ? "Nueva subcategoría" : title}
+                </h2>
+                {parent && (
+                  <p className="text-xs break-words text-slate-500">
+                    Dentro de {parent.path ?? parent.name}
+                  </p>
+                )}
               </div>
               <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                 {category && primaryCount !== undefined
@@ -663,9 +681,19 @@ export function CatalogOptionsManager({
             >
               <input
                 ref={creationInput}
-                aria-label={category ? "Nueva categoría" : "Nuevo laboratorio"}
+                aria-label={
+                  parent
+                    ? "Nueva subcategoría"
+                    : category
+                      ? "Nueva categoría"
+                      : "Nuevo laboratorio"
+                }
                 placeholder={
-                  category ? "Nueva categoría…" : "Nuevo laboratorio…"
+                  parent
+                    ? "Nueva subcategoría…"
+                    : category
+                      ? "Nueva categoría…"
+                      : "Nuevo laboratorio…"
                 }
                 required
                 minLength={2}
@@ -832,11 +860,9 @@ export function CatalogOptionsManager({
                       <p className="text-[11px] text-slate-400">{item.path}</p>
                     )}
                     <p className="mt-0.5 text-[11px] text-slate-500">
-                      {item._count
-                        ? item._count.products === 0
-                          ? "Sin productos"
-                          : `${item._count.products.toLocaleString("es-AR")} productos`
-                        : ""}
+                      {productCountLabel(
+                        productTotals?.get(item.id) ?? item._count?.products,
+                      )}
                     </p>
                   </div>
                   <div className="flex w-full shrink-0 justify-end gap-1.5 sm:w-auto">
@@ -906,4 +932,12 @@ export function CatalogOptionsManager({
       })}
     </div>
   );
+}
+
+function productCountLabel(count: number | undefined): string {
+  if (count === undefined) return "";
+  if (count === 0) return "Sin productos";
+  return count === 1
+    ? "1 producto"
+    : `${count.toLocaleString("es-AR")} productos`;
 }
