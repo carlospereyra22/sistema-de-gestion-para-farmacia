@@ -20,6 +20,22 @@ import {
   horaUltimaSincronizacion,
 } from "./cache-local";
 import { copiaAlDia } from "./copia-por-partes";
+import { productoPorId } from "./indice-productos";
+import {
+  camposCambiadosDelProducto,
+  guardarOperacionCatalogo,
+  opcionesConPendientes,
+  pendientesDeCatalogo,
+  productoConPendientes,
+  productosConPendientes,
+} from "./catalogo-sin-conexion";
+import {
+  guardarOperacionInventario,
+  loteConPendientes,
+  loteDeLaOperacion,
+  pendientesDeInventario,
+  stockConPendientes,
+} from "./inventario-sin-conexion";
 import {
   catalogoAlDia,
   type PartesDelCatalogo,
@@ -489,6 +505,8 @@ export async function createBranch(
 }
 
 export type CatalogProduct = {
+  /** Hecho sin conexión y todavía no enviado (SISTEMA-79). */
+  porEnviar?: boolean;
   brand?: string | null;
   isMedication?: boolean;
   branchStateUpdatedAt?: string | null;
@@ -526,7 +544,7 @@ export type CatalogProduct = {
 // PACKAGE: código del envase; INTERNAL: SG para etiquetas; EQUIVALENT: EAN de
 // un envase importado del mismo medicamento (SISTEMA-20).
 export type ProductBarcodeKind = "PACKAGE" | "INTERNAL" | "EQUIVALENT";
-export async function addEquivalentBarcode(
+async function addEquivalentBarcodeEnLinea(
   token: string,
   organizationId: string,
   productId: string,
@@ -547,7 +565,7 @@ export async function addEquivalentBarcode(
     );
   return response.json();
 }
-export async function removeEquivalentBarcode(
+async function removeEquivalentBarcodeEnLinea(
   token: string,
   organizationId: string,
   productId: string,
@@ -668,7 +686,7 @@ export type MedicineReference = {
  * conexión lo arma con lo guardado (SISTEMA-74). Sin sesión en la PC (no hay
  * dónde guardarlo) se pide entero, como antes.
  */
-export async function getCatalogProducts(
+async function getCatalogProductsDelServidor(
   token: string,
   organizationId: string,
   branchId?: string,
@@ -952,7 +970,7 @@ export async function actualizarBaseMedicamentos(
       packs: base.packs,
     });
 }
-export async function createCatalogProduct(
+async function createCatalogProductEnLinea(
   token: string,
   organizationId: string,
   input: {
@@ -1026,7 +1044,7 @@ export async function setCatalogProductActive(
     throw await responseError(response, "No se pudo actualizar el producto.");
 }
 
-export async function changeBranchProduct(
+async function changeBranchProductEnLinea(
   token: string,
   organizationId: string,
   branchId: string,
@@ -1055,7 +1073,7 @@ export async function changeBranchProduct(
     );
 }
 
-export async function updateCatalogProductImage(
+async function updateCatalogProductImageEnLinea(
   token: string,
   organizationId: string,
   productId: string,
@@ -1073,7 +1091,7 @@ export async function updateCatalogProductImage(
     throw await responseError(response, "No se pudo guardar la foto.");
 }
 
-export async function updateCatalogProduct(
+async function updateCatalogProductEnLinea(
   token: string,
   organizationId: string,
   productId: string,
@@ -1113,7 +1131,7 @@ export async function updateCatalogProduct(
     throw await responseError(response, "No se pudo editar el producto.");
 }
 
-export async function deleteUnusedCatalogProduct(
+async function deleteUnusedCatalogProductEnLinea(
   token: string,
   organizationId: string,
   productId: string,
@@ -1126,7 +1144,7 @@ export async function deleteUnusedCatalogProduct(
     throw await responseError(response, "No se pudo eliminar el producto.");
 }
 
-export async function getCatalogOptions(
+async function getCatalogOptionsDelServidor(
   token: string,
   organizationId: string,
 ): Promise<CatalogOptions> {
@@ -1173,7 +1191,7 @@ export async function resolveExternalCategory(
   }>;
 }
 
-export async function createCatalogNamedItem(
+async function createCatalogNamedItemEnLinea(
   token: string,
   organizationId: string,
   type: "categories" | "laboratories",
@@ -1902,6 +1920,8 @@ export async function setCustomerActive(
 }
 
 export type StockLot = {
+  /** Con un movimiento hecho sin conexión que todavía no llegó (SISTEMA-79). */
+  porEnviar?: boolean;
   metadataVersion: number;
   sellableQuantity: number;
   expiredQuantity: number;
@@ -1929,7 +1949,7 @@ export type StockLot = {
  * última vez; la PC lo guarda y sin conexión lo arma con lo guardado
  * (SISTEMA-77, como el catálogo). Sin sesión en la PC se pide entero.
  */
-export async function getStock(
+async function getStockDelServidor(
   token: string,
   organizationId: string,
   branchId: string,
@@ -2131,7 +2151,7 @@ async function getInventoryCostsCompletos(
   return (await response.json()) as InventoryCosts;
 }
 
-export async function receiveStock(
+async function receiveStockEnLinea(
   token: string,
   organizationId: string,
   branchId: string,
@@ -2159,7 +2179,7 @@ export async function receiveStock(
     throw await responseError(response, "No se pudo recibir stock.");
 }
 
-export async function adjustStock(
+async function adjustStockEnLinea(
   token: string,
   organizationId: string,
   branchId: string,
@@ -2180,7 +2200,7 @@ export async function adjustStock(
     throw await responseError(response, "No se pudo ajustar el stock.");
 }
 
-export async function createSupplierReturn(
+async function createSupplierReturnEnLinea(
   token: string,
   organizationId: string,
   branchId: string,
@@ -2309,7 +2329,7 @@ export async function archiveCashClosure(
   if (!response.ok)
     throw await responseError(response, "No se pudo modificar el cierre.");
 }
-export async function editLotMetadata(
+async function editLotMetadataEnLinea(
   token: string,
   organizationId: string,
   branchId: string,
@@ -4779,5 +4799,596 @@ export function sendSignedOfflinePayable(
     `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/supplier-payables/offline/firmada`,
     body,
     "El servidor no aceptó la operación de cuentas por pagar sin conexión.",
+  );
+}
+
+// --- Productos e inventario sin conexión (SISTEMA-79) ---
+// Cada operación intenta con conexión; sin conexión queda en la PC, firmada,
+// y se manda sola al volver. Si el producto o el lote ya tiene algo sin
+// enviar (o se creó sin conexión), va directo a la PC para llegar en orden.
+// Las lecturas suman lo hecho en la PC que todavía no llegó.
+
+async function conRespaldoEnLaPc<T>(
+  token: string,
+  organizationId: string,
+  enEspera: boolean,
+  enLinea: () => Promise<T>,
+  enLaPc: () => Promise<T>,
+): Promise<T> {
+  if (enEspera && token !== TOKEN_SIN_CONEXION) return enLaPc();
+  if (token !== TOKEN_SIN_CONEXION)
+    try {
+      return await enLinea();
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  await puedeOperarSinConexion(token, organizationId);
+  return enLaPc();
+}
+
+/** ¿El producto, o la categoría o el laboratorio que usa, espera en la PC? */
+async function catalogoEnEspera(
+  organizationId: string,
+  ...ids: (string | null | undefined)[]
+) {
+  const bandeja = await bandejaDeLaPc();
+  const pendientes = pendientesDeCatalogo(bandeja, organizationId);
+  return ids.some(
+    (id) =>
+      id &&
+      (productoConPendientes(bandeja, organizationId, id) ||
+        pendientes.some(
+          ({ op }) => op.tipo === "OPCION" && op.clientOperationId === id,
+        )),
+  );
+}
+
+/** El producto como se ve en la PC (para saber qué cambió una edición). */
+async function productoDeLaPc(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  productId: string,
+) {
+  return productoPorId(
+    await getCatalogProducts(token, organizationId, branchId).catch(
+      () => [] as CatalogProduct[],
+    ),
+    productId,
+  );
+}
+
+/**
+ * Catálogo de la sucursal (o de la organización sin `branchId`). Se baja por
+ * partes y sólo lo que cambió desde la última vez; la PC lo guarda y sin
+ * conexión lo arma con lo guardado (SISTEMA-74). Suma lo hecho en la PC que
+ * todavía no llegó (SISTEMA-79).
+ */
+export async function getCatalogProducts(
+  token: string,
+  organizationId: string,
+  branchId?: string,
+): Promise<CatalogProduct[]> {
+  const [catalogo, bandeja] = await Promise.all([
+    getCatalogProductsDelServidor(token, organizationId, branchId),
+    bandejaDeLaPc(),
+  ]);
+  const pendientes = pendientesDeCatalogo(bandeja, organizationId);
+  if (!pendientes.some(({ op }) => op.tipo !== "OPCION")) return catalogo;
+  const opciones = pendientes.some(
+    ({ op }) => op.tipo === "ALTA" || op.tipo === "EDICION",
+  )
+    ? await getCatalogOptionsDelServidor(token, organizationId).catch(
+        () => undefined,
+      )
+    : undefined;
+  return productosConPendientes(
+    catalogo,
+    bandeja,
+    organizationId,
+    branchId,
+    opciones,
+  );
+}
+
+export async function getCatalogOptions(
+  token: string,
+  organizationId: string,
+): Promise<CatalogOptions> {
+  const [opciones, bandeja] = await Promise.all([
+    getCatalogOptionsDelServidor(token, organizationId),
+    bandejaDeLaPc(),
+  ]);
+  return opcionesConPendientes(opciones, bandeja, organizationId);
+}
+
+/**
+ * Stock de la sucursal. Se baja por partes y sólo lo que cambió desde la
+ * última vez (SISTEMA-77). Suma los ingresos, ajustes, devoluciones y
+ * correcciones hechos en la PC que todavía no llegaron (SISTEMA-79).
+ */
+export async function getStock(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<StockLot[]> {
+  const [stock, bandeja] = await Promise.all([
+    getStockDelServidor(token, organizationId, branchId),
+    bandejaDeLaPc(),
+  ]);
+  const pendientes = pendientesDeInventario(bandeja, organizationId, branchId);
+  if (!pendientes.length) return stock;
+  // Nombre de un producto que todavía no tiene lotes en la sucursal.
+  const sinLotes = pendientes.some(
+    (op) =>
+      op.tipo === "INGRESO" &&
+      !stock.some((lote) => lote.productId === op.cuerpo.productId),
+  );
+  const catalogo = sinLotes
+    ? await getCatalogProducts(token, organizationId, branchId).catch(
+        () => [] as CatalogProduct[],
+      )
+    : [];
+  return stockConPendientes(
+    stock,
+    bandeja,
+    organizationId,
+    branchId,
+    (id) => productoPorId(catalogo, id)?.name,
+  );
+}
+
+export async function createCatalogProduct(
+  token: string,
+  organizationId: string,
+  input: Parameters<typeof createCatalogProductEnLinea>[2],
+  /** Sucursal desde la que se da de alta: sin conexión, queda en la PC. */
+  branchId?: string,
+): Promise<{ id?: string; donde?: DondeQuedo }> {
+  const enLinea = () =>
+    createCatalogProductEnLinea(token, organizationId, input);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(
+      organizationId,
+      input.categoryId,
+      input.laboratoryId,
+    ),
+    enLinea,
+    async () => {
+      // El producto nuevo se usa enseguida: su id es el de la PC.
+      const id = crypto.randomUUID();
+      await guardarOperacionCatalogo(
+        organizationId,
+        branchId,
+        { tipo: "ALTA", cuerpo: input },
+        id,
+      );
+      return { id, donde: "PC" as const };
+    },
+  );
+}
+
+export async function updateCatalogProduct(
+  token: string,
+  organizationId: string,
+  productId: string,
+  input: Parameters<typeof updateCatalogProductEnLinea>[3],
+  branchId?: string,
+): Promise<void> {
+  const enLinea = () =>
+    updateCatalogProductEnLinea(token, organizationId, productId, input);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(
+      organizationId,
+      productId,
+      input.categoryId,
+      input.laboratoryId,
+    ),
+    enLinea,
+    async () => {
+      // Sólo lo que cambió: no se pisa lo que otra PC cambió en otros datos.
+      const antes = await productoDeLaPc(
+        token,
+        organizationId,
+        branchId,
+        productId,
+      );
+      const cuerpo = antes ? camposCambiadosDelProducto(antes, input) : input;
+      if (!Object.keys(cuerpo).length) return;
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "EDICION",
+        productId,
+        cuerpo,
+      });
+    },
+  );
+}
+
+export async function updateCatalogProductImage(
+  token: string,
+  organizationId: string,
+  productId: string,
+  imageDataUrl: string | null,
+  branchId?: string,
+): Promise<void> {
+  const enLinea = () =>
+    updateCatalogProductImageEnLinea(
+      token,
+      organizationId,
+      productId,
+      imageDataUrl,
+    );
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, productId),
+    enLinea,
+    async () => {
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "EDICION",
+        productId,
+        cuerpo: { imageDataUrl },
+      });
+    },
+  );
+}
+
+export async function changeBranchProduct(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  productId: string,
+  input: Parameters<typeof changeBranchProductEnLinea>[4],
+): Promise<void> {
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, productId),
+    () =>
+      changeBranchProductEnLinea(
+        token,
+        organizationId,
+        branchId,
+        productId,
+        input,
+      ),
+    async () => {
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "ESTADO_SUCURSAL",
+        productId,
+        cuerpo: input,
+      });
+    },
+  );
+}
+
+export async function addEquivalentBarcode(
+  token: string,
+  organizationId: string,
+  productId: string,
+  code: string,
+  branchId?: string,
+): Promise<{ productId: string; productName: string; code: string }> {
+  const enLinea = () =>
+    addEquivalentBarcodeEnLinea(token, organizationId, productId, code);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, productId),
+    enLinea,
+    async () => {
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "CODIGO_AGREGAR",
+        productId,
+        cuerpo: { code: code.trim() },
+      });
+      const producto = await productoDeLaPc(
+        token,
+        organizationId,
+        branchId,
+        productId,
+      );
+      return {
+        productId,
+        productName: producto?.name ?? "Producto",
+        code: code.trim(),
+      };
+    },
+  );
+}
+
+export async function removeEquivalentBarcode(
+  token: string,
+  organizationId: string,
+  productId: string,
+  code: string,
+  branchId?: string,
+): Promise<void> {
+  const enLinea = () =>
+    removeEquivalentBarcodeEnLinea(token, organizationId, productId, code);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, productId),
+    enLinea,
+    async () => {
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "CODIGO_QUITAR",
+        productId,
+        cuerpo: { code: code.trim() },
+      });
+    },
+  );
+}
+
+export async function deleteUnusedCatalogProduct(
+  token: string,
+  organizationId: string,
+  productId: string,
+  branchId?: string,
+): Promise<void> {
+  const enLinea = () =>
+    deleteUnusedCatalogProductEnLinea(token, organizationId, productId);
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, productId),
+    enLinea,
+    async () => {
+      await guardarOperacionCatalogo(organizationId, branchId, {
+        tipo: "ELIMINAR",
+        productId,
+        cuerpo: {},
+      });
+    },
+  );
+}
+
+export async function createCatalogNamedItem(
+  token: string,
+  organizationId: string,
+  type: "categories" | "laboratories",
+  name: string,
+  icon?: import("@gestion/contracts").CategoryIcon,
+  color?: import("@gestion/contracts").CategoryColor,
+  parentId?: string | null,
+  /** Sin conexión, la categoría o el laboratorio queda en la PC. */
+  branchId?: string,
+): Promise<CatalogOptions["categories"][number]> {
+  const enLinea = () =>
+    createCatalogNamedItemEnLinea(
+      token,
+      organizationId,
+      type,
+      name,
+      icon,
+      color,
+      parentId,
+    );
+  if (!branchId) return enLinea();
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await catalogoEnEspera(organizationId, parentId),
+    enLinea,
+    async () => {
+      const id = crypto.randomUUID();
+      await guardarOperacionCatalogo(
+        organizationId,
+        branchId,
+        {
+          tipo: "OPCION",
+          cuerpo: {
+            type,
+            name: name.trim(),
+            ...(type === "categories" ? { parentId: parentId ?? null } : {}),
+          },
+        },
+        id,
+      );
+      return {
+        id,
+        name: name.trim(),
+        ...(type === "categories" ? { parentId: parentId ?? null } : {}),
+      };
+    },
+  );
+}
+
+/** ¿El lote o su producto esperan en la PC? Lo nuevo va detrás, en orden. */
+async function inventarioEnEspera(
+  organizationId: string,
+  branchId: string,
+  lotId: string | undefined,
+  productId: string | undefined,
+) {
+  const bandeja = await bandejaDeLaPc();
+  return (
+    (lotId !== undefined &&
+      loteConPendientes(bandeja, organizationId, branchId, lotId)) ||
+    (productId !== undefined &&
+      (productoConPendientes(bandeja, organizationId, productId) ||
+        pendientesDeInventario(bandeja, organizationId, branchId).some(
+          (op) => op.tipo === "INGRESO" && op.cuerpo.productId === productId,
+        )))
+  );
+}
+
+export async function receiveStock(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  input: Parameters<typeof receiveStockEnLinea>[3],
+): Promise<void> {
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await inventarioEnEspera(
+      organizationId,
+      branchId,
+      undefined,
+      input.productId,
+    ),
+    () => receiveStockEnLinea(token, organizationId, branchId, input),
+    async () => {
+      await guardarOperacionInventario(organizationId, branchId, {
+        tipo: "INGRESO",
+        cuerpo: input,
+      });
+    },
+  );
+}
+
+export async function adjustStock(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  input: Parameters<typeof adjustStockEnLinea>[3],
+): Promise<void> {
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await inventarioEnEspera(organizationId, branchId, input.lotId, undefined),
+    () => adjustStockEnLinea(token, organizationId, branchId, input),
+    async () => {
+      const { lotId, ...cuerpo } = input;
+      await guardarOperacionInventario(organizationId, branchId, {
+        tipo: "AJUSTE",
+        cuerpo: { ...cuerpo, lote: loteDeLaOperacion(lotId) },
+      });
+    },
+  );
+}
+
+export async function createSupplierReturn(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  input: Parameters<typeof createSupplierReturnEnLinea>[3],
+): Promise<void> {
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await inventarioEnEspera(organizationId, branchId, input.lotId, undefined),
+    () => createSupplierReturnEnLinea(token, organizationId, branchId, input),
+    async () => {
+      const { lotId, ...cuerpo } = input;
+      await guardarOperacionInventario(organizationId, branchId, {
+        tipo: "DEVOLUCION",
+        cuerpo: { ...cuerpo, lote: loteDeLaOperacion(lotId) },
+      });
+    },
+  );
+}
+
+export async function editLotMetadata(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  lot: StockLot,
+  number: string,
+  expiresAt: string | null,
+  reason: string,
+  unitCostMinor?: string,
+): Promise<void> {
+  return conRespaldoEnLaPc(
+    token,
+    organizationId,
+    await inventarioEnEspera(organizationId, branchId, lot.id, undefined),
+    () =>
+      editLotMetadataEnLinea(
+        token,
+        organizationId,
+        branchId,
+        lot,
+        number,
+        expiresAt,
+        reason,
+        unitCostMinor,
+      ),
+    async () => {
+      // Sólo lo que cambió: no se pisa lo que otra PC corrigió en otro dato.
+      const vence = lot.expiresAt?.slice(0, 10) ?? null;
+      await guardarOperacionInventario(organizationId, branchId, {
+        tipo: "EDICION_LOTE",
+        cuerpo: {
+          lote: loteDeLaOperacion(lot.id),
+          ...(number.trim() !== lot.number ? { number: number.trim() } : {}),
+          ...(expiresAt !== vence ? { expiresAt } : {}),
+          ...(unitCostMinor !== undefined && unitCostMinor !== lot.unitCostMinor
+            ? { unitCostMinor }
+            : {}),
+          reason,
+        },
+      });
+    },
+  );
+}
+
+/** Operación de productos hecha sin conexión (SISTEMA-79). */
+export function sendOfflineCatalog(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/catalog/offline`,
+    body,
+    "El servidor no aceptó el producto guardado sin conexión.",
+  );
+}
+
+export function sendSignedOfflineCatalog(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: EnvioFirmado,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/catalog/offline/firmada`,
+    body,
+    "El servidor no aceptó el producto guardado sin conexión.",
+  );
+}
+
+/** Movimiento de inventario hecho sin conexión (SISTEMA-79). */
+export function sendOfflineInventory(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/offline`,
+    body,
+    "El servidor no aceptó el movimiento de inventario guardado sin conexión.",
+  );
+}
+
+export function sendSignedOfflineInventory(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: EnvioFirmado,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/offline/firmada`,
+    body,
+    "El servidor no aceptó el movimiento de inventario guardado sin conexión.",
   );
 }

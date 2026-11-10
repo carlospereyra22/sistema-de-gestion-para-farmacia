@@ -185,6 +185,48 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
           texto(d.motivo) ||
           "Otra PC ya había anulado este pago: no se anuló otra vez.",
       };
+    // Productos e inventario sin conexión (SISTEMA-79).
+    case "CODIGO_REPETIDO":
+      return {
+        titulo: `Código repetido: ${nombre} ${texto(d.codigo)}`.trim(),
+        detalle:
+          texto(d.motivo) ||
+          "Ese código ya era de otro producto: se registró sin el código. Unificalos a mano.",
+      };
+    case "DATO_PISADO":
+      return {
+        titulo: d.lote
+          ? `Lote corregido en otra PC: ${nombre} · ${texto(d.lote)}`
+          : `Producto cambiado en otra PC: ${nombre}`,
+        detalle:
+          texto(d.motivo) ||
+          "Otra PC cambió esos datos después: quedaron esos cambios.",
+      };
+    case "AJUSTE_SUPERA_STOCK":
+      return {
+        titulo: `${d.tipo === "DEVOLUCION" ? "Devolución" : "Ajuste"} mayor al stock: ${nombre}${d.lote ? ` · lote ${texto(d.lote)}` : ""}`,
+        detalle: `Se cargaron ${texto(d.pedido)} un. y el lote tenía ${texto(d.registrado)}: se registraron ${texto(d.registrado)} y quedaron ${texto(d.faltan)} sin registrar. Revisá el stock.`,
+      };
+    case "LOTE_REPETIDO":
+      return {
+        titulo: `Número de lote repetido: ${nombre} · ${texto(d.lote)}`,
+        detalle:
+          texto(d.motivo) ||
+          "Ya había un lote con ese número para este producto: no se cambió.",
+      };
+    case "OPCION_EXISTENTE":
+      return {
+        titulo: `${texto(d.tipo) === "laboratorio" ? "Laboratorio" : "Categoría"} que ya existía: ${nombre}`,
+        detalle:
+          texto(d.motivo) || "Ya existía con ese nombre: se usó la existente.",
+      };
+    case "PRODUCTO_INACTIVO":
+      return {
+        titulo: `Producto desactivado: ${nombre}`,
+        detalle:
+          texto(d.motivo) ||
+          "El producto estaba desactivado cuando llegó el ingreso: se registró igual.",
+      };
     default:
       return {
         titulo: "Venta sin conexión para revisar",

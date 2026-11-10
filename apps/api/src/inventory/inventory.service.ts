@@ -1,4 +1,32 @@
 import { createHash } from "node:crypto";
+import {
+  contextoSinConexion,
+  guardarOperacionSinConexion,
+  operacionYaRegistrada,
+  type ContextoSinConexion,
+} from "../common/offline/registro-sin-conexion";
+import { verificarOperacionDeOtro } from "../sales/operacion-firmada";
+import { camposPisados } from "../parties/proveedor-sin-conexion";
+import {
+  KIND_INVENTARIO,
+  camposDelLote,
+  hastaLoQueHay,
+  type LoteDeLaOperacion,
+  type OperacionInventarioSinConexion,
+} from "./inventario-sin-conexion";
+
+/** El cuerpo de la operación sin la referencia al lote (va por id). */
+function sinLote<T extends { lote: unknown }>(cuerpo: T): Omit<T, "lote"> {
+  const copia: Partial<T> = { ...cuerpo };
+  delete copia.lote;
+  return copia as Omit<T, "lote">;
+}
+
+/** Operación hecha sin conexión: su contexto (avisos) y la marca para la auditoría. */
+type SinConexion = {
+  contexto: ContextoSinConexion;
+  marca: Record<string, string>;
+};
 import { enTandas } from "../common/db/en-tandas";
 import { rangoDeParte } from "../catalog/catalogo-por-partes";
 import { rangoDeHistorial } from "../common/db/rango-historial";
@@ -8,6 +36,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
@@ -721,77 +750,105 @@ export class InventoryService {
       throw new NotFoundException(
         "Product is unavailable in this organization.",
       );
-    return this.prisma.$transaction(async (tx) => {
-      if (
-        input.supplierId &&
-        !(await tx.supplier.findFirst({
-          where: {
-            id: input.supplierId,
-            organizationId: input.organizationId,
-            active: true,
-          },
-        }))
-      )
+    return this.prisma.$transaction((tx) =>
+      this.recibirEnTx(tx, actorId, input),
+    );
+  }
+
+  /** El ingreso dentro de una transacción (también el hecho sin conexión). */
+  private async recibirEnTx(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    input: {
+      organizationId: string;
+      branchId: string;
+      productId: string;
+      supplierId: string | null;
+      lotNumber: string;
+      quantity: number;
+      unitCostMinor: number;
+      expiresAt?: Date;
+    },
+    sinConexion?: SinConexion,
+  ) {
+    if (input.supplierId) {
+      const proveedor = await tx.supplier.findFirst({
+        where: { id: input.supplierId, organizationId: input.organizationId },
+        select: { name: true, active: true },
+      });
+      if (!proveedor || (!proveedor.active && !sinConexion))
         throw new NotFoundException("El proveedor no está disponible.");
-      const existing = await tx.productLot.findUnique({
-        where: {
-          branchId_productId_number: {
+      // Sin conexión se registra igual (SISTEMA-79).
+      if (!proveedor.active)
+        sinConexion?.contexto.avisos.push({
+          kind: "PROVEEDOR_INACTIVO",
+          detail: {
+            proveedor: proveedor.name,
+            motivo:
+              "El proveedor estaba dado de baja cuando llegó el ingreso: se registró igual.",
+          },
+        });
+    }
+    const existing = await tx.productLot.findUnique({
+      where: {
+        branchId_productId_number: {
+          branchId: input.branchId,
+          productId: input.productId,
+          number: input.lotNumber.trim(),
+        },
+      },
+    });
+    const lot = existing
+      ? await tx.productLot.update({
+          where: { id: existing.id },
+          data: {
+            quantity: { increment: input.quantity },
+            unitCostMinor: BigInt(input.unitCostMinor),
+            expiresAt: input.expiresAt,
+            metadataVersion: { increment: 1 },
+          },
+        })
+      : await tx.productLot.create({
+          data: {
+            organizationId: input.organizationId,
             branchId: input.branchId,
             productId: input.productId,
             number: input.lotNumber.trim(),
+            quantity: input.quantity,
+            unitCostMinor: BigInt(input.unitCostMinor),
+            expiresAt: input.expiresAt,
           },
-        },
-      });
-      const lot = existing
-        ? await tx.productLot.update({
-            where: { id: existing.id },
-            data: {
-              quantity: { increment: input.quantity },
-              unitCostMinor: BigInt(input.unitCostMinor),
-              expiresAt: input.expiresAt,
-              metadataVersion: { increment: 1 },
-            },
-          })
-        : await tx.productLot.create({
-            data: {
-              organizationId: input.organizationId,
-              branchId: input.branchId,
-              productId: input.productId,
-              number: input.lotNumber.trim(),
-              quantity: input.quantity,
-              unitCostMinor: BigInt(input.unitCostMinor),
-              expiresAt: input.expiresAt,
-            },
-          });
-      await tx.inventoryMovement.create({
-        data: {
-          organizationId: input.organizationId,
-          branchId: input.branchId,
-          productId: input.productId,
-          lotId: lot.id,
-          type: "PURCHASE_RECEIPT",
-          quantity: input.quantity,
-          unitCostMinor: BigInt(input.unitCostMinor),
-          supplierId: input.supplierId,
-          actorId,
-        },
-      });
-      await this.audit.recordInTransaction(tx, {
+        });
+    await tx.inventoryMovement.create({
+      data: {
         organizationId: input.organizationId,
         branchId: input.branchId,
+        productId: input.productId,
+        lotId: lot.id,
+        type: "PURCHASE_RECEIPT",
+        quantity: input.quantity,
+        unitCostMinor: BigInt(input.unitCostMinor),
+        supplierId: input.supplierId,
         actorId,
-        entityType: "PRODUCT_LOT",
-        entityId: lot.id,
-        action: "STOCK_RECEIVED",
-        after: {
-          productId: input.productId,
-          supplierId: input.supplierId,
-          lotNumber: input.lotNumber.trim(),
-          quantity: input.quantity,
-        },
-      });
-      return { ...lot, unitCostMinor: lot.unitCostMinor.toString() };
+        ...(sinConexion ? { occurredAt: sinConexion.contexto.occurredAt } : {}),
+      },
     });
+    await this.audit.recordInTransaction(tx, {
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      actorId,
+      entityType: "PRODUCT_LOT",
+      entityId: lot.id,
+      action: "STOCK_RECEIVED",
+      after: {
+        productId: input.productId,
+        supplierId: input.supplierId,
+        lotNumber: input.lotNumber.trim(),
+        quantity: input.quantity,
+        ...(sinConexion?.marca ?? {}),
+      },
+    });
+    return { ...lot, unitCostMinor: lot.unitCostMinor.toString() };
   }
 
   async adjust(
@@ -815,77 +872,102 @@ export class InventoryService {
       throw new ForbiddenException(
         "La variación de cantidad no puede ser 0: no modificaría el stock. Ingresá un número positivo para sumar unidades o negativo para restarlas. Para dejar el lote en cero, restá su cantidad actual.",
       );
-    return this.prisma.$transaction(async (tx) => {
-      // Dos ajustes a la vez no pueden pasarse de lo que tiene el proveedor.
-      await tx.$queryRaw`SELECT id FROM "ProductLot" WHERE id=${input.lotId}::uuid FOR UPDATE`;
-      const lot = await tx.productLot.findFirst({
-        where: {
-          id: input.lotId,
-          organizationId: input.organizationId,
-          branchId: input.branchId,
-        },
-      });
-      if (!lot) throw new NotFoundException("Lot is unavailable.");
-      if (lot.quantity + input.quantity < 0)
-        throw new ForbiddenException(
-          "The adjustment would create negative stock.",
-        );
-      await this.assertAdjustmentSupplier(tx, lot, input);
-      const updated = await tx.productLot.update({
-        where: { id: lot.id },
-        data: {
-          quantity: { increment: input.quantity },
-          // Igual que una recepción: el costo del lote pasa a ser el último.
-          ...(input.unitCostMinor === undefined
-            ? {}
-            : {
-                unitCostMinor: BigInt(input.unitCostMinor),
-                metadataVersion: { increment: 1 },
-              }),
-        },
-      });
-      await tx.inventoryMovement.create({
-        data: {
-          organizationId: input.organizationId,
-          branchId: input.branchId,
-          productId: lot.productId,
-          lotId: lot.id,
-          type: input.quantity > 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT",
-          quantity: input.quantity,
-          actorId,
-          referenceType:
-            input.supplierId === undefined ? "ADJUSTMENT" : SUPPLIER_ADJUSTMENT,
-          supplierId: input.supplierId ?? null,
-          ...(input.unitCostMinor === undefined
-            ? {}
-            : { unitCostMinor: BigInt(input.unitCostMinor) }),
-        },
-      });
-      await this.audit.recordInTransaction(tx, {
+    return this.prisma.$transaction((tx) =>
+      this.ajustarEnTx(tx, actorId, input),
+    );
+  }
+
+  /** El ajuste dentro de una transacción (también el hecho sin conexión). */
+  private async ajustarEnTx(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    input: {
+      organizationId: string;
+      branchId: string;
+      lotId: string;
+      quantity: number;
+      reason: string;
+      supplierId?: string | null;
+      unitCostMinor?: number;
+    },
+    sinConexion?: SinConexion,
+  ) {
+    // Dos ajustes a la vez no pueden pasarse de lo que tiene el proveedor.
+    await tx.$queryRaw`SELECT id FROM "ProductLot" WHERE id=${input.lotId}::uuid FOR UPDATE`;
+    const lot = await tx.productLot.findFirst({
+      where: {
+        id: input.lotId,
         organizationId: input.organizationId,
         branchId: input.branchId,
-        actorId,
-        entityType: "PRODUCT_LOT",
-        entityId: lot.id,
-        action: "STOCK_ADJUSTED",
-        before: {
-          quantity: lot.quantity,
-          unitCostMinor: lot.unitCostMinor.toString(),
-        },
-        after: {
-          quantity: updated.quantity,
-          delta: input.quantity,
-          reason: input.reason.trim(),
-          ...(input.supplierId === undefined
-            ? {}
-            : { supplierId: input.supplierId }),
-          ...(input.unitCostMinor === undefined
-            ? {}
-            : { unitCostMinor: String(input.unitCostMinor) }),
-        },
-      });
-      return { id: updated.id, quantity: updated.quantity };
+      },
     });
+    if (!lot) throw new NotFoundException("Lot is unavailable.");
+    // Sin conexión, una salida se registra hasta lo que hay (SISTEMA-79).
+    if (sinConexion) {
+      input = await this.ajusteSinConexion(tx, lot, input, sinConexion);
+      if (!input.quantity) return { id: lot.id, quantity: lot.quantity };
+    }
+    if (lot.quantity + input.quantity < 0)
+      throw new ForbiddenException(
+        "The adjustment would create negative stock.",
+      );
+    if (!sinConexion) await this.assertAdjustmentSupplier(tx, lot, input);
+    const updated = await tx.productLot.update({
+      where: { id: lot.id },
+      data: {
+        quantity: { increment: input.quantity },
+        // Igual que una recepción: el costo del lote pasa a ser el último.
+        ...(input.unitCostMinor === undefined
+          ? {}
+          : {
+              unitCostMinor: BigInt(input.unitCostMinor),
+              metadataVersion: { increment: 1 },
+            }),
+      },
+    });
+    await tx.inventoryMovement.create({
+      data: {
+        organizationId: input.organizationId,
+        branchId: input.branchId,
+        productId: lot.productId,
+        lotId: lot.id,
+        type: input.quantity > 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT",
+        quantity: input.quantity,
+        actorId,
+        referenceType:
+          input.supplierId === undefined ? "ADJUSTMENT" : SUPPLIER_ADJUSTMENT,
+        supplierId: input.supplierId ?? null,
+        ...(sinConexion ? { occurredAt: sinConexion.contexto.occurredAt } : {}),
+        ...(input.unitCostMinor === undefined
+          ? {}
+          : { unitCostMinor: BigInt(input.unitCostMinor) }),
+      },
+    });
+    await this.audit.recordInTransaction(tx, {
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      actorId,
+      entityType: "PRODUCT_LOT",
+      entityId: lot.id,
+      action: "STOCK_ADJUSTED",
+      before: {
+        quantity: lot.quantity,
+        unitCostMinor: lot.unitCostMinor.toString(),
+      },
+      after: {
+        quantity: updated.quantity,
+        delta: input.quantity,
+        reason: input.reason.trim(),
+        ...(input.supplierId === undefined
+          ? {}
+          : { supplierId: input.supplierId }),
+        ...(input.unitCostMinor === undefined
+          ? {}
+          : { unitCostMinor: String(input.unitCostMinor) }),
+        ...(sinConexion?.marca ?? {}),
+      },
+    });
+    return { id: updated.id, quantity: updated.quantity };
   }
 
   async supplierReturn(
@@ -900,91 +982,591 @@ export class InventoryService {
     },
   ) {
     await this.assert(actorId, input.organizationId, "INVENTORY_MANAGE");
-    return this.prisma.$transaction(async (tx) => {
-      // Dos devoluciones a la vez no pueden pasarse del límite del proveedor.
-      await tx.$queryRaw`SELECT id FROM "ProductLot" WHERE id=${input.lotId}::uuid FOR UPDATE`;
-      const [supplier, lot] = await Promise.all([
-        input.supplierId
-          ? tx.supplier.findFirst({
-              where: {
-                id: input.supplierId,
-                organizationId: input.organizationId,
-                active: true,
-              },
-            })
-          : null,
-        tx.productLot.findFirst({
-          where: {
-            id: input.lotId,
-            organizationId: input.organizationId,
-            branchId: input.branchId,
-          },
-        }),
-      ]);
-      if (input.supplierId && !supplier)
-        throw new NotFoundException("Supplier is unavailable.");
-      if (!lot || lot.quantity < input.quantity)
+    return this.prisma.$transaction((tx) =>
+      this.devolverEnTx(tx, actorId, input),
+    );
+  }
+
+  /** La devolución dentro de una transacción (también la hecha sin conexión). */
+  private async devolverEnTx(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    input: {
+      organizationId: string;
+      branchId: string;
+      supplierId: string | null;
+      lotId: string;
+      quantity: number;
+      reason: string;
+    },
+    sinConexion?: SinConexion,
+  ) {
+    // Dos devoluciones a la vez no pueden pasarse del límite del proveedor.
+    await tx.$queryRaw`SELECT id FROM "ProductLot" WHERE id=${input.lotId}::uuid FOR UPDATE`;
+    const [supplier, lot] = await Promise.all([
+      input.supplierId
+        ? tx.supplier.findFirst({
+            where: {
+              id: input.supplierId,
+              organizationId: input.organizationId,
+              active: true,
+            },
+          })
+        : null,
+      tx.productLot.findFirst({
+        where: {
+          id: input.lotId,
+          organizationId: input.organizationId,
+          branchId: input.branchId,
+        },
+      }),
+    ]);
+    if (
+      input.supplierId &&
+      !supplier &&
+      // Sin conexión, uno dado de baja mientras tanto se acepta (SISTEMA-79).
+      !(
+        sinConexion &&
+        (await tx.supplier.findFirst({
+          where: { id: input.supplierId, organizationId: input.organizationId },
+          select: { id: true },
+        }))
+      )
+    )
+      throw new NotFoundException("Supplier is unavailable.");
+    if (!lot)
+      throw new ForbiddenException("Insufficient stock for supplier return.");
+    const { suppliers, unassigned } = await this.lotStockBySupplier(tx, lot);
+    // A quien entregó el lote solo se le devuelve lo suyo. El stock sin
+    // proveedor sale sin proveedor o a uno que no figura en el lote.
+    const delivered = supplier ? suppliers.has(supplier.id) : false;
+    const limit = Math.min(
+      lot.quantity,
+      delivered ? suppliers.get(supplier!.id)! : unassigned,
+    );
+    if (sinConexion) {
+      // Sin conexión se devuelve hasta lo que hay (decisión del usuario).
+      const { registrado, falta } = hastaLoQueHay(input.quantity, limit);
+      if (falta)
+        sinConexion.contexto.avisos.push({
+          kind: "AJUSTE_SUPERA_STOCK",
+          detail: await this.detalleDeSalida(tx, lot, {
+            tipo: "DEVOLUCION",
+            pedido: input.quantity,
+            registrado,
+          }),
+        });
+      if (!registrado) return null;
+      input = { ...input, quantity: registrado };
+    } else {
+      if (lot.quantity < input.quantity)
         throw new ForbiddenException("Insufficient stock for supplier return.");
-      const { suppliers, unassigned } = await this.lotStockBySupplier(tx, lot);
-      // A quien entregó el lote solo se le devuelve lo suyo. El stock sin
-      // proveedor sale sin proveedor o a uno que no figura en el lote.
-      const delivered = supplier ? suppliers.has(supplier.id) : false;
       if (!delivered && !unassigned)
         throw new ForbiddenException(
           supplier
             ? "Este lote no entró por ese proveedor. Elegí uno de los proveedores del lote."
             : "Todas las unidades de este lote tienen proveedor. Elegí uno.",
         );
-      const limit = delivered ? suppliers.get(supplier!.id)! : unassigned;
       if (input.quantity > limit)
         throw new ForbiddenException(
           `${supplier ? "A ese proveedor solo se le pueden devolver" : "Sin proveedor solo se pueden devolver"} ${limit} un. de este lote.`,
         );
-      const supplierReturn = await tx.supplierReturn.create({
-        data: {
-          organizationId: input.organizationId,
-          branchId: input.branchId,
-          supplierId: input.supplierId,
-          lotId: lot.id,
-          productId: lot.productId,
-          quantity: input.quantity,
-          reason: input.reason.trim(),
-          actorId,
-        },
-      });
-      await tx.productLot.update({
-        where: { id: lot.id },
-        data: { quantity: { decrement: input.quantity } },
-      });
-      await tx.inventoryMovement.create({
-        data: {
-          organizationId: input.organizationId,
-          branchId: input.branchId,
-          productId: lot.productId,
-          lotId: lot.id,
-          type: "SUPPLIER_RETURN",
-          quantity: -input.quantity,
-          actorId,
-          referenceType: "SUPPLIER_RETURN",
-          referenceId: supplierReturn.id,
-        },
-      });
-      await this.audit.recordInTransaction(tx, {
+    }
+    const supplierReturn = await tx.supplierReturn.create({
+      data: {
         organizationId: input.organizationId,
         branchId: input.branchId,
+        supplierId: input.supplierId,
+        lotId: lot.id,
+        productId: lot.productId,
+        quantity: input.quantity,
+        reason: input.reason.trim(),
         actorId,
-        entityType: "SUPPLIER_RETURN",
-        entityId: supplierReturn.id,
-        action: "DISPATCHED",
-        after: {
-          supplierId: input.supplierId,
-          lotId: lot.id,
-          quantity: input.quantity,
-          reason: input.reason.trim(),
+      },
+    });
+    await tx.productLot.update({
+      where: { id: lot.id },
+      data: { quantity: { decrement: input.quantity } },
+    });
+    await tx.inventoryMovement.create({
+      data: {
+        organizationId: input.organizationId,
+        branchId: input.branchId,
+        productId: lot.productId,
+        lotId: lot.id,
+        type: "SUPPLIER_RETURN",
+        quantity: -input.quantity,
+        actorId,
+        ...(sinConexion ? { occurredAt: sinConexion.contexto.occurredAt } : {}),
+        referenceType: "SUPPLIER_RETURN",
+        referenceId: supplierReturn.id,
+      },
+    });
+    await this.audit.recordInTransaction(tx, {
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      actorId,
+      entityType: "SUPPLIER_RETURN",
+      entityId: supplierReturn.id,
+      action: "DISPATCHED",
+      after: {
+        supplierId: input.supplierId,
+        lotId: lot.id,
+        quantity: input.quantity,
+        reason: input.reason.trim(),
+        ...(sinConexion?.marca ?? {}),
+      },
+    });
+    return supplierReturn;
+  }
+
+  // --- Inventario sin conexión (SISTEMA-79) ---
+
+  /** Operación de inventario hecha sin conexión, que la PC manda al volver. */
+  async inventoryOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: OperacionInventarioSinConexion,
+    reenviadaPor?: string,
+  ) {
+    await this.assert(actorId, organizationId, "INVENTORY_MANAGE");
+    await this.branch(organizationId, branchId);
+    const contexto = await contextoSinConexion(this.prisma, organizationId, {
+      operationId: op.clientOperationId,
+      kind: KIND_INVENTARIO[op.tipo],
+      occurredAt: op.occurredAt,
+      deviceId: op.deviceId,
+      negocio: { tipo: op.tipo, cuerpo: op.cuerpo },
+      reenviadaPor,
+    });
+    const sinConexion: SinConexion = {
+      contexto,
+      marca: {
+        origen: "SIN_CONEXION",
+        deviceId: op.deviceId,
+        occurredAt: contexto.occurredAt.toISOString(),
+      },
+    };
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const registrada = await operacionYaRegistrada(
+            tx,
+            organizationId,
+            contexto,
+          );
+          if (registrada) return registrada;
+          const entityId = await this.aplicarSinConexion(
+            tx,
+            actorId,
+            organizationId,
+            branchId,
+            op,
+            sinConexion,
+          );
+          return guardarOperacionSinConexion(tx, contexto, {
+            organizationId,
+            branchId,
+            actorId,
+            entityId,
+          });
+        },
+        { timeout: 30000 },
+      );
+    } catch (error) {
+      // 403/404/409 significan "queda para su dueño" en la bandeja de la PC y
+      // frenarían el resto: un rechazo de la operación es definitivo (422).
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof ForbiddenException
+      )
+        throw new UnprocessableEntityException(
+          `${error.message} No se registró: revisalo y volvé a cargarlo.`,
+        );
+      throw error;
+    }
+  }
+
+  /** La de otro usuario de esta PC: queda a nombre de quien la hizo. */
+  async inventoryOfflineSigned(
+    senderId: string,
+    organizationId: string,
+    branchId: string,
+    firma: {
+      actorId: string;
+      deviceId: string;
+      payload: string;
+      signature: string;
+    },
+    op: OperacionInventarioSinConexion,
+  ) {
+    if (firma.actorId === senderId)
+      return this.inventoryOffline(senderId, organizationId, branchId, op);
+    await verificarOperacionDeOtro(this.prisma, {
+      ...firma,
+      senderId,
+      organizationId,
+      branchId,
+    });
+    try {
+      await this.assert(firma.actorId, organizationId, "INVENTORY_MANAGE");
+    } catch {
+      throw new BadRequestException(
+        "Quien cargó el movimiento ya no puede manejar el inventario. Revisalo a mano.",
+      );
+    }
+    return this.inventoryOffline(
+      firma.actorId,
+      organizationId,
+      branchId,
+      op,
+      senderId,
+    );
+  }
+
+  private async aplicarSinConexion(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: OperacionInventarioSinConexion,
+    sinConexion: SinConexion,
+  ): Promise<string | null> {
+    switch (op.tipo) {
+      case "INGRESO": {
+        const producto = await tx.product.findFirst({
+          where: { id: op.cuerpo.productId, organizationId },
+          select: { name: true, active: true },
+        });
+        if (!producto) throw new NotFoundException("El producto ya no existe.");
+        if (!producto.active)
+          sinConexion.contexto.avisos.push({
+            kind: "PRODUCTO_INACTIVO",
+            detail: {
+              nombre: producto.name,
+              motivo:
+                "El producto estaba desactivado cuando llegó el ingreso: se registró igual.",
+            },
+          });
+        const lote = await this.recibirEnTx(
+          tx,
+          actorId,
+          {
+            ...op.cuerpo,
+            organizationId,
+            branchId,
+            expiresAt: op.cuerpo.expiresAt
+              ? new Date(op.cuerpo.expiresAt)
+              : undefined,
+          },
+          sinConexion,
+        );
+        return lote.id;
+      }
+      case "AJUSTE": {
+        const lote = await this.loteDe(
+          tx,
+          organizationId,
+          branchId,
+          op.cuerpo.lote,
+        );
+        const cuerpo = sinLote(op.cuerpo);
+        await this.ajustarEnTx(
+          tx,
+          actorId,
+          { ...cuerpo, lotId: lote.id, organizationId, branchId },
+          sinConexion,
+        );
+        return lote.id;
+      }
+      case "DEVOLUCION": {
+        const lote = await this.loteDe(
+          tx,
+          organizationId,
+          branchId,
+          op.cuerpo.lote,
+        );
+        const cuerpo = sinLote(op.cuerpo);
+        const devolucion = await this.devolverEnTx(
+          tx,
+          actorId,
+          { ...cuerpo, lotId: lote.id, organizationId, branchId },
+          sinConexion,
+        );
+        return devolucion?.id ?? null;
+      }
+      case "EDICION_LOTE":
+        return this.editarLoteSinConexion(
+          tx,
+          actorId,
+          organizationId,
+          branchId,
+          op.cuerpo,
+          sinConexion,
+        );
+    }
+  }
+
+  /**
+   * Lote de la operación: por su id o, si se creó sin conexión, por producto
+   * y número. Queda bloqueado hasta el final de la transacción.
+   */
+  private async loteDe(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    branchId: string,
+    ref: LoteDeLaOperacion,
+  ) {
+    const lote = ref.lotId
+      ? await tx.productLot.findFirst({
+          where: { id: ref.lotId, organizationId, branchId },
+        })
+      : ref.productId && ref.number
+        ? await tx.productLot.findUnique({
+            where: {
+              branchId_productId_number: {
+                branchId,
+                productId: ref.productId,
+                number: ref.number.trim(),
+              },
+            },
+          })
+        : null;
+    if (!lote || lote.organizationId !== organizationId)
+      throw new NotFoundException("El lote ya no existe en esta sucursal.");
+    await tx.$queryRaw`SELECT id FROM "ProductLot" WHERE id=${lote.id}::uuid FOR UPDATE`;
+    return lote;
+  }
+
+  /** Lo que se informa de una salida que no alcanzó. */
+  private async detalleDeSalida(
+    tx: Prisma.TransactionClient,
+    lote: { productId: string; number: string },
+    salida: {
+      tipo: "AJUSTE" | "DEVOLUCION";
+      pedido: number;
+      registrado: number;
+    },
+  ) {
+    const producto = await tx.product.findUnique({
+      where: { id: lote.productId },
+      select: { name: true },
+    });
+    return {
+      nombre: producto?.name ?? "Producto",
+      lote: lote.number,
+      ...salida,
+      faltan: salida.pedido - salida.registrado,
+    };
+  }
+
+  /**
+   * Ajuste hecho sin conexión: una salida se registra hasta lo que queda en
+   * el lote (y de ese proveedor, si se eligió), con aviso. Un proveedor dado
+   * de baja mientras tanto se acepta para sumar, con aviso.
+   */
+  private async ajusteSinConexion<
+    T extends {
+      quantity: number;
+      supplierId?: string | null;
+      organizationId: string;
+    },
+  >(
+    tx: Prisma.TransactionClient,
+    lot: { id: string; quantity: number; productId: string; number: string },
+    input: T,
+    sinConexion: SinConexion,
+  ): Promise<T> {
+    if (input.supplierId) {
+      const proveedor = await tx.supplier.findFirst({
+        where: { id: input.supplierId, organizationId: input.organizationId },
+        select: { name: true, active: true },
+      });
+      if (!proveedor)
+        throw new NotFoundException("El proveedor no está disponible.");
+      if (!proveedor.active && input.quantity > 0)
+        sinConexion.contexto.avisos.push({
+          kind: "PROVEEDOR_INACTIVO",
+          detail: {
+            proveedor: proveedor.name,
+            motivo:
+              "El proveedor estaba dado de baja cuando llegó el ajuste: se registró igual.",
+          },
+        });
+    }
+    if (input.quantity >= 0) return input;
+    let disponible = lot.quantity;
+    if (input.supplierId !== undefined) {
+      const { suppliers, unassigned } = await this.lotStockBySupplier(tx, lot);
+      disponible = Math.min(
+        disponible,
+        input.supplierId ? (suppliers.get(input.supplierId) ?? 0) : unassigned,
+      );
+    }
+    const { registrado, falta } = hastaLoQueHay(-input.quantity, disponible);
+    if (falta)
+      sinConexion.contexto.avisos.push({
+        kind: "AJUSTE_SUPERA_STOCK",
+        detail: await this.detalleDeSalida(tx, lot, {
+          tipo: "AJUSTE",
+          pedido: -input.quantity,
+          registrado,
+        }),
+      });
+    return { ...input, quantity: -registrado };
+  }
+
+  /**
+   * Corrección de un lote hecha sin conexión: sólo los datos que se cambiaron,
+   * y no los que otra PC cambió después (queda ese cambio, con aviso). Un
+   * número de lote que ya existe para el producto no se cambia.
+   */
+  private async editarLoteSinConexion(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    cuerpo: Extract<
+      OperacionInventarioSinConexion,
+      { tipo: "EDICION_LOTE" }
+    >["cuerpo"],
+    sinConexion: SinConexion,
+  ) {
+    const lote = await this.loteDe(tx, organizationId, branchId, cuerpo.lote);
+    const producto = await tx.product.findUnique({
+      where: { id: lote.productId },
+      select: { name: true },
+    });
+    const nombre = producto?.name ?? "Producto";
+    const registros = await tx.auditLog.findMany({
+      where: {
+        organizationId,
+        entityType: "PRODUCT_LOT",
+        entityId: lote.id,
+        action: "METADATA_UPDATED",
+      },
+      select: { createdAt: true, before: true, after: true },
+    });
+    const pisados = camposPisados(
+      registros,
+      sinConexion.contexto.occurredAt,
+      camposDelLote(cuerpo),
+    );
+    if (pisados.length)
+      sinConexion.contexto.avisos.push({
+        kind: "DATO_PISADO",
+        detail: {
+          nombre,
+          lote: lote.number,
+          campos: pisados,
+          motivo:
+            "Otra PC corrigió esos datos del lote después: quedaron esos cambios.",
         },
       });
-      return supplierReturn;
+    const pide = (campo: string) =>
+      cuerpo[campo as keyof typeof cuerpo] !== undefined &&
+      !pisados.includes(campo);
+    let number = pide("number") ? cuerpo.number!.trim() : undefined;
+    if (
+      number &&
+      number !== lote.number &&
+      (await tx.productLot.findUnique({
+        where: {
+          branchId_productId_number: {
+            branchId,
+            productId: lote.productId,
+            number,
+          },
+        },
+        select: { id: true },
+      }))
+    ) {
+      sinConexion.contexto.avisos.push({
+        kind: "LOTE_REPETIDO",
+        detail: {
+          nombre,
+          lote: number,
+          motivo:
+            "Ya había un lote con ese número para este producto: no se cambió.",
+        },
+      });
+      number = undefined;
+    }
+    const expiresAt = pide("expiresAt")
+      ? cuerpo.expiresAt
+        ? new Date(`${cuerpo.expiresAt}T00:00:00.000Z`)
+        : null
+      : undefined;
+    const unitCostMinor = pide("unitCostMinor")
+      ? BigInt(cuerpo.unitCostMinor!)
+      : undefined;
+    if (
+      number === undefined &&
+      expiresAt === undefined &&
+      unitCostMinor === undefined
+    )
+      return lote.id;
+    if (
+      await tx.transferItem.findFirst({
+        where: {
+          lotId: lote.id,
+          transfer: {
+            organizationId,
+            status: { in: ["PREPARED", "IN_TRANSIT"] },
+          },
+        },
+      })
+    )
+      throw new ConflictException(
+        "El lote tiene una transferencia pendiente: completala o cancelala y volvé a corregirlo.",
+      );
+    const after = await tx.productLot.update({
+      where: { id: lote.id },
+      data: {
+        ...(number !== undefined ? { number } : {}),
+        ...(expiresAt !== undefined ? { expiresAt } : {}),
+        ...(unitCostMinor !== undefined ? { unitCostMinor } : {}),
+        metadataVersion: { increment: 1 },
+      },
     });
+    // Como con conexión: corregir el costo corrige la última recepción.
+    if (unitCostMinor !== undefined && unitCostMinor !== lote.unitCostMinor) {
+      const receipt = await tx.inventoryMovement.findFirst({
+        where: { lotId: lote.id, type: "PURCHASE_RECEIPT" },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      });
+      if (receipt)
+        await tx.inventoryMovement.update({
+          where: { id: receipt.id },
+          data: { unitCostMinor },
+        });
+    }
+    await this.audit.recordInTransaction(tx, {
+      organizationId,
+      branchId,
+      actorId,
+      entityType: "PRODUCT_LOT",
+      entityId: lote.id,
+      action: "METADATA_UPDATED",
+      before: {
+        number: lote.number,
+        unitCostMinor: lote.unitCostMinor.toString(),
+        expiresAt: lote.expiresAt?.toISOString() ?? null,
+        metadataVersion: lote.metadataVersion,
+      },
+      after: {
+        number: after.number,
+        unitCostMinor: after.unitCostMinor.toString(),
+        expiresAt: after.expiresAt?.toISOString() ?? null,
+        metadataVersion: after.metadataVersion,
+        reason: cuerpo.reason.trim(),
+        ...sinConexion.marca,
+      },
+    });
+    return lote.id;
   }
 
   /** Lo que tiene hoy cada proveedor activo del lote y lo que queda sin proveedor. */

@@ -2,6 +2,20 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-79): Productos e inventario funcionan sin conexión con el mismo
+  circuito que los demás módulos: la operación queda en la bandeja de la PC, firmada, y se
+  registra al volver con `OfflineOperation` (rutas `catalog/offline` e `inventory/offline`
+  de la sucursal, más `/firmada`). Reemplaza la decisión del 09/11/2026 que los dejaba sólo
+  con conexión. Reglas de los choques en `BUSINESS_RULES.md` (decisiones del usuario). Para
+  saber si otra PC cambió el mismo dato de un producto, la edición con conexión pasa a dejar
+  en la auditoría (`PRODUCT_UPDATED`) qué datos cambió; antes no quedaba registro. Un lote
+  creado sin conexión no tiene id: las operaciones lo nombran por producto y número, que es
+  único en la sucursal. Los métodos del catálogo y del inventario se separaron en
+  validación y trabajo dentro de la transacción (`crearEnTx`, `editarEnTx`, `recibirEnTx`,
+  `ajustarEnTx`, `devolverEnTx`) para registrar la operación sin conexión en la misma
+  transacción. Las listas de precios, la pantalla Categorías y laboratorios y la búsqueda de
+  datos en internet siguen necesitando conexión.
+
 - 10/11/2026 (SISTEMA-78): Costos de inventario por partes, como el stock
   (`GET inventory/costs/versiones` y `costs/partes`): una venta no cambia ningún costo y no
   se vuelve a bajar nada. El estado de cuenta se pide sólo para lo que se imprime

@@ -54,8 +54,9 @@ necesita conexión.
 | SISTEMA-70 Cuenta corriente sin conexión                      | En main    |
 | SISTEMA-71 Transferencias sin conexión                        | En main    |
 | SISTEMA-72 Todo listo sin conexión desde la primera visita    | En main    |
-| SISTEMA-73 Proveedores y cuentas por pagar sin conexión       | Esta etapa |
-| Catálogo y precios sin conexión                               | Pendiente  |
+| SISTEMA-73 Proveedores y cuentas por pagar sin conexión       | En main    |
+| SISTEMA-79 Productos e inventario sin conexión                | Esta etapa |
+| Listas de precios sin conexión                                | Pendiente  |
 | Prueba completa con dos PCs                                   | Pendiente  |
 
 ## Cómo funciona (SISTEMA-62)
@@ -248,7 +249,21 @@ Problema encontrado en preprod (09/11/2026): sin conexión fallaban el lector de
 - **Worker del lector de PDF en memoria** (SISTEMA-76, `lib/worker-pdf.ts`): el lector de PDF crea su worker pidiendo el archivo cada vez que lee un PDF, así que precargarlo no alcanzaba: sin conexión y sin service worker (en desarrollo, o antes de que tome la pestaña) fallaba con "Setting up fake worker failed". Ahora el código del worker se carga una vez como parte de la app (`?raw`, el archivo tal cual) y queda en memoria como blob; el worker se crea desde ahí, sin red. Si no se pudo cargar, se usa la dirección del archivo como antes. Probado en Edge, en desarrollo y en la versión compilada, leyendo una factura con el servidor prendido y después de apagarlo.
 - **Caja** (`lib/precarga-caja.ts`): con conexión, al entrar y cada 10 minutos, se guardan permisos y reglas de la caja, cobros pendientes, el historial del período por defecto y los últimos movimientos de cada caja. Sin eso no se podía cerrar sin conexión.
 - **Prueba en navegador real** (`scripts/probar-sin-conexion.mjs`, obligatoria antes de publicar en preprod un cambio del modo sin internet; ver skill `cerrar-tarea`): Edge con un perfil nuevo contra la versión compilada como preprod. Entra con conexión con un usuario de prueba que crea sólo en `gestion_dev`, apaga el servidor y recorre cada pantalla, carga cada parte que se baja aparte y cierra la caja; el cierre queda en la bandeja de la PC. Resultado y capturas en `.cache/prueba-sin-conexion/`.
-- **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73.
+- **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73, y productos e inventario en SISTEMA-79.
+
+## Productos e inventario sin conexión (SISTEMA-79)
+
+Decisión del usuario (10/11/2026): "tiene que funcionar todo de producto y todo de inventario" sin internet. Reglas en `BUSINESS_RULES.md` (productos e inventario sin conexión).
+
+- **Bandeja**: lo de productos queda como `operacion: "CATALOGO"` (`lib/catalogo-sin-conexion.ts`: alta, edición, estado en la sucursal, códigos equivalentes, eliminar y categoría o laboratorio nuevo); lo de inventario, como `operacion: "INVENTARIO"` (`lib/inventario-sin-conexion.ts`: ingreso, ajuste, devolución al proveedor y corrección de lote). Se guardan con `lib/guardar-en-la-pc.ts` y se mandan en orden con lo demás: `POST catalog/offline` e `inventory/offline` de la sucursal (o `/firmada`).
+- **Dónde se decide**: en el cliente de la API (`createCatalogProduct`, `updateCatalogProduct`, `updateCatalogProductImage`, `changeBranchProduct`, `addEquivalentBarcode`, `removeEquivalentBarcode`, `deleteUnusedCatalogProduct`, `createCatalogNamedItem`, `receiveStock`, `adjustStock`, `createSupplierReturn` y `editLotMetadata` de `lib/api.ts`). Intentan con conexión y, si no hay, quedan en la PC. Lo de un producto o un lote que ya tiene algo sin enviar (o que se creó sin conexión) va directo a la PC, detrás. La edición sin conexión sólo manda los datos que cambiaron respecto de lo que se ve.
+- **Lo que se ve**: el catálogo, las opciones (categorías y laboratorios) y el stock parten de la copia del servidor y le suman lo pendiente (`productosConPendientes`, `opcionesConPendientes`, `stockConPendientes`), con la etiqueta "Por enviar" en Productos. Un producto nuevo tiene el id de la PC y se usa enseguida (vender, recibir, ajustar). Un lote nuevo se ve con un id de la PC (`pc|producto|número`) y las operaciones lo nombran por producto y número.
+- **Precarga**: con conexión, al entrar y cada 10 minutos, se guardan las categorías, los laboratorios y los proveedores, para el formulario de producto y los movimientos de inventario. Al llegar lo hecho sin conexión se actualiza todo (catálogo y stock bajan sólo lo que cambió).
+- **El servidor** (`catalog/catalogo-sin-conexion.service.ts`, `catalog/producto-sin-conexion.ts`, `inventory/inventario-sin-conexion.ts` y `InventoryService.inventoryOffline`): registra cada operación una sola vez, en una transacción con su auditoría (`origen: SIN_CONEXION`) y sus avisos; usa la hora real en los movimientos de inventario; resuelve la categoría o el laboratorio creado sin conexión aunque se haya usado uno existente.
+- **Rechazos**: eliminar de la sucursal con un stock distinto al que se vio, eliminar un producto que se usó mientras tanto, o una operación sobre un producto o lote que ya no existe responden 422 y quedan "Rechazada" en el panel. No se usa 404/409, que en la bandeja significan "queda para su dueño".
+- **Caja**: productos e inventario no mueven Caja, así que lo pendiente de ellos no bloquea el cierre.
+- **Fuera de alcance**: listas de precios, la pantalla Categorías y laboratorios (renombrar, íconos, logos) y buscar datos de un producto en internet (referencias externas) siguen necesitando conexión. La búsqueda de medicamentos usa la base de la PC (SISTEMA-69).
+- Migración `20261111100000_offline_catalog_inventory`: tipos de operación y de aviso.
 
 ## Proveedores y cuentas por pagar sin conexión (SISTEMA-73)
 
@@ -274,7 +289,7 @@ Decisión del usuario (10/11/2026): que Proveedores y Cuentas por pagar funcione
 - La PC guarda la base de medicamentos completa (~18.000 productos, 4,3 MB) y los exhibidores (`lib/base-medicamentos-local.ts`). La baja con conexión al entrar, al volver internet y cada 10 minutos, pero sólo si cambió: `GET catalog/medicine-references/base-local?version=` responde `items: null` si la PC ya tiene esa versión. Así entra la actualización de precios de las 9 y las 17.
 - Sin conexión, buscar medicamentos (por nombre, droga, laboratorio o código), buscar por código y leer exhibidores usan esa copia, en todas las pantallas. La búsqueda es la misma que la del servidor.
 - Un exhibidor armado sin conexión se usa enseguida y se manda solo al volver. Si el servidor lo rechaza, se descarta, porque la compra ya llevó sus unidades.
-- Crear productos del catálogo sin conexión queda para la etapa "Catálogo y precios sin conexión".
+- Crear productos del catálogo sin conexión: SISTEMA-79 (productos e inventario sin conexión).
 - El nginx de producción no comprime JSON. Con `gzip_types application/json` la descarga bajaría a ~0,7 MB.
 
 ## Rendimiento sin conexión (SISTEMA-74)

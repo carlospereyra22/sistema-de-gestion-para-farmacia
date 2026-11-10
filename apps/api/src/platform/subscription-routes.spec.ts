@@ -107,6 +107,11 @@ const EXCEPTIONS = [
   `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/suppliers/offline/firmada`,
   `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/supplier-payables/offline`,
   `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/supplier-payables/offline/firmada`,
+  // Productos e inventario sin conexión (SISTEMA-79): se deciden con la hora real.
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/catalog/offline`,
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/catalog/offline/firmada`,
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/inventory/offline`,
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/inventory/offline/firmada`,
   `READ_ONLY POST ${sales}/offline-issues/:issueId/resolve`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/printing/jobs/:id/retry`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/transfers/:id/receive`,
