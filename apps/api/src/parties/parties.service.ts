@@ -23,6 +23,11 @@ import {
   operacionYaRegistrada,
 } from "../common/offline/registro-sin-conexion";
 import { verificarOperacionDeOtro } from "../sales/operacion-firmada";
+import {
+  KIND_PROVEEDOR,
+  camposPisados,
+  type OperacionProveedorSinConexion,
+} from "./proveedor-sin-conexion";
 
 /** Alta o edición de cliente hecha sin conexión (SISTEMA-70). */
 export type OperacionClienteSinConexion = {
@@ -460,12 +465,255 @@ export class PartiesService {
       senderId,
     );
   }
-  private validateSupplierTerms(input: {
-    accountEnabled: boolean;
-    accountTermDays?: number | null;
-  }) {
+  /**
+   * Alta, edición, baja o restauración de un proveedor hecha sin conexión
+   * (SISTEMA-73), que la PC manda al volver. Se registra una sola vez, con su
+   * hora real y en una sola transacción con sus avisos.
+   */
+  async supplierOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: OperacionProveedorSinConexion,
+    reenviadaPor?: string,
+  ) {
+    await this.assert(actorId, organizationId, "PARTY_MANAGE");
+    if (op.tipo !== "ESTADO") this.validateSupplierTerms(op.cuerpo, true);
+    const contexto = await contextoSinConexion(this.prisma, organizationId, {
+      operationId: op.clientOperationId,
+      kind: KIND_PROVEEDOR[op.tipo],
+      occurredAt: op.occurredAt,
+      deviceId: op.deviceId,
+      negocio:
+        op.tipo === "ALTA"
+          ? { tipo: op.tipo, cuerpo: op.cuerpo }
+          : { tipo: op.tipo, supplierId: op.supplierId, cuerpo: op.cuerpo },
+      reenviadaPor,
+    });
+    const marca = {
+      origen: "SIN_CONEXION",
+      deviceId: op.deviceId,
+      occurredAt: contexto.occurredAt.toISOString(),
+    };
+    return this.prisma.$transaction(async (tx) => {
+      const registrada = await operacionYaRegistrada(
+        tx,
+        organizationId,
+        contexto,
+      );
+      if (registrada) return registrada;
+      let entityId: string;
+      if (op.tipo === "ALTA") {
+        // Su id es la clave de la PC: las compras y deudas hechas sin conexión
+        // con este proveedor lo encuentran.
+        if (
+          await tx.supplier.findUnique({ where: { id: op.clientOperationId } })
+        )
+          throw new ConflictException(
+            "Ese proveedor ya existe con otros datos.",
+          );
+        const { name, document, accountEnabled, accountTermDays, ...perfil } =
+          op.cuerpo;
+        const terms = {
+          accountEnabled: accountEnabled ?? false,
+          accountTermDays: accountEnabled ? (accountTermDays ?? null) : null,
+        };
+        const fields = supplierProfile({ ...perfil, name });
+        const supplier = await tx.supplier.create({
+          data: {
+            id: op.clientOperationId,
+            createdAt: contexto.occurredAt,
+            organizationId,
+            name: name.trim(),
+            taxId: document?.trim(),
+            ...terms,
+            ...fields,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            branchId,
+            actorId,
+            entityType: "SUPPLIER",
+            entityId: supplier.id,
+            action: "SUPPLIER_CREATED",
+            after: { ...terms, ...fields, ...marca },
+          },
+        });
+        entityId = supplier.id;
+      } else {
+        await tx.$queryRaw`SELECT id FROM "Supplier" WHERE id=${op.supplierId}::uuid AND "organizationId"=${organizationId}::uuid FOR UPDATE`;
+        const supplier = await tx.supplier.findFirst({
+          where: { id: op.supplierId, organizationId },
+        });
+        if (!supplier)
+          throw new NotFoundException(
+            "El proveedor no está disponible en esta organización.",
+          );
+        entityId = supplier.id;
+        const registros = await tx.auditLog.findMany({
+          where: {
+            organizationId,
+            entityType: "SUPPLIER",
+            entityId: supplier.id,
+            action: {
+              in:
+                op.tipo === "ESTADO"
+                  ? ["SUPPLIER_ARCHIVED", "SUPPLIER_RESTORED"]
+                  : ["SUPPLIER_TERMS_UPDATED"],
+            },
+          },
+          select: { createdAt: true, before: true, after: true },
+        });
+        if (op.tipo === "ESTADO") {
+          const { active } = op.cuerpo;
+          if (camposPisados(registros, contexto.occurredAt, ["active"]).length)
+            contexto.avisos.push({
+              kind: "CONFIGURACION_PISADA",
+              detail: {
+                proveedor: supplier.name,
+                motivo: `Otra PC ${supplier.active ? "restauró" : "dio de baja"} este proveedor después: quedó ese cambio, que es el más reciente.`,
+              },
+            });
+          else if (supplier.active !== active) {
+            await tx.supplier.update({
+              where: { id: supplier.id, organizationId },
+              data: { active },
+            });
+            await tx.auditLog.create({
+              data: {
+                organizationId,
+                branchId,
+                actorId,
+                entityType: "SUPPLIER",
+                entityId: supplier.id,
+                action: active ? "SUPPLIER_RESTORED" : "SUPPLIER_ARCHIVED",
+                before: { active: supplier.active },
+                after: { active, ...marca },
+              },
+            });
+          }
+        } else {
+          const { accountEnabled, accountTermDays, ...perfil } = op.cuerpo;
+          const pedidos: Record<string, string | number | boolean | null> = {
+            ...supplierProfile(perfil),
+            ...(accountEnabled !== undefined ? { accountEnabled } : {}),
+            ...(accountTermDays !== undefined ? { accountTermDays } : {}),
+          };
+          const pisados = camposPisados(
+            registros,
+            contexto.occurredAt,
+            Object.keys(pedidos),
+          );
+          for (const campo of pisados) delete pedidos[campo];
+          if (pisados.length)
+            contexto.avisos.push({
+              kind: "CONFIGURACION_PISADA",
+              detail: {
+                proveedor: supplier.name,
+                motivo: `Otra PC cambió después: ${pisados.join(", ")}. Quedó ese cambio, que es el más reciente.`,
+              },
+            });
+          // Sin cuenta corriente no hay plazo, como con conexión.
+          const habilitada =
+            typeof pedidos.accountEnabled === "boolean"
+              ? pedidos.accountEnabled
+              : supplier.accountEnabled;
+          if (!habilitada && "accountEnabled" in pedidos)
+            pedidos.accountTermDays = null;
+          if (!habilitada && "accountTermDays" in pedidos)
+            pedidos.accountTermDays = null;
+          if (!supplier.active)
+            contexto.avisos.push({
+              kind: "PROVEEDOR_INACTIVO",
+              detail: {
+                proveedor: supplier.name,
+                motivo:
+                  "El proveedor estaba dado de baja cuando llegó la edición: se guardó igual.",
+              },
+            });
+          if (Object.keys(pedidos).length) {
+            const before = Object.fromEntries(
+              Object.keys(pedidos).map((campo) => [
+                campo,
+                (supplier as Record<string, unknown>)[campo] ?? null,
+              ]),
+            ) as Prisma.InputJsonObject;
+            await tx.supplier.update({
+              where: { id: supplier.id, organizationId },
+              data: pedidos as Prisma.SupplierUpdateInput,
+            });
+            await tx.auditLog.create({
+              data: {
+                organizationId,
+                branchId,
+                actorId,
+                entityType: "SUPPLIER",
+                entityId: supplier.id,
+                action: "SUPPLIER_TERMS_UPDATED",
+                before,
+                after: { ...pedidos, fields: Object.keys(pedidos), ...marca },
+              },
+            });
+          }
+        }
+      }
+      return guardarOperacionSinConexion(tx, contexto, {
+        organizationId,
+        branchId,
+        actorId,
+        entityId,
+      });
+    });
+  }
+  async supplierOfflineSigned(
+    senderId: string,
+    organizationId: string,
+    branchId: string,
+    firma: {
+      actorId: string;
+      deviceId: string;
+      payload: string;
+      signature: string;
+    },
+    op: OperacionProveedorSinConexion,
+  ) {
+    if (firma.actorId === senderId)
+      return this.supplierOffline(senderId, organizationId, branchId, op);
+    await verificarOperacionDeOtro(this.prisma, {
+      ...firma,
+      senderId,
+      organizationId,
+      branchId,
+    });
+    try {
+      await this.assert(firma.actorId, organizationId, "PARTY_MANAGE");
+    } catch {
+      throw new BadRequestException(
+        "Quien cargó el proveedor ya no puede manejar proveedores. Revisalo a mano.",
+      );
+    }
+    return this.supplierOffline(
+      firma.actorId,
+      organizationId,
+      branchId,
+      op,
+      senderId,
+    );
+  }
+  private validateSupplierTerms(
+    input: {
+      accountEnabled?: boolean;
+      accountTermDays?: number | null;
+    },
+    /** Sin conexión, la edición sólo trae los campos que cambiaron. */
+    parcial = false,
+  ) {
     if (
-      typeof input.accountEnabled !== "boolean" ||
+      (parcial && input.accountEnabled === undefined
+        ? false
+        : typeof input.accountEnabled !== "boolean") ||
       (input.accountTermDays != null &&
         (!Number.isInteger(input.accountTermDays) ||
           input.accountTermDays < 0 ||

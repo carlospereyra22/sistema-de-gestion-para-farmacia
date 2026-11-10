@@ -42,6 +42,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261108100000_offline_cash` (SISTEMA-67): `OfflineOperation` admite `CASH_OPEN` y `CASH_CLOSE`; `OfflineSyncIssue` suma los avisos `CAJA_YA_ABIERTA`, `OTRA_CAJA_ABIERTA` y `CIERRE_DISTINTO`. Una sesión abierta sin conexión usa como id el de la operación de la PC.
 
+`20261110100000_offline_payables` (SISTEMA-73): `OfflineOperation` admite `SUPPLIER_CREATE`, `SUPPLIER_UPDATE`, `SUPPLIER_STATE`, `PAYABLE_CREATE`, `PAYABLE_PAYMENT` y `PAYABLE_PAYMENT_VOID`; `OfflineSyncIssue` suma `PROVEEDOR_INACTIVO`, `COMPROBANTE_REPETIDO`, `PAGO_SUPERA_SALDO` y `PAGO_YA_ANULADO`. Sólo cambia los CHECK: no agrega columnas. Un proveedor, una deuda o un pago creados sin conexión usan como id la clave de la PC (`clientOperationId` / `operationId`). Una deuda con comprobante repetido que difiere de la existente se guarda con `documentKey` nulo (conserva punto y número para mostrarlos), así no choca con el índice único.
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

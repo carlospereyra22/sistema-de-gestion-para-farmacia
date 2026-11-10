@@ -53,7 +53,8 @@ necesita conexión.
 | SISTEMA-69 Compras y recepciones sin conexión                 | En main    |
 | SISTEMA-70 Cuenta corriente sin conexión                      | En main    |
 | SISTEMA-71 Transferencias sin conexión                        | En main    |
-| SISTEMA-72 Todo listo sin conexión desde la primera visita    | Esta etapa |
+| SISTEMA-72 Todo listo sin conexión desde la primera visita    | En main    |
+| SISTEMA-73 Proveedores y cuentas por pagar sin conexión       | Esta etapa |
 | Catálogo y precios sin conexión                               | Pendiente  |
 | Prueba completa con dos PCs                                   | Pendiente  |
 
@@ -246,7 +247,26 @@ Problema encontrado en preprod (09/11/2026): sin conexión fallaban el lector de
 - **Partes que se bajan aparte** (`lib/precargar-modulos.ts`): con conexión, a los 3 segundos de entrar, se precargan el lector de PDF y su worker, el lector de Excel y Reportes. Quedan en la pestaña aunque el service worker todavía no la controle.
 - **Caja** (`lib/precarga-caja.ts`): con conexión, al entrar y cada 10 minutos, se guardan permisos y reglas de la caja, cobros pendientes, el historial del período por defecto y los últimos movimientos de cada caja. Sin eso no se podía cerrar sin conexión.
 - **Prueba en navegador real** (`scripts/probar-sin-conexion.mjs`, obligatoria antes de publicar en preprod un cambio del modo sin internet; ver skill `cerrar-tarea`): Edge con un perfil nuevo contra la versión compilada como preprod. Entra con conexión con un usuario de prueba que crea sólo en `gestion_dev`, apaga el servidor y recorre cada pantalla, carga cada parte que se baja aparte y cierra la caja; el cierre queda en la bandeja de la PC. Resultado y capturas en `.cache/prueba-sin-conexion/`.
-- **Fuera de alcance** (decisión del usuario, 09/11/2026): Cuentas por pagar y Reportes siguen sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración).
+- **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73.
+
+## Proveedores y cuentas por pagar sin conexión (SISTEMA-73)
+
+Decisión del usuario (10/11/2026): que Proveedores y Cuentas por pagar funcionen sin internet de la misma manera que los otros módulos. Reglas en `BUSINESS_RULES.md` (proveedores y cuentas por pagar sin conexión).
+
+- **Bandeja**: el alta, la edición y la baja o restauración de un proveedor quedan como `operacion: "PROVEEDOR"` (`lib/proveedores-sin-conexion.ts`); la deuda, el pago y la anulación, como `operacion: "PAGAR"` (`lib/pagar-sin-conexion.ts`). Se guardan con `lib/guardar-en-la-pc.ts`: firmadas por quien las hizo y con una hora siempre posterior a lo último de la PC, así un pago nunca llega antes que su deuda ni una deuda antes que su proveedor. Se mandan en orden con lo demás: `POST suppliers/offline` y `POST supplier-payables/offline` (o `/offline/firmada`).
+- **Dónde se decide**: en el cliente de la API. Proveedores: `createParty`, `updateSupplierTerms` y `setSupplierActive` de `lib/api.ts`. Cuentas por pagar: `createPayable`, `paySupplier` y `voidSupplierPayment` de `supplier-payables/api.ts`. Intentan con conexión y, si no hay, quedan en la PC. Lo de un proveedor o una deuda que ya tiene algo sin enviar va directo a la PC. Una deuda (o una compra) de un proveedor dado de alta sin conexión también espera en la PC, detrás del alta.
+- **Lo que se ve**: Proveedores parte de la lista del servidor y le suma lo pendiente (`proveedoresConPendientes`), con la etiqueta "Por enviar"; el proveedor nuevo aparece también en Compras y en Cuentas por pagar. Cuentas por pagar, sin conexión o con algo sin enviar, arma la página en la PC (`deudasConPendientes` y `paginaDeDeudas`) desde la copia `base-local`: suma las deudas nuevas, las de recepciones o compras directas sin enviar con "Dejar pendiente de pago", los pagos (repartidos del vencimiento más viejo al más nuevo) y las anulaciones. La fecha de hoy es la del servidor según la PC.
+- **Precarga**: con conexión, al entrar y cada 10 minutos, el shell guarda la lista de proveedores y, si el rol ve Cuentas por pagar, la copia de deudas y las opciones.
+- **El servidor** (`parties/proveedor-sin-conexion.ts`, `supplier-payables/pagar-sin-conexion.ts`, `common/offline/registro-sin-conexion.ts`):
+  - registra cada operación una sola vez (`OfflineOperation`); proveedor, deuda y pago creados sin conexión llevan como id la clave de la PC;
+  - usa la hora real en el alta, la deuda, el pago y la anulación, y la anota en la auditoría (`origen: SIN_CONEXION`);
+  - acepta nombrar la deuda por su id o por su clave (la de una deuda cargada sin conexión o la de una recepción), el pago por su id o su clave, y la compra vinculada por su id o por la clave de un pedido hecho sin conexión;
+  - cada operación es una sola transacción, con su auditoría, sus avisos y la marca "sincronizada por otro";
+  - una edición sin conexión sólo aplica los campos que se cambiaron y no pisa los que otra PC cambió después (se comparan con la auditoría, por su hora real);
+  - avisos nuevos: `PROVEEDOR_INACTIVO`, `COMPROBANTE_REPETIDO`, `PAGO_SUPERA_SALDO` y `PAGO_YA_ANULADO` (además de `CONFIGURACION_PISADA`).
+- **Rechazos**: una deuda exactamente repetida, o un pago o anulación cuya deuda o pago no existe en el servidor, responden 422 y quedan "Rechazada" en el panel. No se usa 404/409, que en la bandeja significan "queda para su dueño" y frenarían el resto de la sucursal.
+- **Caja**: proveedores y cuentas por pagar no mueven Caja, así que lo pendiente de ellos no bloquea el cierre.
+- Migración `20261110100000_offline_payables`: tipos de operación y de aviso.
 
 ## Base de medicamentos en la PC (SISTEMA-69)
 

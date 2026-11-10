@@ -124,6 +124,14 @@ Nuevo y Editar producto comparten el popup de código interno y etiquetas. Gener
   - Límite o plazo cambiado sin conexión: si otra PC lo cambió después, queda ese cambio (el más reciente) y aviso.
   - Editar un cliente sin conexión (lista de precios, facturación, contacto): se aplican los campos cambiados; si otra PC cambió alguno de esos campos después, queda ese cambio y aviso. Un DNI/CUIT repetido o una lista que ya no está se avisan, como en el alta.
   - Mientras un cliente tenga algo sin enviar, lo que se haga con él también queda en la PC, para que llegue en orden.
+- Proveedores y cuentas por pagar sin conexión (10/11/2026, SISTEMA-73; decisiones del usuario: "que funcionen sin internet de la misma manera" que los demás módulos):
+  - Sin internet se puede dar de alta, editar, dar de baja y restaurar proveedores, y registrar deudas, pagos y anulaciones de pagos. Todo se registra al volver, en orden, una sola vez y con su hora real. Lo hecho sin conexión se sigue usando sin conexión: un proveedor nuevo sirve enseguida para comprar y cargarle deudas, y una deuda nueva (o la de una recepción sin enviar) se puede pagar.
+  - Un pago cargado sin conexión que al llegar supera lo que se debe (otra PC pagó mientras tanto) se registra hasta el saldo; lo que sobra no se registra y queda aviso. Si la deuda ya estaba saldada, no se registra nada y queda el aviso.
+  - Una deuda cargada sin conexión con un comprobante (proveedor, tipo, punto y número) que ya está registrado: si es exactamente igual (misma emisión, importe y vencimientos) se rechaza y queda para revisar, porque es la misma factura cargada dos veces; si cambia algo, se registra igual, sin bloquear el número, con aviso para unificarlas. Un pago sin conexión a una deuda rechazada también se rechaza.
+  - Una deuda o una edición para un proveedor que fue dado de baja mientras tanto se registra igual, con aviso.
+  - Editar, dar de baja o restaurar sin conexión: si otra PC cambió lo mismo después, queda ese cambio (el más reciente) y aviso. Sin conexión sólo se mandan los campos que se cambiaron.
+  - Anular un pago que otra PC ya anuló no hace nada y deja aviso.
+  - Sin conexión no se paga más de lo que la PC ve que se debe. Como con conexión, los pagos no mueven Caja: no bloquean el cierre de caja.
 - Transferencias sin conexión (09/11/2026, SISTEMA-71; decisión del usuario):
   - Sin internet se puede enviar: preparar y despachar, también una preparada sin conexión. Despachar descuenta el stock en la PC enseguida.
   - Sin internet sólo se recibe una transferencia que ya estaba en tránsito cuando había conexión. Recibir suma el stock en la PC enseguida. Se acepta también con la farmacia en solo lectura, como con conexión.

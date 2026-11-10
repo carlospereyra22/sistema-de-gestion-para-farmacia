@@ -143,6 +143,10 @@ Pendientes fuera de esta etapa: notas de crédito, estado de cuenta dedicado des
 
 Verificación local de etapa 2: 463 pruebas API, 537 web y 18 de impresión aprobadas; lint, typecheck y build aprobados (build conserva advertencia de tamaño de bundle). Navegador Edge a 1366×768 con API simulada: saldo precargado, actualización de saldo parcial y envío/limpieza de solicitud; captura `.cache/payment-editor.png`. Se retiró la página temporal. Respaldo `compras-v2-20261021-143808.dump`, 375302 bytes, índice legible verificado, sin ensayo completo de restauración. Migración aplicada únicamente a gestion_dev: 57 migraciones. No se desplegó producción ni se registraron pagos sintéticos en la base comercial.
 
+### Sin conexión (10/11/2026, SISTEMA-73)
+
+Registrar deuda, Registrar pago y Anular pago funcionan sin internet: quedan en la PC y se registran solos al volver, con su hora real. El listado y el detalle sin conexión salen de una copia que la PC guarda cada 10 minutos (todas las deudas con saldo y las últimas 100 saldadas), más lo hecho sin enviar, marcado "Por enviar". Conflictos y avisos en `BUSINESS_RULES.md` y `OFFLINE.md`.
+
 ### Legibilidad y selectores (06/11/2026)
 
 Cuentas por pagar usa las mismas proporciones que Clientes, Proveedores y Cuentas corrientes: tabla en texto base, encabezados y datos secundarios en texto chico, sin tamaños menores a 12 px en el listado. Los filtros de Proveedor, Vencimiento y Estado usan `ProductFilterSelect` completo, con buscador y botones de la misma altura; los formularios lo usan en versión `compact`, con la etiqueta arriba. La columna de botones se titula Acciones. No cambian reglas, importes ni API. Los campos de deuda dentro de la recepción de Compras quedan como estaban.

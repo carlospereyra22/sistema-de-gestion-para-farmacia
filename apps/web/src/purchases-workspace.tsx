@@ -106,6 +106,7 @@ import {
   guardarOperacionCompra,
   ingresosDeCompra,
 } from "./lib/compras-sin-conexion";
+import { proveedorSinEnviar } from "./lib/proveedores-sin-conexion";
 import { OperationHistory } from "./operation-history";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
 
@@ -605,8 +606,19 @@ export function PurchasesWorkspace({
       // sola al volver; el stock sube enseguida en la PC (SISTEMA-69).
       const solicitud = request;
       // Un pedido con algo todavía en la PC se sigue en la PC: así llega en orden.
+      // Un proveedor dado de alta sin conexión todavía no está en el servidor:
+      // la compra espera detrás de él (SISTEMA-73).
+      const proveedorId = draft.purchase?.supplierId ?? draft.supplierId;
       let guardadaSinConexion =
         Boolean(draft.purchase?.porEnviar) ||
+        Boolean(
+          proveedorId &&
+          proveedorSinEnviar(
+            await ventasDeLaPc().catch(() => bandeja),
+            organizationId,
+            proveedorId,
+          ),
+        ) ||
         !conectividad().enLinea ||
         token === TOKEN_SIN_CONEXION;
       if (!guardadaSinConexion)

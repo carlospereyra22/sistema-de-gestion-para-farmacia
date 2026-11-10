@@ -8,10 +8,12 @@ it("returns to the refreshed list after payment without opening another dialog",
   );
   const editor = source.split("<PaymentEditor")[1]?.split("/>")[0];
   expect(editor).toBeDefined();
-  const saved = editor?.split("onSaved={() => {")[1];
+  const saved = editor?.split("onSaved={(donde: DondeQuedo) => {")[1];
   expect(saved).toContain("setPaying(undefined)");
   expect(saved).toContain("setRevision((r) => r + 1)");
-  expect(saved).toContain('setNotice("Pago registrado.');
+  expect(saved).toContain('"Pago registrado.');
+  // Sin conexión avisa que quedó en la PC (SISTEMA-73).
+  expect(saved).toContain('donde === "PC"');
   expect(saved).not.toContain("openDetail(");
   expect(saved).not.toContain("setDetail(");
 });
