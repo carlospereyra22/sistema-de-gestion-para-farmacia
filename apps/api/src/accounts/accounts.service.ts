@@ -1,3 +1,4 @@
+import { rangoDeHistorial } from "../common/db/rango-historial";
 import { lockCashSession } from "../cash/lock-cash-session";
 import { recordPendingCollection } from "../cash/pending-collection";
 import { assertCollectionSession } from "../cash/cash-settings";
@@ -128,6 +129,29 @@ function momentoDeConfiguracion(
   return registro.createdAt;
 }
 
+/**
+ * Si un movimiento va en el resumen de cuenta impreso: ventas y cobros, no
+ * anulaciones, ajustes de precio ni aumentos manuales (que sí cuentan en los
+ * saldos).
+ */
+function seMuestraEnElResumen(movement: {
+  type: string;
+  saleId: string | null;
+  allocations: Prisma.JsonValue | null;
+}) {
+  const { allocations } = movement;
+  return movement.type === "CREDIT"
+    ? !movement.saleId
+    : Boolean(movement.saleId) &&
+        !(
+          allocations &&
+          typeof allocations === "object" &&
+          !Array.isArray(allocations) &&
+          (allocations.kind === "PRICE_ADJUSTMENT" ||
+            allocations.kind === "MANUAL_DEBT_ADJUSTMENT")
+        );
+}
+
 type OfflineScope = {
   actorId: string;
   organizationId: string;
@@ -240,6 +264,7 @@ export class AccountsService {
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
         id: true,
+        branchId: true,
         type: true,
         amountMinor: true,
         note: true,
@@ -252,6 +277,8 @@ export class AccountsService {
     });
     return movements.map(({ allocations, ...movement }) => ({
       ...movement,
+      // Para armar el estado de cuenta sin conexión (SISTEMA-78).
+      showInStatement: seMuestraEnElResumen({ ...movement, allocations }),
       isPriceAdjustment: priceAdjustments(allocations).length > 0,
       isDebtAdjustment: Boolean(
         allocations &&
@@ -262,8 +289,22 @@ export class AccountsService {
       amountMinor: movement.amountMinor.toString(),
     }));
   }
-  async statement(actorId: string, organizationId: string, branchId: string) {
+  /**
+   * Estado de cuenta de la sucursal. Con `customerId`, sólo ese cliente; con
+   * `desde` (día de Argentina), sólo los movimientos desde ese día y el saldo
+   * anterior calculado en la base (SISTEMA-78): antes se devolvía todo y la
+   * PC filtraba (11,5 MB con 3.000 clientes).
+   */
+  async statement(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    filtro: { customerId?: string; desde?: string } = {},
+  ) {
     await this.assert(actorId, organizationId, "ACCOUNT_READ");
+    const inicio = filtro.desde
+      ? rangoDeHistorial({ desde: filtro.desde }).inicio
+      : undefined;
     return this.prisma.$transaction(
       async (tx) => {
         const access = await tx.userBranch.findFirst({
@@ -271,8 +312,23 @@ export class AccountsService {
         });
         if (!access)
           throw new ForbiddenException("No tenés acceso a esta sucursal.");
+        const iniciales = new Map<string, bigint>();
+        if (inicio)
+          for (const fila of await tx.$queryRaw<
+            { customerId: string; saldo: bigint }[]
+          >`SELECT "customerId",
+              COALESCE(SUM(CASE WHEN type = 'DEBIT' THEN "amountMinor" ELSE -"amountMinor" END), 0)::bigint AS saldo
+            FROM "CustomerAccountMovement"
+            WHERE "organizationId" = ${organizationId}::uuid
+              AND "branchId" = ${branchId}::uuid
+              AND "createdAt" < ${inicio}
+            GROUP BY "customerId"`)
+            iniciales.set(fila.customerId, fila.saldo);
         const customers = await tx.customer.findMany({
-          where: { organizationId },
+          where: {
+            organizationId,
+            ...(filtro.customerId ? { id: filtro.customerId } : {}),
+          },
           select: {
             id: true,
             name: true,
@@ -280,7 +336,11 @@ export class AccountsService {
             billingTaxId: true,
             billingPhone: true,
             accountMovements: {
-              where: { organizationId, branchId },
+              where: {
+                organizationId,
+                branchId,
+                ...(inicio ? { createdAt: { gte: inicio } } : {}),
+              },
               orderBy: [{ createdAt: "asc" }, { id: "asc" }],
               select: {
                 id: true,
@@ -296,9 +356,12 @@ export class AccountsService {
           orderBy: [{ name: "asc" }, { id: "asc" }],
         });
         return customers.map(({ accountMovements, ...customer }) => {
-          let balance = 0n;
+          const inicial = iniciales.get(customer.id) ?? 0n;
+          let balance = inicial;
           return {
             ...customer,
+            // Saldo antes del primer movimiento devuelto (con `desde`).
+            openingBalanceMinor: inicial.toString(),
             movements: accountMovements.map(({ allocations, ...movement }) => {
               balance +=
                 movement.type === "DEBIT"
@@ -306,17 +369,10 @@ export class AccountsService {
                   : -movement.amountMinor;
               return {
                 ...movement,
-                showInStatement:
-                  movement.type === "CREDIT"
-                    ? !movement.saleId
-                    : Boolean(movement.saleId) &&
-                      !(
-                        allocations &&
-                        typeof allocations === "object" &&
-                        !Array.isArray(allocations) &&
-                        (allocations.kind === "PRICE_ADJUSTMENT" ||
-                          allocations.kind === "MANUAL_DEBT_ADJUSTMENT")
-                      ),
+                showInStatement: seMuestraEnElResumen({
+                  ...movement,
+                  allocations,
+                }),
                 amountMinor: movement.amountMinor.toString(),
                 balanceMinor: balance.toString(),
               };

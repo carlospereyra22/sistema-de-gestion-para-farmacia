@@ -76,7 +76,13 @@ export function AccountDebtStatement({
     let active = true;
     setLoading(true);
     setError("");
-    const key = `${organizationId}:${branchId}:${revision}:${mode}`;
+    // El resumen de cuenta se pide sólo para el cliente y desde el día que se
+    // imprimen (SISTEMA-78); el de deuda, una vez.
+    const desde = range && from ? from : "";
+    const key =
+      mode === "debt"
+        ? `${organizationId}:${branchId}:${revision}:${mode}`
+        : `${organizationId}:${branchId}:${revision}:${mode}:${customerId}:${desde}`;
     const apply = (
       value: AccountDueDates | AccountStatementCustomer[],
       generatedAt: string,
@@ -96,7 +102,10 @@ export function AccountDebtStatement({
     const request =
       mode === "debt"
         ? getAccountDueDates(requestToken.current, organizationId, branchId)
-        : getAccountStatement(requestToken.current, organizationId, branchId);
+        : getAccountStatement(requestToken.current, organizationId, branchId, {
+            customerId: customerId || undefined,
+            desde: desde || undefined,
+          });
     void request
       .then((value) => {
         if (active) {
@@ -119,7 +128,7 @@ export function AccountDebtStatement({
     return () => {
       active = false;
     };
-  }, [organizationId, branchId, revision, mode]);
+  }, [organizationId, branchId, revision, mode, customerId, range, from]);
   const invalidRange =
     range && ((!from && !to) || (Boolean(from && to) && from > to));
   const html = useMemo(() => {

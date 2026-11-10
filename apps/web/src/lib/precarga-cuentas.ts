@@ -7,10 +7,11 @@ import {
 } from "./api";
 import { getEffectivePrices } from "./price-lists-api";
 import { getAccountDueDates } from "./account-due-dates";
-import { getAccountStatement } from "./account-statement";
 
 // Con conexión se dejan guardados en la PC los clientes, sus cuentas, los
-// vencimientos, el estado de cuenta y los artículos de cada cliente que debe
+// vencimientos y los artículos y movimientos de cada cliente que debe. El
+// estado de cuenta ya no se guarda entero (11,5 MB con 3.000 clientes): sin
+// conexión se arma con esos movimientos (SISTEMA-78)
 // (SISTEMA-70): si se corta internet se puede vender a cuenta y cobrar aunque
 // nadie haya entrado antes a Cuentas corrientes. La copia la guarda la caché
 // local de lecturas.
@@ -25,7 +26,6 @@ export async function precargarCuentas(
     getCustomerAccounts(token, organizationId, branchId),
     getParties(token, organizationId, "customers").catch(() => []),
     getAccountDueDates(token, organizationId, branchId).catch(() => undefined),
-    getAccountStatement(token, organizationId, branchId).catch(() => undefined),
   ]);
   // Precios de cada lista: sin conexión la venta a un cliente usa la copia de
   // su lista aunque nunca se le haya vendido con conexión.

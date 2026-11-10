@@ -86,6 +86,24 @@ cada vuelta (`RENDIMIENTO_PCS`, `RENDIMIENTO_VUELTAS`). 60.000 productos y
 Con el método anterior el proceso llegó a 2,7 GB de memoria. Los servicios se
 llaman dentro del mismo proceso: no incluye red, nginx ni compresión.
 
+## Costos y estado de cuenta (SISTEMA-78)
+
+- **Costos por partes** (`GET inventory/costs/versiones` y `costs/partes`),
+  con el mismo módulo que el catálogo y el stock. La versión cambia con las
+  recepciones y ajustes con costo, el costo y la fecha de cada lote, si le
+  queda stock, sus ajustes y devoluciones y los proveedores: una venta que no
+  vacía un lote no cambia nada. Antes la pantalla Productos bajaba 5,3 MB
+  después de cada venta; ahora 10 KB de versiones (0,08 s) y, si cambió algo,
+  esa parte (~20 KB).
+- **Estado de cuenta filtrado**: `customer-accounts/statement` acepta
+  `customerId` y `desde`; con `desde` devuelve el saldo anterior
+  (`openingBalanceMinor`) calculado en la base. Un cliente: de 11,6 MB a casi
+  nada. Todos los clientes sin período sigue trayendo todo, sólo al imprimirlo.
+- La precarga ya no baja el estado de cuenta entero cada 10 minutos. Sin
+  conexión se arma con los movimientos guardados de cada cliente (que ahora
+  traen sucursal y si van en el resumen): los de los clientes con saldo y los
+  que se abrieron en esa PC (decisión del usuario).
+
 ## Cuentas corrientes (SISTEMA-75)
 
 El listado trae saldo, cantidad de movimientos y último cobro calculados en
@@ -94,10 +112,5 @@ PostgreSQL; los movimientos se piden al abrir un cliente. Con 3.000 clientes de
 
 ## Pendiente
 
-- El estado de cuenta de la sucursal (`customer-accounts/statement`, para
-  imprimir resúmenes) trae todos los movimientos de la sucursal: con 3.000
-  clientes de 20 movimientos, 1,2 s y 11,5 MB. La precarga lo pide cada 10
-  minutos para tenerlo sin conexión.
-- Costos de inventario (5 MB) se calculan con todo el historial de recepciones.
 - Prueba con varias PCs reales por HTTP (la prueba de carga llama a los
   servicios dentro del proceso: no mide red, nginx ni compresión).

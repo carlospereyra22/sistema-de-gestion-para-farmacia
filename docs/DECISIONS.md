@@ -2,6 +2,14 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-78): Costos de inventario por partes, como el stock
+  (`GET inventory/costs/versiones` y `costs/partes`): una venta no cambia ningún costo y no
+  se vuelve a bajar nada. El estado de cuenta se pide sólo para lo que se imprime
+  (`customerId`, `desde`; el saldo anterior lo calcula la base) y ya no se precarga entero
+  cada 10 minutos (11,5 MB por PC). Sin conexión se arma con los movimientos guardados de
+  cada cliente: alcanza con los clientes con saldo y los que se abrieron en esa PC
+  (decisión del usuario); un cliente saldado que nunca se abrió no aparece.
+
 - 10/11/2026 (SISTEMA-77): El stock de la sucursal se sincroniza por partes, como el
   catálogo (`GET inventory/stock/versiones` y `inventory/stock/partes`): la parte de un lote
   es la de su producto. La versión resume también las cargas y devoluciones por proveedor

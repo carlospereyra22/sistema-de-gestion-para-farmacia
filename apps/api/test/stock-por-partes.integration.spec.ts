@@ -228,4 +228,74 @@ describe("stock por partes (esquema aislado)", () => {
     await db.productLot.update({ where: { id: loteA }, data: { quantity: 0 } });
     expect(Object.keys(await versiones())).toEqual(["1f"]);
   });
+
+  // Costos por partes (SISTEMA-78).
+  const versionesDeCostos = async () =>
+    (await inventario.costsVersions(conCostos, org, sucursal)).partes;
+
+  it("los costos por partes, juntos, son los mismos que los costos enteros", async () => {
+    const v = await versionesDeCostos();
+    // El lote vaciado sigue contando para el último costo del producto.
+    expect(Object.keys(v).sort()).toEqual(["0a", "1f"]);
+    const { versiones: deLasPartes, partes } = await inventario.costsParts(
+      conCostos,
+      org,
+      sucursal,
+      Object.keys(v),
+    );
+    expect(deLasPartes).toEqual(v);
+    const juntas = Object.values(partes);
+    const enteros = await inventario.costs(conCostos, org, sucursal);
+    const orden = <T>(lista: T[], clave: (x: T) => string) =>
+      [...lista].sort((a, b) => clave(a).localeCompare(clave(b)));
+    expect(
+      orden(
+        juntas.flatMap((p) => p.products),
+        (p) => p.productId,
+      ),
+    ).toEqual(orden(enteros.products, (p) => p.productId));
+    expect(
+      orden(
+        juntas.flatMap((p) => p.lots),
+        (l) => l.lotId,
+      ),
+    ).toEqual(orden(enteros.lots, (l) => l.lotId));
+    expect(juntas.flatMap((p) => p.adjustments)).toEqual(enteros.adjustments);
+    expect(partes["1f"]!.suppliers).toEqual([
+      expect.objectContaining({ id: proveedor }),
+    ]);
+    await expect(
+      inventario.costsVersions(sinCostos, org, sucursal),
+    ).rejects.toThrow();
+  });
+
+  it("una venta no cambia los costos; una recepción con costo, sí", async () => {
+    const antes = await versionesDeCostos();
+    await db.productLot.update({
+      where: { id: loteB },
+      data: { quantity: { decrement: 1 } },
+    });
+    expect(await versionesDeCostos()).toEqual(antes);
+    await db.inventoryMovement.create({
+      data: {
+        organizationId: org,
+        branchId: sucursal,
+        productId: productoB,
+        lotId: loteB,
+        type: "PURCHASE_RECEIPT",
+        quantity: 5,
+        unitCostMinor: 2000n,
+        supplierId: proveedor,
+      },
+    });
+    const despues = await versionesDeCostos();
+    expect(despues["1f"]).not.toBe(antes["1f"]);
+    expect(despues["0a"]).toBe(antes["0a"]);
+    const { partes } = await inventario.costsParts(conCostos, org, sucursal, [
+      "1f",
+    ]);
+    expect(partes["1f"]!.products).toEqual([
+      expect.objectContaining({ productId: productoB, unitCostMinor: "2000" }),
+    ]);
+  });
 });

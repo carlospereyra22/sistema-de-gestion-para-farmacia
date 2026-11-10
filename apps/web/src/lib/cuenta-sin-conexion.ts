@@ -809,7 +809,11 @@ export function estadoConPendientes(
       };
       r.push(cliente);
     }
-    let saldo = BigInt(cliente.movements.at(-1)?.balanceMinor ?? "0");
+    let saldo = BigInt(
+      cliente.movements.at(-1)?.balanceMinor ??
+        cliente.openingBalanceMinor ??
+        "0",
+    );
     for (const m of propios) {
       if (
         cliente.movements.some(

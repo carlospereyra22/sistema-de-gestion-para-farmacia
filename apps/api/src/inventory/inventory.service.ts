@@ -384,6 +384,144 @@ export class InventoryService {
   async costs(actorId: string, organizationId: string, branchId: string) {
     await this.assert(actorId, organizationId, "COST_READ");
     await this.branch(organizationId, branchId);
+    return (await this.armarCostos(organizationId, branchId)).costos;
+  }
+
+  /**
+   * Costos por partes (SISTEMA-78), como el stock: la parte es la del
+   * producto. La versión cambia con las recepciones y ajustes con costo, el
+   * costo y la fecha de cada lote, si le queda stock, los ajustes y
+   * devoluciones de sus lotes y los proveedores. Una venta que no vacía un
+   * lote no cambia nada.
+   */
+  async costsVersions(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+  ): Promise<{ partes: Record<string, string> }> {
+    await this.assert(actorId, organizationId, "COST_READ");
+    await this.branch(organizationId, branchId);
+    return { partes: await this.versionesDeCostos(organizationId, branchId) };
+  }
+
+  /** Costos de algunas partes, cada una por separado y con su versión. */
+  async costsParts(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    partes: string[],
+  ) {
+    await this.assert(actorId, organizationId, "COST_READ");
+    await this.branch(organizationId, branchId);
+    // La versión se lee antes: si algo cambia en el medio, se vuelve a pedir.
+    const todas = await this.versionesDeCostos(organizationId, branchId);
+    const { costos, productoDeLote } = await this.armarCostos(
+      organizationId,
+      branchId,
+      partes,
+    );
+    const parteDeLote = (lotId: string) =>
+      (productoDeLote.get(lotId) ?? "").slice(0, 2).toLowerCase();
+    const proveedores = new Map(costos.suppliers.map((s) => [s.id, s]));
+    return {
+      versiones: Object.fromEntries(
+        partes.map((parte) => [parte, todas[parte] ?? null]),
+      ),
+      partes: Object.fromEntries(
+        partes.map((parte) => {
+          const lots = costos.lots.filter(
+            (l) => parteDeLote(l.lotId) === parte,
+          );
+          const adjustments = costos.adjustments.filter(
+            (a) => parteDeLote(a.lotId) === parte,
+          );
+          const usados = new Set(
+            [
+              ...lots.flatMap((l) => l.receipts.map((r) => r.supplierId)),
+              ...adjustments.map((a) => a.supplierId),
+            ].filter((id): id is string => Boolean(id)),
+          );
+          return [
+            parte,
+            {
+              products: costos.products.filter(
+                (p) => p.productId.slice(0, 2).toLowerCase() === parte,
+              ),
+              lots,
+              adjustments,
+              suppliers: [...usados].flatMap((id) => {
+                const proveedor = proveedores.get(id);
+                return proveedor ? [proveedor] : [];
+              }),
+            },
+          ];
+        }),
+      ),
+    };
+  }
+
+  private async versionesDeCostos(organizationId: string, branchId: string) {
+    const [filas, proveedores] = await Promise.all([
+      this.prisma.$queryRaw<{ parte: string; huella: string }[]>`
+        WITH lotes AS (
+          SELECT substr("productId"::text, 1, 2) AS parte,
+            md5(string_agg(concat(id, ':', quantity > 0, ':', "unitCostMinor", ':', "createdAt"), ',' ORDER BY id)) AS h
+          FROM "ProductLot"
+          WHERE "organizationId" = ${organizationId}::uuid AND "branchId" = ${branchId}::uuid
+          GROUP BY 1
+        ), cargas AS (
+          SELECT substr("productId"::text, 1, 2) AS parte,
+            concat(count(*), ':', sum(quantity), ':', max("occurredAt"), ':', sum(COALESCE("unitCostMinor", 0))) AS h
+          FROM "InventoryMovement"
+          WHERE "organizationId" = ${organizationId}::uuid AND "branchId" = ${branchId}::uuid
+            AND "lotId" IS NOT NULL
+            AND (type = 'PURCHASE_RECEIPT' OR (type = 'ADJUSTMENT_IN' AND "unitCostMinor" IS NOT NULL))
+          GROUP BY 1
+        ), ajustes AS (
+          SELECT substr(l."productId"::text, 1, 2) AS parte,
+            concat(count(*), ':', max(a."createdAt")) AS h
+          FROM "AuditLog" a JOIN "ProductLot" l ON l.id = a."entityId"
+          WHERE a."organizationId" = ${organizationId}::uuid AND a."branchId" = ${branchId}::uuid
+            AND a."entityType" = 'PRODUCT_LOT' AND a.action = 'STOCK_ADJUSTED'
+          GROUP BY 1
+        ), devoluciones AS (
+          SELECT substr("productId"::text, 1, 2) AS parte,
+            concat(count(*), ':', max("createdAt")) AS h
+          FROM "SupplierReturn"
+          WHERE "organizationId" = ${organizationId}::uuid AND "branchId" = ${branchId}::uuid
+          GROUP BY 1
+        )
+        SELECT lotes.parte, concat(lotes.h, '|', cargas.h, '|', ajustes.h, '|', devoluciones.h) AS huella
+        FROM lotes
+        LEFT JOIN cargas USING (parte)
+        LEFT JOIN ajustes USING (parte)
+        LEFT JOIN devoluciones USING (parte)`,
+      this.prisma.$queryRaw<{ huella: string | null }[]>`
+        SELECT md5(string_agg(concat(id, ':', name), ',' ORDER BY id)) AS huella
+        FROM "Supplier" WHERE "organizationId" = ${organizationId}::uuid`,
+    ]);
+    const contexto = proveedores[0]?.huella ?? "-";
+    return Object.fromEntries(
+      filas.map(({ parte, huella }) => [
+        parte,
+        createHash("sha1")
+          .update(`${contexto}|${huella}`)
+          .digest("hex")
+          .slice(0, 20),
+      ]),
+    );
+  }
+
+  /** Costos de la sucursal, o de algunas partes (por producto). */
+  private async armarCostos(
+    organizationId: string,
+    branchId: string,
+    partes?: string[],
+  ) {
+    const rangos = partes?.map((parte) => rangoDeParte(parte));
+    const porProducto = rangos
+      ? { OR: rangos.map((productId) => ({ productId })) }
+      : {};
     const [movements, lots] = await Promise.all([
       this.prisma.inventoryMovement.findMany({
         where: {
@@ -394,6 +532,7 @@ export class InventoryService {
             { type: "PURCHASE_RECEIPT" },
             { type: "ADJUSTMENT_IN", unitCostMinor: { not: null } },
           ],
+          ...(rangos ? { AND: [porProducto] } : {}),
         },
         orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
         select: {
@@ -409,7 +548,7 @@ export class InventoryService {
         },
       }),
       this.prisma.productLot.findMany({
-        where: { organizationId, branchId },
+        where: { organizationId, branchId, ...porProducto },
         select: {
           id: true,
           productId: true,
@@ -422,61 +561,72 @@ export class InventoryService {
     const stockedLotIds = lots
       .filter((lot) => lot.quantity > 0)
       .map((lot) => lot.id);
+    // Por tandas: con muchos lotes o recepciones un solo `IN` excede el
+    // límite de parámetros de PostgreSQL (SISTEMA-74).
     const [purchaseItems, adjustments, returns] = await Promise.all([
-      this.prisma.purchaseReceiptItem.findMany({
-        where: {
-          movementId: {
-            in: movements
-              .filter((movement) => movement.unitCostMinor === null)
-              .map((movement) => movement.id),
+      enTandas(
+        movements
+          .filter((movement) => movement.unitCostMinor === null)
+          .map((movement) => movement.id),
+        (tanda) =>
+          this.prisma.purchaseReceiptItem.findMany({
+            where: { movementId: { in: tanda } },
+            select: { movementId: true, unitCostMinor: true },
+          }),
+      ),
+      enTandas(stockedLotIds, (tanda) =>
+        this.prisma.auditLog.findMany({
+          where: {
+            organizationId,
+            branchId,
+            entityType: "PRODUCT_LOT",
+            action: "STOCK_ADJUSTED",
+            entityId: { in: tanda },
           },
-        },
-        select: { movementId: true, unitCostMinor: true },
-      }),
-      this.prisma.auditLog.findMany({
-        where: {
-          organizationId,
-          branchId,
-          entityType: "PRODUCT_LOT",
-          action: "STOCK_ADJUSTED",
-          entityId: { in: stockedLotIds },
-        },
-        select: { entityId: true, createdAt: true, after: true },
-      }),
-      this.prisma.supplierReturn.findMany({
-        where: { organizationId, branchId, lotId: { in: stockedLotIds } },
-        select: {
-          lotId: true,
-          supplierId: true,
-          quantity: true,
-          reason: true,
-          createdAt: true,
-        },
-      }),
+          select: { entityId: true, createdAt: true, after: true },
+        }),
+      ),
+      enTandas(stockedLotIds, (tanda) =>
+        this.prisma.supplierReturn.findMany({
+          where: { organizationId, branchId, lotId: { in: tanda } },
+          select: {
+            lotId: true,
+            supplierId: true,
+            quantity: true,
+            reason: true,
+            createdAt: true,
+          },
+        }),
+      ),
     ]);
     const lotChanges = [...lotAdjustments(adjustments), ...lotReturns(returns)];
     // Incluye los dados de baja: el historial conserva quién entregó cada carga.
-    const suppliers = await this.prisma.supplier.findMany({
-      where: {
-        organizationId,
-        id: {
-          in: [...movements, ...lotChanges].flatMap((item) =>
-            item.supplierId ? [item.supplierId] : [],
-          ),
-        },
-      },
-      select: { id: true, name: true },
-    });
-    return {
-      ...inventoryCosts(
-        movements,
-        new Map(
-          purchaseItems.map((item) => [item.movementId, item.unitCostMinor]),
+    const supplierIds = [
+      ...new Set(
+        [...movements, ...lotChanges].flatMap((item) =>
+          item.supplierId ? [item.supplierId] : [],
         ),
-        lots,
       ),
-      adjustments: lotChanges,
-      suppliers,
+    ];
+    const suppliers = await enTandas(supplierIds, (tanda) =>
+      this.prisma.supplier.findMany({
+        where: { organizationId, id: { in: tanda } },
+        select: { id: true, name: true },
+      }),
+    );
+    return {
+      costos: {
+        ...inventoryCosts(
+          movements,
+          new Map(
+            purchaseItems.map((item) => [item.movementId, item.unitCostMinor]),
+          ),
+          lots,
+        ),
+        adjustments: lotChanges,
+        suppliers,
+      },
+      productoDeLote: new Map(lots.map((lot) => [lot.id, lot.productId])),
     };
   }
 

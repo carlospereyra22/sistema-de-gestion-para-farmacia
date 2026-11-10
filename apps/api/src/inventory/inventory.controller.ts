@@ -33,7 +33,7 @@ import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { InventoryService } from "./inventory.service";
 import { partesPedidas } from "../catalog/catalogo-por-partes";
 
-/** Partes del stock pedidas: "0a,1f,..." (hasta 32) (SISTEMA-77). */
+/** Partes pedidas del stock o de los costos: "0a,1f,..." (hasta 32) (SISTEMA-77). */
 class StockPartsQuery {
   @IsString()
   @Matches(/^[0-9a-f]{2}(,[0-9a-f]{2}){0,31}$/)
@@ -149,6 +149,44 @@ export class InventoryController {
     @Param("branchId") branchId: string,
   ) {
     return this.inventory.stock(request.auth!.sub, organizationId, branchId);
+  }
+
+  /** Costos por partes (SISTEMA-78): la versión de cada parte. */
+  @Get("costs/versiones")
+  costsVersions(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+  ) {
+    return this.inventory.costsVersions(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+    );
+  }
+
+  /** Costos de algunas partes (SISTEMA-78). */
+  @Get("costs/partes")
+  costsParts(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Query() query: StockPartsQuery,
+  ) {
+    let partes: string[];
+    try {
+      partes = partesPedidas(query.partes);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Partes inválidas.",
+      );
+    }
+    return this.inventory.costsParts(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      partes,
+    );
   }
 
   @Get("costs")
