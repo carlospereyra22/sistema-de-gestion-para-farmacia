@@ -2,6 +2,13 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-76): El worker del lector de PDF (facturas de Compras y pedidos de
+  Distribución) se crea desde una copia en memoria (blob) de su código, cargado como parte
+  de la app con `?raw`, y no desde su dirección: pdf.js lo pide por red cada vez que lee un
+  PDF y sin conexión fallaba si el navegador no lo tenía guardado. Se descartó pedirlo con
+  `fetch` (en desarrollo Vite lo devuelve modificado y no anda como blob) y correr pdf.js en
+  la pestaña sin worker (traba la pantalla con PDF grandes).
+
 - 10/11/2026 (SISTEMA-75): Cuentas corrientes con saldos calculados en el servidor
   (decisión del usuario). `GET customer-accounts` devuelve cada cliente con su saldo, la
   cantidad de movimientos y el último cobro (sin contar anulaciones), sumados en
