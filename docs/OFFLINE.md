@@ -52,7 +52,8 @@ necesita conexión.
 | SISTEMA-67 Caja sin conexión (abrir, movimientos, cerrar)     | En main    |
 | SISTEMA-69 Compras y recepciones sin conexión                 | En main    |
 | SISTEMA-70 Cuenta corriente sin conexión                      | En main    |
-| SISTEMA-71 Transferencias sin conexión                        | Esta etapa |
+| SISTEMA-71 Transferencias sin conexión                        | En main    |
+| SISTEMA-72 Todo listo sin conexión desde la primera visita    | Esta etapa |
 | Catálogo y precios sin conexión                               | Pendiente  |
 | Prueba completa con dos PCs                                   | Pendiente  |
 
@@ -236,6 +237,16 @@ Decisión del usuario (09/11/2026): sin conexión se puede enviar (preparar y de
   - avisos nuevos: `TRANSFERENCIA_YA_DESPACHADA` y `TRANSFERENCIA_YA_RECIBIDA` (además de `STOCK_FALTANTE`).
 - Lo recibido sin conexión suma al stock del producto, pero no se puede volver a transferir hasta que llegue al servidor: la PC no conoce todavía su lote en destino.
 - Migración `20261109160000_offline_transfers`: clave de la PC en `Transfer` y tipos de operación y de aviso.
+
+## Todo listo sin conexión desde la primera visita (SISTEMA-72)
+
+Problema encontrado en preprod (09/11/2026): sin conexión fallaban el lector de PDF de compras ("Failed to fetch dynamically imported module") y el cierre de caja, si en esa PC no se había entrado antes a esas pantallas con conexión o si la versión era nueva.
+
+- **Service worker**: `clientsClaim` toma la pestaña apenas se instala, sin esperar una recarga (una versión nueva igual espera "Actualizar"). Además, todo archivo de `/assets/` que se baje queda guardado (`app-archivos`), como red de seguridad.
+- **Partes que se bajan aparte** (`lib/precargar-modulos.ts`): con conexión, a los 3 segundos de entrar, se precargan el lector de PDF y su worker, el lector de Excel y Reportes. Quedan en la pestaña aunque el service worker todavía no la controle.
+- **Caja** (`lib/precarga-caja.ts`): con conexión, al entrar y cada 10 minutos, se guardan permisos y reglas de la caja, cobros pendientes, el historial del período por defecto y los últimos movimientos de cada caja. Sin eso no se podía cerrar sin conexión.
+- **Prueba en navegador real** (`scripts/probar-sin-conexion.mjs`, obligatoria antes de publicar en preprod un cambio del modo sin internet; ver skill `cerrar-tarea`): Edge con un perfil nuevo contra la versión compilada como preprod. Entra con conexión con un usuario de prueba que crea sólo en `gestion_dev`, apaga el servidor y recorre cada pantalla, carga cada parte que se baja aparte y cierra la caja; el cierre queda en la bandeja de la PC. Resultado y capturas en `.cache/prueba-sin-conexion/`.
+- **Fuera de alcance** (decisión del usuario, 09/11/2026): Cuentas por pagar y Reportes siguen sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración).
 
 ## Base de medicamentos en la PC (SISTEMA-69)
 

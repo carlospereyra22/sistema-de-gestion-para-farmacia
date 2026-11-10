@@ -33,6 +33,15 @@ pnpm build
   pnpm --filter @gestion/web test
   pnpm test:thermal
   ```
+- **Modo sin internet** (cualquier cambio en la web, el service worker, precargas o
+  `lib/*sin-conexion*`): antes de publicar en preprod, correr la prueba en navegador
+  real, que simula una PC nueva y apaga el servidor (ver `docs/OFFLINE.md`, SISTEMA-72):
+  ```powershell
+  $env:VITE_API_URL = "/api/v1"; pnpm --filter @gestion/web build   # desde PowerShell, no Git Bash
+  node scripts/probar-sin-conexion.mjs
+  ```
+  Toda línea `FALLA` se arregla antes de publicar (Cuentas por pagar y Reportes son sólo
+  con conexión y no se recorren). Probar en una PC donde ya se entró a cada pantalla no alcanza.
 - Lint usa `--max-warnings=0`: un warning es un error.
 - TypeScript estricto, sin `any`. No silenciar errores con `// @ts-ignore` ni
   `eslint-disable` salvo justificacion.

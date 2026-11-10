@@ -37,6 +37,25 @@ export default defineConfig({
           /^\/downloads\//,
         ],
         cleanupOutdatedCaches: true,
+        // SISTEMA-72: en la primera visita toma la pestaña enseguida, sin
+        // esperar una recarga; si no, lo que se baja aparte (lector de PDF,
+        // Excel, Reportes) no anda sin conexión hasta recargar. Una versión
+        // nueva igual espera a "Actualizar" (registerType: "prompt").
+        clientsClaim: true,
+        // Red de seguridad: un archivo de la app que no esté en la lista de
+        // esta versión (por ejemplo, el de otra versión todavía abierta en
+        // otra pestaña) queda guardado al bajarse.
+        runtimeCaching: [
+          {
+            urlPattern: ({ sameOrigin, url }) =>
+              sameOrigin && url.pathname.startsWith("/assets/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "app-archivos",
+              expiration: { maxEntries: 200 },
+            },
+          },
+        ],
       },
       devOptions: { enabled: false },
     }),

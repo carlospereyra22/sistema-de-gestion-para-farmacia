@@ -2,6 +2,8 @@ import { resolveExternalCategory } from "./lib/api";
 import { PurchasesWorkspace } from "./purchases-workspace";
 import { precargarCompras } from "./lib/precarga-compras";
 import { precargarCuentas } from "./lib/precarga-cuentas";
+import { precargarModulos } from "./lib/precargar-modulos";
+import { precargarCaja } from "./lib/precarga-caja";
 import { enviarExhibidoresPendientes } from "./lib/base-medicamentos-local";
 import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
@@ -726,6 +728,33 @@ export function WorkspaceShell({
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal, veCuentas, accessToken, organizationId, branchId]);
+  // Caja (SISTEMA-72): permisos, reglas, cobros pendientes, historial y
+  // últimos movimientos, para cerrar y asignar sin conexión aunque nadie haya
+  // entrado antes a Caja.
+  const veCaja = canOpenView("Caja", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !veCaja ||
+      !organizationId ||
+      !branchId
+    )
+      return;
+    const precargar = () =>
+      void precargarCaja(accessToken, organizationId, branchId).catch(() => {});
+    precargar();
+    const timer = window.setInterval(precargar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [enLinea, sesionReal, veCaja, accessToken, organizationId, branchId]);
+  // Lector de PDF, Excel y Reportes listos para usar sin conexión aunque el
+  // service worker todavía no controle la pestaña (SISTEMA-72).
+  useEffect(() => {
+    if (!enLinea || !sesionReal) return;
+    const id = window.setTimeout(() => void precargarModulos(), 3_000);
+    return () => window.clearTimeout(id);
+  }, [enLinea, sesionReal]);
   // Transferencias de la sucursal (SISTEMA-71): sin conexión se despachan las
   // preparadas y se reciben las que ya estaban en camino, aunque nadie haya
   // entrado antes a Transferencias. Los lotes y las sucursales ya se guardan.
