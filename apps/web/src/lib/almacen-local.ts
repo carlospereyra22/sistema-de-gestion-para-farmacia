@@ -7,6 +7,8 @@ export interface AlmacenLocal {
   borrar(clave: string): Promise<void>;
   /** Claves que empiezan con el prefijo. */
   claves(prefijo: string): Promise<string[]>;
+  /** Valores de las claves que empiezan con el prefijo, en una sola lectura. */
+  valores<T>(prefijo: string): Promise<T[]>;
 }
 
 export function almacenEnMemoria(): AlmacenLocal {
@@ -22,6 +24,11 @@ export function almacenEnMemoria(): AlmacenLocal {
     },
     claves: async (prefijo) =>
       [...datos.keys()].filter((clave) => clave.startsWith(prefijo)),
+    valores: async <T>(prefijo: string) =>
+      [...datos.entries()]
+        .filter(([clave]) => clave.startsWith(prefijo))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, valor]) => structuredClone(valor) as T),
   };
 }
 
@@ -71,6 +78,12 @@ function almacenIndexedDb(): AlmacenLocal {
           ),
         )
       ).map(String),
+    valores: async <T>(prefijo: string) =>
+      (await pedido(
+        (await tabla("readonly")).getAll(
+          IDBKeyRange.bound(prefijo, `${prefijo}￿`),
+        ),
+      )) as T[],
   };
 }
 

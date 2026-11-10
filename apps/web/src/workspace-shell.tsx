@@ -1,3 +1,4 @@
+import { lotesDelProducto, productoPorId } from "./lib/indice-productos";
 import { resolveExternalCategory } from "./lib/api";
 import { PurchasesWorkspace } from "./purchases-workspace";
 import { precargarCompras } from "./lib/precarga-compras";
@@ -423,6 +424,13 @@ const SALE_CATALOG_ROW_LIMIT = 200;
 /** Cada cuánto se revisa el historial mientras una factura espera a ARCA. */
 const HISTORIAL_FACTURAS_MS = 15_000;
 
+/** Pantallas que usan el catálogo de toda la organización (SISTEMA-74). */
+const PANTALLAS_CON_CATALOGO_ORGANIZACION = new Set<string>([
+  "Productos",
+  "Listas de precios",
+  "Transferencias",
+]);
+
 const parseArgentineAmountMinor = (value: string): number | undefined => {
   const cleaned = value.trim().replace(/[^\d.,]/g, "");
   if (!cleaned) return undefined;
@@ -576,6 +584,8 @@ export function WorkspaceShell({
   const [organizationProducts, setOrganizationProducts] = useState<
     CatalogProduct[]
   >([]);
+  /** Organización cuyo catálogo compartido ya se cargó (SISTEMA-74). */
+  const organizationCatalogLoaded = useRef<string | undefined>(undefined);
   const operationalProducts = useMemo(
     () => products.filter((product) => product.active),
     [products],
@@ -629,6 +639,10 @@ export function WorkspaceShell({
   const [message, setMessage] = useState<string>();
   const ready = Boolean(accessToken && organizationId && branchId);
   const refreshRevision = useRef(0);
+  // El catálogo de toda la organización sólo lo usan estas pantallas: se pide
+  // cuando se abre una (SISTEMA-74). Con decenas de miles de productos, cada
+  // copia del catálogo pesa decenas de MB.
+  const usaCatalogoOrganizacion = PANTALLAS_CON_CATALOGO_ORGANIZACION.has(view);
   const refresh = async () => {
     if (!accessToken || !organizationId || !branchId) return;
     const revision = ++refreshRevision.current;
@@ -641,11 +655,16 @@ export function WorkspaceShell({
       permissionCodes.includes("CASH_READ")
         ? getCash(accessToken, organizationId, branchId)
         : { registers: [], sessions: [], settings: undefined },
-      getCatalogProducts(accessToken, organizationId),
+      usaCatalogoOrganizacion
+        ? getCatalogProducts(accessToken, organizationId)
+        : undefined,
     ]);
     if (revision !== refreshRevision.current) return;
     setProducts(catalog);
-    setOrganizationProducts(sharedCatalog);
+    if (sharedCatalog) {
+      setOrganizationProducts(sharedCatalog);
+      organizationCatalogLoaded.current = organizationId;
+    }
     setStock(lots);
     setRegisters(cash.registers);
     setOpenSessions(cash.sessions.filter((item) => !item.closedAt));
@@ -842,11 +861,41 @@ export function WorkspaceShell({
   // Ventas cobradas sin conexión: se mandan solas y, al llegar, se actualiza
   // el stock (SISTEMA-64).
   useSincronizarVentas(accessToken, alcance);
+  // Al llegar lo vendido sin conexión cambia el stock, no el catálogo: se
+  // actualiza sólo el stock (SISTEMA-74).
   useEffect(() => {
-    const actualizar = () => void latestRefresh.current().catch(() => {});
+    const actualizar = () => {
+      if (
+        !accessToken ||
+        !organizationId ||
+        !branchId ||
+        !permissionCodes.includes("INVENTORY_READ")
+      )
+        return;
+      void getStock(accessToken, organizationId, branchId)
+        .then(setStock)
+        .catch(() => {});
+    };
     window.addEventListener(VENTAS_SINCRONIZADAS, actualizar);
     return () => window.removeEventListener(VENTAS_SINCRONIZADAS, actualizar);
-  }, []);
+  }, [accessToken, organizationId, branchId, permissionCodes]);
+  // El catálogo de la organización se pide la primera vez que se abre una
+  // pantalla que lo usa; después se actualiza con el resto.
+  useEffect(() => {
+    if (
+      !usaCatalogoOrganizacion ||
+      !accessToken ||
+      !organizationId ||
+      organizationCatalogLoaded.current === organizationId
+    )
+      return;
+    organizationCatalogLoaded.current = organizationId;
+    void getCatalogProducts(accessToken, organizationId)
+      .then(setOrganizationProducts)
+      .catch(() => {
+        organizationCatalogLoaded.current = undefined;
+      });
+  }, [usaCatalogoOrganizacion, accessToken, organizationId]);
   const setPage = (next: View) => {
     setSearchParams(
       workspaceLocation(
@@ -1046,6 +1095,8 @@ export function WorkspaceShell({
                 branches.find((item) => item.id === branchId)?.name ??
                 "Sucursal"
               }
+              products={products}
+              lots={stock}
               onNavigate={setPage}
             />
           )}
@@ -2901,11 +2952,8 @@ function Products({
           ? stockForProduct(product.id) > 0
           : stockToneForProduct(product.id) === stockFilter)) &&
       (!lotQuery.trim() ||
-        stock.some(
-          (lot) =>
-            lot.productId === product.id &&
-            lot.quantity > 0 &&
-            lotNumberMatches(lot.number, lotQuery),
+        lotesDelProducto(stock, product.id).some(
+          (lot) => lot.quantity > 0 && lotNumberMatches(lot.number, lotQuery),
         ))
     );
   });
@@ -5498,8 +5546,7 @@ function Sales({
       Number(
         line.requestedUnitPriceMinor ??
           line.unitPriceMinor ??
-          products.find((item) => item.id === line.productId)?.prices[0]
-            ?.amountMinor ??
+          productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
           0,
       ) *
         line.quantity,
@@ -5534,7 +5581,7 @@ function Sales({
   ).slice(0, SALE_CATALOG_ROW_LIMIT);
   // Mientras se escribe, el primer resultado vendible queda elegido para Enter.
   const selectedCatalogProduct =
-    products.find((item) => item.id === productId) ??
+    productoPorId(products, productId) ??
     (searchTerm
       ? (exactBarcodeProduct ??
         packSale?.product ??
@@ -5688,8 +5735,7 @@ function Sales({
           Number(
             line.requestedUnitPriceMinor ??
               line.unitPriceMinor ??
-              products.find((product) => product.id === line.productId)
-                ?.prices[0]?.amountMinor ??
+              productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
               0,
           ) * line.quantity,
       ),
@@ -5994,7 +6040,7 @@ function Sales({
     });
     if (motivo) return reportPayment(motivo);
     const nombre = (productId: string) =>
-      products.find((product) => product.id === productId)?.name ?? "Producto";
+      productoPorId(products, productId)?.name ?? "Producto";
     const occurredAt = ahoraSegunServidor().toISOString();
     const encabezado = (await encabezadoGuardado(
       organizationId,
@@ -6017,8 +6063,7 @@ function Sales({
         unitarioMinor: Number(
           line.requestedUnitPriceMinor ??
             line.unitPriceMinor ??
-            products.find((product) => product.id === line.productId)?.prices[0]
-              ?.amountMinor ??
+            productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
             0,
         ),
         descuentoMinor: line.discountMinor,
@@ -6115,7 +6160,7 @@ function Sales({
       lines.some(
         (line) =>
           !line.description &&
-          !products.find((p) => p.id === line.productId)?.prices[0],
+          !productoPorId(products, line.productId)?.prices[0],
       )
     )
       return reportPayment(
@@ -6158,9 +6203,8 @@ function Sales({
                 ...line,
                 // Si después bajaron la cantidad, no puede quedar de más.
                 packQuantity: Math.min(line.packQuantity ?? 0, line.quantity),
-                expectedUnitPriceMinor: products.find(
-                  (p) => p.id === line.productId,
-                )!.prices[0]!.amountMinor,
+                expectedUnitPriceMinor: productoPorId(products, line.productId)!
+                  .prices[0]!.amountMinor,
               },
         ),
         payments: finalPayments.map((payment) => ({
@@ -6222,14 +6266,13 @@ function Sales({
       lines: lines.map((line) => ({
         name:
           line.description ??
-          products.find((product) => product.id === line.productId)?.name ??
+          productoPorId(products, line.productId)?.name ??
           "Producto",
         quantity: line.quantity,
         unitPriceMinor: Number(
           line.requestedUnitPriceMinor ??
             line.unitPriceMinor ??
-            products.find((product) => product.id === line.productId)?.prices[0]
-              ?.amountMinor ??
+            productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
             0,
         ),
         discountMinor: line.discountMinor,
@@ -6632,7 +6675,7 @@ function Sales({
                 if (line.description || line.requestedUnitPriceMinor == null)
                   return sum;
                 const list = Number(
-                  products.find((item) => item.id === line.productId)?.prices[0]
+                  productoPorId(products, line.productId)?.prices[0]
                     ?.amountMinor ?? 0,
                 );
                 return (
@@ -6727,9 +6770,7 @@ function Sales({
             <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
               {lines.length ? (
                 sortSaleLines(lines, products).map((line) => {
-                  const product = products.find(
-                    (item) => item.id === line.productId,
-                  );
+                  const product = productoPorId(products, line.productId);
                   const unitPrice = Number(
                     line.requestedUnitPriceMinor ??
                       line.unitPriceMinor ??
@@ -7456,9 +7497,7 @@ function SalesHistory({
                     <span className="text-right">Total</span>
                   </div>
                   {selectedSale.items.map((item) => {
-                    const product = products.find(
-                      (candidate) => candidate.id === item.productId,
-                    );
+                    const product = productoPorId(products, item.productId);
                     const lineTotal =
                       Number(item.unitPriceMinor ?? 0) * item.quantity -
                       Number(item.discountMinor ?? 0);

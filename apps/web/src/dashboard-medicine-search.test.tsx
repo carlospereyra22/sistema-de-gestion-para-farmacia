@@ -207,7 +207,13 @@ describe("dashboard medicine search", () => {
     ).toEqual([reference]);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("q=Actron+400&source=official"),
-      { headers: { Authorization: "Bearer token" }, signal: controller.signal },
+      expect.objectContaining({
+        headers: { Authorization: "Bearer token" },
+      }),
     );
+    // La señal lleva la cancelación de la búsqueda (y el tiempo máximo).
+    const { signal } = fetchMock.mock.calls[0]![1] as { signal: AbortSignal };
+    controller.abort();
+    expect(signal.aborted).toBe(true);
   });
 });

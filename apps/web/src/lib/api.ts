@@ -16,8 +16,14 @@ import { EnvioRechazado } from "./sincronizacion-ventas";
 import {
   TOKEN_SIN_CONEXION,
   VIGENCIA_SIN_CONEXION_MS,
+  alcanceActual,
   horaUltimaSincronizacion,
 } from "./cache-local";
+import {
+  catalogoAlDia,
+  type PartesDelCatalogo,
+  type VersionesDelCatalogo,
+} from "./catalogo-local";
 import { conectividad } from "./conectividad";
 import { ventasDeLaPc, type VentaPendiente } from "./bandeja-ventas";
 import { lotesConPendientes, lotesSinEnviar } from "./compras-sin-conexion";
@@ -652,7 +658,52 @@ export type MedicineReference = {
   officialDelisted?: boolean;
   laboratoryMismatch?: string | null;
 };
+/**
+ * Catálogo de la sucursal (o de la organización sin `branchId`). Se baja por
+ * partes y sólo lo que cambió desde la última vez; la PC lo guarda y sin
+ * conexión lo arma con lo guardado (SISTEMA-74). Sin sesión en la PC (no hay
+ * dónde guardarlo) se pide entero, como antes.
+ */
 export async function getCatalogProducts(
+  token: string,
+  organizationId: string,
+  branchId?: string,
+): Promise<CatalogProduct[]> {
+  const alcance = alcanceActual();
+  if (!alcance)
+    return getCatalogProductsCompleto(token, organizationId, branchId);
+  const base = `${apiBaseUrl}/organizations/${organizationId}/catalog/products`;
+  const sucursal = branchId ? `branchId=${encodeURIComponent(branchId)}` : "";
+  const pedir = async <T>(ruta: string, consulta: string[]) => {
+    const response = await fetch(
+      `${base}/${ruta}?${[sucursal, ...consulta].filter(Boolean).join("&")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok)
+      throw await responseError(response, "No se pudo cargar el catálogo.");
+    return (await response.json()) as T;
+  };
+  const alDia = catalogoAlDia(alcance, organizationId, branchId, {
+    versiones: (diccionario) =>
+      pedir<VersionesDelCatalogo>(
+        "versiones",
+        diccionario ? [`diccionario=${encodeURIComponent(diccionario)}`] : [],
+      ),
+    partes: (partes) =>
+      pedir<PartesDelCatalogo>("partes", [`partes=${partes.join(",")}`]),
+  });
+  try {
+    return await alDia;
+  } catch {
+    // Una API que todavía no tiene el catálogo por partes, o la primera vez
+    // sin conexión después de actualizar: el pedido completo de siempre (o su
+    // copia guardada).
+    return getCatalogProductsCompleto(token, organizationId, branchId);
+  }
+}
+
+/** El catálogo entero en un solo pedido (sin copia en la PC). */
+async function getCatalogProductsCompleto(
   token: string,
   organizationId: string,
   branchId?: string,
@@ -3185,9 +3236,10 @@ export async function getInventoryHistory(
   token: string,
   organizationId: string,
   branchId: string,
+  rango?: RangoHistorial,
 ): Promise<InventoryHistoryEntry[]> {
   const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/history`,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/history${consultaDeRango(rango)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!response.ok)
@@ -3216,13 +3268,28 @@ export async function getReceiptLots(
   return (await response.json()) as ReceiptLot[];
 }
 
+/**
+ * Rango de un historial (SISTEMA-74): sin fechas, el servidor devuelve los
+ * últimos 90 días (en Compras, además, los pedidos abiertos).
+ */
+export type RangoHistorial = { desde?: string; hasta?: string };
+
+const consultaDeRango = (rango?: RangoHistorial) => {
+  const consulta = new URLSearchParams();
+  if (rango?.desde) consulta.set("desde", rango.desde);
+  if (rango?.hasta) consulta.set("hasta", rango.hasta);
+  const texto = consulta.toString();
+  return texto ? `?${texto}` : "";
+};
+
 export async function getPurchases(
   token: string,
   organizationId: string,
   branchId: string,
+  rango?: RangoHistorial,
 ): Promise<Purchase[]> {
   const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/purchases`,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/purchases${consultaDeRango(rango)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!response.ok) throw new Error("No se pudieron cargar las compras.");

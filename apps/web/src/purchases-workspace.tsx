@@ -1,4 +1,42 @@
 import {
+  productoPorCodigo,
+  productoPorId,
+  textoDeBusqueda,
+} from "./lib/indice-productos";
+
+/**
+ * Texto de búsqueda de una compra (referencia, proveedor y productos con sus
+ * códigos). Se arma una vez por compra y catálogo (SISTEMA-74): antes se
+ * rearmaba en cada redibujo, recorriendo el catálogo por cada renglón.
+ */
+const textosDeCompras = new WeakMap<
+  object,
+  { catalogo: readonly CatalogProduct[]; texto: string }
+>();
+function textoDeCompra(
+  compra: {
+    id: string;
+    reference?: string | null;
+    supplierName?: string | null;
+    items: readonly { productId: string }[];
+  },
+  catalogo: readonly CatalogProduct[],
+) {
+  const guardado = textosDeCompras.get(compra);
+  if (guardado?.catalogo === catalogo) return guardado.texto;
+  const texto =
+    `${compra.id} ${compra.reference ?? ""} ${compra.supplierName ?? ""} ${compra.items
+      .map((i) => {
+        const producto = productoPorId(catalogo, i.productId);
+        return producto
+          ? `${producto.name} ${producto.barcodes.map((b) => b.code).join(" ")}`
+          : "Producto histórico";
+      })
+      .join(" ")}`.toLocaleLowerCase("es-AR");
+  textosDeCompras.set(compra, { catalogo, texto });
+  return texto;
+}
+import {
   getMedicinePacks,
   saveMedicinePack,
   searchMedicineReferences,
@@ -250,8 +288,17 @@ export function PurchasesWorkspace({
     window.addEventListener("beforeunload", prevent);
     return () => window.removeEventListener("beforeunload", prevent);
   }, [draft]);
+  // Sin fechas, el servidor trae los pedidos abiertos y los últimos 90 días;
+  // con fechas, ese rango (SISTEMA-74).
+  const rango = useRef({ desde: from, hasta: to });
+  rango.current = { desde: from, hasta: to };
   const load = async () => {
-    const purchases = await getPurchases(token, organizationId, branchId);
+    const purchases = await getPurchases(
+      token,
+      organizationId,
+      branchId,
+      rango.current,
+    );
     setRows(purchases);
   };
   // Lo hecho sin conexión en esta PC se ve en la lista hasta que llega
@@ -315,7 +362,7 @@ export function PurchasesWorkspace({
   useEffect(() => {
     let alive = true;
     void Promise.all([
-      getPurchases(token, organizationId, branchId),
+      getPurchases(token, organizationId, branchId, rango.current),
       getParties(token, organizationId, "suppliers").catch(() => []),
     ])
       .then(([p, s]) => {
@@ -336,19 +383,19 @@ export function PurchasesWorkspace({
     return () => {
       alive = false;
     };
-  }, [token, organizationId, branchId]);
+    // Cambiar las fechas vuelve a pedir la lista con ese rango (SISTEMA-74).
+  }, [token, organizationId, branchId, from, to]);
   const patch = (value: Partial<Draft>) => {
     setDraft((d) => (d && !d.locked ? { ...d, ...value } : d));
     setReviewed(false);
   };
   const productName = (id: string) =>
-    products.find((p) => p.id === id)?.name ?? "Producto histórico";
+    productoPorId(products, id)?.name ?? "Producto histórico";
   const availableProduct = (p: CatalogProduct) =>
     p.active && (!p.branchStatus || p.branchStatus === "ACTIVE");
+  // El texto de cada producto se arma una vez, no en cada tecla (SISTEMA-74).
   const matches = (p: CatalogProduct, q: string) =>
-    `${p.name} ${p.barcodes.map((b) => b.code).join(" ")}`
-      .toLocaleLowerCase("es-AR")
-      .includes(q.trim().toLocaleLowerCase("es-AR"));
+    textoDeBusqueda(p).includes(q.trim().toLocaleLowerCase("es-AR"));
   const openDetail = async (id: string) => {
     setBusy(true);
     setError("");
@@ -706,19 +753,7 @@ export function PurchasesWorkspace({
       (!supplierFilter || p.supplierId === supplierFilter) &&
       (!from || (p.orderedAt ?? p.createdAt).slice(0, 10) >= from) &&
       (!to || (p.orderedAt ?? p.createdAt).slice(0, 10) <= to) &&
-      `${p.id} ${p.reference ?? ""} ${p.supplierName ?? ""} ${p.items
-        .map(
-          (i) =>
-            `${productName(i.productId)} ${
-              products
-                .find((pr) => pr.id === i.productId)
-                ?.barcodes.map((b) => b.code)
-                .join(" ") ?? ""
-            }`,
-        )
-        .join(" ")}`
-        .toLocaleLowerCase("es-AR")
-        .includes(query.toLocaleLowerCase("es-AR")),
+      textoDeCompra(p, products).includes(query.toLocaleLowerCase("es-AR")),
   );
   const pages = Math.max(1, Math.ceil(filtered.length / 10)),
     current = Math.min(page, pages);
@@ -995,6 +1030,12 @@ export function PurchasesWorkspace({
               </button>
             )}
           </div>
+          {!from && !to && (
+            <p className="shrink-0 px-4 pb-2 text-xs text-slate-500">
+              Se muestran los pedidos abiertos y las compras de los últimos 90
+              días. Para ver anteriores, elegí las fechas.
+            </p>
+          )}
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full min-w-[1120px] table-fixed text-left text-[15px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[13px] text-slate-500">
@@ -1498,13 +1539,14 @@ export function PurchasesWorkspace({
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault();
-                              const exact = products.find(
-                                (p) =>
-                                  availableProduct(p) &&
-                                  p.barcodes.some(
-                                    (b) => b.code === search.trim(),
-                                  ),
+                              const porCodigo = productoPorCodigo(
+                                products,
+                                search,
                               );
+                              const exact =
+                                porCodigo && availableProduct(porCodigo)
+                                  ? porCodigo
+                                  : undefined;
                               const found = products.filter(
                                 (p) =>
                                   availableProduct(p) && matches(p, search),

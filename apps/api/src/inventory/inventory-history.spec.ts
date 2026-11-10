@@ -56,6 +56,8 @@ describe("inventory history", () => {
         where: {
           organizationId: "org",
           branchId: "branch",
+          // Por defecto, los últimos 90 días (SISTEMA-74).
+          occurredAt: { gte: expect.any(Date) },
           type: {
             in: [
               "PURCHASE_RECEIPT",

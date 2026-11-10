@@ -1,3 +1,5 @@
+import { enTandas } from "../common/db/en-tandas";
+import { rangoDeHistorial } from "../common/db/rango-historial";
 import {
   ForbiddenException,
   BadRequestException,
@@ -189,8 +191,9 @@ export class InventoryService {
       where: { organizationId, branchId, quantity: { gt: 0 } },
       orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
     });
+    // Los nombres por organización, no por una lista de ids (SISTEMA-74).
     const products = await this.prisma.product.findMany({
-      where: { id: { in: lots.map((lot) => lot.productId) } },
+      where: { organizationId },
       select: { id: true, name: true },
     });
     const names = new Map(
@@ -343,13 +346,24 @@ export class InventoryService {
     return lots.filter((lot) => lot.expiresAt && lot.expiresAt <= limit);
   }
 
-  async history(actorId: string, organizationId: string, branchId: string) {
+  /**
+   * Ingresos y ajustes de la sucursal del rango pedido, por defecto los
+   * últimos 90 días (SISTEMA-74): antes traía todo el historial.
+   */
+  async history(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    filtro: { desde?: string; hasta?: string } = {},
+  ) {
     await this.assert(actorId, organizationId, "INVENTORY_READ");
     await this.branch(organizationId, branchId);
+    const { inicio, fin } = rangoDeHistorial(filtro);
     const movements = await this.prisma.inventoryMovement.findMany({
       where: {
         organizationId,
         branchId,
+        occurredAt: { gte: inicio, ...(fin ? { lte: fin } : {}) },
         type: {
           in: [
             "PURCHASE_RECEIPT",
@@ -361,24 +375,25 @@ export class InventoryService {
       },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
     });
+    // Por tandas y sin repetidos: un `IN` por movimiento excede el límite de
+    // parámetros de PostgreSQL con historiales grandes (SISTEMA-74).
     const [products, lots] = await Promise.all([
-      this.prisma.product.findMany({
-        where: {
-          organizationId,
-          id: { in: movements.map((item) => item.productId) },
-        },
-        select: { id: true, name: true },
-      }),
-      this.prisma.productLot.findMany({
-        where: {
-          organizationId,
-          branchId,
-          id: {
-            in: movements.flatMap((item) => (item.lotId ? [item.lotId] : [])),
-          },
-        },
-        select: { id: true, number: true },
-      }),
+      enTandas(
+        movements.map((item) => item.productId),
+        (tanda) =>
+          this.prisma.product.findMany({
+            where: { organizationId, id: { in: tanda } },
+            select: { id: true, name: true },
+          }),
+      ),
+      enTandas(
+        movements.flatMap((item) => (item.lotId ? [item.lotId] : [])),
+        (tanda) =>
+          this.prisma.productLot.findMany({
+            where: { organizationId, branchId, id: { in: tanda } },
+            select: { id: true, number: true },
+          }),
+      ),
     ]);
     const names = new Map(products.map((item) => [item.id, item.name]));
     const numbers = new Map(lots.map((item) => [item.id, item.number]));

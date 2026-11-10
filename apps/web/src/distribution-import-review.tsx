@@ -1,3 +1,4 @@
+import { productoPorId } from "./lib/indice-productos";
 import { useEffect, useRef, useState } from "react";
 import { Upload, ArrowLeft } from "lucide-react";
 import {
@@ -183,7 +184,7 @@ export function DistributionImportReview({
   function remember() {
     const next = { ...memory };
     for (const row of resolved) {
-      const product = products.find((p) => p.id === row.productId)!;
+      const product = productoPorId(products, row.productId)!;
       next[normalizeMedicine(row.name)] = {
         productId: product.id,
         productName: product.name,
@@ -207,7 +208,7 @@ export function DistributionImportReview({
         .filter((row) => row.missing !== null && row.missing > 0)
         .map((row) =>
           [
-            products.find((p) => p.id === row.productId)?.name || row.name,
+            productoPorId(products, row.productId)?.name || row.name,
             units[row.unit],
             String(row.missing),
           ]

@@ -29,11 +29,44 @@ import {
 } from "./branch-product-lifecycle";
 import { decodeProductImage, saveProductImage } from "./product-image";
 import {
+  rangoDeParte,
+  versionDe,
+  versionesDePartes,
+} from "./catalogo-por-partes";
+import {
   CATEGORY_ICONS,
   CATEGORY_COLORS,
   type CategoryIcon,
   type CategoryColor,
 } from "@gestion/contracts";
+
+/** Campos propios del producto que lleva el listado del catálogo. */
+const CATALOG_PRODUCT_FIELDS = {
+  id: true,
+  name: true,
+  brand: true,
+  isMedication: true,
+  categoryId: true,
+  laboratoryId: true,
+  activeIngredient: true,
+  pharmaceuticalForm: true,
+  concentration: true,
+  presentation: true,
+  externalReferenceSource: true,
+  externalReferenceName: true,
+  externalReferencePresentation: true,
+  externalReferenceBarcode: true,
+  externalReferencePriceMinor: true,
+  priceDivisor: true,
+  priceMarkupBps: true,
+  priceBaseMinor: true,
+  externalReferenceUpdatedAt: true,
+  externalReferenceCheckedAt: true,
+  saleUnit: true,
+  description: true,
+  prescriptionRequired: true,
+  active: true,
+} satisfies Prisma.ProductSelect;
 
 export const DEFAULT_CATALOG_CATEGORIES = [
   "Medicamentos",
@@ -133,94 +166,247 @@ export class CatalogService {
   }
 
   async list(actorId: string, organizationId: string, branchId?: string) {
+    await this.puedeVerCatalogo(actorId, organizationId, branchId);
+    const [productos, { categorias, laboratorios }] = await Promise.all([
+      this.armarCatalogo(organizationId, branchId),
+      this.diccionarioDelCatalogo(organizationId),
+    ]);
+    const categoria = new Map(categorias.map((c) => [c.id, c]));
+    const laboratorio = new Map(laboratorios.map((l) => [l.id, l]));
+    return productos.map(({ categoryId, laboratoryId, ...product }) => ({
+      ...product,
+      category: (categoryId && categoria.get(categoryId)) || null,
+      laboratory: (laboratoryId && laboratorio.get(laboratoryId)) || null,
+    }));
+  }
+
+  private async puedeVerCatalogo(
+    actorId: string,
+    organizationId: string,
+    branchId?: string,
+  ) {
     await this.assert(actorId, organizationId, "CATALOG_READ");
     if (branchId)
       await branchProductAccess(this.prisma, actorId, organizationId, branchId);
-    const products = await this.prisma.product.findMany({
-      where: {
-        organizationId,
-        ...(branchId
-          ? { branchStates: { none: { branchId, status: "DELETED" } } }
-          : { active: true }),
-      },
-      select: {
-        branchStates: {
-          where: {
-            branchId: branchId ?? "00000000-0000-0000-0000-000000000000",
-          },
-          select: { status: true, updatedAt: true },
-        },
-        id: true,
-        name: true,
-        brand: true,
-        isMedication: true,
-        image: { select: { updatedAt: true } },
-        activeIngredient: true,
-        pharmaceuticalForm: true,
-        concentration: true,
-        presentation: true,
-        externalReferenceSource: true,
-        externalReferenceName: true,
-        externalReferencePresentation: true,
-        externalReferenceBarcode: true,
-        externalReferencePriceMinor: true,
-        priceDivisor: true,
-        priceMarkupBps: true,
-        priceBaseMinor: true,
-        externalReferenceUpdatedAt: true,
-        externalReferenceCheckedAt: true,
-        saleUnit: true,
-        description: true,
-        prescriptionRequired: true,
-        active: true,
-        category: { select: { id: true, name: true } },
-        laboratory: { select: { id: true, name: true } },
-        barcodes: { select: { code: true, primary: true, kind: true } },
-        prices: {
-          where: {
-            priceList: {
-              is: {
-                organizationId,
-                name: "Precio general",
-                active: true,
-              },
-            },
-          },
-          select: { amountMinor: true },
-        },
-      },
-      orderBy: { name: "asc" },
-    });
-    const paths = categoryPaths(
-      await this.prisma.category.findMany({
+  }
+
+  /** Categorías (con su ruta) y laboratorios de la organización. */
+  private async diccionarioDelCatalogo(organizationId: string) {
+    const [categories, laboratories] = await Promise.all([
+      this.prisma.category.findMany({
         where: { organizationId },
         select: { id: true, name: true, parentId: true },
+        orderBy: { id: "asc" },
       }),
-    );
-    return products.map((product) => ({
-      ...product,
-      category: product.category
-        ? {
-            ...product.category,
-            path: paths.get(product.category.id) ?? product.category.name,
-          }
-        : null,
-      branchStateUpdatedAt:
-        product.branchStates[0]?.updatedAt.toISOString() ?? null,
-      branchStatus:
-        product.branchStates[0]?.status ??
-        (product.active ? "ACTIVE" : "ARCHIVED"),
-      active:
-        product.active &&
-        (!product.branchStates[0] ||
-          product.branchStates[0].status === "ACTIVE"),
-      priceBaseMinor: product.priceBaseMinor?.toString() ?? null,
-      externalReferencePriceMinor:
-        product.externalReferencePriceMinor?.toString() ?? null,
-      prices: product.prices.map((price) => ({
-        amountMinor: price.amountMinor.toString(),
+      this.prisma.laboratory.findMany({
+        where: { organizationId },
+        select: { id: true, name: true },
+        orderBy: { id: "asc" },
+      }),
+    ]);
+    const paths = categoryPaths(categories);
+    return {
+      categorias: categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        path: paths.get(c.id) ?? c.name,
       })),
-    }));
+      laboratorios: laboratories,
+    };
+  }
+
+  /**
+   * Productos del catálogo, enteros o sólo de algunas partes, con sus códigos,
+   * precio general, estado en la sucursal y foto. Categoría y laboratorio van
+   * por id: se completan con el diccionario.
+   *
+   * Catálogo grande (SISTEMA-74): los productos van en una consulta y cada
+   * relación en otra, filtrada por organización o sucursal. Pedirlas como
+   * relaciones de Prisma arma una lista con un id por producto y, con miles
+   * de productos, PostgreSQL la rechaza (límite de parámetros y de pila).
+   */
+  private async armarCatalogo(
+    organizationId: string,
+    branchId?: string,
+    partes?: string[],
+  ) {
+    const deLasPartes = partes
+      ? { OR: partes.map((parte) => ({ productId: rangoDeParte(parte) })) }
+      : {};
+    const [products, barcodes, states, images, general] = await Promise.all([
+      this.prisma.product.findMany({
+        where: {
+          organizationId,
+          ...(partes
+            ? { OR: partes.map((parte) => ({ id: rangoDeParte(parte) })) }
+            : {}),
+          ...(branchId
+            ? { branchStates: { none: { branchId, status: "DELETED" } } }
+            : { active: true }),
+        },
+        select: CATALOG_PRODUCT_FIELDS,
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.productBarcode.findMany({
+        where: { organizationId, ...deLasPartes },
+        select: { productId: true, code: true, primary: true, kind: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      branchId
+        ? this.prisma.productBranchState.findMany({
+            where: { organizationId, branchId, ...deLasPartes },
+            select: { productId: true, status: true, updatedAt: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.productImage.findMany({
+        where: { organizationId, ...deLasPartes },
+        select: { productId: true, updatedAt: true },
+      }),
+      this.prisma.priceList.findFirst({
+        where: { organizationId, name: "Precio general", active: true },
+        select: { id: true },
+      }),
+    ]);
+    const prices = general
+      ? await this.prisma.productPrice.findMany({
+          where: { priceListId: general.id, ...deLasPartes },
+          select: { productId: true, amountMinor: true },
+        })
+      : [];
+    const codigos = new Map<
+      string,
+      {
+        code: string;
+        primary: boolean;
+        kind: (typeof barcodes)[number]["kind"];
+      }[]
+    >();
+    for (const { productId, ...codigo } of barcodes) {
+      const lista = codigos.get(productId);
+      if (lista) lista.push(codigo);
+      else codigos.set(productId, [codigo]);
+    }
+    const precios = new Map(prices.map((p) => [p.productId, p.amountMinor]));
+    const estados = new Map(states.map((s) => [s.productId, s]));
+    const fotos = new Map(images.map((i) => [i.productId, i.updatedAt]));
+    return products.map((product) => {
+      const estado = estados.get(product.id);
+      const precio = precios.get(product.id);
+      const foto = fotos.get(product.id);
+      return {
+        ...product,
+        image: foto ? { updatedAt: foto } : null,
+        barcodes: codigos.get(product.id) ?? [],
+        branchStates: estado
+          ? [{ status: estado.status, updatedAt: estado.updatedAt }]
+          : [],
+        branchStateUpdatedAt: estado?.updatedAt.toISOString() ?? null,
+        branchStatus:
+          estado?.status ?? (product.active ? "ACTIVE" : "ARCHIVED"),
+        active: product.active && (!estado || estado.status === "ACTIVE"),
+        priceBaseMinor: product.priceBaseMinor?.toString() ?? null,
+        externalReferencePriceMinor:
+          product.externalReferencePriceMinor?.toString() ?? null,
+        prices:
+          precio === undefined ? [] : [{ amountMinor: precio.toString() }],
+      };
+    });
+  }
+
+  /**
+   * Versión de cada parte del catálogo y, si cambió respecto del que tiene la
+   * PC, el diccionario de categorías y laboratorios (SISTEMA-74). Con esto la
+   * PC sabe qué partes volver a pedir.
+   */
+  async catalogVersions(
+    actorId: string,
+    organizationId: string,
+    branchId?: string,
+    diccionarioDeLaPc?: string,
+  ) {
+    await this.puedeVerCatalogo(actorId, organizationId, branchId);
+    const general = await this.prisma.priceList.findFirst({
+      where: { organizationId, name: "Precio general", active: true },
+      select: { id: true },
+    });
+    type Fila = { parte: string; huella: string };
+    const huella = (consulta: Prisma.Sql) =>
+      this.prisma.$queryRaw<Fila[]>(consulta);
+    const [productos, codigos, precios, estados, fotos, diccionario] =
+      await Promise.all([
+        huella(Prisma.sql`
+          SELECT left(id::text, 2) AS parte,
+            md5(string_agg(id::text || ':' || "active"::text || ':' || "updatedAt"::text, ',' ORDER BY id)) AS huella
+          FROM "Product" WHERE "organizationId" = ${organizationId}::uuid
+          GROUP BY 1`),
+        huella(Prisma.sql`
+          SELECT left("productId"::text, 2) AS parte,
+            md5(string_agg("productId"::text || ':' || code || ':' || "primary"::text || ':' || kind::text, ',' ORDER BY "productId", code)) AS huella
+          FROM "ProductBarcode" WHERE "organizationId" = ${organizationId}::uuid
+          GROUP BY 1`),
+        general
+          ? huella(Prisma.sql`
+              SELECT left("productId"::text, 2) AS parte,
+                md5(string_agg("productId"::text || ':' || "amountMinor"::text || ':' || "updatedAt"::text, ',' ORDER BY "productId")) AS huella
+              FROM "ProductPrice" WHERE "priceListId" = ${general.id}::uuid
+              GROUP BY 1`)
+          : Promise.resolve([]),
+        branchId
+          ? huella(Prisma.sql`
+              SELECT left("productId"::text, 2) AS parte,
+                md5(string_agg("productId"::text || ':' || status || ':' || "updatedAt"::text, ',' ORDER BY "productId")) AS huella
+              FROM "ProductBranchState"
+              WHERE "organizationId" = ${organizationId}::uuid AND "branchId" = ${branchId}::uuid
+              GROUP BY 1`)
+          : Promise.resolve([]),
+        huella(Prisma.sql`
+          SELECT left("productId"::text, 2) AS parte,
+            md5(string_agg("productId"::text || ':' || "updatedAt"::text, ',' ORDER BY "productId")) AS huella
+          FROM "ProductImage" WHERE "organizationId" = ${organizationId}::uuid
+          GROUP BY 1`),
+        this.diccionarioDelCatalogo(organizationId),
+      ]);
+    const versionDiccionario = versionDe(diccionario);
+    return {
+      partes: versionesDePartes(
+        { productos, codigos, precios, estados, fotos },
+        `${general?.id ?? "sin-general"}|${branchId ?? "organizacion"}`,
+      ),
+      diccionario:
+        diccionarioDeLaPc === versionDiccionario
+          ? { version: versionDiccionario }
+          : { version: versionDiccionario, ...diccionario },
+    };
+  }
+
+  /**
+   * Productos de algunas partes del catálogo, con su versión al momento de
+   * pedirlos (SISTEMA-74). Si algo cambia en el medio, la PC la vuelve a
+   * pedir en la próxima actualización.
+   */
+  async catalogParts(
+    actorId: string,
+    organizationId: string,
+    branchId: string | undefined,
+    partes: string[],
+  ) {
+    const { partes: versiones } = await this.catalogVersions(
+      actorId,
+      organizationId,
+      branchId,
+      "no-hace-falta-el-diccionario",
+    );
+    const productos = await this.armarCatalogo(
+      organizationId,
+      branchId,
+      partes,
+    );
+    return {
+      versiones: Object.fromEntries(
+        partes.map((parte) => [parte, versiones[parte] ?? null]),
+      ),
+      productos,
+    };
   }
 
   async productImage(

@@ -1,3 +1,4 @@
+import { productoPorId } from "./lib/indice-productos";
 import { useEffect, useRef, useState } from "react";
 import { distributionPrint } from "./lib/distribution-print";
 import { DistributionProductSearch } from "./distribution-product-search";
@@ -122,7 +123,7 @@ export function DistributionWorkspace({
     );
   function choose(id: string) {
     setProductId(id);
-    setQuery(products.find((product) => product.id === id)?.name || "");
+    setQuery(productoPorId(products, id)?.name || "");
     const available = stock
       .filter((l) => l.productId === id && l.sellableQuantity > 0)
       .sort(
@@ -426,8 +427,7 @@ export function DistributionWorkspace({
               />
               {productId && (
                 <p className="mt-3 rounded-lg bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800">
-                  Seleccionado:{" "}
-                  {products.find((product) => product.id === productId)?.name}
+                  Seleccionado: {productoPorId(products, productId)?.name}
                 </p>
               )}
               <div className="mt-3 grid items-end gap-3 sm:grid-cols-[1fr_110px_auto]">

@@ -6,10 +6,28 @@ import {
   respuestaGuardada,
 } from "./cache-local";
 import {
+  conectividad,
   esFallaDeConexion,
   marcarEnLinea,
   marcarSinConexion,
 } from "./conectividad";
+
+/**
+ * Tiempo máximo de un pedido (SISTEMA-74). Sin límite, con la red caída pero
+ * sin rechazar (Wi-Fi sin internet) los pedidos quedaban colgados; el
+ * navegador admite pocos a la vez por servidor y cada pantalla nueva esperaba
+ * detrás de los anteriores: todo se volvía cada vez más lento.
+ */
+export const TIEMPO_MAXIMO_MS = 30_000;
+
+/** La señal del que llama, más el tiempo máximo. */
+function conTiempoMaximo(senal?: AbortSignal | null) {
+  const limite = AbortSignal.timeout(TIEMPO_MAXIMO_MS);
+  if (!senal) return limite;
+  return typeof AbortSignal.any === "function"
+    ? AbortSignal.any([senal, limite])
+    : senal;
+}
 import { registrarHoraServidor } from "./venta-sin-conexion";
 
 /** Evento que avisa que la API cortó por el estado de la suscripción. */
@@ -68,12 +86,19 @@ export async function apiFetch(
 ): Promise<Response> {
   const url = urlDe(input);
   const metodo = metodoDe(input, init);
-  const sinConexion = trabajaSinConexion(init);
+  // Sin conexión conocida no se sale a la red: se responde con la copia de
+  // la PC. Cuando vuelve, lo detecta el sondeo de /health (cada 15 s).
+  const sinConexion = trabajaSinConexion(init) || !conectividad().enLinea;
   let response: Response | undefined;
   if (!sinConexion) {
     try {
-      response = await globalThis.fetch(input, init);
+      response = await globalThis.fetch(input, {
+        ...init,
+        signal: conTiempoMaximo(init?.signal),
+      });
     } catch (error) {
+      // Si canceló quien llamó (cambió de pantalla), no es falta de conexión.
+      if (init?.signal?.aborted) throw error;
       if (!esErrorDeRed(error)) throw error;
     }
   }
@@ -91,6 +116,9 @@ export async function apiFetch(
     return response;
   }
   if (!sinConexion) marcarSinConexion();
+  else if (!trabajaSinConexion(init) && metodo !== "GET")
+    // Con la sesión real pero sin conexión: la escritura no sale a la red.
+    throw new SinConexionError();
   if (metodo === "GET") {
     const guardada = await respuestaGuardada(url).catch(() => undefined);
     if (guardada) return guardada;

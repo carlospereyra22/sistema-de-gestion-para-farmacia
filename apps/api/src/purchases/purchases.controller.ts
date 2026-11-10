@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -29,6 +30,7 @@ import {
   validate,
 } from "class-validator";
 import type { AuthenticatedRequest } from "../auth/auth.types";
+import { HistorialQueryDto } from "../common/db/historial-query.dto";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { PurchasesService } from "./purchases.service";
@@ -299,8 +301,14 @@ export class PurchasesController {
     @Req() request: AuthenticatedRequest,
     @Param("organizationId") organizationId: string,
     @Param("branchId") branchId: string,
+    @Query() filtro: HistorialQueryDto,
   ) {
-    return this.purchases.list(request.auth!.sub, organizationId, branchId);
+    return this.purchases.list(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      filtro,
+    );
   }
   @Post() create(
     @Req() request: AuthenticatedRequest,

@@ -1,3 +1,4 @@
+import { productoPorId } from "./lib/indice-productos";
 import { useEffect, useRef, useState } from "react";
 import { History, X, Search } from "lucide-react";
 import {
@@ -122,35 +123,42 @@ function HistoryDialog({
   }, []);
   useEffect(() => {
     let active = true;
+    // Sin fechas, el servidor trae los últimos 90 días (SISTEMA-74).
+    const rango = { desde: from || undefined, hasta: to || undefined };
     const scope = `${kind}:${organizationId}:${branchId}`;
     const initial = loadedScope.current !== scope;
     setLoading(initial);
     setError("");
     if (initial) setRows([]);
     const productName = (id: string) =>
-      products.find((item) => item.id === id)?.name ?? `Producto ${id}`;
+      productoPorId(products, id)?.name ?? `Producto ${id}`;
     const branchName = (id: string) =>
       branches.find((item) => item.id === id)?.name ?? "Sucursal no disponible";
     async function load(): Promise<HistoryRow[]> {
       if (kind === "Inventario")
-        return (await getInventoryHistory(token, organizationId, branchId)).map(
-          (item) => ({
-            id: item.id,
-            date: item.occurredAt,
-            title: item.productName,
-            status:
-              item.referenceType === "DISTRIBUTION" ||
-              item.referenceType === "DISTRIBUTION_REVERSAL"
-                ? item.referenceType
-                : item.type,
-            detail: [
-              `Lote: ${item.lotNumber ?? "Sin lote"}`,
-              `Variación: ${item.quantity > 0 ? "+" : ""}${item.quantity} unidades`,
-            ],
-          }),
-        );
+        return (
+          await getInventoryHistory(token, organizationId, branchId, rango)
+        ).map((item) => ({
+          id: item.id,
+          date: item.occurredAt,
+          title: item.productName,
+          status:
+            item.referenceType === "DISTRIBUTION" ||
+            item.referenceType === "DISTRIBUTION_REVERSAL"
+              ? item.referenceType
+              : item.type,
+          detail: [
+            `Lote: ${item.lotNumber ?? "Sin lote"}`,
+            `Variación: ${item.quantity > 0 ? "+" : ""}${item.quantity} unidades`,
+          ],
+        }));
       if (kind === "Compras") {
-        const purchases = await getPurchases(token, organizationId, branchId);
+        const purchases = await getPurchases(
+          token,
+          organizationId,
+          branchId,
+          rango,
+        );
         // El historial no requiere permiso de gestión de proveedores para ver una compra.
         const suppliers = await getParties(
           token,
@@ -176,8 +184,7 @@ function HistoryDialog({
           detail: item.items.map(
             (line) =>
               `${productName(line.productId)} · ${
-                products
-                  .find((p) => p.id === line.productId)
+                productoPorId(products, line.productId)
                   ?.barcodes.map((b) => b.code)
                   .join(" ") ?? ""
               } · ${line.receivedQuantity}/${line.orderedQuantity} recibidas · ${line.cancelledQuantity ?? 0} no entregadas · Costo unitario ${purchaseCostLabel(line.unitCostMinor, money)} · ${item.reference ?? ""}`,
@@ -218,7 +225,17 @@ function HistoryDialog({
     return () => {
       active = false;
     };
-  }, [kind, token, organizationId, branchId, products, branches, retry]);
+  }, [
+    kind,
+    token,
+    organizationId,
+    branchId,
+    products,
+    branches,
+    retry,
+    from,
+    to,
+  ]);
   const filtered = filterHistory(rows, query, status, from, to);
   const pages = Math.max(1, Math.ceil(filtered.length / 20));
   const currentPage = Math.min(page, pages - 1);

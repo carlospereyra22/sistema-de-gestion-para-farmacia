@@ -1,3 +1,4 @@
+import { productoPorId } from "./lib/indice-productos";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { InventoryLotInput } from "./inventory-lot-input";
@@ -109,7 +110,7 @@ export function PurchaseReceiptTable({
     return groups;
   }, [existingLots, pendingLots]);
   const visible = items.filter((item) => {
-    const product = products.find((entry) => entry.id === item.productId);
+    const product = productoPorId(products, item.productId);
     return (
       !search ||
       `${product?.name ?? "Producto histórico"} ${product?.barcodes.map((barcode) => barcode.code).join(" ") ?? ""}`
@@ -157,9 +158,7 @@ export function PurchaseReceiptTable({
         </thead>
         <tbody>
           {visible.map((item) => {
-            const product = products.find(
-              (entry) => entry.id === item.productId,
-            );
+            const product = productoPorId(products, item.productId);
             const name = product?.name ?? "Producto histórico";
             const detail = productDetail(product);
             const itemLots = lots.filter((lot) => lot.itemId === item.id);
