@@ -31,13 +31,13 @@ const CADA_CUANTO_ANOTAR_MS = 60_000;
 const RUTAS_GUARDADAS = [/^\/organizations\/[^/]+(\/.*)?$/];
 
 /**
- * El catálogo y el stock por partes los guarda `copia-por-partes.ts`, parte
+ * El catálogo, el stock y los costos por partes los guarda `copia-por-partes.ts`, parte
  * por parte (SISTEMA-74 y SISTEMA-77): copiarlos además acá duplicaría
  * decenas de MB.
  */
 const RUTAS_NO_GUARDADAS = [
   /\/catalog\/products\/(partes|versiones)$/,
-  /\/inventory\/stock\/(partes|versiones)$/,
+  /\/inventory\/(stock|costs)\/(partes|versiones)$/,
 ];
 
 let alcance: string | undefined;

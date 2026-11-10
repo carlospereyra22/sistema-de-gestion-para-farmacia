@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -239,6 +240,12 @@ async function operacionDeCuenta(
   return { ...op, cuerpo } as unknown as OperacionCuentaSinConexion;
 }
 
+/** Estado de cuenta de un cliente y desde un día (SISTEMA-78). */
+class StatementQueryDto {
+  @IsOptional() @IsUUID() customerId?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) desde?: string;
+}
+
 @Controller(
   "organizations/:organizationId/branches/:branchId/customer-accounts",
 )
@@ -299,8 +306,9 @@ export class AccountsController {
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
+    @Query() filtro: StatementQueryDto,
   ) {
-    return this.accounts.statement(req.auth!.sub, org, branch);
+    return this.accounts.statement(req.auth!.sub, org, branch, filtro);
   }
   @Post(":customerId/debt-increase") increaseTotalDebt(
     @Req() req: AuthenticatedRequest,

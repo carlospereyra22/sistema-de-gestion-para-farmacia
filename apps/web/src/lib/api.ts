@@ -1379,6 +1379,9 @@ export type CustomerAccount = {
 export type CustomerAccountMovement = {
   /** Hecho sin conexión y todavía no enviado (SISTEMA-70). */
   porEnviar?: boolean;
+  /** Sucursal y si va en el resumen impreso (SISTEMA-78). */
+  branchId?: string;
+  showInStatement?: boolean;
   clientOperationId?: string | null;
   isPriceAdjustment?: boolean;
   isDebtAdjustment?: boolean;
@@ -1608,7 +1611,8 @@ async function getCustomerAccountsDelServidor(
     );
   return (await response.json()) as CustomerAccount[];
 }
-async function getCustomerAccountMovementsDelServidor(
+/** Movimientos de un cliente como los tiene el servidor (o su copia en la PC). */
+export async function getCustomerAccountMovementsDelServidor(
   token: string,
   organizationId: string,
   branchId: string,
@@ -2036,7 +2040,84 @@ export type InventoryCosts = {
   suppliers?: { id: string; name: string }[];
 };
 
+/**
+ * Costos de la sucursal, por partes como el stock (SISTEMA-78): una venta no
+ * cambia ningún costo, así que no se vuelve a bajar nada; una recepción baja
+ * sólo la parte de ese producto. Sin sesión en la PC se piden enteros.
+ */
 export async function getInventoryCosts(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<InventoryCosts> {
+  const alcance = alcanceActual();
+  if (!alcance)
+    return getInventoryCostsCompletos(token, organizationId, branchId);
+  const base = `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/costs`;
+  const pedir = async <T>(ruta: string) => {
+    const response = await fetch(`${base}/${ruta}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok)
+      throw await responseError(response, "No se pudieron cargar los costos.");
+    return (await response.json()) as T;
+  };
+  try {
+    return await copiaAlDia<CostosDeParte, never, InventoryCosts>({
+      base: `${alcance}|costos|${organizationId}|${branchId}|`,
+      versiones: () => pedir<{ partes: Record<string, string> }>("versiones"),
+      partes: async (partes) => {
+        const respuesta = await pedir<{
+          versiones: Record<string, string | null>;
+          partes: Record<string, InventoryCosts>;
+        }>(`partes?partes=${partes.join(",")}`);
+        return {
+          versiones: respuesta.versiones,
+          elementos: Object.entries(respuesta.partes).map(
+            ([parte, costos]) => ({ parte, costos }),
+          ),
+        };
+      },
+      parteDe: (elemento) => elemento.parte,
+      armar: (partes) => juntarCostos(partes),
+    });
+  } catch {
+    // Una API que todavía no tiene los costos por partes, o la primera vez sin
+    // conexión después de actualizar: el pedido completo (o su copia).
+    return getInventoryCostsCompletos(token, organizationId, branchId);
+  }
+}
+
+/** Costos de una parte, como los guarda la PC. */
+type CostosDeParte = { parte: string; costos: InventoryCosts };
+
+/** Junta los costos de las partes como el pedido completo. */
+export function juntarCostos(
+  partes: Iterable<CostosDeParte[]>,
+): InventoryCosts {
+  const r: Required<InventoryCosts> = {
+    products: [],
+    lots: [],
+    adjustments: [],
+    suppliers: [],
+  };
+  const proveedores = new Set<string>();
+  for (const parte of partes)
+    for (const { costos } of parte) {
+      r.products.push(...costos.products);
+      r.lots.push(...costos.lots);
+      r.adjustments.push(...(costos.adjustments ?? []));
+      for (const proveedor of costos.suppliers ?? [])
+        if (!proveedores.has(proveedor.id)) {
+          proveedores.add(proveedor.id);
+          r.suppliers.push(proveedor);
+        }
+    }
+  return r;
+}
+
+/** Los costos enteros en un solo pedido. */
+async function getInventoryCostsCompletos(
   token: string,
   organizationId: string,
   branchId: string,

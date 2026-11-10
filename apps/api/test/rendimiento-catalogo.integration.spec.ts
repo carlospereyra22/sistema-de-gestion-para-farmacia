@@ -252,6 +252,19 @@ describir("rendimiento con catálogo grande (esquema aislado)", () => {
         ),
       );
     }
+    // Costos por partes (SISTEMA-78).
+    const versionesDeCostos = await medir("versiones de costos", () =>
+      inventario.costsVersions(usuario, org, sucursales[0]!),
+    );
+    if (versionesDeCostos)
+      await medir("32 partes de costos", () =>
+        inventario.costsParts(
+          usuario,
+          org,
+          sucursales[0]!,
+          Object.keys(versionesDeCostos.partes).slice(0, 32),
+        ),
+      );
     // Stock por partes (SISTEMA-77).
     const versionesDeStock = await medir("versiones del stock", () =>
       inventario.stockVersions(usuario, org, sucursales[0]!),
@@ -300,6 +313,18 @@ describir("rendimiento con catálogo grande (esquema aislado)", () => {
     );
     await medir("estado de cuenta (sucursal)", () =>
       cuentas.statement(usuario, org, sucursales[0]!),
+    );
+    // Estado de cuenta de lo que se imprime (SISTEMA-78).
+    const unCliente = (await cuentas.list(usuario, org))[0]!.id;
+    await medir("estado de cuenta (un cliente)", () =>
+      cuentas.statement(usuario, org, sucursales[0]!, {
+        customerId: unCliente,
+      }),
+    );
+    await medir("estado de cuenta (desde hace 7 días)", () =>
+      cuentas.statement(usuario, org, sucursales[0]!, {
+        desde: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
+      }),
     );
     await medir("vencimientos de cuentas", () =>
       cuentas.dueDates(usuario, org, sucursales[0]!),
