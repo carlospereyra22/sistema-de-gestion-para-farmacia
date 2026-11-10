@@ -1,10 +1,18 @@
-import { apiFetch as fetch } from "./lib/api-fetch";
+import { apiFetch as fetch, SinConexionError } from "./lib/api-fetch";
+import {
+  cajaSinConexion,
+  guardarOperacionCaja,
+  type OperacionCaja,
+} from "./lib/caja-sin-conexion";
+import { ventasDeLaPc } from "./lib/bandeja-ventas";
+import { conectividad } from "./lib/conectividad";
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import {
   apiBaseUrl,
   getCash,
   getCashPendingCollections,
+  puedeOperarSinConexion,
   saleInvoice,
   type CashPendingCollection as Collection,
   type CashRegister,
@@ -124,27 +132,74 @@ export function CashPendingCollections({
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch(`${url}/${row.id}/${paths[action]}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-          action === "incorporate"
-            ? { cashSessionId: sessionId }
+      // Sin conexión (o con algo de este cobro todavía en la PC), queda en la
+      // PC y se manda solo al volver, en orden (SISTEMA-81).
+      const enLaPc = async () => {
+        await puedeOperarSinConexion(token, organizationId);
+        await guardarOperacionCaja(organizationId, branchId, {
+          tipo:
+            action === "incorporate"
+              ? "COBRO_INCORPORAR"
+              : action === "clear"
+                ? "COBRO_QUITAR"
+                : "COBRO_DESTINO",
+          collectionId: row.id,
+          ...(action === "incorporate"
+            ? {
+                sessionId,
+                ...(BigInt(row.cashMinor) > 0n
+                  ? { amountMinor: Number(row.cashMinor) }
+                  : {}),
+              }
             : action === "clear"
               ? { expectedRegisterId: targetId }
-              : { cashRegisterId: targetId },
-        ),
-      });
-      if (!response.ok) {
-        const body = (await response.json()) as { message?: string | string[] };
-        throw new Error(
-          typeof body.message === "string"
-            ? body.message
-            : "No se pudo guardar. Actualizá y reintentá.",
-        );
+              : { cashRegisterId: targetId }),
+        });
+        guardadaEnPc = true;
+      };
+      let guardadaEnPc = false;
+      const bandejaActual = await ventasDeLaPc().catch(() => []);
+      const enEspera = bandejaActual.some(
+        (item) =>
+          item.estado === "PENDIENTE" &&
+          item.operacion === "CAJA" &&
+          ((item.cuerpo as OperacionCaja).collectionId === row.id ||
+            // Una sesión abierta sin conexión todavía no está en el servidor.
+            (action === "incorporate" && item.id === sessionId)),
+      );
+      if (enEspera || cajaSinConexion(token, conectividad().enLinea))
+        await enLaPc();
+      else {
+        let response: Response | undefined;
+        try {
+          response = await fetch(`${url}/${row.id}/${paths[action]}`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(
+              action === "incorporate"
+                ? { cashSessionId: sessionId }
+                : action === "clear"
+                  ? { expectedRegisterId: targetId }
+                  : { cashRegisterId: targetId },
+            ),
+          });
+        } catch (cause) {
+          if (!(cause instanceof SinConexionError)) throw cause;
+          await enLaPc();
+        }
+        if (response && !response.ok) {
+          const body = (await response.json()) as {
+            message?: string | string[];
+          };
+          throw new Error(
+            typeof body.message === "string"
+              ? body.message
+              : "No se pudo guardar. Actualizá y reintentá.",
+          );
+        }
       }
       setRows((current) =>
         action === "incorporate"
@@ -163,13 +218,15 @@ export function CashPendingCollections({
         row.sourceType === "SALE" &&
         row.facturaEnEspera;
       setNotice(
-        facturaLiberada
-          ? `${notices.incorporate} La factura de la venta se está enviando a ARCA.`
-          : notices[action],
+        guardadaEnPc
+          ? `${notices[action]} Guardado sin conexión: se envía solo cuando vuelva internet.`
+          : facturaLiberada
+            ? `${notices.incorporate} La factura de la venta se está enviando a ARCA.`
+            : notices[action],
       );
       // La factura que esperaba la caja se pide enseguida, como al vender; si
       // no se puede (permisos, ARCA), la cola fiscal la envía en su vuelta.
-      if (facturaLiberada)
+      if (facturaLiberada && !guardadaEnPc)
         void saleInvoice(
           token,
           organizationId,

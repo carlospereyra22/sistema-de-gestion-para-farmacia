@@ -9,7 +9,16 @@ import { ahoraSegunServidor, idDeEstaPc } from "./venta-sin-conexion";
 // la PC que todavía no llegó: aperturas, ventas, movimientos y cierres.
 
 export type OperacionCaja = {
-  tipo: "APERTURA" | "MOVIMIENTO" | "CIERRE";
+  tipo:
+    | "APERTURA"
+    | "MOVIMIENTO"
+    | "CIERRE"
+    // Cobros pendientes de caja (SISTEMA-81).
+    | "COBRO_DESTINO"
+    | "COBRO_INCORPORAR"
+    | "COBRO_QUITAR";
+  collectionId?: string;
+  expectedRegisterId?: string;
   clientOperationId: string;
   occurredAt: string;
   deviceId: string;
@@ -105,6 +114,28 @@ export function aplicarCajaLocal(
         );
         if (abierta) alias.set(op.clientOperationId, abierta.id);
         else porId.set(op.clientOperationId, sesionLocal(op));
+        continue;
+      }
+      // Asignar o quitar la caja de un cobro no mueve plata (SISTEMA-81).
+      if (op.tipo === "COBRO_DESTINO" || op.tipo === "COBRO_QUITAR") continue;
+      if (op.tipo === "COBRO_INCORPORAR") {
+        // El efectivo del cobro entra a la sesión, como en el servidor.
+        const sesion = porId.get(real(op.sessionId)!);
+        const efectivo = BigInt(op.amountMinor ?? 0);
+        if (!sesion || sesion.closedAt || efectivo <= 0n) continue;
+        sesion.movements.push({
+          id: op.clientOperationId,
+          type: "IN",
+          amountMinor: efectivo.toString(),
+          reason: "Asignación de cobro sin caja · sin conexión",
+          createdAt: op.occurredAt,
+          actorName: item.actorName ?? item.alcance,
+        });
+        sesion.manualInMinor = sumar(sesion.manualInMinor, efectivo);
+        sesion.expectedAmountMinor = sumar(
+          sesion.expectedAmountMinor,
+          efectivo,
+        );
         continue;
       }
       const sesion = porId.get(real(op.sessionId)!);
@@ -320,4 +351,43 @@ export function ultimoCierreLocal(
     closedBy: cierre.actorName ?? cierre.alcance,
     sinEnviar: true,
   };
+}
+
+/**
+ * Cobros pendientes de caja con lo hecho en la PC que todavía no llegó
+ * (SISTEMA-81): los incorporados salen de la lista y los que cambiaron de caja
+ * muestran la nueva.
+ */
+export function cobrosConPendientes<
+  T extends { id: string; destinationRegisterId: string | null },
+>(
+  cobros: readonly T[],
+  bandeja: readonly VentaPendiente[],
+  organizationId: string,
+  branchId: string,
+): T[] {
+  const ops = bandeja
+    .filter(
+      (item) =>
+        item.operacion === "CAJA" &&
+        item.estado === "PENDIENTE" &&
+        item.organizationId === organizationId &&
+        item.branchId === branchId &&
+        Boolean((item.cuerpo as OperacionCaja).collectionId),
+    )
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
+    .map((item) => item.cuerpo as OperacionCaja);
+  if (!ops.length) return cobros as T[];
+  let r = cobros.map((cobro) => ({ ...cobro }));
+  for (const op of ops) {
+    if (op.tipo === "COBRO_INCORPORAR")
+      r = r.filter((cobro) => cobro.id !== op.collectionId);
+    else {
+      const cobro = r.find((c) => c.id === op.collectionId);
+      if (cobro)
+        cobro.destinationRegisterId =
+          op.tipo === "COBRO_DESTINO" ? (op.cashRegisterId ?? null) : null;
+    }
+  }
+  return r;
 }

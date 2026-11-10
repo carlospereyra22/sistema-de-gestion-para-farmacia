@@ -71,7 +71,15 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
       return {
         titulo: "Caja cerrada al sincronizar",
         detalle:
+          texto(d.motivo) ||
           "El cobro quedó pendiente de asignar a una caja. Asignalo desde Caja.",
+      };
+    // Cobros pendientes de caja sin conexión (SISTEMA-81).
+    case "COBRO_YA_ASIGNADO":
+      return {
+        titulo:
+          `Cobro pendiente ya resuelto: ${texto(d.origen) || "cobro"} ${texto(d.comprobante)}`.trim(),
+        detalle: `${texto(d.motivo) || "Otra PC ya lo había resuelto."} No se movió plata.`,
       };
     case "FACTURA_NO_PREPARADA":
       return {

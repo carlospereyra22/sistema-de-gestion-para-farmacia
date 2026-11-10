@@ -2,6 +2,17 @@
 
 ## DECIDED
 
+- 11/11/2026 (SISTEMA-81): Asignar cobros pendientes de caja deja de ser "sólo con conexión"
+  (decisión del 09/11/2026): asignar caja, incorporar a una sesión y quitar la caja son
+  operaciones de caja sin conexión (`cash/offline`, tipos `COBRO_DESTINO`,
+  `COBRO_INCORPORAR` y `COBRO_QUITAR`). Ante un choque no se mueve plata: queda aviso
+  (`COBRO_YA_ASIGNADO`, o `CAJA_CERRADA` si la sesión ya se cerró). La incorporación con y
+  sin conexión comparte el mismo código (`incorporarCobro`). También: la creación de
+  productos en tanda desde una factura de Compras funciona sin conexión, y una compra con un
+  producto creado sin conexión espera en la PC detrás de su alta. Una escritura automática
+  que la pantalla hace al abrirse (preparar las categorías por defecto en Productos) no se
+  intenta sin conexión: su error aparecía como aviso en otras pantallas.
+
 - 10/11/2026 (SISTEMA-80): Categorías y laboratorios y listas de precios funcionan sin
   conexión con el mismo circuito que productos (`catalog/offline`, nuevos tipos de
   operación); la regla de choques es la de productos: el cambio más reciente gana, dato por

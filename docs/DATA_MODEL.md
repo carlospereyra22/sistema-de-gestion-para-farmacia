@@ -48,6 +48,8 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261111200000_offline_options_price_lists` (SISTEMA-80): `OfflineOperation` admite `CATALOG_OPTION_UPDATE`, `CATALOG_OPTION_DELETE`, `CATALOG_OPTION_ICON`, `CATALOG_LAB_LOGO`, `CATALOG_PRICE_LIST_CREATE`, `CATALOG_PRICE_LIST_UPDATE` y `CATALOG_PRICE_LIST_PRICES`; `OfflineSyncIssue` suma `NOMBRE_REPETIDO`. Sólo cambia los CHECK. Una lista creada sin conexión usa como id la clave de la PC (o, si ya existía con ese nombre, `OfflineOperation.entityId` dice cuál se usó). Los cambios de precios sin conexión dejan en `PRICE_LIST_UPDATED` la hora real (`occurredAt`), para comparar con los de otras PCs.
 
+`20261111300000_offline_cash_collections` (SISTEMA-81): `OfflineOperation` admite `CASH_COLLECTION_DESTINATION`, `CASH_COLLECTION_ASSIGN` y `CASH_COLLECTION_CLEAR`; `OfflineSyncIssue` suma `COBRO_YA_ASIGNADO`. Sólo cambia los CHECK.
+
 ## Operational MVP
 
 La migración aditiva `20261027000000_product_brand_kind` incorpora `Product.brand` opcional (120 caracteres) y `Product.isMedication` booleano. Conserva como medicinales los registros previamente vinculados, con receta o categoría Medicamentos; no modifica precios ni historial. Marca se normaliza por espacios al guardar y se mantiene separada de Laboratory.

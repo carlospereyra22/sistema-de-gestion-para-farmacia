@@ -20,6 +20,7 @@ import {
   horaUltimaSincronizacion,
 } from "./cache-local";
 import { copiaAlDia } from "./copia-por-partes";
+import { cobrosConPendientes } from "./caja-sin-conexion";
 import { productoPorId } from "./indice-productos";
 import {
   listasConPendientes,
@@ -2467,7 +2468,13 @@ export async function getCashPendingCollections(
   );
   if (!response.ok)
     throw new Error("No se pudieron consultar los cobros pendientes.");
-  return (await response.json()) as CashPendingCollection[];
+  // Con lo asignado o incorporado en la PC que todavía no llegó (SISTEMA-81).
+  return cobrosConPendientes(
+    (await response.json()) as CashPendingCollection[],
+    await bandejaDeLaPc(),
+    organizationId,
+    branchId,
+  );
 }
 
 export type CashClosure = CashSession & {

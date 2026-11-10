@@ -2268,7 +2268,13 @@ function Products({
     // consulta carga las opciones existentes.
     void (
       canManage
-        ? ensureDefaultCatalogCategories(token, organizationId)
+        ? ensureDefaultCatalogCategories(token, organizationId).catch(
+            (cause: unknown) => {
+              // Sin conexión no se preparan (ya están en la copia de la PC):
+              // no es un error de lo que está haciendo el usuario (SISTEMA-81).
+              if (!(cause instanceof SinConexionError)) throw cause;
+            },
+          )
         : Promise.resolve()
     )
       .then(() => getCatalogOptions(token, organizationId))
