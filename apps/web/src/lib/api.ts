@@ -19,6 +19,7 @@ import {
   alcanceActual,
   horaUltimaSincronizacion,
 } from "./cache-local";
+import { copiaAlDia } from "./copia-por-partes";
 import {
   catalogoAlDia,
   type PartesDelCatalogo,
@@ -1909,6 +1910,7 @@ export type StockLot = {
   expiresAt: string | null;
   /** Solo llega con permiso para ver costos. */
   unitCostMinor?: string;
+  createdAt?: string;
   packFactor?: number | null;
   packCount?: number;
   // quantity: lo que le queda en el lote, gastando primero lo más viejo. En 0
@@ -1918,7 +1920,82 @@ export type StockLot = {
   unassignedQuantity?: number;
 };
 
+/**
+ * Stock de la sucursal. Se baja por partes y sólo lo que cambió desde la
+ * última vez; la PC lo guarda y sin conexión lo arma con lo guardado
+ * (SISTEMA-77, como el catálogo). Sin sesión en la PC se pide entero.
+ */
 export async function getStock(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<StockLot[]> {
+  const alcance = alcanceActual();
+  if (!alcance) return getStockCompleto(token, organizationId, branchId);
+  const base = `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/stock`;
+  const pedir = async <T>(ruta: string) => {
+    const response = await fetch(`${base}/${ruta}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("No se pudo cargar el stock.");
+    return (await response.json()) as T;
+  };
+  try {
+    return await copiaAlDia<LoteGuardado, never, StockLot[]>({
+      base: `${alcance}|stock|${organizationId}|${branchId}|`,
+      versiones: () => pedir<{ partes: Record<string, string> }>("versiones"),
+      partes: async (partes) => {
+        const respuesta = await pedir<{
+          versiones: Record<string, string | null>;
+          lotes: StockLot[];
+        }>(`partes?partes=${partes.join(",")}`);
+        return {
+          versiones: respuesta.versiones,
+          elementos: respuesta.lotes.map(sinDisponibilidad),
+        };
+      },
+      parteDe: (lote) => lote.productId.slice(0, 2).toLowerCase(),
+      armar: (partes) => armarStock(partes),
+      // Vencido o por vencer depende del día: se vuelve a calcular cada día.
+      vigencia: () => new Date().toDateString(),
+    });
+  } catch {
+    // Una API que todavía no tiene el stock por partes, o la primera vez sin
+    // conexión después de actualizar: el pedido completo (o su copia).
+    return getStockCompleto(token, organizationId, branchId);
+  }
+}
+
+/** Lote guardado en la PC: sin lo que depende del día, que se calcula al armar. */
+type LoteGuardado = Omit<
+  StockLot,
+  "sellableQuantity" | "expiredQuantity" | "expiryStatus"
+>;
+
+function sinDisponibilidad(lote: StockLot): LoteGuardado {
+  const guardado: Partial<StockLot> = { ...lote };
+  delete guardado.sellableQuantity;
+  delete guardado.expiredQuantity;
+  delete guardado.expiryStatus;
+  return guardado as LoteGuardado;
+}
+
+/** Arma el stock como el pedido completo: primero lo que vence antes. */
+export function armarStock(partes: Iterable<LoteGuardado[]>): StockLot[] {
+  const lotes: LoteGuardado[] = [];
+  for (const parte of partes) lotes.push(...parte);
+  return lotes
+    .sort(
+      (a, b) =>
+        (a.expiresAt ?? "\uffff").localeCompare(b.expiresAt ?? "\uffff") ||
+        (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
+        a.id.localeCompare(b.id),
+    )
+    .map((lote) => withStockAvailability(lote));
+}
+
+/** El stock entero en un solo pedido. */
+async function getStockCompleto(
   token: string,
   organizationId: string,
   branchId: string,

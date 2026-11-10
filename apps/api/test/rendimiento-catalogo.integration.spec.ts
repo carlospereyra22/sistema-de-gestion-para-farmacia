@@ -22,6 +22,10 @@ const LOTES_POR_SUCURSAL = Number(process.env.RENDIMIENTO_LOTES ?? 20000);
 const COMPRAS = Number(process.env.RENDIMIENTO_COMPRAS ?? 3000);
 const DEUDAS = Number(process.env.RENDIMIENTO_DEUDAS ?? 3000);
 const CLIENTES = Number(process.env.RENDIMIENTO_CLIENTES ?? 3000);
+// Prueba de carga (SISTEMA-77): PCs actualizando a la vez, repartidas en las
+// sucursales, y cuántas vueltas.
+const PCS = Number(process.env.RENDIMIENTO_PCS ?? 10);
+const VUELTAS = Number(process.env.RENDIMIENTO_VUELTAS ?? 5);
 const describir = process.env.RENDIMIENTO === "1" ? describe : describe.skip;
 
 describir("rendimiento con catálogo grande (esquema aislado)", () => {
@@ -248,6 +252,19 @@ describir("rendimiento con catálogo grande (esquema aislado)", () => {
         ),
       );
     }
+    // Stock por partes (SISTEMA-77).
+    const versionesDeStock = await medir("versiones del stock", () =>
+      inventario.stockVersions(usuario, org, sucursales[0]!),
+    );
+    if (versionesDeStock)
+      await medir("32 partes del stock", () =>
+        inventario.stockParts(
+          usuario,
+          org,
+          sucursales[0]!,
+          Object.keys(versionesDeStock.partes).slice(0, 32),
+        ),
+      );
     // Resto de los módulos con volumen (SISTEMA-74).
     const compras = app.get(PurchasesService);
     const pagar = app.get(SupplierPayablesService);
@@ -300,4 +317,85 @@ describir("rendimiento con catálogo grande (esquema aislado)", () => {
       ),
     );
   }, 600000);
+
+  // Prueba de carga (SISTEMA-77): varias PCs de dos sucursales actualizan a la
+  // vez, como después de cada venta. Antes cada PC pedía el catálogo y el stock
+  // enteros; ahora pide las versiones y sólo la parte que cambió (en cada
+  // vuelta se vende de un lote de cada sucursal).
+  it("aguanta varias PCs actualizando a la vez", async () => {
+    const catalog = app.get(CatalogService);
+    const inventario = app.get(InventoryService);
+    const pcs = Array.from({ length: PCS }, (_, i) => ({
+      sucursal: sucursales[i % sucursales.length]!,
+    }));
+    const tamano = (valor: unknown) =>
+      JSON.stringify(valor, (_, v: unknown) =>
+        typeof v === "bigint" ? v.toString() : v,
+      ).length;
+    const vender = async () => {
+      for (const branchId of sucursales)
+        await db.$executeRaw`
+          UPDATE "ProductLot" SET quantity = quantity - 1
+          WHERE id = (SELECT id FROM "ProductLot"
+            WHERE "branchId" = ${branchId}::uuid AND quantity > 1
+            ORDER BY random() LIMIT 1)`;
+    };
+    const vueltas = async (
+      nombre: string,
+      actualizar: (pc: (typeof pcs)[number]) => Promise<number>,
+    ) => {
+      const tiempos: number[] = [];
+      let bytes = 0;
+      let memoria = 0;
+      const inicio = performance.now();
+      for (let v = 0; v < VUELTAS; v++) {
+        await vender();
+        await Promise.all(
+          pcs.map(async (pc) => {
+            const desde = performance.now();
+            // En dos pasos: `bytes += await` pierde sumas entre PCs.
+            const recibidos = await actualizar(pc);
+            bytes += recibidos;
+            tiempos.push(performance.now() - desde);
+          }),
+        );
+        memoria = Math.max(memoria, process.memoryUsage().heapUsed);
+      }
+      const total = performance.now() - inicio;
+      tiempos.sort((a, b) => a - b);
+      const p95 = tiempos[Math.floor(tiempos.length * 0.95)] ?? 0;
+      medidas.push(
+        `  ${nombre.padEnd(34)} ${VUELTAS} vueltas × ${PCS} PCs: ${(total / 1000).toFixed(1)} s · por PC p50 ${tiempos[Math.floor(tiempos.length / 2)]!.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms · ${(bytes / 1024 / 1024).toFixed(0)} MB · memoria ${(memoria / 1024 / 1024).toFixed(0)} MB`,
+      );
+      return p95;
+    };
+    // Antes: catálogo y stock enteros en cada actualización.
+    await vueltas("carga: catálogo y stock enteros", async (pc) => {
+      const [catalogo, stock] = await Promise.all([
+        catalog.list(usuario, org, pc.sucursal),
+        inventario.stock(usuario, org, pc.sucursal),
+      ]);
+      return tamano(catalogo) + tamano(stock);
+    });
+    // Ahora: versiones y sólo las partes que cambiaron desde la vuelta anterior.
+    const guardadas = new Map<string, Record<string, string>>();
+    const p95 = await vueltas("carga: por partes", async (pc) => {
+      const clave = pc.sucursal;
+      const [catalogo, stock] = await Promise.all([
+        catalog.catalogVersions(usuario, org, pc.sucursal, "x"),
+        inventario.stockVersions(usuario, org, pc.sucursal),
+      ]);
+      const previas = guardadas.get(clave) ?? {};
+      const cambiadas = Object.keys(stock.partes)
+        .filter((parte) => previas[parte] !== stock.partes[parte])
+        .slice(0, 32);
+      guardadas.set(clave, stock.partes);
+      const partes = cambiadas.length
+        ? await inventario.stockParts(usuario, org, pc.sucursal, cambiadas)
+        : undefined;
+      return tamano(catalogo) + tamano(stock) + tamano(partes ?? {});
+    });
+    // Con 10 PCs a la vez, ninguna actualización debería tardar más de 10 s.
+    expect(p95).toBeLessThan(10000);
+  }, 1800000);
 });

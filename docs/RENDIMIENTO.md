@@ -58,6 +58,34 @@ Sin conexión el catálogo se arma con las partes guardadas. Si la API todavía 
 tiene estas rutas (la web se publica aparte), la web pide el catálogo completo
 como antes. `GET catalog/products` se conserva.
 
+## Stock por partes (SISTEMA-77)
+
+Igual que el catálogo: 256 partes por los dos primeros caracteres del id del
+producto de cada lote (`GET inventory/stock/versiones` y
+`GET inventory/stock/partes?partes=...`). La versión de cada parte resume los
+lotes con stock (cantidad, vencimiento, número, costo, exhibidores), el nombre
+del producto, las cargas y devoluciones por proveedor de cada lote (de ahí sale
+de quién son las unidades), los proveedores de la organización y si quien pide
+ve costos. La PC guarda las partes (`lib/copia-por-partes.ts`, el mismo módulo
+que el catálogo) y lo que depende del día (vencido o por vencer) lo calcula al
+armar. Con 20.000 lotes: stock entero 0,9 s y 10 MB; versiones 0,12 s y 10 KB;
+32 partes 0,24 s y 1,25 MB.
+
+## Prueba de carga (SISTEMA-77)
+
+`test/rendimiento-catalogo` (con `RENDIMIENTO=1`) simula 10 PCs de dos
+sucursales actualizando a la vez, 5 vueltas, con una venta por sucursal en
+cada vuelta (`RENDIMIENTO_PCS`, `RENDIMIENTO_VUELTAS`). 60.000 productos y
+20.000 lotes por sucursal:
+
+| Cada actualización pide              | Tiempo total | Por PC (p50 / p95) | Datos    |
+| ------------------------------------ | ------------ | ------------------ | -------- |
+| Catálogo y stock enteros (antes)     | 89,7 s       | 16,1 s / 19,9 s    | 2.829 MB |
+| Versiones y partes cambiadas (ahora) | 6,0 s        | 1,0 s / 1,3 s      | 4 MB     |
+
+Con el método anterior el proceso llegó a 2,7 GB de memoria. Los servicios se
+llaman dentro del mismo proceso: no incluye red, nginx ni compresión.
+
 ## Cuentas corrientes (SISTEMA-75)
 
 El listado trae saldo, cantidad de movimientos y último cobro calculados en
@@ -70,6 +98,6 @@ PostgreSQL; los movimientos se piden al abrir un cliente. Con 3.000 clientes de
   imprimir resúmenes) trae todos los movimientos de la sucursal: con 3.000
   clientes de 20 movimientos, 1,2 s y 11,5 MB. La precarga lo pide cada 10
   minutos para tenerlo sin conexión.
-- El stock de la sucursal (10 MB con 20.000 lotes) se sigue pidiendo entero.
 - Costos de inventario (5 MB) se calculan con todo el historial de recepciones.
-- Prueba con varias PCs y sucursales reales al mismo tiempo.
+- Prueba con varias PCs reales por HTTP (la prueba de carga llama a los
+  servicios dentro del proceso: no mide red, nginx ni compresión).

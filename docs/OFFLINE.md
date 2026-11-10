@@ -281,6 +281,7 @@ Decisión del usuario (10/11/2026): que Proveedores y Cuentas por pagar funcione
 
 - **Sin conexión no se sale a la red**: con la falta de conexión ya detectada, `apiFetch` responde con la copia de la PC sin intentar la red (y las escrituras quedan en la bandeja enseguida). Antes cada pantalla intentaba primero la red; si la red colgaba los pedidos en vez de rechazarlos, se acumulaban y todo se volvía cada vez más lento. Volver a conectarse lo detecta el sondeo de `/health`. Con conexión, cada pedido tiene un tiempo máximo de 30 s.
 - **Bandeja en memoria**: se lee de una vez (`valores` del almacén) y se reutiliza hasta que cambie, en esta pestaña o en otra.
+- **Stock por partes** (SISTEMA-77): la copia del stock sin conexión son las partes que guarda `lib/copia-por-partes.ts`, igual que el catálogo; si todavía no hay partes guardadas se usa la copia del stock entero.
 - **Catálogo por partes**: la copia del catálogo sin conexión son las partes que guarda `lib/catalogo-local.ts` (antes, una respuesta de más de 8 MB no se guardaba y con catálogos grandes no había catálogo sin conexión). Ver `RENDIMIENTO.md`.
 
 ## Cómo probarlo
