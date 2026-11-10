@@ -13,6 +13,8 @@ const pesos = (minor: string | number | null | undefined) =>
 
 const texto = (value: string | number | null | undefined) =>
   value === null || value === undefined ? "" : String(value);
+const mayuscula = (valor: string) =>
+  valor.charAt(0).toLocaleUpperCase("es") + valor.slice(1);
 
 export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
   titulo: string;
@@ -197,10 +199,15 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
       return {
         titulo: d.lote
           ? `Lote corregido en otra PC: ${nombre} · ${texto(d.lote)}`
-          : `Producto cambiado en otra PC: ${nombre}`,
-        detalle:
+          : d.lista
+            ? `Precios cambiados en otra PC: ${texto(d.lista)}`
+            : d.tipo
+              ? `${mayuscula(texto(d.tipo))} cambiada en otra PC: ${nombre}`
+              : `Producto cambiado en otra PC: ${nombre}`,
+        detalle: `${
           texto(d.motivo) ||
-          "Otra PC cambió esos datos después: quedaron esos cambios.",
+          "Otra PC cambió esos datos después: quedaron esos cambios."
+        }${Array.isArray(d.productos) && d.productos.length ? ` (${d.productos.map(String).join(", ")})` : ""}`,
       };
     case "AJUSTE_SUPERA_STOCK":
       return {
@@ -214,9 +221,16 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
           texto(d.motivo) ||
           "Ya había un lote con ese número para este producto: no se cambió.",
       };
+    case "NOMBRE_REPETIDO":
+      return {
+        titulo: `Nombre ya usado: ${nombre}`,
+        detalle:
+          texto(d.motivo) ||
+          "Ese nombre ya estaba usado: no se cambió. Elegí otro.",
+      };
     case "OPCION_EXISTENTE":
       return {
-        titulo: `${texto(d.tipo) === "laboratorio" ? "Laboratorio" : "Categoría"} que ya existía: ${nombre}`,
+        titulo: `${mayuscula(texto(d.tipo) || "categoría")} que ya existía: ${nombre}`,
         detalle:
           texto(d.motivo) || "Ya existía con ese nombre: se usó la existente.",
       };

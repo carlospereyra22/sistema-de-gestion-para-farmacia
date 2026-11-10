@@ -120,7 +120,10 @@ export function ReportOverviewTab({
   // El resultado se guarda con sus filtros: al volver a Reportes con los mismos
   // filtros se revalida sin vaciar; con filtros distintos se muestra el esqueleto.
   const key = JSON.stringify([organizationId, from, to, branchId, comparison]);
-  const [result, setResult] = useState<{ key: string; data: ReportOverview }>();
+  const [result, setResult] = useState<{
+    key: string;
+    data: ReportOverview & { guardadaEl?: number };
+  }>();
   const [error, setError] = useState<string>();
   const data = result?.key === key ? result.data : undefined;
   const load = useCallback(() => {
@@ -158,11 +161,40 @@ export function ReportOverviewTab({
       <ReportSkeleton />
     );
   return (
-    <ReportOverviewContent
-      data={data}
-      comparison={comparison}
-      onOpenInventory={onOpenInventory}
-    />
+    <>
+      {data.guardadaEl ? (
+        <ReportCopiaGuardada guardadaEl={data.guardadaEl} />
+      ) : null}
+      <ReportOverviewContent
+        data={data}
+        comparison={comparison}
+        onOpenInventory={onOpenInventory}
+      />
+    </>
+  );
+}
+
+/**
+ * Sin conexión el Resumen es la copia que la PC guardó del servidor
+ * (SISTEMA-80, decisión del usuario): dice de cuándo son los datos.
+ */
+export function ReportCopiaGuardada({ guardadaEl }: { guardadaEl: number }) {
+  const cuando = new Date(guardadaEl).toLocaleString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return (
+    <p
+      role="status"
+      className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+    >
+      Sin conexión: datos al {cuando}. No incluye lo hecho sin conexión; se
+      actualiza cuando vuelva internet.
+    </p>
   );
 }
 

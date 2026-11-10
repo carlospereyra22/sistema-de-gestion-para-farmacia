@@ -7,8 +7,16 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { plainToInstance } from "class-transformer";
+import { Type, plainToInstance } from "class-transformer";
+import { CATEGORY_COLORS, CATEGORY_ICONS } from "@gestion/contracts";
+import { PriceChangeDto } from "./price-list-updates";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  ValidateIf,
+  ValidateNested,
   IsIn,
   IsISO8601,
   IsObject,
@@ -42,6 +50,49 @@ class OpcionOfflineDto {
   @IsIn(["categories", "laboratories"]) type!: "categories" | "laboratories";
   @IsString() @MinLength(2) @MaxLength(120) name!: string;
   @IsOptional() @IsUUID() parentId?: string | null;
+  @IsOptional() @IsIn(CATEGORY_ICONS) icon?: string;
+  @IsOptional() @IsIn(CATEGORY_COLORS) color?: string;
+}
+// Categorías, laboratorios y listas de precios (SISTEMA-80).
+class OpcionEdicionOfflineDto {
+  @IsIn(["categories", "laboratories"]) type!: "categories" | "laboratories";
+  @IsUUID() id!: string;
+  @IsString() @MinLength(2) @MaxLength(120) name!: string;
+  @IsOptional() @IsUUID() parentId?: string | null;
+}
+class OpcionBajaOfflineDto {
+  @IsIn(["categories", "laboratories"]) type!: "categories" | "laboratories";
+  @IsUUID() id!: string;
+}
+class IconoOfflineDto {
+  @IsUUID() id!: string;
+  @IsIn(CATEGORY_ICONS) icon!: string;
+  @IsOptional() @IsIn(CATEGORY_COLORS) color?: string;
+}
+class LogoOfflineDto {
+  @IsUUID() id!: string;
+  @ValidateIf((_object, value: unknown) => value !== null)
+  @IsString()
+  @MaxLength(82000)
+  dataUrl!: string | null;
+}
+class ListaAltaOfflineDto {
+  @IsString() @MinLength(2) @MaxLength(120) name!: string;
+  @IsOptional() @IsBoolean() includeAll?: boolean;
+}
+class ListaEdicionOfflineDto {
+  @IsUUID() priceListId!: string;
+  @IsString() @MinLength(2) @MaxLength(120) name!: string;
+  @IsOptional() @IsUUID() fallbackPriceListId?: string | null;
+}
+class ListaPreciosOfflineDto {
+  @IsUUID() priceListId!: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(2000)
+  @ValidateNested({ each: true })
+  @Type(() => PriceChangeDto)
+  changes!: PriceChangeDto[];
 }
 const CUERPO_CATALOGO = {
   ALTA: CreateProductDto,
@@ -51,8 +102,21 @@ const CUERPO_CATALOGO = {
   CODIGO_QUITAR: CodigoOfflineDto,
   ELIMINAR: EliminarOfflineDto,
   OPCION: OpcionOfflineDto,
+  OPCION_EDICION: OpcionEdicionOfflineDto,
+  OPCION_BAJA: OpcionBajaOfflineDto,
+  OPCION_ICONO: IconoOfflineDto,
+  LOGO: LogoOfflineDto,
+  LISTA_ALTA: ListaAltaOfflineDto,
+  LISTA_EDICION: ListaEdicionOfflineDto,
+  LISTA_PRECIOS: ListaPreciosOfflineDto,
 } as const;
-const SIN_PRODUCTO: readonly string[] = ["ALTA", "OPCION"];
+const CON_PRODUCTO: readonly string[] = [
+  "EDICION",
+  "ESTADO_SUCURSAL",
+  "CODIGO_AGREGAR",
+  "CODIGO_QUITAR",
+  "ELIMINAR",
+];
 
 class OfflineCatalogDto {
   @IsIn(Object.keys(CUERPO_CATALOGO))
@@ -83,7 +147,7 @@ async function operacionDeCatalogo(
     (await validate(op, opciones)).length ||
     !cuerpo ||
     (await validate(cuerpo, opciones)).length ||
-    (!SIN_PRODUCTO.includes(op.tipo) && !op.productId)
+    (CON_PRODUCTO.includes(op.tipo) && !op.productId)
   )
     throw new BadRequestException(
       "El producto guardado sin conexión tiene datos inválidos.",

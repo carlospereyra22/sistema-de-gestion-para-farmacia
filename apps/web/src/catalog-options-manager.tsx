@@ -332,11 +332,13 @@ function LaboratoryLogo({
   item,
   token,
   organizationId,
+  branchId,
   onSaved,
 }: {
   item: CatalogNamedOption;
   token: string;
   organizationId: string;
+  branchId?: string;
   onSaved: () => Promise<void>;
 }) {
   const [image, setImage] = useState<{ key: string; url: string }>();
@@ -405,7 +407,14 @@ function LaboratoryLogo({
           onClose={() => setOpen(false)}
           onCommit={async (value) => {
             if (value === undefined) return;
-            await laboratoryLogo(token, organizationId, item.id, value);
+            await laboratoryLogo(
+              token,
+              organizationId,
+              item.id,
+              value,
+              undefined,
+              branchId,
+            );
             await onSaved();
           }}
         />
@@ -418,10 +427,13 @@ type Kind = "categories" | "laboratories";
 export function CatalogOptionsManager({
   token,
   organizationId,
+  branchId,
   onError,
 }: {
   token: string;
   organizationId: string;
+  /** Sin conexión, los cambios quedan en la PC (SISTEMA-80). */
+  branchId?: string;
   onError: (message: string) => void;
 }) {
   const [options, setOptions] = useState<CatalogOptions>();
@@ -480,6 +492,7 @@ export function CatalogOptionsManager({
         type === "categories" ? categoryIcon : undefined,
         type === "categories" ? categoryColor : undefined,
         type === "categories" ? parentId || null : undefined,
+        branchId,
       );
       setNames((current) => ({ ...current, [type]: "" }));
       if (type === "categories") {
@@ -567,6 +580,7 @@ export function CatalogOptionsManager({
               action.type === "categories"
                 ? (action.parentId ?? null)
                 : undefined,
+              branchId,
             );
             setAction(undefined);
             await load();
@@ -771,6 +785,7 @@ export function CatalogOptionsManager({
                           item.id,
                           icon,
                           color,
+                          branchId,
                         )
                           .then(() =>
                             setOptions((current) =>
@@ -805,6 +820,7 @@ export function CatalogOptionsManager({
                       item={item}
                       token={token}
                       organizationId={organizationId}
+                      branchId={branchId}
                       onSaved={load}
                     />
                   )}

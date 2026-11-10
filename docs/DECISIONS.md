@@ -2,6 +2,16 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-80): Categorías y laboratorios y listas de precios funcionan sin
+  conexión con el mismo circuito que productos (`catalog/offline`, nuevos tipos de
+  operación); la regla de choques es la de productos: el cambio más reciente gana, dato por
+  dato y precio por precio. La vista previa de un ajuste de precios sin conexión la calcula
+  la PC con la misma fórmula que el servidor. Reportes deja de ser "sólo con conexión"
+  (decisión del 09/11/2026) pero no se calcula en la PC: los reportes suman lo de todas las
+  PCs y sucursales, y recalcularlos en el navegador duplicaría la lógica del servidor con
+  datos incompletos. Sin conexión se muestra la copia guardada del servidor con la hora de
+  los datos (decisión del usuario); la PC guarda cada 15 minutos los períodos habituales.
+
 - 10/11/2026 (SISTEMA-79): Productos e inventario funcionan sin conexión con el mismo
   circuito que los demás módulos: la operación queda en la bandeja de la PC, firmada, y se
   registra al volver con `OfflineOperation` (rutas `catalog/offline` e `inventory/offline`

@@ -7,6 +7,7 @@ import type { EnvironmentService } from "../src/config/environment.service";
 import { CatalogService } from "../src/catalog/catalog.service";
 import { CatalogOfflineService } from "../src/catalog/catalogo-sin-conexion.service";
 import { InventoryService } from "../src/inventory/inventory.service";
+import { PriceListUpdates } from "../src/catalog/price-list-updates";
 import type { OperacionCatalogoSinConexion } from "../src/catalog/producto-sin-conexion";
 import type { OperacionInventarioSinConexion } from "../src/inventory/inventario-sin-conexion";
 
@@ -511,5 +512,159 @@ describe("productos e inventario sin conexión (esquema aislado)", () => {
       productId: existente,
       cuerpo: { code: ean("779000000005") },
     });
+  });
+
+  // --- Categorías, laboratorios y listas de precios (SISTEMA-80) ---
+
+  it("categoría: renombrar sin conexión no pisa un cambio posterior; un nombre usado no se cambia", async () => {
+    const cat = randomUUID();
+    await deCatalogo(
+      {
+        tipo: "OPCION",
+        cuerpo: { type: "categories", name: "Dermo", icon: "auto" },
+      },
+      90,
+      cat,
+    );
+    await deCatalogo(
+      { tipo: "OPCION", cuerpo: { type: "categories", name: "Bebés" } },
+      89,
+    );
+    // Con conexión, ahora.
+    await catalogo.changeNamedItem(
+      usuario,
+      org,
+      "categories",
+      cat,
+      "Dermocosmética",
+    );
+    const pisada = await deCatalogo(
+      {
+        tipo: "OPCION_EDICION",
+        cuerpo: { type: "categories", id: cat, name: "Piel" },
+      },
+      60,
+    );
+    expect(avisos(pisada)).toEqual(["DATO_PISADO"]);
+    const repetido = await deCatalogo(
+      {
+        tipo: "OPCION_EDICION",
+        cuerpo: { type: "categories", id: cat, name: "bebés" },
+      },
+      0,
+    );
+    expect(avisos(repetido)).toEqual(["NOMBRE_REPETIDO"]);
+    expect((await db.category.findUnique({ where: { id: cat } }))?.name).toBe(
+      "Dermocosmética",
+    );
+  });
+
+  it("eliminar una categoría que mientras tanto tiene productos: se rechaza", async () => {
+    const cat = randomUUID();
+    await deCatalogo(
+      { tipo: "OPCION", cuerpo: { type: "categories", name: "Ortopedia" } },
+      30,
+      cat,
+    );
+    await deCatalogo(
+      {
+        tipo: "ALTA",
+        cuerpo: { name: "Muñequera", priceMinor: 100, categoryId: cat },
+      },
+      29,
+    );
+    await expect(
+      deCatalogo(
+        { tipo: "OPCION_BAJA", cuerpo: { type: "categories", id: cat } },
+        28,
+      ),
+    ).rejects.toMatchObject({ status: 422 });
+    expect((await db.category.findUnique({ where: { id: cat } }))?.active).toBe(
+      true,
+    );
+  });
+
+  it("lista de precios: alta con todos los productos y precios, el más reciente gana", async () => {
+    const lista = randomUUID();
+    await deCatalogo(
+      { tipo: "LISTA_ALTA", cuerpo: { name: "Mayorista", includeAll: true } },
+      90,
+      lista,
+    );
+    const precio = (productId: string) =>
+      db.productPrice
+        .findUnique({
+          where: { productId_priceListId: { productId, priceListId: lista } },
+        })
+        .then((p) => p?.amountMinor.toString() ?? null);
+    const antes = await precio(existente);
+    expect(antes).not.toBeNull();
+    // Otra PC (con conexión, ahora) cambia el precio.
+    await app.get(PriceListUpdates).save(usuario, org, lista, {
+      requestId: randomUUID(),
+      changes: [
+        { productId: existente, expectedMinor: antes, amountMinor: "5000" },
+      ],
+    });
+    // Sin conexión, hace una hora, otro precio: queda el de ahora.
+    const viejo = await deCatalogo(
+      {
+        tipo: "LISTA_PRECIOS",
+        cuerpo: {
+          priceListId: lista,
+          changes: [
+            { productId: existente, expectedMinor: antes, amountMinor: "4000" },
+          ],
+        },
+      },
+      60,
+    );
+    expect(avisos(viejo)).toEqual(["DATO_PISADO"]);
+    expect(await precio(existente)).toBe("5000");
+    // Sin conexión, después del cambio: gana aunque viera otro precio.
+    await deCatalogo(
+      {
+        tipo: "LISTA_PRECIOS",
+        cuerpo: {
+          priceListId: lista,
+          changes: [
+            { productId: existente, expectedMinor: antes, amountMinor: "6000" },
+          ],
+        },
+      },
+      0,
+    );
+    expect(await precio(existente)).toBe("6000");
+    // Otra lista con el mismo nombre: se usa la existente.
+    const otra = await deCatalogo(
+      { tipo: "LISTA_ALTA", cuerpo: { name: "mayorista" } },
+      0,
+    );
+    expect(avisos(otra)).toEqual(["OPCION_EXISTENTE"]);
+    expect(otra.entityId).toBe(lista);
+  });
+
+  it("lista de precios: renombrar a un nombre usado no se cambia", async () => {
+    const a = randomUUID();
+    await deCatalogo(
+      { tipo: "LISTA_ALTA", cuerpo: { name: "Obra social A" } },
+      20,
+      a,
+    );
+    await deCatalogo(
+      { tipo: "LISTA_ALTA", cuerpo: { name: "Obra social B" } },
+      19,
+    );
+    const r = await deCatalogo(
+      {
+        tipo: "LISTA_EDICION",
+        cuerpo: { priceListId: a, name: "Obra social B" },
+      },
+      18,
+    );
+    expect(avisos(r)).toEqual(["NOMBRE_REPETIDO"]);
+    expect((await db.priceList.findUnique({ where: { id: a } }))?.name).toBe(
+      "Obra social A",
+    );
   });
 });

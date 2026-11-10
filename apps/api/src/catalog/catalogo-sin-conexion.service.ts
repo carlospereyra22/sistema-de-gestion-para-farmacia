@@ -8,6 +8,8 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { CATEGORY_COLORS, CATEGORY_ICONS } from "@gestion/contracts";
+import { decodeProductImage } from "./product-image";
 import {
   contextoSinConexion,
   guardarOperacionSinConexion,
@@ -27,6 +29,7 @@ import {
 import {
   KIND_CATALOGO,
   camposDeLaEdicion,
+  preciosPisados,
   sinCamposPisados,
   type OperacionCatalogoSinConexion,
 } from "./producto-sin-conexion";
@@ -409,7 +412,682 @@ export class CatalogOfflineService {
       }
       case "OPCION":
         return this.crearOpcion(tx, actorId, organizationId, op, contexto);
+      case "OPCION_EDICION":
+        return this.editarOpcion(tx, actorId, organizationId, op, contexto);
+      case "OPCION_BAJA":
+        return this.bajaDeOpcion(tx, actorId, organizationId, op);
+      case "OPCION_ICONO":
+        return this.iconoDeCategoria(tx, actorId, organizationId, op, contexto);
+      case "LOGO":
+        return this.logoDeLaboratorio(
+          tx,
+          actorId,
+          organizationId,
+          op,
+          contexto,
+        );
+      case "LISTA_ALTA":
+        return this.crearLista(tx, actorId, organizationId, op, contexto);
+      case "LISTA_EDICION":
+        return this.editarLista(tx, actorId, organizationId, op, contexto);
+      case "LISTA_PRECIOS":
+        return this.preciosDeLista(tx, actorId, organizationId, op, contexto);
     }
+  }
+
+  // --- Categorías, laboratorios y listas de precios (SISTEMA-80) ---
+
+  /**
+   * Id en el servidor de algo creado sin conexión: el de la PC, o el que ya
+   * existía con ese nombre (lo dice la operación registrada).
+   */
+  private async idReal(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    id: string,
+    kind: string,
+  ) {
+    const creada = await tx.offlineOperation.findFirst({
+      where: { id, organizationId, kind },
+      select: { entityId: true },
+    });
+    return creada?.entityId ?? id;
+  }
+
+  /** ¿Otra PC cambió esto después (según la hora real)? Para avisar y no pisarlo. */
+  private async cambiadoDespues(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    entityType: string,
+    entityId: string,
+    acciones: string[],
+    campos: string[],
+    cuando: Date,
+  ) {
+    const registros = await tx.auditLog.findMany({
+      where: { organizationId, entityType, entityId, action: { in: acciones } },
+      select: { createdAt: true, before: true, after: true },
+    });
+    return camposPisados(registros, cuando, campos);
+  }
+
+  private async editarOpcion(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    op: Extract<OperacionCatalogoSinConexion, { tipo: "OPCION_EDICION" }>,
+    contexto: ContextoSinConexion,
+  ) {
+    const { type } = op.cuerpo;
+    const id = await this.idReal(
+      tx,
+      organizationId,
+      op.cuerpo.id,
+      KIND_CATALOGO.OPCION,
+    );
+    const name = op.cuerpo.name.trim();
+    const tipo = type === "categories" ? "categoría" : "laboratorio";
+    const campos = [
+      "name",
+      ...(type === "categories" && op.cuerpo.parentId !== undefined
+        ? ["parentId"]
+        : []),
+    ];
+    const pisados = await this.cambiadoDespues(
+      tx,
+      organizationId,
+      type === "categories" ? "CATEGORY" : "LABORATORY",
+      id,
+      ["RENAMED", "MOVED"],
+      campos,
+      contexto.occurredAt,
+    );
+    if (type === "laboratories") {
+      const lab = await tx.laboratory.findFirst({
+        where: { id, organizationId, active: true },
+      });
+      if (!lab) throw new NotFoundException("El laboratorio ya no existe.");
+      if (pisados.length) return this.avisoPisado(contexto, lab.name, tipo, id);
+      if (
+        await tx.laboratory.findFirst({
+          where: {
+            organizationId,
+            id: { not: id },
+            name: { equals: name, mode: "insensitive" },
+          },
+          select: { id: true },
+        })
+      )
+        return this.avisoNombre(contexto, name, tipo, id);
+      await tx.laboratory.update({ where: { id }, data: { name } });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "LABORATORY",
+          entityId: id,
+          action: "RENAMED",
+          before: { name: lab.name, active: lab.active },
+          after: { name, occurredAt: contexto.occurredAt.toISOString() },
+        },
+      });
+      return id;
+    }
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${organizationId}, 146))`;
+    const nodes = await tx.category.findMany({
+      where: { organizationId },
+      select: { id: true, name: true, parentId: true, active: true },
+    });
+    const antes = nodes.find((node) => node.id === id && node.active);
+    if (!antes) throw new NotFoundException("La categoría ya no existe.");
+    if (pisados.length) return this.avisoPisado(contexto, antes.name, tipo, id);
+    const parentId =
+      op.cuerpo.parentId === undefined
+        ? antes.parentId
+        : op.cuerpo.parentId
+          ? await this.idReal(
+              tx,
+              organizationId,
+              op.cuerpo.parentId,
+              KIND_CATALOGO.OPCION,
+            )
+          : null;
+    try {
+      validateCategoryPlacement(nodes, id, name, parentId);
+    } catch (error) {
+      if (error instanceof ConflictException)
+        return this.avisoNombre(contexto, name, tipo, id);
+      if (error instanceof HttpException)
+        throw new UnprocessableEntityException(error.message);
+      throw error;
+    }
+    await tx.category.update({ where: { id }, data: { name, parentId } });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: "CATEGORY",
+        entityId: id,
+        action: parentId !== antes.parentId ? "MOVED" : "RENAMED",
+        before: { name: antes.name, parentId: antes.parentId, active: true },
+        after: {
+          name,
+          parentId,
+          active: true,
+          occurredAt: contexto.occurredAt.toISOString(),
+        },
+      },
+    });
+    return id;
+  }
+
+  /**
+   * Eliminar una categoría o un laboratorio: si mientras tanto se le asignaron
+   * productos (o subcategorías), se rechaza, como con conexión.
+   */
+  private async bajaDeOpcion(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    op: Extract<OperacionCatalogoSinConexion, { tipo: "OPCION_BAJA" }>,
+  ) {
+    const { type } = op.cuerpo;
+    const id = await this.idReal(
+      tx,
+      organizationId,
+      op.cuerpo.id,
+      KIND_CATALOGO.OPCION,
+    );
+    const where = { id, organizationId };
+    const item =
+      type === "categories"
+        ? await tx.category.findFirst({ where })
+        : await tx.laboratory.findFirst({ where });
+    // Ya eliminada en otra PC: no hay nada que hacer.
+    if (!item?.active) return id;
+    const productos = await tx.product.count({
+      where:
+        type === "categories"
+          ? { organizationId, categoryId: id }
+          : { organizationId, laboratoryId: id },
+    });
+    if (productos)
+      throw new ConflictException(
+        `“${item.name}” tiene ${productos} producto(s) asociado(s): no se eliminó.`,
+      );
+    if (
+      type === "categories" &&
+      (await tx.category.count({
+        where: { organizationId, parentId: id, active: true },
+      }))
+    )
+      throw new ConflictException(
+        `“${item.name}” tiene subcategorías: no se eliminó.`,
+      );
+    if (type === "categories")
+      await tx.category.update({ where: { id }, data: { active: false } });
+    else await tx.laboratory.update({ where: { id }, data: { active: false } });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: type === "categories" ? "CATEGORY" : "LABORATORY",
+        entityId: id,
+        action: "ARCHIVED",
+        before: { name: item.name, active: true },
+        after: { active: false, origen: "SIN_CONEXION" },
+      },
+    });
+    return id;
+  }
+
+  private async iconoDeCategoria(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    op: Extract<OperacionCatalogoSinConexion, { tipo: "OPCION_ICONO" }>,
+    contexto: ContextoSinConexion,
+  ) {
+    const { icon, color } = op.cuerpo;
+    if (!(CATEGORY_ICONS as readonly string[]).includes(icon))
+      throw new BadRequestException("Icono inválido.");
+    if (
+      color !== undefined &&
+      !(CATEGORY_COLORS as readonly string[]).includes(color)
+    )
+      throw new BadRequestException("Color inválido.");
+    const id = await this.idReal(
+      tx,
+      organizationId,
+      op.cuerpo.id,
+      KIND_CATALOGO.OPCION,
+    );
+    const item = await tx.category.findFirst({
+      where: { id, organizationId, active: true },
+    });
+    if (!item) throw new NotFoundException("La categoría ya no existe.");
+    const campos = ["icon", ...(color !== undefined ? ["color"] : [])];
+    if (
+      (
+        await this.cambiadoDespues(
+          tx,
+          organizationId,
+          "CATEGORY",
+          id,
+          ["ICON_CHANGED"],
+          campos,
+          contexto.occurredAt,
+        )
+      ).length
+    )
+      return this.avisoPisado(contexto, item.name, "categoría", id);
+    await tx.category.update({
+      where: { id },
+      data: { icon, ...(color !== undefined ? { color } : {}) },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: "CATEGORY",
+        entityId: id,
+        action: "ICON_CHANGED",
+        before: {
+          icon: item.icon,
+          ...(color !== undefined ? { color: item.color } : {}),
+        },
+        after: {
+          icon,
+          ...(color !== undefined ? { color } : {}),
+          occurredAt: contexto.occurredAt.toISOString(),
+        },
+      },
+    });
+    return id;
+  }
+
+  private async logoDeLaboratorio(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    op: Extract<OperacionCatalogoSinConexion, { tipo: "LOGO" }>,
+    contexto: ContextoSinConexion,
+  ) {
+    const id = await this.idReal(
+      tx,
+      organizationId,
+      op.cuerpo.id,
+      KIND_CATALOGO.OPCION,
+    );
+    const lab = await tx.laboratory.findFirst({
+      where: { id, organizationId, active: true },
+    });
+    if (!lab) throw new NotFoundException("El laboratorio ya no existe.");
+    // Un logo cambiado en otra PC después queda (el más reciente gana).
+    if (lab.logoUpdatedAt && lab.logoUpdatedAt > contexto.occurredAt)
+      return this.avisoPisado(contexto, lab.name, "laboratorio", id);
+    const content =
+      op.cuerpo.dataUrl === null
+        ? null
+        : new Uint8Array(decodeProductImage(op.cuerpo.dataUrl));
+    await tx.laboratory.update({
+      where: { id },
+      data: {
+        logo: content,
+        logoUpdatedAt: content === null ? null : contexto.occurredAt,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: "LABORATORY",
+        entityId: id,
+        action: content === null ? "LOGO_REMOVED" : "LOGO_SAVED",
+        after: {
+          origen: "SIN_CONEXION",
+          occurredAt: contexto.occurredAt.toISOString(),
+        },
+      },
+    });
+    return id;
+  }
+
+  /** Lista creada sin conexión: si ya existe con ese nombre, se usa esa. */
+  private async crearLista(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    op: Extract<OperacionCatalogoSinConexion, { tipo: "LISTA_ALTA" }>,
+    contexto: ContextoSinConexion,
+  ) {
+    const name = op.cuerpo.name.trim();
+    if (name.length < 2 || name.toLocaleLowerCase("es") === "precio general")
+      throw new BadRequestException(
+        "Ingresá un nombre de al menos dos caracteres distinto de Precio general.",
+      );
+    const previa = await tx.priceList.findFirst({
+      where: { organizationId, name: { equals: name, mode: "insensitive" } },
+    });
+    if (previa) {
+      if (!previa.active)
+        await tx.priceList.update({
+          where: { id: previa.id },
+          data: { active: true },
+        });
+      contexto.avisos.push({
+        kind: "OPCION_EXISTENTE",
+        detail: {
+          nombre: name,
+          tipo: "lista de precios",
+          motivo: "Ya existía una lista con ese nombre: se usó la existente.",
+        },
+      });
+      return previa.id;
+    }
+    const id = op.clientOperationId;
+    await tx.priceList.create({ data: { id, organizationId, name } });
+    if (op.cuerpo.includeAll) {
+      // Como con conexión, con el precio general de cada producto activo (los
+      // que no tienen precio general quedan afuera).
+      const general = await tx.priceList.findFirst({
+        where: { organizationId, name: "Precio general", active: true },
+        select: { id: true },
+      });
+      const precios = general
+        ? await tx.productPrice.findMany({
+            where: {
+              priceListId: general.id,
+              product: { organizationId, active: true },
+            },
+            select: { productId: true, amountMinor: true },
+          })
+        : [];
+      if (precios.length)
+        await tx.productPrice.createMany({
+          data: precios.map((p) => ({ ...p, priceListId: id })),
+        });
+    }
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: "PRICE_LIST",
+        entityId: id,
+        action: "PRICE_LIST_CREATED",
+        after: {
+          name,
+          includeAll: Boolean(op.cuerpo.includeAll),
+          occurredAt: contexto.occurredAt.toISOString(),
+        },
+      },
+    });
+    return id;
+  }
+
+  /** La lista de la operación (creada sin conexión o no), editable. */
+  private async listaEditable(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    priceListId: string,
+  ) {
+    const id = await this.idReal(
+      tx,
+      organizationId,
+      priceListId,
+      KIND_CATALOGO.LISTA_ALTA,
+    );
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${organizationId + ":price-list:" + id}, 0))`;
+    const lista = await tx.priceList.findFirst({
+      where: { id, organizationId, active: true },
+    });
+    if (!lista)
+      throw new NotFoundException("La lista de precios ya no existe.");
+    if (lista.name === "Precio general")
+      throw new BadRequestException("Precio general es de solo lectura.");
+    return lista;
+  }
+
+  private async editarLista(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    op: Extract<OperacionCatalogoSinConexion, { tipo: "LISTA_EDICION" }>,
+    contexto: ContextoSinConexion,
+  ) {
+    const lista = await this.listaEditable(
+      tx,
+      organizationId,
+      op.cuerpo.priceListId,
+    );
+    const name = op.cuerpo.name.trim();
+    if (name.length < 2 || name.toLocaleLowerCase("es") === "precio general")
+      throw new BadRequestException(
+        "Ingresá un nombre de 2 a 120 caracteres distinto de Precio general.",
+      );
+    const pedidos = [
+      ...(name !== lista.name ? ["name"] : []),
+      ...(op.cuerpo.fallbackPriceListId !== undefined
+        ? ["fallbackPriceListId"]
+        : []),
+    ];
+    const pisados = await this.cambiadoDespues(
+      tx,
+      organizationId,
+      "PRICE_LIST",
+      lista.id,
+      ["PRICE_LIST_RENAMED", "PRICE_LIST_UPDATED"],
+      pedidos,
+      contexto.occurredAt,
+    );
+    if (pisados.length)
+      this.avisoPisado(contexto, lista.name, "lista de precios", lista.id);
+    const data: { name?: string; fallbackPriceListId?: string | null } = {};
+    if (pedidos.includes("name") && !pisados.includes("name")) {
+      if (
+        await tx.priceList.findFirst({
+          where: {
+            organizationId,
+            id: { not: lista.id },
+            name: { equals: name, mode: "insensitive" },
+          },
+          select: { id: true },
+        })
+      )
+        this.avisoNombre(contexto, name, "lista de precios", lista.id);
+      else data.name = name;
+    }
+    if (
+      pedidos.includes("fallbackPriceListId") &&
+      !pisados.includes("fallbackPriceListId")
+    ) {
+      const respaldo = op.cuerpo.fallbackPriceListId
+        ? await this.idReal(
+            tx,
+            organizationId,
+            op.cuerpo.fallbackPriceListId,
+            KIND_CATALOGO.LISTA_ALTA,
+          )
+        : null;
+      const disponible = respaldo
+        ? await tx.priceList.findFirst({
+            where: { id: respaldo, organizationId, active: true },
+            select: { id: true, name: true },
+          })
+        : null;
+      if (respaldo !== lista.id)
+        data.fallbackPriceListId =
+          disponible && disponible.name !== "Precio general"
+            ? disponible.id
+            : null;
+    }
+    if (!Object.keys(data).length) return lista.id;
+    await tx.priceList.update({ where: { id: lista.id }, data });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: "PRICE_LIST",
+        entityId: lista.id,
+        action:
+          data.fallbackPriceListId === undefined
+            ? "PRICE_LIST_RENAMED"
+            : "PRICE_LIST_UPDATED",
+        before: {
+          ...(data.name !== undefined ? { name: lista.name } : {}),
+          ...(data.fallbackPriceListId !== undefined
+            ? { fallbackPriceListId: lista.fallbackPriceListId ?? null }
+            : {}),
+        },
+        after: { ...data, occurredAt: contexto.occurredAt.toISOString() },
+      },
+    });
+    return lista.id;
+  }
+
+  /**
+   * Precios cambiados sin conexión. Producto por producto: si el precio ya no
+   * es el que se vio y otra PC lo cambió después, queda ese (el más reciente)
+   * y aviso; si no, se aplica (decisión del usuario).
+   */
+  private async preciosDeLista(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    op: Extract<OperacionCatalogoSinConexion, { tipo: "LISTA_PRECIOS" }>,
+    contexto: ContextoSinConexion,
+  ) {
+    const lista = await this.listaEditable(
+      tx,
+      organizationId,
+      op.cuerpo.priceListId,
+    );
+    const ids = op.cuerpo.changes.map((c) => c.productId);
+    if (new Set(ids).size !== ids.length)
+      throw new BadRequestException("Hay productos repetidos.");
+    const [activos, actuales, registros] = await Promise.all([
+      tx.product.findMany({
+        where: { id: { in: ids }, organizationId, active: true },
+        select: { id: true, name: true },
+      }),
+      tx.productPrice.findMany({
+        where: { priceListId: lista.id, productId: { in: ids } },
+      }),
+      tx.auditLog.findMany({
+        where: {
+          organizationId,
+          entityType: "PRICE_LIST",
+          entityId: lista.id,
+          action: "PRICE_LIST_UPDATED",
+        },
+        select: { createdAt: true, after: true },
+      }),
+    ]);
+    const cambiados = new Set(
+      preciosPisados(
+        registros,
+        contexto.occurredAt,
+        op.cuerpo.changes
+          .filter(
+            (c) =>
+              (actuales
+                .find((p) => p.productId === c.productId)
+                ?.amountMinor.toString() ?? null) !== c.expectedMinor,
+          )
+          .map((c) => c.productId),
+      ),
+    );
+    const nombre = new Map(activos.map((p) => [p.id, p.name]));
+    const aplicados = op.cuerpo.changes.filter(
+      (c) => nombre.has(c.productId) && !cambiados.has(c.productId),
+    );
+    if (cambiados.size)
+      contexto.avisos.push({
+        kind: "DATO_PISADO",
+        detail: {
+          nombre: lista.name,
+          lista: lista.name,
+          productos: [...cambiados].map((id) => nombre.get(id) ?? id),
+          motivo: "Otra PC cambió esos precios después: quedaron esos precios.",
+        },
+      });
+    for (const c of aplicados)
+      if (c.amountMinor === null)
+        await tx.productPrice.deleteMany({
+          where: { priceListId: lista.id, productId: c.productId },
+        });
+      else
+        await tx.productPrice.upsert({
+          where: {
+            productId_priceListId: {
+              productId: c.productId,
+              priceListId: lista.id,
+            },
+          },
+          create: {
+            productId: c.productId,
+            priceListId: lista.id,
+            amountMinor: BigInt(c.amountMinor),
+          },
+          update: { amountMinor: BigInt(c.amountMinor) },
+        });
+    if (aplicados.length) {
+      await tx.priceList.update({
+        where: { id: lista.id },
+        data: { updatedAt: new Date() },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          organizationId,
+          entityType: "PRICE_LIST",
+          entityId: lista.id,
+          action: "PRICE_LIST_UPDATED",
+          after: {
+            requestId: op.clientOperationId,
+            actorId,
+            changes: aplicados.map((c) => ({ ...c })),
+            origen: "SIN_CONEXION",
+            occurredAt: contexto.occurredAt.toISOString(),
+          },
+        },
+      });
+    }
+    return lista.id;
+  }
+
+  private avisoPisado(
+    contexto: ContextoSinConexion,
+    nombre: string,
+    tipo: string,
+    id: string,
+  ) {
+    contexto.avisos.push({
+      kind: "DATO_PISADO",
+      detail: {
+        nombre,
+        tipo,
+        motivo: `Otra PC cambió esta ${tipo === "laboratorio" ? "ficha" : tipo} después: quedó ese cambio.`,
+      },
+    });
+    return id;
+  }
+
+  private avisoNombre(
+    contexto: ContextoSinConexion,
+    nombre: string,
+    tipo: string,
+    id: string,
+  ) {
+    contexto.avisos.push({
+      kind: "NOMBRE_REPETIDO",
+      detail: {
+        nombre,
+        tipo,
+        motivo: "Ese nombre ya estaba usado: no se cambió.",
+      },
+    });
+    return id;
   }
 
   private avisoCodigo(
@@ -526,7 +1204,20 @@ export class CatalogOfflineService {
       throw error;
     }
     await tx.category.create({
-      data: { id: op.clientOperationId, organizationId, name, parentId },
+      data: {
+        id: op.clientOperationId,
+        organizationId,
+        name,
+        parentId,
+        ...(op.cuerpo.icon &&
+        (CATEGORY_ICONS as readonly string[]).includes(op.cuerpo.icon)
+          ? { icon: op.cuerpo.icon }
+          : {}),
+        ...(op.cuerpo.color &&
+        (CATEGORY_COLORS as readonly string[]).includes(op.cuerpo.color)
+          ? { color: op.cuerpo.color }
+          : {}),
+      },
     });
     await tx.auditLog.create({
       data: {
