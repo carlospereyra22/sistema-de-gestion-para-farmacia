@@ -8,6 +8,13 @@ import {
   type MedicineReference,
 } from "./lib/api";
 import { AlfaBetaMedicineCard } from "./alfabeta-medicine-card";
+import { SinConexionError } from "./lib/api-fetch";
+import { conectividad, useConectividad } from "./lib/conectividad";
+import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
+import {
+  buscarMedicamentosEnLaPc,
+  leerBaseMedicamentos,
+} from "./lib/base-medicamentos-local";
 import { groupMedicines, medicineSources } from "./lib/medicine-search";
 import {
   MedicinePresentationHeader,
@@ -89,6 +96,9 @@ export function MedicineSearchResults({
   );
 }
 
+/** Fuente del buscador: las de referencia, AlfaBeta o nuestra base en la PC. */
+type Fuente = MedicineReference["source"] | "alfabeta" | "pc";
+
 export function DashboardMedicineSearch({
   token,
   organizationId,
@@ -97,13 +107,26 @@ export function DashboardMedicineSearch({
   organizationId: string;
 }) {
   const [query, setQuery] = useState("");
-  const [source, setSource] = useState<
-    MedicineReference["source"] | "alfabeta"
-  >("alfabeta");
+  // "pc": nuestra base de medicamentos guardada en la PC (SISTEMA-86).
+  const [source, setSource] = useState<Fuente>("alfabeta");
+  const { enLinea } = useConectividad();
+  // Sin conexión, AlfaBeta pasa sola a nuestra base; al volver, vuelve.
+  const cambioAutomatico = useRef(false);
+  useEffect(() => {
+    if (!enLinea && source === "alfabeta") {
+      cambioAutomatico.current = true;
+      setSource("pc");
+    } else if (enLinea && cambioAutomatico.current && source === "pc") {
+      cambioAutomatico.current = false;
+      setSource("alfabeta");
+    }
+  }, [enLinea, source]);
   const [results, setResults] = useState<MedicineReference[]>([]);
   const [alfaResults, setAlfaResults] = useState<AlfaBetaMatch[]>([]);
   const [searched, setSearched] = useState("");
   const [loading, setLoading] = useState(false);
+  /** Sin conexión: cuándo se guardó la base de la PC que se consultó. */
+  const [baseDeLaPc, setBaseDeLaPc] = useState<number>();
   const [error, setError] = useState("");
   const request = useRef<AbortController | null>(null);
   useEffect(
@@ -139,17 +162,37 @@ export function DashboardMedicineSearch({
     setResults([]);
     setAlfaResults([]);
     setSearched("");
+    setBaseDeLaPc(undefined);
+    // Sin conexión, AlfaBeta no responde: se consulta nuestra base de
+    // medicamentos guardada en la PC (SISTEMA-86).
+    const enLaPc = async () => {
+      const found = await buscarMedicamentosEnLaPc(text);
+      const base = await leerBaseMedicamentos().catch(() => undefined);
+      if (!controller.signal.aborted) {
+        setResults(found);
+        setSearched(text);
+        setBaseDeLaPc(base?.guardada ?? 0);
+      }
+    };
     try {
+      if (source === "pc") return await enLaPc();
       if (source === "alfabeta") {
-        const found = await searchAlfaBeta(
-          token,
-          organizationId,
-          text,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setAlfaResults(found);
-          setSearched(text);
+        if (!conectividad().enLinea || token === TOKEN_SIN_CONEXION)
+          return await enLaPc();
+        try {
+          const found = await searchAlfaBeta(
+            token,
+            organizationId,
+            text,
+            controller.signal,
+          );
+          if (!controller.signal.aborted) {
+            setAlfaResults(found);
+            setSearched(text);
+          }
+        } catch (cause) {
+          if (!(cause instanceof SinConexionError)) throw cause;
+          await enLaPc();
         }
         return;
       }
@@ -227,10 +270,13 @@ export function DashboardMedicineSearch({
                 ...Object.entries(medicineSources)
                   .filter(([value]) => value !== "alfabeta")
                   .map(([value, label]) => ({ value, label })),
+                { value: "pc", label: "Nuestra base · en la PC" },
               ]}
               onChange={(value) => {
                 resetResults();
-                setSource(value as MedicineReference["source"] | "alfabeta");
+                // Elegida a mano: no se cambia sola al volver internet.
+                cambioAutomatico.current = false;
+                setSource(value as Fuente);
               }}
             />
           </div>
@@ -274,11 +320,28 @@ export function DashboardMedicineSearch({
           {loading
             ? "Consultando la fuente. Puede demorar unos segundos…"
             : searched
-              ? (source === "alfabeta" ? alfaResults.length : results.length)
+              ? (
+                  source === "alfabeta" && baseDeLaPc === undefined
+                    ? alfaResults.length
+                    : results.length
+                )
                 ? ""
                 : `No se encontraron resultados para “${searched}”. Probá otro nombre o cambiá la fuente.`
               : ""}
         </p>
+        {baseDeLaPc !== undefined && searched && (
+          <p
+            role="note"
+            className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"
+          >
+            {enLinea ? "" : "Sin conexión: AlfaBeta necesita internet. "}
+            Resultados de nuestra base de medicamentos guardada en la PC
+            {baseDeLaPc
+              ? ` (precios al ${new Date(baseDeLaPc).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })})`
+              : ""}
+            .
+          </p>
+        )}
         {results.length > 0 && <MedicineSearchResults results={results} />}
         {source === "alfabeta" && alfaResults.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">

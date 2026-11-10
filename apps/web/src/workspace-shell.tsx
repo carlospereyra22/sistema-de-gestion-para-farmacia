@@ -216,6 +216,7 @@ import { ProductLotsDetail } from "./product-lots-detail";
 import { ProductLotCell } from "./product-lot-cell";
 import { PorEnviar } from "./por-enviar";
 import { precargarReportes } from "./lib/reports-api";
+import { getResumenDeInicio, type ResumenDeInicio } from "./lib/inicio-api";
 import { ProductCatalogToolbar } from "./product-catalog-toolbar";
 import { matchesCatalogExtras } from "./lib/product-catalog-filters";
 import {
@@ -361,7 +362,6 @@ import {
   type AlfaBetaMatch,
   getParties,
   getPriceLists,
-  getReportSummary,
   getRoles,
   getSales,
   getStock,
@@ -380,7 +380,6 @@ import {
   type CashSession,
   type Party,
   type PriceList,
-  type ReportSummary,
   type RoleListItem,
   type Sale,
   type StockLot,
@@ -1702,23 +1701,26 @@ function Home({
   session?: CashSession;
   onNavigate: (view: View) => void;
 }): ReactElement {
-  const [summary, setSummary] = useState<ReportSummary>();
+  const [summary, setSummary] = useState<ResumenDeInicio>();
   const [summaryError, setSummaryError] = useState("");
   const { enLinea } = useConectividad();
   useEffect(() => {
     if (!active || !canReadReports) return;
     let current = true;
-    void getReportSummary(token, organizationId, branchId)
+    // Sin conexión: la copia del servidor con lo de esta PC (SISTEMA-86).
+    void getResumenDeInicio(token, organizationId, branchId)
       .then((result) => {
         if (current) {
           setSummary(result);
           setSummaryError("");
         }
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
         if (current)
           setSummaryError(
-            "No se pudo actualizar el resumen. Los datos visibles corresponden a la última consulta.",
+            cause instanceof SinConexionError
+              ? cause.message
+              : "No se pudo actualizar el resumen. Los datos visibles corresponden a la última consulta.",
           );
       });
     return () => {
@@ -1776,14 +1778,28 @@ function Home({
             {summaryError}
           </p>
         )}
+        {summary?.guardadaEl ? (
+          <p role="status" className="text-xs text-amber-700">
+            Sin conexión: ventas de otras PCs hasta las{" "}
+            {new Date(summary.guardadaEl).toLocaleTimeString("es-AR", {
+              timeZone: "America/Argentina/Buenos_Aires",
+              hour: "2-digit",
+              minute: "2-digit",
+              hourCycle: "h23",
+            })}
+            . Las de esta PC ya están sumadas.
+          </p>
+        ) : null}
         <div className="dashboard-entrada relative max-sm:[&_.dashboard-welcome]:pt-10">
           <div className="absolute right-0 top-0 z-20">
             <DashboardDate />
           </div>
           <DashboardWelcome branchName={branchName} />
         </div>
+        {/* Por encima de las tarjetas de abajo: el menú de "Fuente" se abre
+            sobre ellas (la entrada animada arma capas separadas). */}
         <div
-          className="dashboard-entrada"
+          className="dashboard-entrada relative z-30"
           style={{ "--orden": 1 } as CSSProperties}
         >
           <DashboardMedicineSearch

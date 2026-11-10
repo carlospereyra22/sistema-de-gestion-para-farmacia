@@ -57,7 +57,8 @@ necesita conexión.
 | SISTEMA-73 Proveedores y cuentas por pagar sin conexión       | En main    |
 | SISTEMA-79 Productos e inventario sin conexión                | En main    |
 | SISTEMA-80 Categorías, laboratorios, listas y reportes        | En main    |
-| SISTEMA-81 Arreglos de la prueba: compras, cobros y avisos    | Esta etapa |
+| SISTEMA-81 Arreglos de la prueba: compras, cobros y avisos    | En main    |
+| SISTEMA-86 Inicio sin conexión                                | Esta etapa |
 | Prueba completa con dos PCs                                   | Pendiente  |
 
 ## Cómo funciona (SISTEMA-62)
@@ -251,6 +252,15 @@ Problema encontrado en preprod (09/11/2026): sin conexión fallaban el lector de
 - **Caja** (`lib/precarga-caja.ts`): con conexión, al entrar y cada 10 minutos, se guardan permisos y reglas de la caja, cobros pendientes, el historial del período por defecto y los últimos movimientos de cada caja. Sin eso no se podía cerrar sin conexión.
 - **Prueba en navegador real** (`scripts/probar-sin-conexion.mjs`, obligatoria antes de publicar en preprod un cambio del modo sin internet; ver skill `cerrar-tarea`): Edge con un perfil nuevo contra la versión compilada como preprod. Entra con conexión con un usuario de prueba que crea sólo en `gestion_dev`, apaga el servidor y recorre cada pantalla, carga cada parte que se baja aparte y cierra la caja; el cierre queda en la bandeja de la PC. Resultado y capturas en `.cache/prueba-sin-conexion/`.
 - **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73, productos e inventario en SISTEMA-79, y categorías, laboratorios, listas de precios y reportes (copia del servidor) en SISTEMA-80.
+
+## Inicio sin conexión (SISTEMA-86)
+
+Pedido del usuario (11/11/2026): que Inicio funcione sin internet, y que el buscador consulte nuestra base de medicamentos.
+
+- **KPI** (`lib/inicio-api.ts`, `lib/inicio-sin-conexion.ts`): Ventas hoy, Ticket promedio y la curva de 7 días parten de la copia del resumen del servidor y suman las ventas de hoy de esta PC que todavía no se enviaron. Sin conexión, A cobrar (cuentas corrientes de la PC), Deuda con proveedores (copia de Cuentas por pagar con lo pendiente, con el mismo criterio de vencimientos), cada Caja (sesiones de la PC con lo pendiente) y Compras por recibir (compras de la PC) se calculan en la PC. Las alertas de inventario ya salían del stock y el catálogo de la PC. Aviso: "Sin conexión: ventas de otras PCs hasta las …"; lo que vendan otras PCs sin conexión no se ve hasta que vuelva internet.
+- **Buscador de medicamentos**: la fuente "Nuestra base · en la PC" busca en nuestra base de medicamentos guardada en la PC (`buscarMedicamentosEnLaPc`, SISTEMA-69), con o sin conexión, y avisa de qué día son los precios. AlfaBeta necesita internet: al cortarse, el buscador pasa solo de AlfaBeta a nuestra base y, al volver, vuelve a AlfaBeta (si la fuente se eligió a mano, no se cambia). Si AlfaBeta no responde por falta de conexión, también se busca en nuestra base. La fecha informada de nuestra base se muestra como fecha de Argentina.
+- **Últimas ventas**: las del servidor (o su copia) más las ventas sin enviar, con "Por enviar".
+- **Precarga**: el resumen de Inicio se guarda con los reportes (cada 15 minutos).
 
 ## Arreglos de la prueba sin conexión (SISTEMA-81)
 

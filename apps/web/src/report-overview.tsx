@@ -4,7 +4,9 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -28,6 +30,11 @@ import type { EChartsCoreOption } from "echarts/core";
 import { paymentLabels, rankingOption, trendOption } from "./lib/report-charts";
 import { formatMoneyMinor } from "./lib/report-format";
 import { getReportOverview } from "./lib/reports-api";
+import {
+  conAnimacion,
+  DURACION_ENTRADA,
+  tocaAnimarReportes,
+} from "./lib/animacion-reportes";
 import { comparisonOptions, type ReportView } from "./lib/report-view";
 import { ReportCashClosuresPanel } from "./report-cash-closures";
 import { ReportKpiCard } from "./report-kpi";
@@ -44,15 +51,21 @@ function Panel({
   title,
   icon,
   hint,
+  orden = 4,
   children,
 }: {
   title: string;
   icon: ReactNode;
   hint?: string;
+  /** Orden de aparición: cada panel entra un poco después (SISTEMA-87). */
+  orden?: number;
   children: ReactNode;
 }): ReactElement {
   return (
-    <section className={`${reportCardClass} min-w-0 p-4`}>
+    <section
+      className={`${reportCardClass} reportes-entrada min-w-0 p-4`}
+      style={{ "--orden": orden } as CSSProperties}
+    >
       <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
         <span className="text-[#087f70]">{icon}</span>
         {title}
@@ -153,8 +166,28 @@ export function ReportOverviewTab({
   useEffect(() => {
     if (active) return load();
   }, [active, load]);
+  // La entrada animada se decide una vez, cuando el Resumen se ve por primera
+  // vez con datos: sólo la primera vez de la sesión (SISTEMA-87).
+  // Se decide una sola vez por pantalla: en desarrollo React repite los
+  // efectos, y la segunda vez ya figuraba como vista y no animaba.
+  const decision = useRef<boolean>(undefined);
+  const [animar, setAnimar] = useState<boolean>();
+  useEffect(() => {
+    if (!active || !data) return;
+    decision.current ??= tocaAnimarReportes() && !data.guardadaEl;
+    setAnimar(decision.current);
+  }, [active, data]);
+  // Terminada la entrada, un cambio de filtros ya no la repite.
+  useEffect(() => {
+    if (!animar) return;
+    const fin = window.setTimeout(() => {
+      decision.current = false;
+      setAnimar(false);
+    }, DURACION_ENTRADA + 1500);
+    return () => window.clearTimeout(fin);
+  }, [animar]);
 
-  if (!data)
+  if (!data || animar === undefined)
     return error ? (
       <ReportErrorState message={error} onRetry={load} />
     ) : (
@@ -169,6 +202,7 @@ export function ReportOverviewTab({
         data={data}
         comparison={comparison}
         onOpenInventory={onOpenInventory}
+        animar={animar}
       />
     </>
   );
@@ -203,18 +237,21 @@ export function ReportOverviewContent({
   data,
   comparison,
   onOpenInventory,
+  animar = false,
 }: {
   data: ReportOverview;
   comparison: ReportView["comparison"];
   onOpenInventory: () => void;
+  /** Entrada animada: números que suben y gráficos que se dibujan (SISTEMA-87). */
+  animar?: boolean;
 }): ReactElement {
   const comparisonLabel =
     comparison === "none"
       ? null
       : (comparisonOptions.find((option) => option.id === comparison)?.label ??
         null);
-  const options = useMemo(
-    () => ({
+  const options = useMemo(() => {
+    const opciones = {
       trend: trendOption(
         data.charts.salesTrend,
         data.charts.trendGranularity,
@@ -241,9 +278,14 @@ export function ReportOverviewContent({
         })),
         "units",
       ),
-    }),
-    [data, comparisonLabel],
-  );
+    };
+    return Object.fromEntries(
+      Object.entries(opciones).map(([clave, opcion]) => [
+        clave,
+        conAnimacion(opcion, animar),
+      ]),
+    ) as typeof opciones;
+  }, [data, comparisonLabel, animar]);
   const { kpis, charts, tables, meta } = data;
   const showProfit = kpis.grossProfit.unavailableReason !== "FORBIDDEN";
   const empty = kpis.unitsSold.value === "0" && kpis.netSales.value === "0";
@@ -252,7 +294,7 @@ export function ReportOverviewContent({
   const showBranches = tables.branches.length > 1;
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${animar ? "reportes-animado" : ""}`}>
       {meta.dataQuality.warnings.map((warning) => (
         <p
           key={warning}
@@ -266,6 +308,8 @@ export function ReportOverviewContent({
         className={`grid gap-3 sm:grid-cols-2 ${showProfit ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
       >
         <ReportKpiCard
+          animar={animar}
+          orden={0}
           label="Ventas netas"
           icon={<ReceiptText size={18} aria-hidden />}
           kpi={kpis.netSales}
@@ -273,6 +317,8 @@ export function ReportOverviewContent({
         />
         {showProfit ? (
           <ReportKpiCard
+            animar={animar}
+            orden={1}
             label="Ganancia bruta estimada"
             icon={<TrendingUp size={18} aria-hidden />}
             kpi={kpis.grossProfit}
@@ -280,12 +326,16 @@ export function ReportOverviewContent({
           />
         ) : null}
         <ReportKpiCard
+          animar={animar}
+          orden={2}
           label="Ticket promedio"
           icon={<Wallet size={18} aria-hidden />}
           kpi={kpis.averageTicket}
           help="Total facturado dividido la cantidad de ventas confirmadas."
         />
         <ReportKpiCard
+          animar={animar}
+          orden={3}
           label="Unidades vendidas"
           icon={<Package size={18} aria-hidden />}
           kpi={kpis.unitsSold}
@@ -304,6 +354,7 @@ export function ReportOverviewContent({
         <>
           <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
             <Panel
+              orden={4}
               title="Evolución de ventas"
               icon={<TrendingUp size={16} aria-hidden />}
               hint={`Ventas netas por ${charts.trendGranularity === "day" ? "día" : "mes"}`}
@@ -311,6 +362,7 @@ export function ReportOverviewContent({
               <Chart option={options.trend} label="Evolución de ventas netas" />
             </Panel>
             <Panel
+              orden={5}
               title="Medios de pago"
               icon={<CreditCard size={16} aria-hidden />}
               hint="Sobre lo facturado; el vuelto se descuenta del efectivo."
@@ -340,6 +392,7 @@ export function ReportOverviewContent({
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
             <Panel
+              orden={6}
               title="Ventas por categoría"
               icon={<Tags size={16} aria-hidden />}
               hint="Ventas netas según la categoría asignada al producto."
@@ -354,6 +407,7 @@ export function ReportOverviewContent({
               />
             </Panel>
             <Panel
+              orden={7}
               title="Productos más vendidos"
               icon={<Trophy size={16} aria-hidden />}
               hint="Unidades netas de devoluciones."
@@ -377,6 +431,7 @@ export function ReportOverviewContent({
       >
         {showBranches ? (
           <Panel
+            orden={8}
             title="Resumen por sucursal"
             icon={<Store size={16} aria-hidden />}
           >
@@ -462,6 +517,7 @@ export function ReportOverviewContent({
           </Panel>
         ) : null}
         <Panel
+          orden={9}
           title="Alertas de inventario"
           icon={<AlertTriangle size={16} aria-hidden />}
           hint="Estado actual, no depende del período."

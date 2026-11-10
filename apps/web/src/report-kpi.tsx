@@ -1,4 +1,11 @@
-import type { ReactElement, ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { DURACION_ENTRADA, easeOutCubic } from "./lib/animacion-reportes";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { ReportKpi } from "@gestion/contracts";
 import { formatKpiValue, kpiTrend, unavailableText } from "./lib/report-format";
@@ -14,14 +21,32 @@ export function ReportKpiCard({
   kpi,
   help,
   higherIsBetter = true,
+  animar = false,
+  orden = 0,
 }: {
   label: string;
   icon: ReactNode;
   kpi: ReportKpi;
   help: string;
   higherIsBetter?: boolean;
+  /** Entrada animada: el número sube desde 0 (SISTEMA-87). */
+  animar?: boolean;
+  /** Orden de aparición de la tarjeta. */
+  orden?: number;
 }): ReactElement {
   const trend = kpiTrend(kpi, higherIsBetter);
+  const avance = useAvance(animar && kpi.available && kpi.value !== null);
+  const mostrado =
+    avance < 1 && kpi.value !== null
+      ? {
+          ...kpi,
+          value: String(
+            kpi.unit === "percent"
+              ? Number(kpi.value) * avance
+              : Math.round(Number(kpi.value) * avance),
+          ),
+        }
+      : kpi;
   const TrendIcon =
     trend.direction === "up"
       ? ArrowUpRight
@@ -29,7 +54,10 @@ export function ReportKpiCard({
         ? ArrowDownRight
         : Minus;
   return (
-    <article className={`${reportCardClass} flex gap-3 px-4 py-3.5`}>
+    <article
+      className={`${reportCardClass} reportes-entrada flex gap-3 px-4 py-3.5`}
+      style={{ "--orden": orden } as CSSProperties}
+    >
       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#e8faf5] text-[#087f70]">
         {icon}
       </span>
@@ -46,7 +74,7 @@ export function ReportKpiCard({
               : unavailableText[kpi.unavailableReason ?? "NO_DATA"]
           }
         >
-          {formatKpiValue(kpi)}
+          {formatKpiValue(mostrado)}
           {kpi.estimated && kpi.available ? (
             <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-600">
               estimado
@@ -77,4 +105,25 @@ export function ReportKpiCard({
       </div>
     </article>
   );
+}
+
+/**
+ * Avance de 0 a 1 de los números que suben, con una curva suave. Sin
+ * animación es 1 desde el principio (y en el servidor, para los tests).
+ */
+function useAvance(animar: boolean) {
+  const [avance, setAvance] = useState(animar ? 0 : 1);
+  useEffect(() => {
+    if (!animar) return;
+    let cuadro = 0;
+    const inicio = performance.now();
+    const paso = (ahora: number) => {
+      const t = Math.min(1, (ahora - inicio) / DURACION_ENTRADA);
+      setAvance(easeOutCubic(t));
+      if (t < 1) cuadro = requestAnimationFrame(paso);
+    };
+    cuadro = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(cuadro);
+  }, [animar]);
+  return avance;
 }

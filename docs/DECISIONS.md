@@ -2,6 +2,22 @@
 
 ## DECIDED
 
+- 11/11/2026 (SISTEMA-87): Reportes tiene una entrada animada (pedido del usuario): los
+  números de los KPI suben desde 0, las tarjetas y los paneles aparecen de a uno, la línea
+  de evolución se dibuja y las barras crecen. Sólo la primera vez que se abre Reportes en la
+  sesión del navegador (`sessionStorage`), para que no se repita en cada entrada; después
+  todo aparece directo y al cambiar un filtro los gráficos hacen una transición corta.
+  Nunca anima sin conexión, con la copia guardada ni con "reducir movimiento"
+  (`lib/animacion-reportes.ts`). Sin librerías nuevas: CSS, `requestAnimationFrame` y la
+  animación de ECharts.
+
+- 11/11/2026 (SISTEMA-86): Inicio funciona sin conexión. A diferencia de Reportes (copia
+  del servidor), Inicio muestra "lo de hoy en esta sucursal": las ventas parten de la copia
+  y suman las de la PC sin enviar, y los demás KPI se calculan con las copias de la PC con el
+  mismo criterio que el servidor (`lib/inicio-sin-conexion.ts`). El buscador de medicamentos,
+  sin conexión, consulta la base de medicamentos de la PC en lugar de AlfaBeta (pedido del
+  usuario). Se hizo sobre el rediseño de Inicio de SISTEMA-85.
+
 - 11/11/2026 (SISTEMA-81): Asignar cobros pendientes de caja deja de ser "sólo con conexión"
   (decisión del 09/11/2026): asignar caja, incorporar a una sesión y quitar la caja son
   operaciones de caja sin conexión (`cash/offline`, tipos `COBRO_DESTINO`,
