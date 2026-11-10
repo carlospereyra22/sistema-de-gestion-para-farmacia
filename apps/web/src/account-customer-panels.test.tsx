@@ -17,24 +17,8 @@ const account: CustomerAccount = {
   creditLimitMinor: "10000000",
   balanceMinor: "6000000",
   accountTermDays: 30,
-  movements: [
-    {
-      id: "receipt",
-      type: "CREDIT",
-      amountMinor: "18000000",
-      createdAt: "2026-10-09T12:00:00Z",
-      note: null,
-      saleId: null,
-    },
-    {
-      id: "cancel",
-      type: "CREDIT",
-      amountMinor: "100000",
-      createdAt: "2026-10-10T12:00:00Z",
-      note: null,
-      saleId: "sale",
-    },
-  ],
+  // El servidor calcula el último cobro sin contar las anulaciones (SISTEMA-75).
+  lastPayment: { amountMinor: "18000000", createdAt: "2026-10-09T12:00:00Z" },
 };
 const listProps = {
   disabled: false,
@@ -172,7 +156,7 @@ it("handles no payments and credit balances without inventing dates", () => {
         ...account,
         balanceMinor: "-1000",
         accountTermDays: null,
-        movements: [],
+        lastPayment: null,
       }}
     />,
   );

@@ -1,5 +1,6 @@
 import {
   getAccountItems,
+  getCustomerAccountMovements,
   getCustomerAccounts,
   getParties,
   getPriceLists,
@@ -37,8 +38,30 @@ export async function precargarCuentas(
     .filter((cuenta) => !cuenta.porEnviar && cuenta.balanceMinor !== "0")
     .slice(0, maximo);
   // De a uno: no compite con lo que se está usando en pantalla.
-  for (const cuenta of conDeuda)
+  for (const cuenta of conDeuda) {
     await getAccountItems(token, organizationId, branchId, cuenta.id).catch(
       () => undefined,
     );
+    // Sus movimientos: el listado ya no los trae (SISTEMA-75). Sólo si la
+    // cuenta cambió desde la última vez (nunca se borran movimientos, así que
+    // el saldo y la cantidad alcanzan para saberlo).
+    const clave = `${organizationId}|${branchId}|${cuenta.id}`;
+    const version = `${cuenta.balanceMinor}|${cuenta.movementCount ?? ""}`;
+    if (movimientosPrecargados.get(clave) === version) continue;
+    await getCustomerAccountMovements(
+      token,
+      organizationId,
+      branchId,
+      cuenta.id,
+    )
+      .then(() => movimientosPrecargados.set(clave, version))
+      .catch(() => undefined);
+  }
+}
+
+const movimientosPrecargados = new Map<string, string>();
+
+/** Para los tests. */
+export function olvidarMovimientosPrecargados() {
+  movimientosPrecargados.clear();
 }

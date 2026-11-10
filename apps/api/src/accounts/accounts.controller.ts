@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -384,6 +385,13 @@ export class AccountsController {
     @Param("organizationId") org: string,
   ) {
     return this.accounts.list(req.auth!.sub, org);
+  }
+  @Get(":customerId/movements") movements(
+    @Req() req: AuthenticatedRequest,
+    @Param("organizationId") org: string,
+    @Param("customerId", ParseUUIDPipe) customerId: string,
+  ) {
+    return this.accounts.movements(req.auth!.sub, org, customerId);
   }
   @Get(":customerId/movements/:movementId/sale") detail(
     @Req() req: AuthenticatedRequest,

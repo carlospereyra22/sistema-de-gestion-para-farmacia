@@ -2,6 +2,18 @@
 
 ## DECIDED
 
+- 10/11/2026 (SISTEMA-75): Cuentas corrientes con saldos calculados en el servidor
+  (decisión del usuario). `GET customer-accounts` devuelve cada cliente con su saldo, la
+  cantidad de movimientos y el último cobro (sin contar anulaciones), sumados en
+  PostgreSQL, y ya no sus movimientos: con 3.000 clientes de 20 movimientos bajó de 27 MB y
+  1,4 s a 1 MB y 0,14 s. Los movimientos de un cliente se piden al abrirlo
+  (`GET customer-accounts/:customerId/movements`). Para no contar dos veces lo que la PC
+  envió y el servidor ya registró, la web pide los movimientos sólo de los clientes con
+  operaciones pendientes en la bandeja. La precarga guarda los movimientos de los clientes
+  con saldo (los mismos que ya guardaban sus artículos) y sólo los vuelve a pedir si
+  cambiaron el saldo o la cantidad; los movimientos nunca se borran, así que alcanza con
+  eso.
+
 - 10/11/2026 (SISTEMA-74): Rendimiento con catálogos e historiales grandes (60.000
   productos o más). El catálogo se sincroniza por partes: 256 partes por los dos primeros
   caracteres del id, cada una con una versión que resume su contenido

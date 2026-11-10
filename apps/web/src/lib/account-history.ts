@@ -1,7 +1,7 @@
-import type { CustomerAccount } from "./api";
+import type { CustomerAccountMovement } from "./api";
 export type AccountHistoryFilter = "all" | "sales" | "receipts";
 export function filterAccountHistory(
-  movements: CustomerAccount["movements"],
+  movements: readonly CustomerAccountMovement[],
   filter: AccountHistoryFilter,
 ) {
   return movements.filter(

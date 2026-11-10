@@ -274,6 +274,19 @@ describir("rendimiento con catálogo grande (esquema aislado)", () => {
     await medir(`cuentas corrientes (${CLIENTES})`, () =>
       cuentas.list(usuario, org),
     );
+    await medir("movimientos de un cliente", async () =>
+      cuentas.movements(
+        usuario,
+        org,
+        (await cuentas.list(usuario, org))[0]!.id,
+      ),
+    );
+    await medir("estado de cuenta (sucursal)", () =>
+      cuentas.statement(usuario, org, sucursales[0]!),
+    );
+    await medir("vencimientos de cuentas", () =>
+      cuentas.dueDates(usuario, org, sucursales[0]!),
+    );
     await medir("clientes", () => partes.list(usuario, org, "customers"));
     // Dos PCs (una por sucursal) pidiendo lo mismo a la vez.
     await medir("2 PCs a la vez (catálogo+stock)", () =>

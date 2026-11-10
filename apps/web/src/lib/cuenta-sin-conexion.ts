@@ -1,4 +1,5 @@
 import type {
+  CustomerAccountMovement,
   AccountItems,
   AccountReceipt,
   AccountSaleDetail,
@@ -531,7 +532,7 @@ export function itemsConPendientes(
 
 // --- Movimientos y saldos de las cuentas ---
 
-type Movimiento = CustomerAccount["movements"][number];
+type Movimiento = CustomerAccountMovement;
 
 /** Movimientos que tendría cada cliente con lo que todavía no llegó. */
 function movimientosPendientes(
@@ -635,6 +636,47 @@ const yaLlego = (movimientos: readonly Movimiento[], m: Movimiento) =>
 const delta = (m: Movimiento) =>
   m.type === "DEBIT" ? BigInt(m.amountMinor) : -BigInt(m.amountMinor);
 
+/** Clientes con movimientos hechos en la PC que todavía no llegaron. */
+export function clientesConMovimientosPendientes(
+  bandeja: readonly VentaPendiente[],
+  org: string,
+) {
+  return [...movimientosPendientes(bandeja, org).keys()];
+}
+
+/** Lo que la PC tiene por enviar de un cliente: su alta y sus movimientos. */
+export function pendientesDelCliente(
+  bandeja: readonly VentaPendiente[],
+  org: string,
+  customerId: string,
+) {
+  return pendientesDe(bandeja, org).filter(
+    (item) =>
+      clienteDe(item)?.clientOperationId === customerId ||
+      opDe(item)?.customerId === customerId ||
+      ventaACuenta(item)?.customerId === customerId,
+  );
+}
+
+const sinSucursal = (m: Movimiento & { branchId: string }): Movimiento => {
+  const movimiento: Movimiento & { branchId?: string } = { ...m };
+  delete movimiento.branchId;
+  return movimiento;
+};
+
+/** Los movimientos de un cliente con lo hecho en la PC que todavía no llegó. */
+export function movimientosConPendientes(
+  movimientos: readonly Movimiento[],
+  bandeja: readonly VentaPendiente[],
+  org: string,
+  customerId: string,
+): Movimiento[] {
+  const r = [...movimientos];
+  for (const m of movimientosPendientes(bandeja, org).get(customerId) ?? [])
+    if (!yaLlego(r, m)) r.push(sinSucursal(m));
+  return r;
+}
+
 /** Las cuentas corrientes con lo hecho en la PC que todavía no llegó. */
 export function cuentasConPendientes(
   cuentas: readonly CustomerAccount[],
@@ -691,9 +733,20 @@ export function cuentasConPendientes(
     if (!cuenta) continue;
     let saldo = BigInt(cuenta.balanceMinor);
     for (const m of movimientos) {
-      if (yaLlego(cuenta.movements, m)) continue;
-      cuenta.movements.push(m);
+      // Sin los movimientos del servidor (SISTEMA-75) se cuenta lo pendiente.
+      if (cuenta.movements && yaLlego(cuenta.movements, m)) continue;
+      cuenta.movements?.push(sinSucursal(m));
       saldo += delta(m);
+      cuenta.movementCount = (cuenta.movementCount ?? 0) + 1;
+      if (
+        m.type === "CREDIT" &&
+        !m.saleId &&
+        (!cuenta.lastPayment || m.createdAt >= cuenta.lastPayment.createdAt)
+      )
+        cuenta.lastPayment = {
+          amountMinor: m.amountMinor,
+          createdAt: m.createdAt,
+        };
     }
     cuenta.balanceMinor = saldo.toString();
   }

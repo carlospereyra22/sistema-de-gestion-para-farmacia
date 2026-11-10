@@ -308,6 +308,42 @@ describe("Current account lifecycle (rolled-back fixtures)", () => {
           expect((await accounts.list(user.id, org.id))[0]?.balanceMinor).toBe(
             "6000",
           );
+          // SISTEMA-75: el listado trae el resumen calculado en la base y los
+          // movimientos se piden por cliente.
+          const resumen = (await accounts.list(user.id, org.id))[0]!;
+          const movimientos = await accounts.movements(
+            user.id,
+            org.id,
+            customer.id,
+          );
+          expect(resumen).not.toHaveProperty("movements");
+          expect(resumen.movementCount).toBe(movimientos.length);
+          expect(
+            movimientos.reduce(
+              (s, m) =>
+                s + (m.type === "DEBIT" ? 1n : -1n) * BigInt(m.amountMinor),
+              0n,
+            ),
+          ).toBe(6000n);
+          // El último cobro no cuenta la anulación de la venta.
+          expect(resumen.lastPayment).toEqual({
+            amountMinor: "4000",
+            createdAt: movimientos.find((m) => m.id === firstReceipt.id)
+              ?.createdAt,
+          });
+          expect(movimientos.at(-1)).toMatchObject({
+            id: firstReceipt.id,
+            type: "CREDIT",
+            amountMinor: "4000",
+            paymentMethod: "CASH",
+            clientOperationId: operation,
+          });
+          await expect(
+            accounts.movements(user.id, org.id, randomUUID()),
+          ).rejects.toThrow("No se encontró el cliente");
+          await expect(
+            accounts.movements(randomUUID(), org.id, customer.id),
+          ).rejects.toThrow();
           expect(
             await tx.cashMovement.count({
               where: { cashSessionId: session.id },
