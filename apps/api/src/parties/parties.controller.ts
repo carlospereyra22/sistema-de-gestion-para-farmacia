@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -14,21 +15,31 @@ import {
   IsOptional,
   IsBoolean,
   IsInt,
+  IsIn,
+  IsISO8601,
+  IsObject,
+  IsUUID,
   Min,
   Max,
   IsString,
   MinLength,
   MaxLength,
   ValidateNested,
+  validate,
 } from "class-validator";
-import { Type } from "class-transformer";
+import { Type, plainToInstance } from "class-transformer";
+import { BranchAccessGuard } from "../auth/branch-access.guard";
+import { DecidedWhenOccurred } from "../platform/subscription-gate";
 import {
   CustomerBillingDto,
   UpdateCustomerBillingDto,
 } from "./customer-billing.dto";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
-import { PartiesService } from "./parties.service";
+import {
+  PartiesService,
+  type OperacionClienteSinConexion,
+} from "./parties.service";
 class CreatePartyDto {
   @IsString() @MinLength(2) name!: string;
   @IsOptional() @IsString() document?: string;
@@ -59,6 +70,107 @@ class CreateSupplierDto extends SupplierProfileDto {
   @IsOptional() @IsBoolean() accountEnabled?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(3650) accountTermDays?: number | null;
 }
+/** Alta o edición de un cliente hecha sin conexión (SISTEMA-70). */
+class OfflineCustomerDto {
+  @IsOptional() @IsIn(["ALTA", "EDICION"]) tipo?: "ALTA" | "EDICION";
+  @IsOptional() @IsUUID() customerId?: string;
+  @IsUUID() clientOperationId!: string;
+  @IsISO8601({ strict: true }) occurredAt!: string;
+  @IsUUID() deviceId!: string;
+  /** El mismo cuerpo que con conexión: el del alta o el de la edición. */
+  @IsObject() cuerpo!: Record<string, unknown>;
+}
+class SignedOfflineCustomerDto {
+  @IsUUID() actorId!: string;
+  @IsUUID() deviceId!: string;
+  @IsString() @MaxLength(20000) payload!: string;
+  @IsString() @MaxLength(200) signature!: string;
+}
+/** Valida la operación y su cuerpo con el DTO de su tipo, como con conexión. */
+async function operacionDeCliente(
+  datos: unknown,
+): Promise<OperacionClienteSinConexion> {
+  const opciones = { whitelist: true, forbidNonWhitelisted: true };
+  const op = plainToInstance(OfflineCustomerDto, datos ?? {});
+  const edicion = op.tipo === "EDICION";
+  const DTO: new () => object = edicion
+    ? UpdateCustomerBillingDto
+    : CreateCustomerDto;
+  const cuerpo: object = plainToInstance(DTO, op.cuerpo ?? {});
+  if (
+    (await validate(op, opciones)).length ||
+    (await validate(cuerpo, opciones)).length ||
+    (edicion && !op.customerId)
+  )
+    throw new BadRequestException(
+      "El cliente guardado sin conexión tiene datos inválidos.",
+    );
+  return edicion
+    ? {
+        tipo: "EDICION",
+        customerId: op.customerId!,
+        clientOperationId: op.clientOperationId,
+        occurredAt: op.occurredAt,
+        deviceId: op.deviceId,
+        cuerpo: cuerpo as UpdateCustomerBillingDto,
+      }
+    : {
+        tipo: "ALTA",
+        clientOperationId: op.clientOperationId,
+        occurredAt: op.occurredAt,
+        deviceId: op.deviceId,
+        cuerpo: cuerpo as CreateCustomerDto,
+      };
+}
+
+@Controller("organizations/:organizationId/branches/:branchId/customers")
+@UseGuards(JwtAccessGuard, BranchAccessGuard)
+export class PartiesOfflineController {
+  constructor(private readonly parties: PartiesService) {}
+  /** Cliente dado de alta o editado sin conexión, que la PC manda al volver. */
+  @DecidedWhenOccurred()
+  @Post("offline")
+  async offline(
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() body: OfflineCustomerDto,
+  ) {
+    return this.parties.customerOffline(
+      req.auth!.sub,
+      org,
+      branch,
+      await operacionDeCliente(body),
+    );
+  }
+  /** El de otro usuario de esta PC: queda a nombre de quien lo hizo. */
+  @DecidedWhenOccurred()
+  @Post("offline/firmada")
+  async offlineSigned(
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() body: SignedOfflineCustomerDto,
+  ) {
+    let datos: unknown;
+    try {
+      datos = JSON.parse(body.payload);
+    } catch {
+      throw new BadRequestException("La operación firmada no se puede leer.");
+    }
+    const op = await operacionDeCliente(datos);
+    if (op.deviceId !== body.deviceId)
+      throw new BadRequestException("La operación no corresponde a esa PC.");
+    return this.parties.customerOfflineSigned(
+      req.auth!.sub,
+      org,
+      branch,
+      body,
+      op,
+    );
+  }
+}
+
 @Controller("organizations/:organizationId")
 @UseGuards(JwtAccessGuard)
 export class PartiesController {

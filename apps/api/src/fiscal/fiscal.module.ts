@@ -15,9 +15,12 @@ import { ProductionConfigurationService } from "./production-configuration.servi
 import { ProductionCreditService } from "./production-credit.service";
 import { AccountsModule } from "../accounts/accounts.module";
 import { ColaFiscalService } from "./cola-fiscal.service";
+import { PadronService } from "./padron.service";
+import { PadronController } from "./padron.controller";
 @Module({
   imports: [AuthModule, OrganizationsModule, AccountsModule],
   providers: [
+    PadronService,
     ColaFiscalService,
     ProductionCreditService,
     ProductionSalesService,
@@ -30,6 +33,7 @@ import { ColaFiscalService } from "./cola-fiscal.service";
     FiscalTrialService,
   ],
   controllers: [
+    PadronController,
     FiscalCredentialsController,
     FiscalTestingController,
     FiscalProductionController,

@@ -115,6 +115,10 @@ model Organization {
 model FiscalCredential {
   encryptedTicket String?
   ticketExpiresAt DateTime? @db.Timestamptz(6)
+  // Acceso aparte para el padrón de ARCA (constancia de inscripción): ARCA da
+  // uno por servicio y no lo repite hasta que vence (SISTEMA-70).
+  encryptedPadronTicket String?
+  padronTicketExpiresAt DateTime? @db.Timestamptz(6)
   verifiedAt DateTime? @db.Timestamptz(6)
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -1422,4 +1426,23 @@ model SalePayment {
   sale Sale @relation(fields: [saleId], references: [id], onDelete: Restrict)
   @@index([saleId])
   @@index([cashSessionId])
+}
+
+// Certificado de Farmatec para consultar el padrón de ARCA (constancia de
+// inscripción) en nombre de la plataforma, para todas las farmacias. Uno por
+// ambiente. La clave privada y el acceso de ARCA van cifrados (SISTEMA-70).
+model PlatformPadronCredential {
+  id                  String    @id @default(uuid()) @db.Uuid
+  environment         String    @unique @db.VarChar(20)
+  cuit                String    @db.VarChar(11)
+  encryptedPrivateKey String
+  csr                 String?
+  certificate         String?
+  fingerprint         String?
+  expiresAt           DateTime? @db.Timestamptz(6)
+  encryptedTicket     String?
+  ticketExpiresAt     DateTime? @db.Timestamptz(6)
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
 }

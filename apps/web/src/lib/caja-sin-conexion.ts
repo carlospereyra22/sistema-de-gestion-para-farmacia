@@ -135,7 +135,42 @@ export function aplicarCajaLocal(
       }
       continue;
     }
-    // Las compras no tocan la caja.
+    // Cobro de cuenta corriente (SISTEMA-70): el efectivo entra a la caja como
+    // un ingreso, igual que en el servidor.
+    if (item.operacion === "CUENTA") {
+      const op = item.cuerpo as {
+        tipo: string;
+        cuerpo: {
+          amountMinor: number;
+          method: string;
+          cashSessionId?: string;
+          payments?: { method: string; amountMinor: number }[];
+        };
+      };
+      if (op.tipo !== "COBRO") continue;
+      const sesion = porId.get(real(op.cuerpo.cashSessionId) ?? "");
+      const efectivo = BigInt(
+        op.cuerpo.payments
+          ? (op.cuerpo.payments.find((p) => p.method === "CASH")?.amountMinor ??
+              0)
+          : op.cuerpo.method === "CASH"
+            ? op.cuerpo.amountMinor
+            : 0,
+      );
+      if (!sesion || sesion.closedAt || efectivo <= 0n) continue;
+      sesion.movements.push({
+        id: item.id,
+        type: "IN",
+        amountMinor: efectivo.toString(),
+        reason: "Cobro cuenta corriente · sin conexión",
+        createdAt: item.occurredAt,
+        actorName: item.actorName ?? item.alcance,
+      });
+      sesion.manualInMinor = sumar(sesion.manualInMinor, efectivo);
+      sesion.expectedAmountMinor = sumar(sesion.expectedAmountMinor, efectivo);
+      continue;
+    }
+    // Las compras y las altas de clientes no tocan la caja.
     if (item.operacion) continue;
     // Venta sin enviar: suma sus cobros a la caja donde se cobró.
     const pagos = (item.cuerpo as CuerpoVenta).payments ?? [];

@@ -1,6 +1,7 @@
 import type { ThermalTicket } from "@gestion/contracts";
 import { useEffect, useState } from "react";
 import { almacenLocal } from "./almacen-local";
+import type { DetalleLocal } from "./cuenta-sin-conexion";
 
 // Bandeja de salida (SISTEMA-64): ventas cobradas sin conexión que esperan
 // llegar al servidor. Se guardan en la PC por usuario: sólo las manda la
@@ -37,9 +38,12 @@ export type VentaPendiente = {
   /**
    * Operación sin conexión que no es venta: de caja (SISTEMA-67: apertura,
    * movimiento o cierre) o de compras (SISTEMA-69: pedido, compra directa o
-   * recepción). Sin este campo es una venta.
+   * recepción) o de cuenta corriente (SISTEMA-70: cobros, ajustes y alta de
+   * clientes). Sin este campo es una venta.
    */
-  operacion?: "CAJA" | "COMPRA";
+  operacion?: "CAJA" | "COMPRA" | "CUENTA" | "CLIENTE";
+  /** Lo que la PC sabe de la operación para mostrarla (SISTEMA-70). */
+  local?: DetalleLocal;
   /** Quién la hizo, para mostrarlo en la caja (nombre o email). */
   actorName?: string;
   estado: EstadoVentaPendiente;

@@ -1,6 +1,7 @@
 import { resolveExternalCategory } from "./lib/api";
 import { PurchasesWorkspace } from "./purchases-workspace";
 import { precargarCompras } from "./lib/precarga-compras";
+import { precargarCuentas } from "./lib/precarga-cuentas";
 import { enviarExhibidoresPendientes } from "./lib/base-medicamentos-local";
 import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
 import {
@@ -698,6 +699,29 @@ export function WorkspaceShell({
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal, veCompras, accessToken, organizationId, branchId]);
+  // Lo mismo con la cuenta corriente (SISTEMA-70): clientes, saldos y
+  // artículos pendientes para vender a cuenta y cobrar sin conexión.
+  const veCuentas =
+    canOpenView("Cuentas corrientes", permissionCodes) ||
+    canOpenView("Ventas", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !veCuentas ||
+      !organizationId ||
+      !branchId
+    )
+      return;
+    const precargar = () =>
+      void precargarCuentas(accessToken, organizationId, branchId).catch(
+        () => {},
+      );
+    precargar();
+    const timer = window.setInterval(precargar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [enLinea, sesionReal, veCuentas, accessToken, organizationId, branchId]);
   // Base de medicamentos en la PC para buscar sin conexión; se baja sólo si
   // cambió. Antes, los exhibidores armados sin conexión (SISTEMA-69).
   useEffect(() => {
@@ -1258,6 +1282,7 @@ export function WorkspaceShell({
               key={`customers:${organizationId}`}
               token={accessToken!}
               organizationId={organizationId!}
+              branchId={branchId}
             />
           ) : null}
           {ready &&
@@ -5222,7 +5247,13 @@ function Sales({
     let current = true;
     setPricingLoading(true);
     setPricingError("");
-    void getEffectivePrices(token, organizationId, customerId, salePriceListId)
+    void getEffectivePrices(
+      token,
+      organizationId,
+      customerId,
+      salePriceListId,
+      activeSaleListId,
+    )
       .then((data) => {
         if (!current) return;
         const signature = JSON.stringify({ key: pricingKey, data });
@@ -5259,6 +5290,7 @@ function Sales({
     customerId,
     pricingKey,
     salePriceListId,
+    activeSaleListId,
     pricingVersion,
     catalogProducts,
   ]);

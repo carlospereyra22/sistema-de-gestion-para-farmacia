@@ -875,6 +875,11 @@ export function AccountItemSelector({
                                   />
                                   <span className="text-sm text-slate-700">
                                     {item.name}
+                                    {"porEnviar" in item && item.porEnviar && (
+                                      <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                                        Por enviar
+                                      </span>
+                                    )}
                                     {Number(item.increaseMinor) > 0 && (
                                       <span className="mt-1 block text-[11px] font-medium text-amber-700">
                                         Referencia aumentó:{" "}

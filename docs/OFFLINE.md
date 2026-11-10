@@ -49,8 +49,8 @@ necesita conexión.
 | SISTEMA-65 Comprobante interno a ARCA, factura en espera      | En main    |
 | SISTEMA-66 Sesiones: cerrar sesión y entrar sin conexión      | En main    |
 | SISTEMA-67 Caja sin conexión (abrir, movimientos, cerrar)     | En main    |
-| Cuenta corriente sin conexión                                 | Pendiente  |
-| SISTEMA-69 Compras y recepciones sin conexión                 | Esta etapa |
+| SISTEMA-70 Cuenta corriente sin conexión                      | Esta etapa |
+| SISTEMA-69 Compras y recepciones sin conexión                 | En main    |
 | Transferencias sin conexión                                   | Pendiente  |
 | Catálogo y precios sin conexión                               | Pendiente  |
 | Prueba completa con dos PCs                                   | Pendiente  |
@@ -111,9 +111,8 @@ conexión). Puntos técnicos:
 
 - **Cuándo se cobra sin conexión**: al confirmar la venta, si la app ya está
   sin conexión o si el envío se corta en ese momento. No se puede si pasaron
-  más de 24 horas desde la última sincronización, si la farmacia está en solo
-  lectura o bloqueada, o si un pago es a cuenta corriente (llega en la etapa
-  siguiente).
+  más de 24 horas desde la última sincronización o si la farmacia está en solo
+  lectura o bloqueada. A cuenta corriente también se puede desde SISTEMA-70.
 - **Bandeja** (`lib/bandeja-ventas.ts`, IndexedDB, claves `bandeja|usuario|id`):
   cada venta queda con el cuerpo listo para `POST sales/offline`, las unidades
   vendidas y el ticket impreso. El id es el `clientOperationId`, que también
@@ -198,6 +197,26 @@ Decisión del usuario (08/11/2026): sin internet se pueden crear pedidos, hacer 
 - **Conflicto**: si otra PC ya recibió o canceló ese saldo, la recepción se rechaza ("saldo abierto") y queda como rechazada en el panel de sincronización y arriba de la lista de Compras.
 
 - **Transacciones**: cada operación que llega es una sola transacción. Incluye el pedido, la recepción, los lotes, los movimientos de stock, la deuda y la auditoría, también la de "sincronizada por otro". Si algo falla, se deshace entera y la PC la reintenta igual, sin duplicar. Si el servidor la rechaza, la PC deja de contarla en el stock y en el estado del pedido.
+
+## Cuenta corriente sin conexión (SISTEMA-70)
+
+Decisión del usuario (09/11/2026): toda la cuenta corriente funciona sin conexión igual que con conexión. Reglas en `BUSINESS_RULES.md` (cuenta corriente sin conexión).
+
+- **Bandeja**: cobros, asignaciones, aumentos de deuda (por artículo y total), actualización de precios y configuración de la cuenta quedan como `operacion: "CUENTA"`; el alta de cliente, como `operacion: "CLIENTE"` (`lib/cuenta-sin-conexion.ts`). Van firmadas por quien las hizo y se mandan en orden con las ventas, la caja y las compras: `POST customer-accounts/offline` (o `/offline/firmada`) y `POST customers/offline` (o `/offline/firmada`).
+- **Dónde se decide**: en el cliente de la API (`lib/api.ts`). Cada escritura de cuenta corriente intenta con conexión y, si no hay, queda en la PC. Si el cliente ya tiene algo sin enviar, va directo a la PC para llegar en orden. Sin conexión no se opera pasadas 24 horas sin sincronizar o con la farmacia en solo lectura.
+- **Lo que se ve**: las consultas de cuentas (`getCustomerAccounts`, `getAccountItems`, clientes, vencimientos y estado de cuenta) parten de la copia del servidor y le suman lo pendiente de la PC, con la etiqueta "Por enviar" en la fila. Lo usan la venta (crédito disponible), Cuentas corrientes y Clientes. El comprobante del cobro y el detalle de una venta a cuenta sin enviar se arman en la PC; el comprobante lleva la leyenda de provisorio. Caja suma el efectivo de los cobros al esperado.
+- **Ventas sin enviar**: la PC no conoce los ids de sus renglones (el servidor los parte por lote), así que los nombra por venta y producto (`linea|venta|p:producto`). El servidor reparte el importe entre los renglones reales. Una venta mixta se asigna nombrándola por su id.
+- **Precarga**: con conexión, cada 10 minutos, la PC guarda clientes, cuentas, vencimientos, estado de cuenta y los artículos de cada cliente con saldo (`lib/precarga-cuentas.ts`).
+- **El servidor** (`accounts/cuenta-sin-conexion.ts`, `common/offline/registro-sin-conexion.ts`):
+  - registra cada operación una sola vez (`OfflineOperation`, mismo id con otros datos es 409) y, si ya había llegado con conexión, devuelve la de entonces;
+  - usa la hora real en el movimiento, el ajuste, el ingreso de caja y el cobro pendiente;
+  - cada operación es una sola transacción, con su auditoría, sus avisos y la marca "sincronizada por otro": si algo falla se deshace entera;
+  - avisos nuevos: `SALDO_DISTINTO`, `CONFIGURACION_PISADA` y `CLIENTE_DUPLICADO` (además de `SALDO_A_FAVOR` y `CAJA_CERRADA`).
+- **Edición de clientes**: también queda en la PC (`operacion: "CLIENTE"` con `tipo: "EDICION"`, mismo `POST customers/offline`). La lista de precios nueva se usa enseguida en la venta.
+- **Precios en la venta**: la venta pide los precios por cliente y lista. Sin conexión, si esa combinación nunca se consultó, usa la copia de la lista sin cliente (es la misma lista). La PC guarda los precios de todas las listas en la precarga.
+- **Lector de PDF de compras**: el service worker también guarda los `.mjs` (pdf.worker). Un PDF escaneado necesita el OCR, que se baja de internet: sin conexión sólo se leen los PDF con texto.
+- Un cobro mixto conserva su desglose de medios de pago cuando después se le asignan artículos (también con conexión).
+- Migraciones `20261109120000_offline_accounts` y `20261109130000_offline_customer_update`: tipos de operación y de aviso.
 
 ## Base de medicamentos en la PC (SISTEMA-69)
 

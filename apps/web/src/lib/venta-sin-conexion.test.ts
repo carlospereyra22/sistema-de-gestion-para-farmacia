@@ -47,10 +47,10 @@ describe("cuándo se puede cobrar sin conexión", () => {
       );
   });
 
-  it("la cuenta corriente todavía necesita conexión", () => {
+  it("también se puede vender a cuenta corriente sin conexión (SISTEMA-70)", () => {
     expect(
       motivoParaNoVenderSinConexion({ ...datos, metodos: ["CASH", "ACCOUNT"] }),
-    ).toContain("cuenta corriente");
+    ).toBeNull();
   });
 });
 

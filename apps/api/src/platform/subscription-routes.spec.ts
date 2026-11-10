@@ -94,6 +94,11 @@ const EXCEPTIONS = [
   // Compras sin conexión (SISTEMA-69).
   `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/purchases/offline`,
   `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/purchases/offline/firmada`,
+  // Cuenta corriente y alta de clientes sin conexión (SISTEMA-70).
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/customer-accounts/offline`,
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/customer-accounts/offline/firmada`,
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/customers/offline`,
+  `OFFLINE_SYNC POST organizations/:organizationId/branches/:branchId/customers/offline/firmada`,
   `READ_ONLY POST ${sales}/offline-issues/:issueId/resolve`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/printing/jobs/:id/retry`,
   `READ_ONLY POST organizations/:organizationId/branches/:branchId/transfers/:id/receive`,

@@ -36,6 +36,7 @@ import {
 import { MoneyInput } from "./money-input";
 import { accountTicket } from "./lib/thermal-ticket";
 import { DirectTicketPrint } from "./direct-ticket-print";
+import { VENTAS_SINCRONIZADAS } from "./lib/sincronizacion-ventas";
 import {
   ShieldCheck,
   Infinity as InfinityIcon,
@@ -45,7 +46,6 @@ import {
   Printer,
   Users,
   CalendarClock,
-  ArrowLeft,
 } from "lucide-react";
 import {
   configureCustomerAccount,
@@ -280,6 +280,17 @@ export function CustomerAccounts({
         setSessions([]);
         setSessionId("");
       });
+  }, [token, organizationId, branchId, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Lo hecho sin conexión ya llegó al servidor: se vuelve a pedir la cuenta,
+  // que ahora lo trae (SISTEMA-70).
+  useEffect(() => {
+    if (!active) return;
+    const actualizar = () => {
+      void load().catch(() => {});
+      setDueRevision((value) => value + 1);
+    };
+    window.addEventListener(VENTAS_SINCRONIZADAS, actualizar);
+    return () => window.removeEventListener(VENTAS_SINCRONIZADAS, actualizar);
   }, [token, organizationId, branchId, active]); // eslint-disable-line react-hooks/exhaustive-deps
   const backToList = useCallback(() => {
     setDueSelection(undefined);
@@ -670,6 +681,7 @@ export function CustomerAccounts({
           priceLists={priceLists}
           token={token}
           organizationId={organizationId}
+          branchId={branchId}
           onClose={() => setCustomerDraft(undefined)}
           onSaved={(id) => void customerCreated(id)}
         />
@@ -753,16 +765,11 @@ export function CustomerAccounts({
             className="account-customer-detail min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:p-5"
           >
             <div className="account-customer-heading">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={backToList}
-                className="mb-3 inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                <ArrowLeft size={16} aria-hidden="true" />
-                Volver a clientes
-              </button>
-              <AccountCustomerProfile account={selected} />
+              <AccountCustomerProfile
+                account={selected}
+                onBack={backToList}
+                backDisabled={busy}
+              />
             </div>
             <div className="account-customer-tabs mt-5 flex flex-wrap gap-4 border-b border-slate-200">
               {(
@@ -1059,6 +1066,11 @@ export function CustomerAccounts({
                                         ? `Compra · ${movement.saleId.slice(0, 8).toUpperCase()}`
                                         : movement.note}
                                   </span>
+                                  {movement.porEnviar && (
+                                    <span className="mt-1 block w-fit whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                                      Por enviar
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                   {movement.type === "DEBIT"
@@ -1093,7 +1105,8 @@ export function CustomerAccounts({
                                     </button>
                                   )}
                                   {movement.type === "CREDIT" &&
-                                    !movement.saleId && (
+                                    !movement.saleId &&
+                                    !movement.isDebtAdjustment && (
                                       <button
                                         type="button"
                                         onClick={() =>

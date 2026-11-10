@@ -1,5 +1,7 @@
 import { apiFetch as fetch } from "./api-fetch";
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, getCustomerAccounts } from "./api";
+import { ventasDeLaPc } from "./bandeja-ventas";
+import { vencimientosConPendientes, ventaACuenta } from "./cuenta-sin-conexion";
 
 export type AccountDueRow = {
   saleId: string;
@@ -72,5 +74,14 @@ export async function getAccountDueDates(
     throw new Error(
       "No se pudieron cargar los vencimientos. Volvé a intentar.",
     );
-  return response.json() as Promise<AccountDueDates>;
+  const base = (await response.json()) as AccountDueDates;
+  // Con lo hecho en la PC que todavía no llegó (SISTEMA-70).
+  const bandeja = await ventasDeLaPc().catch(() => []);
+  if (!bandeja.some((item) => item.estado === "PENDIENTE")) return base;
+  const cuentas = bandeja.some(
+    (item) => item.estado === "PENDIENTE" && ventaACuenta(item),
+  )
+    ? await getCustomerAccounts(token, org, branch).catch(() => [])
+    : [];
+  return vencimientosConPendientes(base, bandeja, org, branch, cuentas);
 }

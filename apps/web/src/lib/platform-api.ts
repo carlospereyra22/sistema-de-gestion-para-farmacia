@@ -309,3 +309,60 @@ export const updatePlatformPlan = (
     extraBranchMinor: string;
   },
 ) => platformRequest<{ id: string }>(token, `/plans/${planId}`, input, "PATCH");
+
+/** Certificado de Farmatec para el padrón de ARCA (SISTEMA-70). */
+export type PadronAmbiente = "HOMOLOGATION" | "PRODUCTION";
+export type PlatformPadronStatus = {
+  environment: PadronAmbiente;
+  cuit: string;
+  version: number;
+  hasRequest: boolean;
+  hasCertificate: boolean;
+  fingerprint: string | null;
+  expiresAt: string | null;
+  storage: string;
+};
+
+export const getPlatformPadron = (token: string, environment: PadronAmbiente) =>
+  platformRequest<PlatformPadronStatus>(
+    token,
+    `/padron-certificado?environment=${environment}`,
+  );
+
+export const preparePlatformPadron = (
+  token: string,
+  input: {
+    environment: PadronAmbiente;
+    cuit: string;
+    expectedVersion: number;
+    replace?: boolean;
+  },
+) =>
+  platformRequest<PlatformPadronStatus>(
+    token,
+    "/padron-certificado/solicitud",
+    input,
+  );
+
+export const getPlatformPadronRequest = (
+  token: string,
+  environment: PadronAmbiente,
+) =>
+  platformRequest<{ csr: string; filename: string }>(
+    token,
+    `/padron-certificado/solicitud?environment=${environment}`,
+  );
+
+export const uploadPlatformPadron = (
+  token: string,
+  input: {
+    environment: PadronAmbiente;
+    certificate: string;
+    expectedVersion: number;
+  },
+) =>
+  platformRequest<PlatformPadronStatus>(
+    token,
+    "/padron-certificado/certificado",
+    input,
+  );

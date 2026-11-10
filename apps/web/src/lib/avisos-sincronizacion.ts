@@ -96,6 +96,36 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
           ? `La PC mostraba ${pesos(d.vioMinor)} esperados y el servidor calculó ${pesos(d.esperadoMinor)}. Se contaron ${pesos(d.contadoMinor)}.`
           : `${texto(d.motivo)} Se contaron ${pesos(d.contadoMinor)}.`.trim(),
       };
+    // Cuenta corriente sin conexión (SISTEMA-70).
+    case "SALDO_A_FAVOR":
+      return {
+        titulo: `Saldo a favor: ${texto(d.cliente) || "cliente"}`,
+        detalle: `${texto(d.motivo) || "El cobro superó la deuda."} Quedaron ${pesos(d.aFavorMinor)} a favor del cliente.`,
+      };
+    case "SALDO_DISTINTO":
+      return {
+        titulo: `Saldo distinto: ${texto(d.articulo) || texto(d.cliente) || "cuenta corriente"}`,
+        detalle: [
+          texto(d.motivo),
+          d.esperadoMinor
+            ? `La PC veía ${pesos(d.esperadoMinor)} y el servidor tenía ${pesos(d.encontradoMinor)}.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      };
+    case "CONFIGURACION_PISADA":
+      return {
+        titulo: `Cuenta configurada en otra PC: ${texto(d.cliente) || "cliente"}`,
+        detalle:
+          texto(d.motivo) ||
+          "Otra PC cambió el límite o el plazo después: quedó ese cambio.",
+      };
+    case "CLIENTE_DUPLICADO":
+      return {
+        titulo: `Cliente repetido: ${texto(d.cliente) || "cliente"}`,
+        detalle: texto(d.motivo) || "Ya había un cliente con ese DNI/CUIT.",
+      };
     default:
       return {
         titulo: "Venta sin conexión para revisar",

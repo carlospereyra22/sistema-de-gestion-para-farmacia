@@ -7,10 +7,33 @@ import type {
   SaleFiscalCapabilities,
 } from "@gestion/contracts";
 import { withStockAvailability } from "./stock-availability";
-import { recordarEncabezado } from "./venta-sin-conexion";
+import {
+  encabezadoGuardado,
+  LEYENDA_PROVISORIO,
+  recordarEncabezado,
+} from "./venta-sin-conexion";
 import { EnvioRechazado } from "./sincronizacion-ventas";
-import { TOKEN_SIN_CONEXION } from "./cache-local";
+import {
+  TOKEN_SIN_CONEXION,
+  VIGENCIA_SIN_CONEXION_MS,
+  horaUltimaSincronizacion,
+} from "./cache-local";
 import { conectividad } from "./conectividad";
+import { ventasDeLaPc, type VentaPendiente } from "./bandeja-ventas";
+import {
+  aImputaciones,
+  clienteConPendientes,
+  clientesConPendientes,
+  cuentasConPendientes,
+  detalleDeVentaLocal,
+  guardarAltaCliente,
+  guardarEdicionCliente,
+  guardarOperacionCuenta,
+  itemsConPendientes,
+  lineaDeId,
+  reciboLocal,
+  repartirAumento,
+} from "./cuenta-sin-conexion";
 import {
   buscarMedicamentosEnLaPc,
   exhibidoresEnLaPc,
@@ -1253,6 +1276,8 @@ export type Party = CustomerBilling & {
   document?: string | null;
   taxId?: string | null;
   active: boolean;
+  /** Dado de alta sin conexión y todavía no enviado (SISTEMA-70). */
+  porEnviar?: boolean;
 };
 export type AccountActor = { id: string; name: string | null };
 export type CustomerAccount = {
@@ -1268,7 +1293,12 @@ export type CustomerAccount = {
   active: boolean;
   creditLimitMinor: string | null;
   balanceMinor: string;
+  /** Dado de alta sin conexión y todavía no enviado (SISTEMA-70). */
+  porEnviar?: boolean;
   movements: {
+    /** Hecho sin conexión y todavía no enviado (SISTEMA-70). */
+    porEnviar?: boolean;
+    clientOperationId?: string | null;
     isPriceAdjustment?: boolean;
     isDebtAdjustment?: boolean;
     id: string;
@@ -1291,6 +1321,12 @@ export type AccountItems = {
   items: {
     saleItemId: string;
     saleId: string;
+    productId?: string | null;
+    description?: string | null;
+    /** Si se le puede aplicar el aumento por precio de referencia. */
+    comparable?: boolean;
+    /** De una venta hecha sin conexión que todavía no llegó (SISTEMA-70). */
+    porEnviar?: boolean;
     name: string;
     quantity: number;
     financedMinor: string;
@@ -1322,7 +1358,7 @@ export type AccountPricePreview = {
   pendingMinor: string;
   nextPendingMinor: string;
 };
-export async function previewAccountPrices(
+async function previewAccountPricesEnLinea(
   token: string,
   org: string,
   branch: string,
@@ -1340,7 +1376,7 @@ export async function previewAccountPrices(
     );
   return (await response.json()) as AccountPricePreview;
 }
-export async function updateAccountPrices(
+async function updateAccountPricesEnLinea(
   token: string,
   org: string,
   branch: string,
@@ -1360,7 +1396,7 @@ export async function updateAccountPrices(
   if (!response.ok)
     throw await responseError(response, "No se pudo actualizar la deuda.");
 }
-export async function increaseAccountDebt(
+async function increaseAccountDebtEnLinea(
   token: string,
   org: string,
   branch: string,
@@ -1384,7 +1420,7 @@ export async function increaseAccountDebt(
   if (!response.ok)
     throw await responseError(response, "No se pudo aumentar la deuda.");
 }
-export async function increaseAccountTotalDebt(
+async function increaseAccountTotalDebtEnLinea(
   token: string,
   org: string,
   branch: string,
@@ -1404,7 +1440,7 @@ export async function increaseAccountTotalDebt(
   if (!response.ok)
     throw await responseError(response, "No se pudo aumentar el saldo total.");
 }
-export async function getAccountItems(
+async function getAccountItemsDelServidor(
   token: string,
   org: string,
   branch: string,
@@ -1421,7 +1457,7 @@ export async function getAccountItems(
     );
   return (await response.json()) as AccountItems;
 }
-export async function assignAccountItems(
+async function assignAccountItemsEnLinea(
   token: string,
   org: string,
   branch: string,
@@ -1458,7 +1494,7 @@ export type AccountSaleDetail = {
     subtotalMinor: string;
   }[];
 };
-export async function getAccountSaleDetail(
+async function getAccountSaleDetailDelServidor(
   token: string,
   organizationId: string,
   branchId: string,
@@ -1476,7 +1512,7 @@ export async function getAccountSaleDetail(
     );
   return (await response.json()) as AccountSaleDetail;
 }
-export async function getCustomerAccounts(
+async function getCustomerAccountsDelServidor(
   token: string,
   organizationId: string,
   branchId: string,
@@ -1492,7 +1528,7 @@ export async function getCustomerAccounts(
     );
   return (await response.json()) as CustomerAccount[];
 }
-export async function configureCustomerAccount(
+async function configureCustomerAccountEnLinea(
   token: string,
   organizationId: string,
   branchId: string,
@@ -1515,7 +1551,7 @@ export async function configureCustomerAccount(
       "No se pudo configurar la cuenta corriente.",
     );
 }
-export async function createCustomerAccountReceipt(
+async function createCustomerAccountReceiptEnLinea(
   token: string,
   organizationId: string,
   branchId: string,
@@ -1569,7 +1605,7 @@ export interface AccountReceipt {
   items: { name: string; saleId: string; amountMinor: string }[];
 }
 
-export async function getAccountReceipt(
+async function getAccountReceiptDelServidor(
   token: string,
   organizationId: string,
   branchId: string,
@@ -1584,7 +1620,7 @@ export async function getAccountReceipt(
     throw await responseError(response, "No se pudo cargar el comprobante.");
   return response.json();
 }
-export async function getParties(
+async function getPartiesDelServidor(
   token: string,
   organizationId: string,
   type: "customers" | "suppliers",
@@ -1606,7 +1642,7 @@ export type SupplierProfileInput = {
   address?: string;
   notes?: string;
 };
-export async function createParty(
+async function createPartyEnLinea(
   token: string,
   organizationId: string,
   type: "customers" | "suppliers",
@@ -1658,7 +1694,7 @@ export async function updateSupplierTerms(
     );
 }
 
-export async function updateCustomerBilling(
+async function updateCustomerBillingEnLinea(
   token: string,
   organizationId: string,
   customerId: string,
@@ -3314,4 +3350,709 @@ export async function getReportDetail(
   if (!response.ok)
     throw await responseError(response, "No se pudieron cargar los reportes.");
   return (await response.json()) as ReportDetail;
+}
+
+// --- Cuenta corriente sin conexión (SISTEMA-70) ---
+// Las consultas de cuenta corriente suman lo hecho en la PC que todavía no
+// llegó; las escrituras que no llegan al servidor quedan en la bandeja y se
+// mandan solas al volver. Lo de un cliente que ya tiene algo sin enviar
+// también espera en la PC, para llegar en orden.
+
+const bandejaDeLaPc = () => ventasDeLaPc().catch(() => [] as VentaPendiente[]);
+
+/** Sin conexión no se opera pasadas 24 h o con la farmacia en solo lectura. */
+async function puedeOperarSinConexion(token: string, organizationId: string) {
+  const ultima = horaUltimaSincronizacion();
+  if (!ultima || Date.now() - ultima > VIGENCIA_SIN_CONEXION_MS)
+    throw new SinConexionError(
+      "Pasaron más de 24 horas sin conexión con el servidor. Para registrar esta operación hace falta que vuelva internet.",
+    );
+  const { getSubscriptionStatus } = await import("./subscription-status");
+  const estado = await getSubscriptionStatus(token, organizationId).catch(
+    () => undefined,
+  );
+  if (estado?.access === "READ_ONLY" || estado?.access === "BLOCKED")
+    throw new SinConexionError(
+      "La farmacia está en solo lectura o bloqueada: sin conexión no se pueden registrar operaciones.",
+    );
+}
+
+/**
+ * Manda la operación al servidor; si no hay conexión (o el cliente tiene algo
+ * sin enviar), la guarda en la PC.
+ */
+async function cuentaConRespaldo<T>(
+  token: string,
+  organizationId: string,
+  customerId: string,
+  enLinea: () => Promise<T>,
+  enLaPc: () => Promise<T>,
+): Promise<T> {
+  const enEspera =
+    token !== TOKEN_SIN_CONEXION &&
+    clienteConPendientes(await bandejaDeLaPc(), organizationId, customerId);
+  if (enEspera) return enLaPc();
+  if (token !== TOKEN_SIN_CONEXION)
+    try {
+      return await enLinea();
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  await puedeOperarSinConexion(token, organizationId);
+  return enLaPc();
+}
+
+export async function getCustomerAccounts(
+  token: string,
+  organizationId: string,
+  branchId: string,
+): Promise<CustomerAccount[]> {
+  return cuentasConPendientes(
+    await getCustomerAccountsDelServidor(token, organizationId, branchId),
+    await bandejaDeLaPc(),
+    organizationId,
+  );
+}
+
+export async function getParties(
+  token: string,
+  organizationId: string,
+  type: "customers" | "suppliers",
+): Promise<Party[]> {
+  const lista = await getPartiesDelServidor(token, organizationId, type);
+  return type === "customers"
+    ? clientesConPendientes(lista, await bandejaDeLaPc(), organizationId)
+    : lista;
+}
+
+export async function getAccountItems(
+  token: string,
+  org: string,
+  branch: string,
+  customer: string,
+): Promise<AccountItems> {
+  const bandeja = await bandejaDeLaPc();
+  let base: AccountItems | undefined;
+  try {
+    base = await getAccountItemsDelServidor(token, org, branch, customer);
+  } catch (cause) {
+    // Un cliente nuevo o sin datos guardados: alcanza con lo de la PC.
+    if (
+      !(cause instanceof SinConexionError) ||
+      !clienteConPendientes(bandeja, org, customer)
+    )
+      throw cause;
+  }
+  return itemsConPendientes(base, bandeja, org, customer);
+}
+
+/** Aumento por precios calculado en la PC, con lo que debe hoy cada artículo. */
+async function previewLocal(
+  token: string,
+  org: string,
+  branch: string,
+  customer: string,
+  sale: string,
+): Promise<AccountPricePreview> {
+  const detalle = await getAccountItems(token, org, branch, customer);
+  const filas = detalle.items.filter(
+    (item) => sale === "all" || item.saleId === sale,
+  );
+  const cambiados = filas.filter((item) => BigInt(item.increaseMinor) > 0n);
+  const aumento = cambiados.reduce((s, i) => s + BigInt(i.increaseMinor), 0n);
+  const pendiente = filas.reduce((s, i) => s + BigInt(i.pendingMinor), 0n);
+  return {
+    fingerprint: "sin-conexion",
+    items: cambiados,
+    increaseMinor: aumento.toString(),
+    pendingMinor: pendiente.toString(),
+    nextPendingMinor: (pendiente + aumento).toString(),
+  };
+}
+
+export async function previewAccountPrices(
+  token: string,
+  org: string,
+  branch: string,
+  customer: string,
+  sale: string,
+): Promise<AccountPricePreview> {
+  return cuentaConRespaldo(
+    token,
+    org,
+    customer,
+    () => previewAccountPricesEnLinea(token, org, branch, customer, sale),
+    () => previewLocal(token, org, branch, customer, sale),
+  );
+}
+
+/** Cuánto cambia lo que debe cada venta, para Vencimientos. */
+function porVenta(cambios: { saleId: string; deltaMinor: bigint }[]) {
+  const total = new Map<string, bigint>();
+  for (const c of cambios)
+    if (c.saleId)
+      total.set(c.saleId, (total.get(c.saleId) ?? 0n) + c.deltaMinor);
+  return [...total].map(([saleId, d]) => ({
+    saleId,
+    deltaMinor: d.toString(),
+  }));
+}
+
+export async function updateAccountPrices(
+  token: string,
+  org: string,
+  branch: string,
+  customer: string,
+  sale: string,
+  fingerprint: string,
+  clientOperationId: string,
+): Promise<void> {
+  return cuentaConRespaldo(
+    token,
+    org,
+    customer,
+    () =>
+      updateAccountPricesEnLinea(
+        token,
+        org,
+        branch,
+        customer,
+        sale,
+        fingerprint,
+        clientOperationId,
+      ),
+    async () => {
+      const vista = await previewLocal(token, org, branch, customer, sale);
+      const referencias = [
+        ...new Map(
+          vista.items
+            .filter((item) => item.productId && item.referencePriceMinor)
+            .map((item) => [
+              item.productId!,
+              {
+                productId: item.productId!,
+                referencePriceMinor: Number(item.referencePriceMinor),
+              },
+            ]),
+        ).values(),
+      ];
+      if (!referencias.length) return;
+      await guardarOperacionCuenta(org, branch, {
+        tipo: "ACTUALIZAR_PRECIOS",
+        customerId: customer,
+        cuerpo: { saleId: sale, referencias },
+        clientOperationId,
+        totalMinor: vista.increaseMinor,
+        local: {
+          ventas: porVenta(
+            vista.items.map((item) => ({
+              saleId: item.saleId,
+              deltaMinor: BigInt(item.increaseMinor),
+            })),
+          ),
+        },
+      });
+    },
+  );
+}
+
+export async function increaseAccountDebt(
+  token: string,
+  org: string,
+  branch: string,
+  customer: string,
+  item: string,
+  input: {
+    expectedPendingMinor: number;
+    nextPendingMinor: number;
+    reason: string;
+    clientOperationId: string;
+  },
+): Promise<void> {
+  return cuentaConRespaldo(
+    token,
+    org,
+    customer,
+    () => increaseAccountDebtEnLinea(token, org, branch, customer, item, input),
+    async () => {
+      const linea = lineaDeId(item);
+      const detalle = await getAccountItems(token, org, branch, customer);
+      const saleId =
+        detalle.items.find((i) => i.saleItemId === item)?.saleId ?? "";
+      const { clientOperationId, ...resto } = input;
+      const aumento = BigInt(
+        input.nextPendingMinor - input.expectedPendingMinor,
+      );
+      await guardarOperacionCuenta(org, branch, {
+        tipo: "AUMENTO_DEUDA",
+        customerId: customer,
+        cuerpo: { ...resto, destino: linea ? { linea } : { saleItemId: item } },
+        clientOperationId,
+        totalMinor: aumento.toString(),
+        local: { ventas: porVenta([{ saleId, deltaMinor: aumento }]) },
+      });
+    },
+  );
+}
+
+export async function increaseAccountTotalDebt(
+  token: string,
+  org: string,
+  branch: string,
+  customer: string,
+  input: {
+    expectedPendingMinor: number;
+    nextPendingMinor: number;
+    reason: string;
+    clientOperationId: string;
+    expectedItems: { saleItemId: string; pendingMinor: string }[];
+  },
+): Promise<void> {
+  return cuentaConRespaldo(
+    token,
+    org,
+    customer,
+    () => increaseAccountTotalDebtEnLinea(token, org, branch, customer, input),
+    async () => {
+      const detalle = await getAccountItems(token, org, branch, customer);
+      const aumento = BigInt(
+        input.nextPendingMinor - input.expectedPendingMinor,
+      );
+      await guardarOperacionCuenta(org, branch, {
+        tipo: "AUMENTO_DEUDA_TOTAL",
+        customerId: customer,
+        // El servidor reparte el aumento con lo que debe cada artículo al llegar.
+        cuerpo: {
+          expectedPendingMinor: input.expectedPendingMinor,
+          nextPendingMinor: input.nextPendingMinor,
+          reason: input.reason,
+        },
+        clientOperationId: input.clientOperationId,
+        totalMinor: aumento.toString(),
+        local: {
+          ventas: porVenta(
+            repartirAumento(detalle.items, aumento).map((parte) => ({
+              saleId:
+                detalle.items.find((i) => i.saleItemId === parte.saleItemId)
+                  ?.saleId ?? "",
+              deltaMinor: parte.amountMinor,
+            })),
+          ),
+        },
+      });
+    },
+  );
+}
+
+export async function assignAccountItems(
+  token: string,
+  org: string,
+  branch: string,
+  customer: string,
+  movement: string,
+  allocations: ItemAllocation[],
+): Promise<void> {
+  return cuentaConRespaldo(
+    token,
+    org,
+    customer,
+    () =>
+      assignAccountItemsEnLinea(
+        token,
+        org,
+        branch,
+        customer,
+        movement,
+        allocations,
+      ),
+    async () => {
+      const detalle = await getAccountItems(token, org, branch, customer);
+      // Asignar un cobro suelto baja lo que debe cada venta; la asignación
+      // inicial de una venta mixta, no.
+      const suelto = detalle.unassignedReceipts.some((u) => u.id === movement);
+      await guardarOperacionCuenta(org, branch, {
+        tipo: "ASIGNACION",
+        customerId: customer,
+        cuerpo: {
+          movementId: movement,
+          imputaciones: aImputaciones(allocations),
+        },
+        local: suelto
+          ? {
+              ventas: porVenta(
+                allocations.map((a) => ({
+                  saleId:
+                    detalle.items.find((i) => i.saleItemId === a.saleItemId)
+                      ?.saleId ?? "",
+                  deltaMinor: -BigInt(a.amountMinor),
+                })),
+              ),
+            }
+          : undefined,
+      });
+    },
+  );
+}
+
+export async function configureCustomerAccount(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  customerId: string,
+  enabled: boolean,
+  creditLimitMinor: number | null,
+  accountTermDays?: number | null,
+): Promise<void> {
+  return cuentaConRespaldo(
+    token,
+    organizationId,
+    customerId,
+    () =>
+      configureCustomerAccountEnLinea(
+        token,
+        organizationId,
+        branchId,
+        customerId,
+        enabled,
+        creditLimitMinor,
+        accountTermDays,
+      ),
+    async () => {
+      await guardarOperacionCuenta(organizationId, branchId, {
+        tipo: "CONFIGURAR",
+        customerId,
+        cuerpo: {
+          enabled,
+          creditLimitMinor,
+          ...(accountTermDays !== undefined ? { accountTermDays } : {}),
+        },
+      });
+    },
+  );
+}
+
+export async function createCustomerAccountReceipt(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  customerId: string,
+  amountMinor: number,
+  method: "CASH" | "CARD" | "TRANSFER" | "OTHER",
+  note?: string,
+  cashSessionId?: string,
+  clientOperationId: string = crypto.randomUUID(),
+  allocations: ItemAllocation[] = [],
+  payments?: { method: "CASH" | "CARD" | "TRANSFER"; amountMinor: number }[],
+): Promise<{ id: string; amountMinor: string }> {
+  return cuentaConRespaldo(
+    token,
+    organizationId,
+    customerId,
+    () =>
+      createCustomerAccountReceiptEnLinea(
+        token,
+        organizationId,
+        branchId,
+        customerId,
+        amountMinor,
+        method,
+        note,
+        cashSessionId,
+        clientOperationId,
+        allocations,
+        payments,
+      ),
+    async () => {
+      const [detalle, cuentas, encabezado] = await Promise.all([
+        getAccountItems(token, organizationId, branchId, customerId),
+        getCustomerAccounts(token, organizationId, branchId).catch(
+          () => [] as CustomerAccount[],
+        ),
+        encabezadoGuardado(organizationId, branchId).catch(() => undefined),
+      ]);
+      const fila = (id: string) =>
+        detalle.items.find((i) => i.saleItemId === id);
+      const ajuste = (a: ItemAllocation) =>
+        a.expectedPendingMinor !== undefined
+          ? BigInt(a.nextPendingMinor ?? a.amountMinor) -
+            BigInt(a.expectedPendingMinor)
+          : 0n;
+      const ajustes = allocations.reduce((s, a) => s + ajuste(a), 0n);
+      const recibo: AccountReceipt = {
+        id: clientOperationId,
+        createdAt: new Date().toISOString(),
+        customerName:
+          cuentas.find((c) => c.id === customerId)?.name ?? "Cliente",
+        branchName: encabezado?.branch ?? "",
+        ...(encabezado?.store ? { store: encabezado.store } : {}),
+        amountMinor: String(amountMinor),
+        method,
+        ...(payments
+          ? {
+              payments: payments.map((p) => ({
+                method: p.method,
+                amountMinor: String(p.amountMinor),
+              })),
+            }
+          : {}),
+        note: [note?.trim(), LEYENDA_PROVISORIO].filter(Boolean).join(" · "),
+        balanceAfterMinor: (
+          BigInt(detalle.balanceMinor) +
+          ajustes -
+          BigInt(amountMinor)
+        ).toString(),
+        items: allocations.map((a) => ({
+          name: fila(a.saleItemId)?.name ?? "Artículo",
+          saleId: fila(a.saleItemId)?.saleId ?? "",
+          amountMinor: String(a.amountMinor),
+        })),
+      };
+      const { op } = await guardarOperacionCuenta(organizationId, branchId, {
+        tipo: "COBRO",
+        customerId,
+        cuerpo: {
+          amountMinor,
+          method,
+          ...(note?.trim() ? { note: note.trim() } : {}),
+          ...(cashSessionId ? { cashSessionId } : {}),
+          ...(payments ? { payments } : {}),
+          ...(allocations.length
+            ? { imputaciones: aImputaciones(allocations) }
+            : {}),
+        },
+        clientOperationId,
+        totalMinor: String(amountMinor),
+        local: {
+          ventas: porVenta(
+            allocations.map((a) => ({
+              saleId: fila(a.saleItemId)?.saleId ?? "",
+              deltaMinor: ajuste(a) - BigInt(a.amountMinor),
+            })),
+          ),
+          recibo,
+        },
+      });
+      return { id: op.clientOperationId, amountMinor: String(amountMinor) };
+    },
+  );
+}
+
+export async function getAccountReceipt(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  customerId: string,
+  receiptId: string,
+): Promise<AccountReceipt> {
+  const local = reciboLocal(await bandejaDeLaPc(), receiptId);
+  if (local) return local;
+  return getAccountReceiptDelServidor(
+    token,
+    organizationId,
+    branchId,
+    customerId,
+    receiptId,
+  );
+}
+
+export async function getAccountSaleDetail(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  customerId: string,
+  movementId: string,
+): Promise<AccountSaleDetail> {
+  const local = detalleDeVentaLocal(await bandejaDeLaPc(), movementId);
+  if (local) return local;
+  return getAccountSaleDetailDelServidor(
+    token,
+    organizationId,
+    branchId,
+    customerId,
+    movementId,
+  );
+}
+
+export async function createParty(
+  token: string,
+  organizationId: string,
+  type: "customers" | "suppliers",
+  name: string,
+  document: string,
+  priceListId?: string,
+  billing?: CustomerBilling,
+  supplierTerms?: SupplierProfileInput,
+  /** Sucursal desde la que se da de alta: sin conexión, el cliente queda en la PC. */
+  branchId?: string,
+): Promise<{ id: string }> {
+  const enLinea = () =>
+    createPartyEnLinea(
+      token,
+      organizationId,
+      type,
+      name,
+      document,
+      priceListId,
+      billing,
+      supplierTerms,
+    );
+  if (type !== "customers" || !branchId) return enLinea();
+  if (token !== TOKEN_SIN_CONEXION)
+    try {
+      return await enLinea();
+    } catch (cause) {
+      if (!(cause instanceof SinConexionError)) throw cause;
+    }
+  await puedeOperarSinConexion(token, organizationId);
+  const alta = await guardarAltaCliente(organizationId, branchId, {
+    name: name.trim(),
+    ...(document ? { document } : {}),
+    ...(priceListId ? { priceListId } : {}),
+    ...(billing ? { billing } : {}),
+  });
+  return { id: alta.clientOperationId };
+}
+
+async function enviarSinConexion(
+  token: string,
+  url: string,
+  body: unknown,
+  mensaje: string,
+) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: authJson(token),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const error = await responseError(response, mensaje);
+    throw new EnvioRechazado(error.message, response.status);
+  }
+  return (await response.json()) as { offlineIssues?: unknown[] };
+}
+
+type EnvioFirmado = {
+  actorId: string;
+  deviceId: string;
+  payload: string;
+  signature: string;
+};
+
+/** Operación de cuenta corriente hecha sin conexión (SISTEMA-70). */
+export function sendOfflineAccount(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/customer-accounts/offline`,
+    body,
+    "El servidor no aceptó la operación de cuenta corriente sin conexión.",
+  );
+}
+
+/** La de otro usuario de esta PC, firmada por él (SISTEMA-70). */
+export function sendSignedOfflineAccount(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: EnvioFirmado,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/customer-accounts/offline/firmada`,
+    body,
+    "El servidor no aceptó la operación de cuenta corriente sin conexión.",
+  );
+}
+
+/** Cliente dado de alta sin conexión (SISTEMA-70). */
+export function sendOfflineCustomer(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: Record<string, unknown>,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/customers/offline`,
+    body,
+    "El servidor no aceptó el cliente dado de alta sin conexión.",
+  );
+}
+
+export function sendSignedOfflineCustomer(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  body: EnvioFirmado,
+) {
+  return enviarSinConexion(
+    token,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/customers/offline/firmada`,
+    body,
+    "El servidor no aceptó el cliente dado de alta sin conexión.",
+  );
+}
+
+/** Editar un cliente: sin conexión (o si tiene algo sin enviar) queda en la PC (SISTEMA-70). */
+export async function updateCustomerBilling(
+  token: string,
+  organizationId: string,
+  customerId: string,
+  billing: CustomerBilling & { name?: string; priceListId?: string | null },
+  branchId?: string,
+): Promise<void> {
+  const enLinea = () =>
+    updateCustomerBillingEnLinea(token, organizationId, customerId, billing);
+  if (!branchId) return enLinea();
+  return cuentaConRespaldo(
+    token,
+    organizationId,
+    customerId,
+    enLinea,
+    async () => {
+      await guardarEdicionCliente(
+        organizationId,
+        branchId,
+        customerId,
+        billing,
+      );
+    },
+  );
+}
+
+/** Datos de un CUIT en el padrón de ARCA (SISTEMA-70). */
+export type DatosDePadron = {
+  cuit: string;
+  nombre: string;
+  condicionIva:
+    "Responsable inscripto" | "Monotributista" | "Exento" | "Consumidor final";
+  domicilio: string;
+  localidad: string;
+  provincia: string;
+  codigoPostal: string;
+  estado: string;
+  environment: "HOMOLOGATION" | "PRODUCTION";
+};
+
+/** Busca un CUIT en ARCA para completar la ficha del cliente. Necesita internet. */
+export async function buscarCuitEnArca(
+  token: string,
+  organizationId: string,
+  cuit: string,
+): Promise<DatosDePadron> {
+  if (token === TOKEN_SIN_CONEXION)
+    throw new SinConexionError(
+      "Sin conexión: la búsqueda en ARCA necesita internet. Cargá los datos a mano.",
+    );
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/fiscal/padron/${encodeURIComponent(cuit.replace(/[\s.-]/g, ""))}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo buscar el CUIT en ARCA.");
+  return (await response.json()) as DatosDePadron;
 }

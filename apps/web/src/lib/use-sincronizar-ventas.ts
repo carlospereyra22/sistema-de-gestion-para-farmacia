@@ -1,9 +1,13 @@
 import { useEffect, useRef } from "react";
 import {
+  sendOfflineAccount,
   sendOfflineCash,
+  sendOfflineCustomer,
   sendOfflinePurchase,
   sendOfflineSale,
+  sendSignedOfflineAccount,
   sendSignedOfflineCash,
+  sendSignedOfflineCustomer,
   sendSignedOfflinePurchase,
   sendSignedOfflineSale,
 } from "./api";
@@ -48,26 +52,35 @@ export function useSincronizarVentas(
           alcance,
           // Ventas y operaciones de caja, en el orden en que pasaron.
           enviar: (venta) =>
-            venta.operacion === "COMPRA"
-              ? sendOfflinePurchase(
+            venta.operacion === "CUENTA" || venta.operacion === "CLIENTE"
+              ? (venta.operacion === "CUENTA"
+                  ? sendOfflineAccount
+                  : sendOfflineCustomer)(
                   token,
                   venta.organizationId,
                   venta.branchId,
                   venta.cuerpo,
                 )
-              : venta.operacion === "CAJA"
-                ? sendOfflineCash(
+              : venta.operacion === "COMPRA"
+                ? sendOfflinePurchase(
                     token,
                     venta.organizationId,
                     venta.branchId,
                     venta.cuerpo,
                   )
-                : sendOfflineSale(
-                    token,
-                    venta.organizationId,
-                    venta.branchId,
-                    venta.cuerpo,
-                  ),
+                : venta.operacion === "CAJA"
+                  ? sendOfflineCash(
+                      token,
+                      venta.organizationId,
+                      venta.branchId,
+                      venta.cuerpo,
+                    )
+                  : sendOfflineSale(
+                      token,
+                      venta.organizationId,
+                      venta.branchId,
+                      venta.cuerpo,
+                    ),
           // Las de otros usuarios de la PC van firmadas por ellos (SISTEMA-66).
           enviarDeOtro: (venta) => {
             const firmada = {
@@ -75,6 +88,15 @@ export function useSincronizarVentas(
               payload: venta.payload!,
               signature: venta.firma!,
             };
+            if (venta.operacion === "CUENTA" || venta.operacion === "CLIENTE")
+              return (
+                venta.operacion === "CUENTA"
+                  ? sendSignedOfflineAccount
+                  : sendSignedOfflineCustomer
+              )(token, venta.organizationId, venta.branchId, {
+                ...firmada,
+                actorId: venta.vendedorId!,
+              });
             if (venta.operacion === "COMPRA")
               return sendSignedOfflinePurchase(
                 token,

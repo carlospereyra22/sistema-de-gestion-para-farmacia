@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { CustomerNameWarning } from "./customer-name-warning";
 import {
+  CustomerDocumentWarning,
+  CustomerNameWarning,
+} from "./customer-name-warning";
+import {
+  matchingCustomerDocuments,
   matchingCustomerNames,
   customerIdentityDetail,
 } from "./lib/customer-identity";
@@ -49,4 +53,35 @@ it("shows archived profiles and a reference when optional identity fields are ab
       billingPhone: "456",
     }),
   ).toBe("123 · 456");
+});
+it("el CUIT distinto alcanza para diferenciar a dos clientes con el mismo nombre", () => {
+  const conCuit = [{ ...customers[0], billingTaxId: "20-11111111-1" }];
+  const html = renderToStaticMarkup(
+    <CustomerNameWarning
+      customers={conCuit}
+      name="Carlos Pérez"
+      taxId="20222222222"
+    />,
+  );
+  expect(html).toContain("distinto CUIT/DNI");
+  expect(html).not.toContain('type="checkbox"');
+  // Sin CUIT para comparar sigue pidiendo confirmar que es otra persona.
+  expect(
+    renderToStaticMarkup(
+      <CustomerNameWarning customers={conCuit} name="Carlos Pérez" />,
+    ),
+  ).toContain('type="checkbox" required=""');
+});
+it("avisa el CUIT repetido aunque esté escrito con puntos o guiones", () => {
+  const conCuit = [{ ...customers[0], billingTaxId: "20-11111111-1" }];
+  expect(matchingCustomerDocuments(conCuit, "20.11111111.1")).toHaveLength(1);
+  expect(matchingCustomerDocuments(conCuit, "")).toEqual([]);
+  expect(
+    matchingCustomerDocuments(conCuit, "20111111111", "customer-1"),
+  ).toEqual([]);
+  const html = renderToStaticMarkup(
+    <CustomerDocumentWarning customers={conCuit} taxId="20111111111" />,
+  );
+  expect(html).toContain("Ya existe un cliente con este CUIT/DNI");
+  expect(html).toContain('role="alert"');
 });

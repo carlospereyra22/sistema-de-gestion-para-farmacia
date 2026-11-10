@@ -53,9 +53,12 @@ function Avatar({ name }: { name: string }) {
 export function CustomersWorkspace({
   token,
   organizationId,
+  branchId,
 }: {
   token: string;
   organizationId: string;
+  /** Sin conexión, las altas quedan en la PC a nombre de esta sucursal. */
+  branchId?: string;
 }) {
   const [items, setItems] = useState<Party[]>([]),
     [lists, setLists] = useState<PriceList[]>([]),
@@ -442,6 +445,7 @@ export function CustomersWorkspace({
           priceLists={lists}
           token={token}
           organizationId={organizationId}
+          branchId={branchId}
           onClose={() => setEditor(undefined)}
           onSaved={() => {
             setEditor(undefined);

@@ -4,6 +4,8 @@ import { getPlatformSession, type PlatformSession } from "./lib/platform-api";
 import { PlatformAccess } from "./platform-access";
 import { PlatformAuditPanel } from "./platform-audit-panel";
 import { PlatformOrganizations } from "./platform-organizations";
+import { PlatformPadron } from "./platform-padron";
+import { BUSQUEDA_ARCA } from "./lib/funciones-ocultas";
 import { PlatformPayments } from "./platform-payments";
 import { PlatformPlans } from "./platform-plans";
 import { SessionStartup } from "./session-startup";
@@ -12,6 +14,7 @@ const sections = [
   ["farmacias", "Farmacias"],
   ["pagos", "Pagos"],
   ["planes", "Planes"],
+  ["arca", "ARCA"],
   ["auditoria", "Auditoría"],
 ] as const;
 type Section = (typeof sections)[number][0];
@@ -110,17 +113,19 @@ export default function PlatformShell({
         aria-label="Secciones de la plataforma"
         className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 sm:px-6"
       >
-        {sections.map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-current={section === value ? "page" : undefined}
-            onClick={() => setSection(value)}
-            className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium ${section === value ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-          >
-            {label}
-          </button>
-        ))}
+        {sections
+          .filter(([value]) => BUSQUEDA_ARCA || value !== "arca")
+          .map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-current={section === value ? "page" : undefined}
+              onClick={() => setSection(value)}
+              className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium ${section === value ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            >
+              {label}
+            </button>
+          ))}
       </nav>
       <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
         {section === "farmacias" && (
@@ -137,6 +142,12 @@ export default function PlatformShell({
         )}
         {section === "planes" && (
           <PlatformPlans
+            token={token}
+            onVerificationExpired={verificationExpired}
+          />
+        )}
+        {BUSQUEDA_ARCA && section === "arca" && (
+          <PlatformPadron
             token={token}
             onVerificationExpired={verificationExpired}
           />
