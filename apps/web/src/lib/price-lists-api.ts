@@ -1,4 +1,4 @@
-import { apiFetch as fetch } from "./api-fetch";
+import { apiFetch as fetch, SinConexionError } from "./api-fetch";
 const base = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
 export type PriceChange = {
   productId: string;
@@ -36,17 +36,40 @@ async function request<T>(
     );
   return result as T;
 }
-export const getEffectivePrices = (
+const preciosDe = (
   token: string,
   org: string,
   customerId: string,
-  priceListId = "",
+  priceListId: string,
 ) =>
   request<EffectivePrices>(
     token,
     org,
     `effective-prices?${new URLSearchParams({ ...(customerId ? { customerId } : {}), ...(priceListId ? { priceListId } : {}) })}`,
   );
+/**
+ * Precios con los que se cobra. La lista es la elegida, la del cliente o
+ * Precio general: el cliente no cambia los precios. Sin conexión, si esa
+ * combinación de cliente y lista nunca se consultó, se usa la copia de la
+ * misma lista sin cliente (`listaEnUso`), que la PC guarda para todas las
+ * listas (SISTEMA-70).
+ */
+export async function getEffectivePrices(
+  token: string,
+  org: string,
+  customerId: string,
+  priceListId = "",
+  listaEnUso = "",
+) {
+  try {
+    return await preciosDe(token, org, customerId, priceListId);
+  } catch (cause) {
+    const lista = priceListId || listaEnUso;
+    if (!(cause instanceof SinConexionError) || (!customerId && !lista))
+      throw cause;
+    return preciosDe(token, org, "", lista);
+  }
+}
 export const saveListChanges = (
   token: string,
   org: string,

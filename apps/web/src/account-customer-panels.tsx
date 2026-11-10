@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import {
+  ArrowLeft,
   CalendarClock,
   ChevronRight,
   CircleDollarSign,
@@ -248,6 +249,11 @@ export function AccountCustomerList({
                           Eliminado
                         </span>
                       )}
+                      {account.porEnviar && (
+                        <span className="shrink-0 whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                          Por enviar
+                        </span>
+                      )}
                     </span>
                     <span className="mt-0.5 block truncate text-sm text-slate-500 md:hidden">
                       {[detail, credit].filter(Boolean).join(" · ")}
@@ -337,8 +343,13 @@ export function AccountCustomerList({
 
 export function AccountCustomerProfile({
   account,
+  onBack,
+  backDisabled = false,
 }: {
   account: CustomerAccount;
+  /** Volver al listado: el botón va en la misma barra que los datos. */
+  onBack?: () => void;
+  backDisabled?: boolean;
 }) {
   const tooltipId = useId();
   const [activeHint, setActiveHint] = useState<string | null>(null);
@@ -396,23 +407,33 @@ export function AccountCustomerProfile({
   return (
     <header className="account-profile">
       <div className="account-profile-layout">
-        <div className="flex min-w-0 items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-100 text-lg font-semibold text-teal-800"
+        <div className="account-profile-bar flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          {onBack && (
+            <button
+              type="button"
+              disabled={backDisabled}
+              onClick={onBack}
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <ArrowLeft size={16} aria-hidden="true" />
+              Volver a clientes
+            </button>
+          )}
+          <div
+            className={`flex min-w-0 items-center gap-3 ${onBack ? "account-profile-group" : ""}`}
           >
-            {accountInitials(account.name)}
-          </span>
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Cuenta del cliente
-            </p>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h2 className="break-words text-xl font-semibold text-slate-900">
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-100 text-lg font-semibold text-teal-800"
+            >
+              {accountInitials(account.name)}
+            </span>
+            <div className="min-w-0">
+              <h2 className="break-words text-xl font-semibold leading-tight text-slate-900">
                 {account.name}
               </h2>
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium ${account.creditEnabled ? "bg-teal-50 text-teal-700" : "bg-slate-100 text-slate-500"}`}
+                className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${account.creditEnabled ? "bg-teal-50 text-teal-700" : "bg-slate-100 text-slate-500"}`}
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-current" />
                 {account.creditEnabled
@@ -420,11 +441,31 @@ export function AccountCustomerProfile({
                   : "Crédito deshabilitado"}
               </span>
             </div>
+          </div>
+          <div className="account-profile-group min-w-0">
             <AccountCustomerContact account={account} />
-            <p className="mt-1 text-xs text-slate-500">
-              Creado por: {actorName(account.createdBy)}
-              {account.creditEnabled &&
-                ` · Cuenta habilitada por: ${actorName(account.creditEnabledBy)}`}
+          </div>
+          <div className="account-profile-group flex min-w-0 items-center gap-2 text-xs text-slate-500">
+            <UserRound
+              size={16}
+              aria-hidden="true"
+              className="shrink-0 text-slate-500"
+            />
+            <p className="min-w-0 leading-5">
+              Creado por:{" "}
+              <strong className="font-semibold text-slate-700">
+                {actorName(account.createdBy)}
+              </strong>
+              {account.creditEnabled && (
+                <>
+                  {" · "}
+                  <br className="hidden xl:inline" />
+                  Cuenta habilitada por:{" "}
+                  <strong className="font-semibold text-slate-700">
+                    {actorName(account.creditEnabledBy)}
+                  </strong>
+                </>
+              )}
             </p>
           </div>
         </div>

@@ -128,8 +128,9 @@ it("muestra por separado quién creó el cliente y quién habilitó la cuenta", 
   const profile = renderToStaticMarkup(
     <AccountCustomerProfile account={props} />,
   );
-  expect(profile).toContain("Creado por: Ana Caja");
-  expect(profile).toContain("Cuenta habilitada por: Luz Admin");
+  const texto = profile.replace(/<[^>]+>/g, "");
+  expect(texto).toContain("Creado por: Ana Caja");
+  expect(texto).toContain("Cuenta habilitada por: Luz Admin");
 });
 it("no inventa usuarios ni muestra quién habilitó una cuenta sin crédito", () => {
   const profile = renderToStaticMarkup(
@@ -137,7 +138,7 @@ it("no inventa usuarios ni muestra quién habilitó una cuenta sin crédito", ()
       account={{ ...account, creditEnabled: false, creditEnabledBy: null }}
     />,
   );
-  expect(profile).toContain("Creado por: Sin datos");
+  expect(profile.replace(/<[^>]+>/g, "")).toContain("Creado por: Sin datos");
   expect(profile).not.toContain("Cuenta habilitada por");
 });
 it("muestra el contacto debajo del nombre en la ficha", () => {

@@ -22,7 +22,11 @@ export default defineConfig({
       // Se conserva public/manifest.webmanifest (app instalable, 29/10/2026).
       manifest: false,
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff,woff2,webmanifest}"],
+        // mjs: el lector de PDF de compras (pdf.worker) también tiene que
+        // andar sin conexión.
+        globPatterns: [
+          "**/*.{js,mjs,css,html,svg,png,ico,woff,woff2,webmanifest}",
+        ],
         // El instalador del agente de impresión (34 MB) se baja aparte.
         globIgnores: ["**/downloads/**"],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,

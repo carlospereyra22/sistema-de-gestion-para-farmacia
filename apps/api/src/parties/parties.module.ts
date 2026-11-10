@@ -1,11 +1,14 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
-import { PartiesController } from "./parties.controller";
+import {
+  PartiesController,
+  PartiesOfflineController,
+} from "./parties.controller";
 import { PartiesService } from "./parties.service";
 
 @Module({
   imports: [AuthModule],
-  controllers: [PartiesController],
+  controllers: [PartiesController, PartiesOfflineController],
   providers: [PartiesService],
 })
 export class PartiesModule {}

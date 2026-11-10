@@ -1,13 +1,30 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { UserRound, FileText, Phone, ChevronDown, X, Save } from "lucide-react";
 import {
+  UserRound,
+  FileText,
+  Phone,
+  ChevronDown,
+  X,
+  Save,
+  Search,
+} from "lucide-react";
+import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
+import { useConectividad } from "./lib/conectividad";
+import { BUSQUEDA_ARCA } from "./lib/funciones-ocultas";
+import {
+  buscarCuitEnArca,
   createParty,
   updateCustomerBilling,
   type CustomerBilling,
   type Party,
 } from "./lib/api";
-import { CustomerNameWarning } from "./customer-name-warning";
 import {
+  CustomerDocumentWarning,
+  CustomerNameWarning,
+} from "./customer-name-warning";
+import {
+  matchingCustomerDocuments,
+  normalizedCustomerDocument,
   normalizedCustomerName,
   type CustomerIdentity,
 } from "./lib/customer-identity";
@@ -71,6 +88,7 @@ export function CustomerEditor({
   priceLists,
   token,
   organizationId,
+  branchId,
   onClose,
   onSaved,
 }: {
@@ -80,6 +98,8 @@ export function CustomerEditor({
   priceLists: { id: string; name: string }[];
   token: string;
   organizationId: string;
+  /** Sin conexión, el alta queda en la PC a nombre de esta sucursal (SISTEMA-70). */
+  branchId?: string;
   onClose: () => void;
   onSaved: (customerId: string) => void;
 }) {
@@ -94,6 +114,47 @@ export function CustomerEditor({
   }));
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  // Buscar el CUIT en el padrón de ARCA (SISTEMA-70). Necesita internet.
+  const { enLinea } = useConectividad();
+  const puedeBuscar = enLinea && token !== TOKEN_SIN_CONEXION;
+  const [buscando, setBuscando] = useState(false);
+  const [arca, setArca] = useState<{ ok: boolean; mensaje: string }>();
+  const buscarEnArca = async () => {
+    if (buscando || !puedeBuscar) return;
+    setBuscando(true);
+    setArca(undefined);
+    try {
+      const datos = await buscarCuitEnArca(
+        token,
+        organizationId,
+        value.billingTaxId ?? "",
+      );
+      setName(datos.nombre);
+      setValue((actual) => ({
+        ...actual,
+        billingTaxId: datos.cuit,
+        billingVatCondition: datos.condicionIva,
+        billingAddress: datos.domicilio || actual.billingAddress,
+        billingCity: datos.localidad || actual.billingCity,
+        billingProvince: datos.provincia || actual.billingProvince,
+        billingPostalCode: datos.codigoPostal || actual.billingPostalCode,
+      }));
+      setArca({
+        ok: true,
+        mensaje: `Datos de ARCA${datos.environment === "HOMOLOGATION" ? " (homologación)" : ""}: ${datos.nombre} · ${datos.condicionIva}${datos.estado && datos.estado !== "ACTIVO" ? ` · Clave ${datos.estado.toLowerCase()}` : ""}. Revisalos antes de guardar.`,
+      });
+    } catch (cause) {
+      setArca({
+        ok: false,
+        mensaje:
+          cause instanceof Error
+            ? cause.message
+            : "No se pudo buscar el CUIT en ARCA.",
+      });
+    } finally {
+      setBuscando(false);
+    }
+  };
   useEffect(() => {
     const element = dialog.current,
       previous = document.activeElement;
@@ -133,20 +194,34 @@ export function CustomerEditor({
       />
     </label>
   );
+  // El CUIT/DNI identifica al cliente: si ya lo tiene otro, no se guarda.
+  // Como el servidor, sólo cuando el CUIT cambia: una ficha vieja repetida se
+  // puede seguir editando.
+  const documentoRepetido =
+    normalizedCustomerDocument(value.billingTaxId) !==
+      normalizedCustomerDocument(customer?.billingTaxId) &&
+    matchingCustomerDocuments(customers, value.billingTaxId, customer?.id)
+      .length > 0;
   const submit = async () => {
-    if (gate.current) return;
+    if (gate.current || documentoRepetido) return;
     gate.current = true;
     setBusy(true);
     setError("");
     try {
       if (customer) {
-        await updateCustomerBilling(token, organizationId, customer.id, {
-          ...value,
-          ...(name !== customer.name ? { name: name.trim() } : {}),
-          ...(listId !== (customer.priceListId ?? "")
-            ? { priceListId: listId || null }
-            : {}),
-        });
+        await updateCustomerBilling(
+          token,
+          organizationId,
+          customer.id,
+          {
+            ...value,
+            ...(name !== customer.name ? { name: name.trim() } : {}),
+            ...(listId !== (customer.priceListId ?? "")
+              ? { priceListId: listId || null }
+              : {}),
+          },
+          branchId,
+        );
         onSaved(customer.id);
       } else {
         const created = await createParty(
@@ -157,6 +232,8 @@ export function CustomerEditor({
           "",
           listId || undefined,
           value,
+          undefined,
+          branchId,
         );
         onSaved(created.id);
       }
@@ -211,6 +288,66 @@ export function CustomerEditor({
         <div data-product-editor-body className="min-h-0 overflow-y-auto p-5">
           <fieldset disabled={busy} className="space-y-4">
             <section className="rounded-xl border border-slate-200 p-4">
+              <label
+                htmlFor={`${titleId}-cuit`}
+                className="text-base font-semibold text-slate-800"
+              >
+                CUIT / CUIL / DNI
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input
+                  id={`${titleId}-cuit`}
+                  autoFocus
+                  className={`${field} min-w-0 flex-1`}
+                  maxLength={32}
+                  placeholder="30-12345678-9"
+                  value={value.billingTaxId ?? ""}
+                  onChange={(e) => {
+                    setValue({ ...value, billingTaxId: e.target.value });
+                    setArca(undefined);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!BUSQUEDA_ARCA || e.key !== "Enter") return;
+                    e.preventDefault();
+                    void buscarEnArca();
+                  }}
+                />
+                {BUSQUEDA_ARCA && (
+                  <button
+                    type="button"
+                    disabled={buscando || !puedeBuscar}
+                    onClick={() => void buscarEnArca()}
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-slate-800 px-4 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50"
+                  >
+                    <Search size={16} aria-hidden="true" />
+                    {buscando ? "Buscando…" : "Buscar en ARCA"}
+                  </button>
+                )}
+              </div>
+              {BUSQUEDA_ARCA && (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  {puedeBuscar
+                    ? "Con el CUIT traemos nombre, condición frente al IVA y domicilio. También podés apretar Enter."
+                    : "Sin conexión no se puede buscar en ARCA: cargá los datos a mano."}
+                </p>
+              )}
+              {BUSQUEDA_ARCA && arca && (
+                <p
+                  role={arca.ok ? "status" : "alert"}
+                  className={`mt-2 rounded-lg px-3 py-2 text-xs ${arca.ok ? "bg-teal-50 text-teal-800" : "bg-rose-50 text-rose-800"}`}
+                >
+                  {arca.mensaje}
+                </p>
+              )}
+              {documentoRepetido && (
+                <CustomerDocumentWarning
+                  customers={customers}
+                  taxId={value.billingTaxId}
+                  excludeId={customer?.id}
+                />
+              )}
+            </section>
+            <section className="rounded-xl border border-slate-200 p-4">
               <h3 className="mb-3 flex items-center gap-2 text-base font-semibold">
                 <UserRound size={17} className="text-teal-700" />
                 Datos principales
@@ -219,7 +356,6 @@ export function CustomerEditor({
                 <label className="text-sm text-slate-500">
                   Nombre o razón social <span className="text-rose-500">*</span>
                   <input
-                    autoFocus
                     required
                     minLength={2}
                     maxLength={160}
@@ -248,19 +384,13 @@ export function CustomerEditor({
                   customers={customers}
                   name={name}
                   excludeId={customer?.id}
+                  taxId={value.billingTaxId}
                 />
               )}
             </section>
             <Section title="Datos de facturación" icon={<FileText size={17} />}>
               <div className="grid gap-3 sm:grid-cols-2">
-                {input(
-                  "billingTaxId",
-                  "CUIT / CUIL / DNI",
-                  32,
-                  "text",
-                  "Sin especificar",
-                )}
-                <div className="text-sm text-slate-500">
+                <div className="text-sm text-slate-500 sm:col-span-2">
                   <p className="mb-1">Condición frente al IVA</p>
                   <ProductFilterSelect
                     compact
@@ -369,7 +499,7 @@ export function CustomerEditor({
           >
             Cancelar
           </button>
-          <button className={primary} disabled={busy}>
+          <button className={primary} disabled={busy || documentoRepetido}>
             <Save size={16} />
             {busy ? "Guardando…" : "Guardar cliente"}
           </button>

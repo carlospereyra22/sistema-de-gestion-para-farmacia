@@ -991,9 +991,15 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-@container (min-width: 960px) {
-  .account-profile-layout {
-    grid-template-columns: minmax(260px, 1.2fr) minmax(0, 3fr);
+/* Barra del cliente en una fila: cada grupo separado por una línea vertical.
+   Más angosto los grupos bajan de renglón, sin líneas. */
+@container (min-width: 900px) {
+  .account-profile-bar {
+    flex-wrap: nowrap;
+  }
+  .account-profile-group {
+    border-left: 1px solid #e2e8f0;
+    padding-left: 20px;
   }
 }
 .sales-cart-row {

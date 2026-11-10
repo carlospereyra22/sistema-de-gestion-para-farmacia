@@ -6,6 +6,8 @@ import { CredentialVault } from "../fiscal/credential-vault";
 import { PlatformAdminGuard } from "./platform-admin.guard";
 import { PlatformBillingService } from "./platform-billing.service";
 import { PlatformController } from "./platform.controller";
+import { PlatformPadronController } from "./platform-padron.controller";
+import { PlatformPadronService } from "./platform-padron.service";
 import { PlatformIdentityService } from "./platform-identity.service";
 import { PlatformOrganizationsController } from "./platform-organizations.controller";
 import { PlatformOrganizationsService } from "./platform-organizations.service";
@@ -19,6 +21,7 @@ import {
   imports: [AuthModule],
   controllers: [
     PlatformController,
+    PlatformPadronController,
     PlatformOrganizationsController,
     SubscriptionStatusController,
   ],
@@ -27,6 +30,7 @@ import {
     PlatformBillingService,
     PlatformIdentityService,
     PlatformOrganizationsService,
+    PlatformPadronService,
     SubscriptionStatusService,
     CredentialVault,
     // Global: aplica el estado comercial a toda ruta con :organizationId.

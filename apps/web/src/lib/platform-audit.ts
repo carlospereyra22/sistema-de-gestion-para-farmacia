@@ -17,6 +17,8 @@ const actionLabels: Record<string, string> = {
   PLATFORM_CHARGE_WAIVED: "Cargo condonado",
   PLATFORM_EXTENSION_GRANTED: "Prórroga otorgada",
   PLATFORM_EXTENSION_REMOVED: "Prórroga quitada",
+  PADRON_CERTIFICADO_SOLICITUD: "Solicitud de certificado del padrón de ARCA",
+  PADRON_CERTIFICADO_CARGADO: "Certificado del padrón de ARCA cargado",
 };
 
 export function platformActionLabel(action: string): string {

@@ -50,8 +50,8 @@ export function motivoParaNoVenderSinConexion(datos: {
     return "Pasaron más de 24 horas sin conexión con el servidor. Para seguir vendiendo hace falta que vuelva internet.";
   if (datos.acceso === "READ_ONLY" || datos.acceso === "BLOCKED")
     return "La farmacia está en solo lectura o bloqueada: sin conexión no se pueden registrar ventas.";
-  if (datos.metodos.includes("ACCOUNT"))
-    return "La cuenta corriente sin conexión todavía no está disponible. Cobrá con otro medio o esperá a que vuelva internet.";
+  // La cuenta corriente también anda sin conexión (SISTEMA-70): el crédito
+  // disponible se calcula con el saldo guardado más lo pendiente de la PC.
   return null;
 }
 

@@ -17,6 +17,30 @@ import {
   assertCustomerDocumentAvailable,
   normalizeCustomerDocument,
 } from "./customer-identity";
+import {
+  contextoSinConexion,
+  guardarOperacionSinConexion,
+  operacionYaRegistrada,
+} from "../common/offline/registro-sin-conexion";
+import { verificarOperacionDeOtro } from "../sales/operacion-firmada";
+
+/** Alta o edición de cliente hecha sin conexión (SISTEMA-70). */
+export type OperacionClienteSinConexion = {
+  clientOperationId: string;
+  occurredAt: string;
+  deviceId: string;
+} & (
+  | {
+      tipo: "ALTA";
+      cuerpo: {
+        name: string;
+        document?: string;
+        priceListId?: string;
+        billing?: CustomerBillingDto;
+      };
+    }
+  | { tipo: "EDICION"; customerId: string; cuerpo: UpdateCustomerBillingDto }
+);
 
 @Injectable()
 export class PartiesService {
@@ -117,6 +141,324 @@ export class PartiesService {
           });
           return supplier;
         });
+  }
+  /**
+   * Cliente dado de alta sin conexión (SISTEMA-70). Su id es la clave de la
+   * operación en la PC, así las ventas y cobros que se le hicieron sin conexión
+   * lo encuentran. Si repite un DNI/CUIT se crea igual y queda aviso para
+   * unificar; una lista de precios que ya no está se deja de lado con aviso.
+   */
+  async createCustomerOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: {
+      clientOperationId: string;
+      occurredAt: string;
+      deviceId: string;
+      cuerpo: {
+        name: string;
+        document?: string;
+        priceListId?: string;
+        billing?: CustomerBillingDto;
+      };
+    },
+    reenviadaPor?: string,
+  ) {
+    await this.assert(actorId, organizationId, "PARTY_MANAGE");
+    const contexto = await contextoSinConexion(this.prisma, organizationId, {
+      operationId: op.clientOperationId,
+      kind: "CUSTOMER_CREATE",
+      occurredAt: op.occurredAt,
+      deviceId: op.deviceId,
+      negocio: op.cuerpo,
+      reenviadaPor,
+    });
+    const { name, document, billing = {} } = op.cuerpo;
+    return this.prisma.$transaction(async (tx) => {
+      const registrada = await operacionYaRegistrada(
+        tx,
+        organizationId,
+        contexto,
+      );
+      if (registrada) return registrada;
+      if (await tx.customer.findUnique({ where: { id: op.clientOperationId } }))
+        throw new ConflictException("Ese cliente ya existe con otros datos.");
+      let priceListId = op.cuerpo.priceListId;
+      if (
+        priceListId &&
+        !(await tx.priceList.findFirst({
+          where: { id: priceListId, organizationId, active: true },
+        }))
+      ) {
+        contexto.avisos.push({
+          kind: "LISTA_INACTIVA",
+          detail: {
+            cliente: name.trim(),
+            motivo:
+              "La lista de precios del cliente ya no está activa: se creó sin lista.",
+          },
+        });
+        priceListId = undefined;
+      }
+      try {
+        await assertCustomerDocumentAvailable(tx, organizationId, [
+          document,
+          billing.billingTaxId,
+        ]);
+      } catch (cause) {
+        if (!(cause instanceof ConflictException)) throw cause;
+        contexto.avisos.push({
+          kind: "CLIENTE_DUPLICADO",
+          detail: {
+            cliente: name.trim(),
+            motivo: `${cause.message} Se creó igual porque se usó sin conexión: unificalos.`,
+          },
+        });
+      }
+      const customer = await tx.customer.create({
+        data: {
+          id: op.clientOperationId,
+          createdAt: contexto.occurredAt,
+          organizationId,
+          name: name.trim(),
+          document: document?.trim(),
+          priceListId,
+          ...billingData(billing),
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          branchId,
+          actorId,
+          entityType: "CUSTOMER",
+          entityId: customer.id,
+          action: "CUSTOMER_CREATED",
+          after: { origen: "SIN_CONEXION", deviceId: op.deviceId },
+        },
+      });
+      return guardarOperacionSinConexion(tx, contexto, {
+        organizationId,
+        branchId,
+        actorId,
+        entityId: customer.id,
+      });
+    });
+  }
+  /** Alta o edición de cliente hecha sin conexión (SISTEMA-70). */
+  customerOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: OperacionClienteSinConexion,
+    reenviadaPor?: string,
+  ) {
+    return op.tipo === "EDICION"
+      ? this.updateCustomerOffline(
+          actorId,
+          organizationId,
+          branchId,
+          op,
+          reenviadaPor,
+        )
+      : this.createCustomerOffline(
+          actorId,
+          organizationId,
+          branchId,
+          op,
+          reenviadaPor,
+        );
+  }
+  /**
+   * Edición de un cliente hecha sin conexión: se aplican los campos que se
+   * cambiaron. Si otra PC cambió alguno de esos campos después, queda ese
+   * cambio (el más reciente) y se avisa. Un DNI/CUIT repetido o una lista que
+   * ya no está se avisan, como en el alta.
+   */
+  async updateCustomerOffline(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    op: Extract<OperacionClienteSinConexion, { tipo: "EDICION" }>,
+    reenviadaPor?: string,
+  ) {
+    await this.assert(actorId, organizationId, "PARTY_MANAGE");
+    const input = op.cuerpo;
+    if (
+      input.name !== undefined &&
+      (input.name.trim().length < 2 || input.name.trim().length > 160)
+    )
+      throw new BadRequestException(
+        "El nombre o razón social debe tener entre 2 y 160 caracteres.",
+      );
+    const contexto = await contextoSinConexion(this.prisma, organizationId, {
+      operationId: op.clientOperationId,
+      kind: "CUSTOMER_UPDATE",
+      occurredAt: op.occurredAt,
+      deviceId: op.deviceId,
+      negocio: { customerId: op.customerId, cuerpo: input },
+      reenviadaPor,
+    });
+    return this.prisma.$transaction(async (tx) => {
+      const registrada = await operacionYaRegistrada(
+        tx,
+        organizationId,
+        contexto,
+      );
+      if (registrada) return registrada;
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId}::uuid FOR UPDATE`;
+      const customer = await tx.customer.findFirst({
+        where: { id: op.customerId, organizationId },
+      });
+      if (!customer)
+        throw new NotFoundException(
+          "El cliente no está disponible en esta organización.",
+        );
+      const pedidos: Record<string, string | null> = {
+        ...(input.priceListId !== undefined
+          ? { priceListId: input.priceListId || null }
+          : {}),
+        ...billingData(input),
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      };
+      // Campos que otra PC cambió después de esta edición: quedan como están.
+      const registros = await tx.auditLog.findMany({
+        where: {
+          organizationId,
+          entityType: "CUSTOMER",
+          entityId: op.customerId,
+          action: "CUSTOMER_BILLING_UPDATED",
+        },
+        select: { createdAt: true, after: true },
+      });
+      const pisados = new Set<string>();
+      for (const registro of registros) {
+        const after = registro.after;
+        if (!after || typeof after !== "object" || Array.isArray(after))
+          continue;
+        const cuando =
+          typeof after.occurredAt === "string"
+            ? new Date(after.occurredAt)
+            : registro.createdAt;
+        if (cuando <= contexto.occurredAt || !Array.isArray(after.fields))
+          continue;
+        for (const campo of after.fields)
+          if (typeof campo === "string" && campo in pedidos) pisados.add(campo);
+      }
+      for (const campo of pisados) delete pedidos[campo];
+      if (pisados.size)
+        contexto.avisos.push({
+          kind: "CONFIGURACION_PISADA",
+          detail: {
+            cliente: customer.name,
+            motivo: `Otra PC cambió después: ${[...pisados].join(", ")}. Quedó ese cambio, que es el más reciente.`,
+          },
+        });
+      const lista = pedidos.priceListId;
+      if (
+        lista &&
+        !(await tx.priceList.findFirst({
+          where: { id: lista, organizationId, active: true },
+        }))
+      ) {
+        delete pedidos.priceListId;
+        contexto.avisos.push({
+          kind: "LISTA_INACTIVA",
+          detail: {
+            cliente: customer.name,
+            motivo:
+              "La lista de precios elegida ya no está activa: el cliente quedó con la que tenía.",
+          },
+        });
+      }
+      const cuit = pedidos.billingTaxId;
+      if (
+        cuit &&
+        normalizeCustomerDocument(cuit) !==
+          normalizeCustomerDocument(customer.billingTaxId)
+      )
+        try {
+          await assertCustomerDocumentAvailable(
+            tx,
+            organizationId,
+            [cuit],
+            op.customerId,
+          );
+        } catch (cause) {
+          if (!(cause instanceof ConflictException)) throw cause;
+          contexto.avisos.push({
+            kind: "CLIENTE_DUPLICADO",
+            detail: {
+              cliente: customer.name,
+              motivo: `${cause.message} Se guardó igual porque se cargó sin conexión: unificalos.`,
+            },
+          });
+        }
+      if (Object.keys(pedidos).length) {
+        await tx.customer.update({
+          where: { id: op.customerId, organizationId },
+          data: pedidos,
+        });
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            branchId,
+            actorId,
+            entityType: "CUSTOMER",
+            entityId: op.customerId,
+            action: "CUSTOMER_BILLING_UPDATED",
+            after: {
+              fields: Object.keys(pedidos),
+              occurredAt: contexto.occurredAt.toISOString(),
+              origen: "SIN_CONEXION",
+              deviceId: op.deviceId,
+            },
+          },
+        });
+      }
+      return guardarOperacionSinConexion(tx, contexto, {
+        organizationId,
+        branchId,
+        actorId,
+        entityId: op.customerId,
+      });
+    });
+  }
+  async customerOfflineSigned(
+    senderId: string,
+    organizationId: string,
+    branchId: string,
+    firma: {
+      actorId: string;
+      deviceId: string;
+      payload: string;
+      signature: string;
+    },
+    op: OperacionClienteSinConexion,
+  ) {
+    if (firma.actorId === senderId)
+      return this.customerOffline(senderId, organizationId, branchId, op);
+    await verificarOperacionDeOtro(this.prisma, {
+      ...firma,
+      senderId,
+      organizationId,
+      branchId,
+    });
+    try {
+      await this.assert(firma.actorId, organizationId, "PARTY_MANAGE");
+    } catch {
+      throw new BadRequestException(
+        "Quien cargó el cliente ya no puede manejar clientes. Revisalo a mano.",
+      );
+    }
+    return this.customerOffline(
+      firma.actorId,
+      organizationId,
+      branchId,
+      op,
+      senderId,
+    );
   }
   private validateSupplierTerms(input: {
     accountEnabled: boolean;

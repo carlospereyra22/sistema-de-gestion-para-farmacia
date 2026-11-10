@@ -1,4 +1,8 @@
-import { Injectable, BadGatewayException } from "@nestjs/common";
+import {
+  Injectable,
+  BadGatewayException,
+  NotFoundException,
+} from "@nestjs/common";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import * as forge from "node-forge";
 import { randomInt } from "node:crypto";
@@ -15,6 +19,13 @@ export const PRODUCTION_WSAA = "https://wsaa.afip.gov.ar/ws/services/LoginCms";
 export const PRODUCTION_WSFE =
   "https://servicios1.afip.gov.ar/wsfev1/service.asmx";
 export const NS = "http://ar.gov.afip.dif.FEV1/";
+/** Padrón de constancia de inscripción (ws_sr_constancia_inscripcion). */
+export const PADRON =
+  "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5";
+export const PRODUCTION_PADRON =
+  "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5";
+export const PADRON_NS = "http://a5.soap.ws.server.puc.sr/";
+export const PADRON_SERVICE = "ws_sr_constancia_inscripcion";
 export const obj = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -49,9 +60,13 @@ export function parseXml(xml: string): Record<string, unknown> {
     }).parse(xml) as unknown,
   );
 }
-export function signedLogin(certificate: string, privateKey: string) {
+export function signedLogin(
+  certificate: string,
+  privateKey: string,
+  service = "wsfe",
+) {
   const now = Date.now();
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>${randomInt(1, 2147483647)}</uniqueId><generationTime>${new Date(now - 60000).toISOString()}</generationTime><expirationTime>${new Date(now + 600000).toISOString()}</expirationTime></header><service>wsfe</service></loginTicketRequest>`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>${randomInt(1, 2147483647)}</uniqueId><generationTime>${new Date(now - 60000).toISOString()}</generationTime><expirationTime>${new Date(now + 600000).toISOString()}</expirationTime></header><service>${service}</service></loginTicketRequest>`;
   const cms = forge.pkcs7.createSignedData();
   cms.content = forge.util.createBuffer(xml, "utf8");
   cms.addCertificate(certificate);
@@ -85,10 +100,30 @@ export function communicationHint(operation: string) {
     return "No se emitió nada en esta consulta. Volvé a consultar en unos minutos.";
   return "No se emitió ningún comprobante en este paso. Volvé a intentarlo.";
 }
+/** Código y texto corto de una falla SOAP de ARCA, sin datos sensibles. */
+export function codigoDeFalla(fault: unknown) {
+  const f = obj(fault);
+  return `${str(f.faultcode)} ${str(f.faultstring)}`
+    .replace(/[^\w .:,áéíóúñÁÉÍÓÚÑ-]/g, "")
+    .trim()
+    .slice(0, 160);
+}
+/** Error del padrón de ARCA, en palabras de la farmacia. Nunca el cuerpo SOAP. */
+export function padronFault(fault: string) {
+  if (/no existe|inexistente|no se encontr/i.test(fault))
+    return new NotFoundException("ARCA no tiene datos para ese CUIT.");
+  if (/notAuthorized|not.authorized|no autorizad/i.test(fault))
+    return new BadGatewayException(
+      "El certificado no está habilitado para consultar el padrón. En ARCA (Administrador de Relaciones) asociale el servicio ws_sr_constancia_inscripcion.",
+    );
+  return new BadGatewayException(
+    "ARCA no pudo responder la consulta del CUIT. Probá de nuevo en unos minutos.",
+  );
+}
 @Injectable()
 export class ArcaSoap {
   async call(
-    kind: "wsaa" | "wsfe",
+    kind: "wsaa" | "wsfe" | "padron",
     operation: string,
     content: string,
     environment: FiscalEnvironment = "HOMOLOGATION",
@@ -108,6 +143,8 @@ export class ArcaSoap {
     if (
       environment === "PRODUCTION" &&
       !(kind === "wsaa" && operation === "loginCms") &&
+      // El padrón sólo consulta datos de un CUIT: no emite nada.
+      !(kind === "padron" && operation === "getPersona_v2") &&
       !(
         kind === "wsfe" &&
         [
@@ -129,13 +166,26 @@ export class ArcaSoap {
       environment === "PRODUCTION"
         ? kind === "wsaa"
           ? PRODUCTION_WSAA
-          : PRODUCTION_WSFE
+          : kind === "padron"
+            ? PRODUCTION_PADRON
+            : PRODUCTION_WSFE
         : kind === "wsaa"
           ? WSAA
-          : WSFE;
+          : kind === "padron"
+            ? PADRON
+            : WSFE;
     const namespace =
-      kind === "wsaa" ? "http://wsaa.view.sua.dvadac.desein.afip.gov" : NS;
-    const body = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><${operation} xmlns="${namespace}">${content}</${operation}></soap:Body></soap:Envelope>`;
+      kind === "wsaa"
+        ? "http://wsaa.view.sua.dvadac.desein.afip.gov"
+        : kind === "padron"
+          ? PADRON_NS
+          : NS;
+    // En el padrón los campos van sin espacio de nombres: sólo la operación.
+    const operationXml =
+      kind === "padron"
+        ? `<a5:${operation} xmlns:a5="${namespace}">${content}</a5:${operation}>`
+        : `<${operation} xmlns="${namespace}">${content}</${operation}>`;
+    const body = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>${operationXml}</soap:Body></soap:Envelope>`;
     let xml: string;
     try {
       if (environment === "PRODUCTION" && kind === "wsfe") {
@@ -147,7 +197,7 @@ export class ArcaSoap {
           signal: AbortSignal.timeout(20000),
           headers: {
             "Content-Type": "text/xml; charset=utf-8",
-            SOAPAction: `"${kind === "wsaa" ? "" : NS + operation}"`,
+            SOAPAction: `"${kind === "wsfe" ? NS + operation : ""}"`,
           },
           body,
         });
@@ -176,6 +226,7 @@ export class ArcaSoap {
     const payload = obj(envelope.Body);
     if (payload.Fault) {
       const fault = str(obj(payload.Fault).faultstring);
+      if (kind === "padron") throw padronFault(fault);
       const hint =
         environment === "PRODUCTION"
           ? /alreadyAuthenticated/i.test(fault)
@@ -188,14 +239,20 @@ export class ArcaSoap {
               : /untrusted/i.test(fault)
                 ? "El certificado no fue aceptado por homologación. Revisá que sea el certificado de pruebas de WSASS."
                 : "Revisá certificado, autorización WSASS y fecha/hora del servidor.";
-      // Never return SOAP bodies: they can contain credentials.
-      throw new BadGatewayException(`ARCA rechazó la conexión. ${hint}`);
+      // Never return SOAP bodies: they can contain credentials. El código de
+      // ARCA (p. ej. coe.notAuthorized) sí, para saber qué pasó.
+      const error = new BadGatewayException(
+        `ARCA rechazó la conexión. ${hint}`,
+      );
+      Object.assign(error, { arcaFault: codigoDeFalla(payload.Fault) });
+      throw error;
     }
     const result = obj(payload[`${operation}Response`]);
     if (!Object.keys(result).length)
       throw new BadGatewayException(
         "Respuesta inesperada de ARCA; no se confirmó la operación.",
       );
+    if (kind === "padron") return obj(result.personaReturn);
     return kind === "wsaa" ? result : obj(result[`${operation}Result`]);
   }
 }

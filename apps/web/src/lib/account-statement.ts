@@ -1,6 +1,8 @@
 import { apiFetch as fetch } from "./api-fetch";
 import { accountStatementStyle } from "./account-statement-style";
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, getCustomerAccounts } from "./api";
+import { ventasDeLaPc } from "./bandeja-ventas";
+import { estadoConPendientes } from "./cuenta-sin-conexion";
 import {
   argentinaSaleDate,
   statementMoney,
@@ -35,7 +37,12 @@ export async function getAccountStatement(
   );
   if (!response.ok)
     throw new Error("No se pudo cargar el estado de cuenta. Volvé a intentar.");
-  return response.json() as Promise<AccountStatementCustomer[]>;
+  const base = (await response.json()) as AccountStatementCustomer[];
+  // Con lo hecho en la PC que todavía no llegó (SISTEMA-70).
+  const bandeja = await ventasDeLaPc().catch(() => []);
+  if (!bandeja.some((item) => item.estado === "PENDIENTE")) return base;
+  const cuentas = await getCustomerAccounts(token, org, branch).catch(() => []);
+  return estadoConPendientes(base, bandeja, org, branch, cuentas);
 }
 export function accountStatementPeriod(
   customer: AccountStatementCustomer,
