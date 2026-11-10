@@ -154,7 +154,32 @@ describe("caja sin conexión (base local con rollback)", () => {
           { method: "CASH", amountMinor: 10000, cashSessionId: sessionId },
         ],
       });
-    return { org, branch, ana, beto, register, cash, caja, vender, hace };
+    // Cobro de un recibo sin caja (SISTEMA-81).
+    const cobro = (cashMinor = 5000n) =>
+      tx.cashPendingCollection.create({
+        data: {
+          organizationId: org.id,
+          branchId: branch.id,
+          sourceType: "RECEIPT",
+          sourceId: randomUUID(),
+          actorId: ana.id,
+          cashMinor,
+          cardMinor: 0n,
+          transferMinor: 0n,
+        },
+      });
+    return {
+      org,
+      branch,
+      ana,
+      beto,
+      register,
+      cash,
+      caja,
+      vender,
+      hace,
+      cobro,
+    };
   }
 
   it("abre, vende, mueve y cierra sin conexión, con la hora real y sin duplicar", () =>
@@ -325,5 +350,118 @@ describe("caja sin conexión (base local con rollback)", () => {
         expectedAmountMinor: 20000,
       });
       expect(cierre.offlineIssues).toEqual([]);
+    }));
+
+  // --- Cobros pendientes sin conexión (SISTEMA-81) ---
+
+  it("asigna la caja e incorpora un cobro pendiente sin conexión, en una caja abierta sin conexión", () =>
+    enRollback(async (tx, f) => {
+      const pendiente = await f.cobro();
+      const aperturaId = randomUUID();
+      await f.caja(f.ana.id, {
+        tipo: "APERTURA",
+        clientOperationId: aperturaId,
+        occurredAt: f.hace(60),
+        cashRegisterId: f.register.id,
+        openingAmountMinor: 10000,
+      });
+      await f.caja(f.ana.id, {
+        tipo: "COBRO_DESTINO",
+        occurredAt: f.hace(50),
+        collectionId: pendiente.id,
+        cashRegisterId: f.register.id,
+      });
+      const incorporar = {
+        tipo: "COBRO_INCORPORAR" as const,
+        clientOperationId: randomUUID(),
+        occurredAt: f.hace(40),
+        collectionId: pendiente.id,
+        sessionId: aperturaId,
+      };
+      const r = await f.caja(f.ana.id, incorporar);
+      expect(r.offlineIssues).toEqual([]);
+      // Reintento: no duplica el efectivo.
+      await f.caja(f.ana.id, incorporar);
+      expect(
+        await tx.cashMovement.count({ where: { cashSessionId: aperturaId } }),
+      ).toBe(1);
+      expect(
+        await tx.cashPendingCollection.findUniqueOrThrow({
+          where: { id: pendiente.id },
+        }),
+      ).toMatchObject({ assignedSessionId: aperturaId });
+      // 100 de fondo + 50 del cobro.
+      const cierre = await f.caja(f.ana.id, {
+        tipo: "CIERRE",
+        occurredAt: f.hace(30),
+        sessionId: aperturaId,
+        closingAmountMinor: 15000,
+        expectedAmountMinor: 15000,
+      });
+      expect(cierre.offlineIssues).toEqual([]);
+    }));
+
+  it("si otra PC ya lo incorporó o la sesión ya estaba cerrada, no mueve plata y avisa", () =>
+    enRollback(async (tx, f) => {
+      const sesion = await f.caja(f.ana.id, {
+        tipo: "APERTURA",
+        occurredAt: f.hace(60),
+        cashRegisterId: f.register.id,
+        openingAmountMinor: 0,
+      });
+      const sessionId = sesion.entityId!;
+      // Otra PC, con conexión, ya lo incorporó.
+      const yaHecho = await f.cobro();
+      await f.cash.assignCollection(
+        f.beto.id,
+        f.org.id,
+        f.branch.id,
+        yaHecho.id,
+        sessionId,
+      );
+      const otra = await f.caja(f.ana.id, {
+        tipo: "COBRO_INCORPORAR",
+        occurredAt: f.hace(50),
+        collectionId: yaHecho.id,
+        sessionId: randomUUID(),
+      });
+      expect(otra.offlineIssues.map((a) => a.kind)).toEqual([
+        "COBRO_YA_ASIGNADO",
+      ]);
+      expect(
+        await tx.cashMovement.count({ where: { cashSessionId: sessionId } }),
+      ).toBe(1);
+      const quitar = await f.caja(f.ana.id, {
+        tipo: "COBRO_QUITAR",
+        occurredAt: f.hace(45),
+        collectionId: yaHecho.id,
+        expectedRegisterId: f.register.id,
+      });
+      expect(quitar.offlineIssues.map((a) => a.kind)).toEqual([
+        "COBRO_YA_ASIGNADO",
+      ]);
+      // La sesión se cerró antes de que llegara: el cobro sigue pendiente.
+      await f.caja(f.ana.id, {
+        tipo: "CIERRE",
+        occurredAt: f.hace(40),
+        sessionId,
+        closingAmountMinor: 5000,
+        expectedAmountMinor: 5000,
+      });
+      const tarde = await f.cobro(3000n);
+      const cerrada = await f.caja(f.ana.id, {
+        tipo: "COBRO_INCORPORAR",
+        occurredAt: f.hace(30),
+        collectionId: tarde.id,
+        sessionId,
+      });
+      expect(cerrada.offlineIssues.map((a) => a.kind)).toEqual([
+        "CAJA_CERRADA",
+      ]);
+      expect(
+        await tx.cashPendingCollection.findUniqueOrThrow({
+          where: { id: tarde.id },
+        }),
+      ).toMatchObject({ assignedSessionId: null });
     }));
 });

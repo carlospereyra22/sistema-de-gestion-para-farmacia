@@ -56,7 +56,8 @@ necesita conexión.
 | SISTEMA-72 Todo listo sin conexión desde la primera visita    | En main    |
 | SISTEMA-73 Proveedores y cuentas por pagar sin conexión       | En main    |
 | SISTEMA-79 Productos e inventario sin conexión                | En main    |
-| SISTEMA-80 Categorías, laboratorios, listas y reportes        | Esta etapa |
+| SISTEMA-80 Categorías, laboratorios, listas y reportes        | En main    |
+| SISTEMA-81 Arreglos de la prueba: compras, cobros y avisos    | Esta etapa |
 | Prueba completa con dos PCs                                   | Pendiente  |
 
 ## Cómo funciona (SISTEMA-62)
@@ -249,7 +250,15 @@ Problema encontrado en preprod (09/11/2026): sin conexión fallaban el lector de
 - **Worker del lector de PDF en memoria** (SISTEMA-76, `lib/worker-pdf.ts`): el lector de PDF crea su worker pidiendo el archivo cada vez que lee un PDF, así que precargarlo no alcanzaba: sin conexión y sin service worker (en desarrollo, o antes de que tome la pestaña) fallaba con "Setting up fake worker failed". Ahora el código del worker se carga una vez como parte de la app (`?raw`, el archivo tal cual) y queda en memoria como blob; el worker se crea desde ahí, sin red. Si no se pudo cargar, se usa la dirección del archivo como antes. Probado en Edge, en desarrollo y en la versión compilada, leyendo una factura con el servidor prendido y después de apagarlo.
 - **Caja** (`lib/precarga-caja.ts`): con conexión, al entrar y cada 10 minutos, se guardan permisos y reglas de la caja, cobros pendientes, el historial del período por defecto y los últimos movimientos de cada caja. Sin eso no se podía cerrar sin conexión.
 - **Prueba en navegador real** (`scripts/probar-sin-conexion.mjs`, obligatoria antes de publicar en preprod un cambio del modo sin internet; ver skill `cerrar-tarea`): Edge con un perfil nuevo contra la versión compilada como preprod. Entra con conexión con un usuario de prueba que crea sólo en `gestion_dev`, apaga el servidor y recorre cada pantalla, carga cada parte que se baja aparte y cierra la caja; el cierre queda en la bandeja de la PC. Resultado y capturas en `.cache/prueba-sin-conexion/`.
-- **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (asignar cobros pendientes, anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73, productos e inventario en SISTEMA-79, y categorías, laboratorios, listas de precios y reportes (copia del servidor) en SISTEMA-80.
+- **Fuera de alcance** (decisión del usuario, 09/11/2026): Reportes sigue sólo con conexión, igual que las acciones que nunca tuvieron modo sin conexión (anular o devolver ventas, cancelar pendientes de compras, inventario, catálogo y administración). Cuentas por pagar pasó a funcionar sin conexión en SISTEMA-73, productos e inventario en SISTEMA-79, y categorías, laboratorios, listas de precios y reportes (copia del servidor) en SISTEMA-80.
+
+## Arreglos de la prueba sin conexión (SISTEMA-81)
+
+Bugs que encontró el usuario al probar sin internet (11/11/2026):
+
+- **Compras: crear productos de una factura PDF**: la creación en tanda (`createProductsFromBase`) no pasaba la sucursal y quedaba sólo con conexión. Ahora los productos quedan en la PC y se usan enseguida (la base de medicamentos de la PC da los datos). Una compra con un producto creado sin conexión espera en la PC detrás de su alta (`productoConPendientes`).
+- **Caja: asignar cobros pendientes**: asignar caja, incorporar a una sesión y quitar la caja quedan como operación de caja (`COBRO_DESTINO`, `COBRO_INCORPORAR`, `COBRO_QUITAR`, `cash-pending-collections.tsx`). La lista (`cobrosConPendientes`) y el esperado de la caja (`aplicarCajaLocal`) ya los muestran. Lo de un cobro con algo sin enviar, o la incorporación a una sesión abierta sin conexión, va directo a la PC.
+- **Aviso "Sin conexión: esta operación necesita internet" al volver a Ventas**: lo dejaba la pantalla Productos, que al abrirse prepara las categorías por defecto (una escritura). Sin conexión ya no se intenta: las categorías están en la copia de la PC.
 
 ## Categorías, laboratorios, listas de precios y reportes sin conexión (SISTEMA-80)
 

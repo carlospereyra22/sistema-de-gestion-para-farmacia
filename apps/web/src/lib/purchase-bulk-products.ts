@@ -113,6 +113,8 @@ export async function createProductsFromBase(
   organizationId: string,
   rows: BulkProductRow[],
   onProgress: (done: number) => void,
+  /** Sin conexión, los productos quedan en la PC y se usan enseguida (SISTEMA-81). */
+  branchId?: string,
 ) {
   const options = await getCatalogOptions(token, organizationId);
   return createRows(
@@ -128,6 +130,7 @@ export async function createProductsFromBase(
         token,
         organizationId,
         bulkProductInput(code, bulkReference(matches), options),
+        branchId,
       );
       if (!id) throw new Error("No se pudo crear el producto.");
       return id;

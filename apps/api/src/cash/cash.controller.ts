@@ -1,3 +1,4 @@
+import type { TipoOperacionCaja } from "./offline-cash";
 import {
   BadRequestException,
   Body,
@@ -91,8 +92,15 @@ class EditRegisterDto {
 }
 /** Apertura, movimiento o cierre hecho sin conexión (SISTEMA-67). */
 class OfflineCashDto {
-  @IsIn(["APERTURA", "MOVIMIENTO", "CIERRE"]) tipo!:
-    "APERTURA" | "MOVIMIENTO" | "CIERRE";
+  @IsIn([
+    "APERTURA",
+    "MOVIMIENTO",
+    "CIERRE",
+    "COBRO_DESTINO",
+    "COBRO_INCORPORAR",
+    "COBRO_QUITAR",
+  ])
+  tipo!: TipoOperacionCaja;
   @IsUUID() clientOperationId!: string;
   @IsISO8601({ strict: true }) occurredAt!: string;
   @IsUUID() deviceId!: string;
@@ -112,6 +120,9 @@ class OfflineCashDto {
   @Min(0)
   closingAmountMinor?: number;
   @IsOptional() @Type(() => Number) @IsInt() expectedAmountMinor?: number;
+  /** Cobro pendiente de caja (SISTEMA-81). */
+  @IsOptional() @IsUUID() collectionId?: string;
+  @IsOptional() @IsUUID() expectedRegisterId?: string;
 }
 /** La de otro usuario de la PC, firmada por él (SISTEMA-67). */
 class SignedOfflineCashDto {

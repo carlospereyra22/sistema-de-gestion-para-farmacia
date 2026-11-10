@@ -22,6 +22,7 @@ import {
   KIND_POR_TIPO,
   hashOperacionCaja,
   sesionReal,
+  TIPOS_DE_COBRO,
   validarOperacionCaja,
   type OperacionCajaSinConexion,
 } from "./offline-cash";
@@ -245,6 +246,47 @@ export class CashService {
           "Seleccioná una sesión abierta de esta sucursal.",
         );
       const assignedAt = new Date();
+      return this.incorporarCobro(tx, {
+        actorId,
+        organizationId,
+        branchId,
+        row,
+        sessionId,
+        assignedAt,
+      });
+    });
+  }
+
+  /**
+   * Incorpora un cobro pendiente a una sesión: su efectivo entra una sola vez
+   * como movimiento, y la factura que esperaba la caja pasa a la cola fiscal.
+   * También lo usa el cobro incorporado sin conexión (SISTEMA-81).
+   */
+  private async incorporarCobro(
+    tx: Prisma.TransactionClient,
+    datos: {
+      actorId: string;
+      organizationId: string;
+      branchId: string;
+      row: {
+        id: string;
+        sourceType: string;
+        sourceId: string;
+        collectedAt: Date;
+        cashMinor: bigint;
+        cardMinor: bigint;
+        transferMinor: bigint;
+        changeMinor: bigint;
+      };
+      sessionId: string;
+      assignedAt: Date;
+      origen?: Record<string, string>;
+    },
+  ) {
+    const { actorId, organizationId, branchId, row, sessionId, assignedAt } =
+      datos;
+    const id = row.id;
+    {
       // Source payments remain untouched. Cash is incorporated exactly once as an allocation entry.
       if (row.cashMinor > 0n)
         await tx.cashMovement.create({
@@ -254,6 +296,7 @@ export class CashService {
             amountMinor: row.cashMinor,
             actorId,
             reason: `Asignación de cobro sin caja · ${row.sourceType === "SALE" ? "Venta" : "Recibo"} ${row.sourceId} · ${row.collectedAt.toISOString()}`,
+            ...(datos.origen ? { createdAt: assignedAt } : {}),
           },
         });
       await tx.cashPendingCollection.update({
@@ -292,10 +335,11 @@ export class CashService {
           transferMinor: row.transferMinor.toString(),
           changeMinor: row.changeMinor.toString(),
           facturaLiberada,
+          ...(datos.origen ?? {}),
         },
       });
       return { id, assignedSessionId: sessionId, assignedAt, facturaLiberada };
-    });
+    }
   }
   async setCollectionDestination(
     actorId: string,
@@ -1337,7 +1381,18 @@ export class CashService {
       const avisos: { kind: string; detail: Prisma.InputJsonValue }[] = [];
       const origen = { origen: "SIN_CONEXION", deviceId: op.deviceId };
       let entityId: string | null = null;
-      if (op.tipo === "APERTURA") {
+      if (TIPOS_DE_COBRO.includes(op.tipo)) {
+        entityId = op.collectionId!;
+        await this.cobroSinConexion(tx, {
+          actorId,
+          organizationId,
+          branchId,
+          op,
+          occurredAt,
+          avisos,
+          origen: { ...origen, occurredAt: occurredAt.toISOString() },
+        });
+      } else if (op.tipo === "APERTURA") {
         await tx.$queryRaw`SELECT id FROM "CashRegister" WHERE id=${op.cashRegisterId!}::uuid AND "branchId"=${branchId}::uuid FOR UPDATE`;
         const register = await tx.cashRegister.findFirst({
           where: { id: op.cashRegisterId, branchId, active: true },
@@ -1550,6 +1605,176 @@ export class CashService {
           }),
         );
       return { entityId, offlineIssues };
+    });
+  }
+
+  /**
+   * Cobro pendiente asignado, incorporado o liberado sin conexión
+   * (SISTEMA-81). Si al llegar otra PC ya hizo algo con ese cobro (o la venta
+   * se anuló), no se toca nada y queda aviso: nunca se mueve plata de más. Si
+   * la sesión elegida ya estaba cerrada, el cobro sigue pendiente.
+   */
+  private async cobroSinConexion(
+    tx: Prisma.TransactionClient,
+    datos: {
+      actorId: string;
+      organizationId: string;
+      branchId: string;
+      op: OperacionCajaSinConexion;
+      occurredAt: Date;
+      avisos: { kind: string; detail: Prisma.InputJsonValue }[];
+      origen: Record<string, string>;
+    },
+  ) {
+    const { actorId, organizationId, branchId, op, occurredAt, avisos } = datos;
+    const id = op.collectionId!;
+    const original = await tx.cashPendingCollection.findFirst({
+      where: { id, organizationId, branchId },
+    });
+    if (!original)
+      throw new NotFoundException("Cobro pendiente no disponible.");
+    const aviso = (motivo: string) =>
+      avisos.push({
+        kind: "COBRO_YA_ASIGNADO",
+        detail: {
+          motivo,
+          origen: original.sourceType === "SALE" ? "Venta" : "Recibo",
+          comprobante: original.sourceId.slice(0, 8).toUpperCase(),
+          efectivoMinor: original.cashMinor.toString(),
+        },
+      });
+    if (original.sourceType === "SALE") {
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${original.sourceId}::uuid AND "organizationId"=${organizationId}::uuid FOR UPDATE`;
+      if (
+        !(await tx.sale.findFirst({
+          where: {
+            id: original.sourceId,
+            organizationId,
+            branchId,
+            status: "COMPLETED",
+          },
+        }))
+      )
+        return aviso("La venta se anuló mientras no había conexión.");
+    }
+    await tx.$queryRaw`SELECT id FROM "CashPendingCollection" WHERE id=${id}::uuid FOR UPDATE`;
+    const row = await tx.cashPendingCollection.findUniqueOrThrow({
+      where: { id },
+    });
+    if (row.voidedAt) return aviso("El cobro se anuló.");
+    if (op.tipo === "COBRO_INCORPORAR") {
+      const sessionId = await sesionReal(tx, organizationId, op.sessionId!);
+      if (row.assignedAt) {
+        if (row.assignedSessionId !== sessionId)
+          aviso("Otra PC ya lo había incorporado a otra sesión.");
+        return;
+      }
+      await lockCashSession(tx, sessionId);
+      const session = await tx.cashSession.findFirst({
+        where: { id: sessionId },
+      });
+      const register = session
+        ? await tx.cashRegister.findFirst({
+            where: { id: session.cashRegisterId, branchId },
+          })
+        : null;
+      if (!session || !register)
+        throw new NotFoundException(
+          "La caja de esta operación no está disponible en la sucursal.",
+        );
+      if (session.closedAt) {
+        avisos.push({
+          kind: "CAJA_CERRADA",
+          detail: {
+            caja: register.name,
+            motivo:
+              "La sesión ya estaba cerrada: el cobro sigue pendiente. Incorporalo a una sesión abierta.",
+          },
+        });
+        return;
+      }
+      if (
+        row.destinationRegisterId &&
+        row.destinationRegisterId !== session.cashRegisterId
+      )
+        return aviso("Otra PC le había asignado otra caja: no se incorporó.");
+      await this.incorporarCobro(tx, {
+        actorId,
+        organizationId,
+        branchId,
+        row,
+        sessionId,
+        assignedAt:
+          occurredAt.getTime() < session.openedAt.getTime()
+            ? session.openedAt
+            : occurredAt,
+        origen: datos.origen,
+      });
+      return;
+    }
+    if (row.assignedAt)
+      return aviso("Otra PC ya lo había incorporado a una sesión.");
+    if (op.tipo === "COBRO_DESTINO") {
+      if (row.destinationRegisterId) {
+        if (row.destinationRegisterId !== op.cashRegisterId)
+          aviso("Otra PC ya le había asignado otra caja.");
+        return;
+      }
+      if (
+        !(await tx.cashRegister.findFirst({
+          where: { id: op.cashRegisterId, branchId, active: true },
+        }))
+      )
+        throw new NotFoundException("La caja no está disponible.");
+      await tx.cashPendingCollection.update({
+        where: { id },
+        data: {
+          destinationRegisterId: op.cashRegisterId,
+          destinationSetAt: occurredAt,
+          destinationSetById: actorId,
+        },
+      });
+      await this.audit.recordInTransaction(tx, {
+        organizationId,
+        branchId,
+        actorId,
+        entityType: "CASH_PENDING_COLLECTION",
+        entityId: id,
+        action: "DESTINATION_ASSIGNED",
+        after: {
+          cashRegisterId: op.cashRegisterId,
+          sourceId: row.sourceId,
+          collectedAt: row.collectedAt.toISOString(),
+          ...datos.origen,
+        },
+      });
+      return;
+    }
+    // Quitar la caja: sólo si sigue siendo la que vio la PC.
+    if (!row.destinationRegisterId) return;
+    if (row.destinationRegisterId !== op.expectedRegisterId)
+      return aviso("Otra PC le cambió la caja: no se quitó.");
+    await tx.cashPendingCollection.update({
+      where: { id },
+      data: {
+        destinationRegisterId: null,
+        destinationSetAt: null,
+        destinationSetById: null,
+      },
+    });
+    await this.audit.recordInTransaction(tx, {
+      organizationId,
+      branchId,
+      actorId,
+      entityType: "CASH_PENDING_COLLECTION",
+      entityId: id,
+      action: "DESTINATION_CLEARED",
+      before: {
+        cashRegisterId: row.destinationRegisterId,
+        sourceId: row.sourceId,
+        collectedAt: row.collectedAt.toISOString(),
+      },
+      after: datos.origen,
     });
   }
 

@@ -107,6 +107,7 @@ import {
   ingresosDeCompra,
 } from "./lib/compras-sin-conexion";
 import { proveedorSinEnviar } from "./lib/proveedores-sin-conexion";
+import { productoConPendientes } from "./lib/catalogo-sin-conexion";
 import { OperationHistory } from "./operation-history";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
 
@@ -609,15 +610,23 @@ export function PurchasesWorkspace({
       // Un proveedor dado de alta sin conexión todavía no está en el servidor:
       // la compra espera detrás de él (SISTEMA-73).
       const proveedorId = draft.purchase?.supplierId ?? draft.supplierId;
+      const bandejaActual = await ventasDeLaPc().catch(() => bandeja);
       let guardadaSinConexion =
         Boolean(draft.purchase?.porEnviar) ||
         Boolean(
           proveedorId &&
-          proveedorSinEnviar(
-            await ventasDeLaPc().catch(() => bandeja),
-            organizationId,
-            proveedorId,
-          ),
+          proveedorSinEnviar(bandejaActual, organizationId, proveedorId),
+        ) ||
+        // Un producto creado (o cambiado) sin conexión todavía no llegó: la
+        // compra espera detrás de él (SISTEMA-81).
+        draft.lines.some(
+          (line) =>
+            line.productId &&
+            productoConPendientes(
+              bandejaActual,
+              organizationId,
+              line.productId,
+            ),
         ) ||
         !conectividad().enLinea ||
         token === TOKEN_SIN_CONEXION;
@@ -1182,6 +1191,7 @@ export function PurchasesWorkspace({
                     organizationId,
                     rows,
                     onProgress,
+                    branchId,
                   ).finally(onChanged)
                 }
                 packActions={packActions}

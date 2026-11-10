@@ -30,6 +30,10 @@ import { useConectividad } from "./lib/conectividad";
 /** Qué operación de caja es (SISTEMA-67). */
 const operacionDeCaja = (venta: VentaPendiente) => {
   const op = venta.cuerpo as { tipo?: string; type?: string };
+  // Cobros pendientes (SISTEMA-81).
+  if (op.tipo === "COBRO_DESTINO") return "asignar caja a un cobro";
+  if (op.tipo === "COBRO_INCORPORAR") return "incorporar un cobro";
+  if (op.tipo === "COBRO_QUITAR") return "quitar la caja de un cobro";
   return op.tipo === "APERTURA"
     ? "apertura"
     : op.tipo === "CIERRE"
