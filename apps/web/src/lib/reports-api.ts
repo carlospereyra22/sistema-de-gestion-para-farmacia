@@ -11,7 +11,7 @@ import {
   presetRange,
   resolveBranchId,
 } from "./report-view";
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, getReportSummary } from "./api";
 
 /** Mensaje de la API (400/402/403 en español) o uno genérico. */
 async function reportError(response: Response, fallback: string) {
@@ -111,6 +111,10 @@ export async function precargarReportes(
   branchId: string,
   hoy = argentineToday(),
 ) {
+  // El resumen de Inicio, para verlo sin conexión (SISTEMA-86).
+  await getReportSummary(token, organizationId, branchId).catch(
+    () => undefined,
+  );
   const opciones = await getReportFilterOptions(token, organizationId);
   const sucursales = new Set(
     [resolveBranchId(ALL_BRANCHES, opciones.branches), branchId].filter((id) =>

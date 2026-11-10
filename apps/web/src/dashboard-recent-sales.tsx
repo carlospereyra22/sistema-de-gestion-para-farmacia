@@ -1,6 +1,12 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { ArrowRight, Clock3, ReceiptText } from "lucide-react";
-import { getSales, type Sale } from "./lib/api";
+import { getSales } from "./lib/api";
+import { SinConexionError } from "./lib/api-fetch";
+import { ventasDeLaPc } from "./lib/bandeja-ventas";
+import {
+  historialConPendientes,
+  type VentaDelHistorial,
+} from "./lib/historial-con-pendientes";
 
 export function DashboardRecentSales({
   token,
@@ -19,19 +25,34 @@ export function DashboardRecentSales({
   skeleton?: boolean;
 }) {
   const scope = `${organizationId}:${branchId}`;
-  const [snapshot, setSnapshot] = useState<{ scope: string; sales: Sale[] }>();
+  const [snapshot, setSnapshot] = useState<{
+    scope: string;
+    sales: VentaDelHistorial[];
+  }>();
   const sales = snapshot?.scope === scope ? snapshot.sales : undefined;
   const [error, setError] = useState("");
   useEffect(() => {
     if (!active) return;
     let current = true;
     setError("");
-    void getSales(token, organizationId, branchId)
-      .then((result) => {
+    // Con las ventas de esta PC que todavía no se enviaron (SISTEMA-86).
+    void Promise.all([
+      getSales(token, organizationId, branchId).catch((cause: unknown) => {
+        if (cause instanceof SinConexionError) return [];
+        throw cause;
+      }),
+      ventasDeLaPc().catch(() => []),
+    ])
+      .then(([result, bandeja]) => {
         if (current)
           setSnapshot({
             scope,
-            sales: [...result]
+            sales: historialConPendientes(
+              result,
+              bandeja,
+              organizationId,
+              branchId,
+            )
               .sort((a, b) =>
                 (b.completedAt ?? "").localeCompare(a.completedAt ?? ""),
               )
@@ -162,7 +183,11 @@ export function DashboardRecentSales({
                       aria-hidden="true"
                       className="size-1.5 rounded-full bg-current opacity-70"
                     />
-                    {sale.status === "CANCELLED" ? "Anulada" : "Completada"}
+                    {sale.status === "CANCELLED"
+                      ? "Anulada"
+                      : sale.porEnviar
+                        ? "Por enviar"
+                        : "Completada"}
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-slate-800">

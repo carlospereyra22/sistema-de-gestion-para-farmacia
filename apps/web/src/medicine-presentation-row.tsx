@@ -1,3 +1,4 @@
+import { fechaInformada } from "./lib/fecha-informada";
 import type { ReactNode } from "react";
 import { referenceMoney } from "./lib/medicine-search";
 
@@ -32,7 +33,7 @@ export function MedicinePresentationRow({
       </p>
       <p className="text-xs text-slate-500 sm:text-right">
         <span className="sm:hidden">Fecha informada: </span>
-        {updatedAt || "no disponible"}
+        {fechaInformada(updatedAt)}
       </p>
       {children && <div className="sm:col-span-3">{children}</div>}
     </article>

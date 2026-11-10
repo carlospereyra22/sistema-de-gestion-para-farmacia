@@ -297,6 +297,14 @@ async function deudasEnLaPc(scope: PayableScope, bandeja: VentaPendiente[]) {
   };
 }
 
+/**
+ * Deudas de la sucursal como las ve la PC: la copia con lo hecho sin enviar
+ * (para Inicio sin conexión, SISTEMA-86).
+ */
+export async function deudasDeLaPc(scope: PayableScope) {
+  return (await deudasEnLaPc(scope, await bandejaDeLaPc())).deudas;
+}
+
 /** Opciones (proveedores, compras y permisos) con los proveedores sin enviar. */
 export async function getPayableOptions(
   scope: PayableScope,

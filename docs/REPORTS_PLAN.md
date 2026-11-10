@@ -6,6 +6,15 @@ Las imagenes son guia de composicion; los colores son los del sistema (verde/tea
 `#087f70`, `#008b7c`, `#31826a`, bordes `#dce7ef`, cards como `.cash-card`), no el
 verde de las imagenes ni el azul `#315da8` que usa hoy la pantalla de Reportes.
 
+## Animación del Resumen (SISTEMA-87, 11/11/2026)
+
+La primera vez que se abre Reportes en la sesión del navegador, los KPI suben desde 0 y
+las tarjetas y los paneles aparecen de a uno (`reportes-animado`, `reportes-entrada` en
+`index.css`); los gráficos se dibujan con la animación de ECharts (`conAnimacion`). Las
+entradas siguientes muestran todo directo; un cambio de filtros sólo hace una transición
+corta en los gráficos. Sin conexión, con la copia guardada o con "reducir movimiento" no
+hay animación. Lógica en `lib/animacion-reportes.ts`.
+
 ## Punto de partida (31/10/2026)
 
 - API: `apps/api/src/reports/` con `GET .../branches/:branchId/reports/summary` y
