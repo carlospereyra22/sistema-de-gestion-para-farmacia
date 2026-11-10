@@ -9,6 +9,7 @@ import { externalGtin } from "./lib/external-product";
 export function ProductEquivalentBarcodes({
   token,
   organizationId,
+  branchId,
   productId,
   initialCodes,
   primaryCode = "",
@@ -24,6 +25,8 @@ export function ProductEquivalentBarcodes({
   onRemovePending?: () => void;
   token: string;
   organizationId: string;
+  /** Sin conexión, el cambio queda en la PC (SISTEMA-79). */
+  branchId?: string;
   productId?: string;
   initialCodes: string[];
   primaryCode?: string;
@@ -78,6 +81,7 @@ export function ProductEquivalentBarcodes({
         organizationId,
         productId,
         code,
+        branchId,
       );
       setCodes((current) => [...current, saved.code]);
       setDraft("");
@@ -88,7 +92,13 @@ export function ProductEquivalentBarcodes({
         setPending(codes.filter((item) => item !== value));
         return;
       }
-      await removeEquivalentBarcode(token, organizationId, productId, value);
+      await removeEquivalentBarcode(
+        token,
+        organizationId,
+        productId,
+        value,
+        branchId,
+      );
       setCodes((current) => current.filter((item) => item !== value));
     });
   return (

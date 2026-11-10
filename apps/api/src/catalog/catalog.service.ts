@@ -16,6 +16,7 @@ import {
 } from "./category-classification";
 import { fractionalPrice } from "./fractional-price";
 import { withProductBarcode } from "./product-barcode";
+import { cambiosDelProducto } from "./producto-sin-conexion";
 import { internalBarcode } from "./internal-barcode";
 import {
   addEquivalentBarcode,
@@ -792,18 +793,77 @@ export class CatalogService {
     },
   ) {
     await this.assert(actorId, organizationId, "CATALOG_MANAGE");
-    const product = await this.prisma.product.findFirst({
+    const imageContent = await this.prepararEdicion(
+      this.prisma,
+      organizationId,
+      productId,
+      input,
+    );
+    await withProductBarcode(
+      this.prisma,
+      organizationId,
+      productId,
+      input.barcode,
+      () =>
+        this.prisma.$transaction((tx) =>
+          this.editarEnTx(
+            tx,
+            actorId,
+            organizationId,
+            productId,
+            input,
+            imageContent,
+          ),
+        ),
+    );
+    return { id: productId };
+  }
+
+  /** Validaciones de la edición, antes de la transacción (SISTEMA-79). */
+  async prepararEdicion(
+    db: Pick<Prisma.TransactionClient, "product" | "category" | "laboratory">,
+    organizationId: string,
+    productId: string,
+    input: {
+      generateInternalBarcode?: boolean;
+      brand?: string | null;
+      isMedication?: boolean;
+      priceDivisor?: number | null;
+      priceMarkupBps?: number;
+      priceBaseMinor?: number | null;
+      name?: string;
+      imageDataUrl?: string | null;
+      categoryId?: string | null;
+      laboratoryId?: string | null;
+      barcode?: string;
+      priceMinor?: number;
+      activeIngredient?: string;
+      pharmaceuticalForm?: string;
+      concentration?: string;
+      presentation?: string;
+      externalReferenceSource?:
+        "official" | "preciosderemedios" | "alfabeta" | null;
+      externalReferenceName?: string | null;
+      externalReferencePresentation?: string | null;
+      externalReferenceBarcode?: string | null;
+      externalReferencePriceMinor?: number | null;
+      saleUnit?: "BOX" | "BLISTER" | "UNIT";
+      description?: string;
+      prescriptionRequired?: boolean;
+    },
+  ) {
+    const product = await db.product.findFirst({
       where: { id: productId, organizationId },
     });
     if (!product) throw new NotFoundException("Product is unavailable.");
     const [category, laboratory] = await Promise.all([
       input.categoryId
-        ? this.prisma.category.findFirst({
+        ? db.category.findFirst({
             where: { id: input.categoryId, organizationId, active: true },
           })
         : undefined,
       input.laboratoryId
-        ? this.prisma.laboratory.findFirst({
+        ? db.laboratory.findFirst({
             where: { id: input.laboratoryId, organizationId, active: true },
           })
         : undefined,
@@ -819,316 +879,363 @@ export class CatalogService {
         : input.imageDataUrl === null
           ? null
           : decodeProductImage(input.imageDataUrl);
-    await withProductBarcode(
-      this.prisma,
+    return imageContent;
+  }
+
+  /** La edición dentro de una transacción (también la hecha sin conexión). */
+  async editarEnTx(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    productId: string,
+    input: {
+      generateInternalBarcode?: boolean;
+      brand?: string | null;
+      isMedication?: boolean;
+      priceDivisor?: number | null;
+      priceMarkupBps?: number;
+      priceBaseMinor?: number | null;
+      name?: string;
+      imageDataUrl?: string | null;
+      categoryId?: string | null;
+      laboratoryId?: string | null;
+      barcode?: string;
+      priceMinor?: number;
+      activeIngredient?: string;
+      pharmaceuticalForm?: string;
+      concentration?: string;
+      presentation?: string;
+      externalReferenceSource?:
+        "official" | "preciosderemedios" | "alfabeta" | null;
+      externalReferenceName?: string | null;
+      externalReferencePresentation?: string | null;
+      externalReferenceBarcode?: string | null;
+      externalReferencePriceMinor?: number | null;
+      saleUnit?: "BOX" | "BLISTER" | "UNIT";
+      description?: string;
+      prescriptionRequired?: boolean;
+    },
+    imageContent: Awaited<ReturnType<CatalogService["prepararEdicion"]>>,
+    /** Hora real y PC de una edición sin conexión, para la auditoría. */
+    marca: Record<string, string> = {},
+  ) {
+    await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${productId}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE`;
+    const beforeProduct = await tx.product.findFirstOrThrow({
+      where: { id: productId, organizationId },
+    });
+    const [codigoAntes, precioAntes] = await Promise.all([
+      primaryCode(tx, productId),
+      generalPrice(tx, organizationId, productId),
+    ]);
+    const isMedication =
+      input.isMedication ??
+      beforeProduct.isMedication ??
+      Boolean(beforeProduct.externalReferenceSource);
+    if (
+      !isMedication &&
+      (input.externalReferenceSource || input.prescriptionRequired)
+    )
+      throw new BadRequestException(
+        "Activá Es medicamento antes de vincular una referencia medicinal o indicar receta.",
+      );
+    if (isMedication && input.externalReferenceSource)
+      assertMedicineReferenceBarcode(
+        input.barcode,
+        input.externalReferenceBarcode,
+      );
+    if (!isMedication)
+      input = {
+        ...input,
+        prescriptionRequired: false,
+        externalReferenceSource: null,
+        externalReferenceName: null,
+        externalReferencePresentation: null,
+        externalReferenceBarcode: null,
+        externalReferencePriceMinor: null,
+        ...(beforeProduct.externalReferenceSource &&
+        beforeProduct.priceDivisor &&
+        input.priceBaseMinor == null
+          ? {
+              priceBaseMinor: Number(
+                beforeProduct.externalReferencePriceMinor ??
+                  beforeProduct.priceBaseMinor ??
+                  0,
+              ),
+            }
+          : {}),
+      };
+    await saveProductImage(
+      tx,
       organizationId,
       productId,
-      input.barcode,
-      () =>
-        this.prisma.$transaction(async (tx) => {
-          await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${productId}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE`;
-          const beforeProduct = await tx.product.findFirstOrThrow({
-            where: { id: productId, organizationId },
-          });
-          const isMedication =
-            input.isMedication ??
-            beforeProduct.isMedication ??
-            Boolean(beforeProduct.externalReferenceSource);
-          if (
-            !isMedication &&
-            (input.externalReferenceSource || input.prescriptionRequired)
-          )
-            throw new BadRequestException(
-              "Activá Es medicamento antes de vincular una referencia medicinal o indicar receta.",
-            );
-          if (isMedication && input.externalReferenceSource)
-            assertMedicineReferenceBarcode(
-              input.barcode,
-              input.externalReferenceBarcode,
-            );
-          if (!isMedication)
-            input = {
-              ...input,
-              prescriptionRequired: false,
-              externalReferenceSource: null,
-              externalReferenceName: null,
-              externalReferencePresentation: null,
-              externalReferenceBarcode: null,
-              externalReferencePriceMinor: null,
-              ...(beforeProduct.externalReferenceSource &&
-              beforeProduct.priceDivisor &&
-              input.priceBaseMinor == null
-                ? {
-                    priceBaseMinor: Number(
-                      beforeProduct.externalReferencePriceMinor ??
-                        beforeProduct.priceBaseMinor ??
-                        0,
-                    ),
-                  }
-                : {}),
-            };
-          await saveProductImage(
-            tx,
-            organizationId,
-            productId,
-            actorId,
-            imageContent,
-          );
-          const updatedProduct = await tx.product.update({
-            where: { id: productId },
-            data: {
-              isMedication,
-              ...(input.brand !== undefined
-                ? { brand: input.brand?.trim().replace(/\s+/g, " ") || null }
-                : {}),
-              ...(!isMedication
-                ? {
-                    externalReferenceUpdatedAt: null,
-                    externalReferenceCheckedAt: null,
-                  }
-                : {}),
-              priceDivisor: input.priceDivisor,
-              priceMarkupBps:
-                input.priceDivisor === null ? 0 : input.priceMarkupBps,
-              priceBaseMinor:
-                input.priceDivisor === null
+      actorId,
+      imageContent,
+    );
+    const updatedProduct = await tx.product.update({
+      where: { id: productId },
+      data: {
+        isMedication,
+        ...(input.brand !== undefined
+          ? { brand: input.brand?.trim().replace(/\s+/g, " ") || null }
+          : {}),
+        ...(!isMedication
+          ? {
+              externalReferenceUpdatedAt: null,
+              externalReferenceCheckedAt: null,
+            }
+          : {}),
+        priceDivisor: input.priceDivisor,
+        priceMarkupBps: input.priceDivisor === null ? 0 : input.priceMarkupBps,
+        priceBaseMinor:
+          input.priceDivisor === null
+            ? null
+            : input.priceBaseMinor === undefined
+              ? undefined
+              : input.priceBaseMinor === null
+                ? null
+                : BigInt(input.priceBaseMinor),
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.categoryId !== undefined
+          ? { categoryId: input.categoryId }
+          : {}),
+        ...(input.laboratoryId !== undefined
+          ? { laboratoryId: input.laboratoryId }
+          : {}),
+        ...(input.activeIngredient !== undefined
+          ? { activeIngredient: input.activeIngredient.trim() || null }
+          : {}),
+        ...(input.pharmaceuticalForm !== undefined
+          ? {
+              pharmaceuticalForm: input.pharmaceuticalForm.trim() || null,
+            }
+          : {}),
+        ...(input.concentration !== undefined
+          ? { concentration: input.concentration.trim() || null }
+          : {}),
+        ...(input.presentation !== undefined
+          ? { presentation: input.presentation.trim() || null }
+          : {}),
+        ...(input.externalReferenceSource !== undefined
+          ? { externalReferenceSource: input.externalReferenceSource }
+          : {}),
+        ...(input.externalReferenceName !== undefined
+          ? {
+              externalReferenceName:
+                input.externalReferenceName?.trim() || null,
+            }
+          : {}),
+        ...(input.externalReferencePresentation !== undefined
+          ? {
+              externalReferencePresentation:
+                input.externalReferencePresentation?.trim() || null,
+            }
+          : {}),
+        ...(input.externalReferenceBarcode !== undefined
+          ? {
+              externalReferenceBarcode:
+                input.externalReferenceBarcode?.trim() || null,
+            }
+          : {}),
+        ...(input.externalReferencePriceMinor !== undefined
+          ? {
+              externalReferencePriceMinor:
+                input.externalReferencePriceMinor === null
                   ? null
-                  : input.priceBaseMinor === undefined
-                    ? undefined
-                    : input.priceBaseMinor === null
-                      ? null
-                      : BigInt(input.priceBaseMinor),
-              ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-              ...(input.categoryId !== undefined
-                ? { categoryId: input.categoryId }
-                : {}),
-              ...(input.laboratoryId !== undefined
-                ? { laboratoryId: input.laboratoryId }
-                : {}),
-              ...(input.activeIngredient !== undefined
-                ? { activeIngredient: input.activeIngredient.trim() || null }
-                : {}),
-              ...(input.pharmaceuticalForm !== undefined
-                ? {
-                    pharmaceuticalForm: input.pharmaceuticalForm.trim() || null,
-                  }
-                : {}),
-              ...(input.concentration !== undefined
-                ? { concentration: input.concentration.trim() || null }
-                : {}),
-              ...(input.presentation !== undefined
-                ? { presentation: input.presentation.trim() || null }
-                : {}),
-              ...(input.externalReferenceSource !== undefined
-                ? { externalReferenceSource: input.externalReferenceSource }
-                : {}),
-              ...(input.externalReferenceName !== undefined
-                ? {
-                    externalReferenceName:
-                      input.externalReferenceName?.trim() || null,
-                  }
-                : {}),
-              ...(input.externalReferencePresentation !== undefined
-                ? {
-                    externalReferencePresentation:
-                      input.externalReferencePresentation?.trim() || null,
-                  }
-                : {}),
-              ...(input.externalReferenceBarcode !== undefined
-                ? {
-                    externalReferenceBarcode:
-                      input.externalReferenceBarcode?.trim() || null,
-                  }
-                : {}),
-              ...(input.externalReferencePriceMinor !== undefined
-                ? {
-                    externalReferencePriceMinor:
-                      input.externalReferencePriceMinor === null
-                        ? null
-                        : BigInt(input.externalReferencePriceMinor),
-                    externalReferenceCheckedAt: isMedication
-                      ? new Date()
-                      : null,
-                  }
-                : {}),
-              ...(input.saleUnit !== undefined
-                ? { saleUnit: input.saleUnit }
-                : {}),
-              ...(input.description !== undefined
-                ? { description: input.description.trim() || null }
-                : {}),
-              ...(input.prescriptionRequired !== undefined
-                ? { prescriptionRequired: input.prescriptionRequired }
-                : {}),
+                  : BigInt(input.externalReferencePriceMinor),
+              externalReferenceCheckedAt: isMedication ? new Date() : null,
+            }
+          : {}),
+        ...(input.saleUnit !== undefined ? { saleUnit: input.saleUnit } : {}),
+        ...(input.description !== undefined
+          ? { description: input.description.trim() || null }
+          : {}),
+        ...(input.prescriptionRequired !== undefined
+          ? { prescriptionRequired: input.prescriptionRequired }
+          : {}),
+      },
+    });
+    if (input.barcode !== undefined) {
+      const primaryBarcode = await tx.productBarcode.findFirst({
+        where: { productId, primary: true },
+      });
+      if (input.barcode.trim()) {
+        if (primaryBarcode) {
+          await tx.productBarcode.update({
+            where: { id: primaryBarcode.id },
+            data: { code: input.barcode.trim() },
+          });
+        } else {
+          await tx.productBarcode.create({
+            data: {
+              organizationId,
+              productId,
+              code: input.barcode.trim(),
+              primary: true,
             },
           });
-          if (input.barcode !== undefined) {
-            const primaryBarcode = await tx.productBarcode.findFirst({
-              where: { productId, primary: true },
-            });
-            if (input.barcode.trim()) {
-              if (primaryBarcode) {
-                await tx.productBarcode.update({
-                  where: { id: primaryBarcode.id },
-                  data: { code: input.barcode.trim() },
-                });
-              } else {
-                await tx.productBarcode.create({
-                  data: {
-                    organizationId,
-                    productId,
-                    code: input.barcode.trim(),
-                    primary: true,
-                  },
-                });
-              }
-            } else if (primaryBarcode) {
-              await tx.productBarcode.delete({
-                where: { id: primaryBarcode.id },
-              });
-            }
-          }
-          if (input.isMedication !== undefined || input.brand !== undefined)
-            await tx.auditLog.create({
-              data: {
-                actorId,
-                organizationId,
-                entityType: "PRODUCT",
-                entityId: productId,
-                action: "PRODUCT_CLASSIFICATION_UPDATED",
-                before: {
-                  isMedication: beforeProduct.isMedication,
-                  brand: beforeProduct.brand,
-                  externalReferenceSource:
-                    beforeProduct.externalReferenceSource,
-                },
-                after: {
-                  isMedication: updatedProduct.isMedication,
-                  brand: updatedProduct.brand,
-                  externalReferenceSource:
-                    updatedProduct.externalReferenceSource,
-                },
-              },
-            });
-          const pricingChanged =
-            input.priceMinor !== undefined ||
-            input.priceDivisor !== undefined ||
-            input.priceMarkupBps !== undefined ||
-            input.priceBaseMinor !== undefined ||
-            input.externalReferencePriceMinor !== undefined;
-          const divided = updatedProduct.priceDivisor != null;
-          const linked = Boolean(
-            updatedProduct.externalReferenceSource &&
-            updatedProduct.externalReferenceName,
-          );
-          const calculatedPrice =
-            divided && pricingChanged
-              ? fractionalPrice(
-                  linked
-                    ? updatedProduct.externalReferencePriceMinor
-                    : updatedProduct.priceBaseMinor,
-                  updatedProduct.priceDivisor!,
-                  updatedProduct.priceMarkupBps,
-                )
-              : undefined;
-          const salePrice =
-            calculatedPrice ??
-            (input.priceDivisor === null &&
-            linked &&
-            updatedProduct.saleUnit === "BOX"
-              ? (updatedProduct.externalReferencePriceMinor ?? undefined)
-              : input.priceMinor === undefined
-                ? undefined
-                : BigInt(input.priceMinor));
-          if (salePrice !== undefined) {
-            const priceList = await tx.priceList.upsert({
-              where: {
-                organizationId_name: { organizationId, name: "Precio general" },
-              },
-              update: {},
-              create: { organizationId, name: "Precio general" },
-            });
-            const synchronized =
-              (input.saleUnit ?? beforeProduct.saleUnit) === "BOX" &&
-              (input.externalReferenceSource === undefined
-                ? beforeProduct.externalReferenceSource
-                : input.externalReferenceSource) &&
-              (input.externalReferenceName === undefined
-                ? beforeProduct.externalReferenceName
-                : input.externalReferenceName);
-            if (synchronized && !divided && input.priceDivisor !== null) {
-              const existingPrice = await tx.productPrice.findUnique({
-                where: {
-                  productId_priceListId: {
-                    productId,
-                    priceListId: priceList.id,
-                  },
-                },
-              });
-              const referencePrice =
-                input.externalReferenceSource &&
-                input.externalReferencePriceMinor != null
-                  ? BigInt(input.externalReferencePriceMinor)
-                  : existingPrice?.amountMinor;
-              if (salePrice !== referencePrice)
-                throw new BadRequestException(
-                  "El precio de este producto está sincronizado. Para otro precio, usá una lista personalizada.",
-                );
-            }
-            const previousPrice =
-              divided || beforeProduct.priceDivisor != null
-                ? await tx.productPrice.findUnique({
-                    where: {
-                      productId_priceListId: {
-                        productId,
-                        priceListId: priceList.id,
-                      },
-                    },
-                  })
-                : null;
-            await tx.productPrice.upsert({
-              where: {
-                productId_priceListId: { productId, priceListId: priceList.id },
-              },
-              update: { amountMinor: salePrice },
-              create: {
-                productId,
-                priceListId: priceList.id,
-                amountMinor: salePrice,
-              },
-            });
-            if (divided || beforeProduct.priceDivisor != null)
-              await tx.auditLog.create({
-                data: {
-                  actorId,
-                  organizationId,
-                  entityType: "PRODUCT",
-                  entityId: productId,
-                  action: "PRODUCT_FRACTIONAL_PRICE_CONFIGURED",
-                  before: {
-                    divisor: beforeProduct.priceDivisor,
-                    markupBps: beforeProduct.priceMarkupBps,
-                    baseMinor: beforeProduct.priceBaseMinor?.toString() ?? null,
-                    amountMinor: previousPrice?.amountMinor.toString() ?? null,
-                  },
-                  after: {
-                    divisor: updatedProduct.priceDivisor,
-                    markupBps: updatedProduct.priceMarkupBps,
-                    baseMinor:
-                      updatedProduct.priceBaseMinor?.toString() ?? null,
-                    referencePriceMinor:
-                      updatedProduct.externalReferencePriceMinor?.toString() ??
-                      null,
-                    amountMinor: salePrice.toString(),
-                  },
-                },
-              });
-          }
-          if (input.generateInternalBarcode)
-            await internalBarcode(tx, actorId, organizationId, productId, true);
-        }),
+        }
+      } else if (primaryBarcode) {
+        await tx.productBarcode.delete({
+          where: { id: primaryBarcode.id },
+        });
+      }
+    }
+    if (input.isMedication !== undefined || input.brand !== undefined)
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          organizationId,
+          entityType: "PRODUCT",
+          entityId: productId,
+          action: "PRODUCT_CLASSIFICATION_UPDATED",
+          before: {
+            isMedication: beforeProduct.isMedication,
+            brand: beforeProduct.brand,
+            externalReferenceSource: beforeProduct.externalReferenceSource,
+          },
+          after: {
+            isMedication: updatedProduct.isMedication,
+            brand: updatedProduct.brand,
+            externalReferenceSource: updatedProduct.externalReferenceSource,
+          },
+        },
+      });
+    const pricingChanged =
+      input.priceMinor !== undefined ||
+      input.priceDivisor !== undefined ||
+      input.priceMarkupBps !== undefined ||
+      input.priceBaseMinor !== undefined ||
+      input.externalReferencePriceMinor !== undefined;
+    const divided = updatedProduct.priceDivisor != null;
+    const linked = Boolean(
+      updatedProduct.externalReferenceSource &&
+      updatedProduct.externalReferenceName,
     );
-    return { id: productId };
+    const calculatedPrice =
+      divided && pricingChanged
+        ? fractionalPrice(
+            linked
+              ? updatedProduct.externalReferencePriceMinor
+              : updatedProduct.priceBaseMinor,
+            updatedProduct.priceDivisor!,
+            updatedProduct.priceMarkupBps,
+          )
+        : undefined;
+    const salePrice =
+      calculatedPrice ??
+      (input.priceDivisor === null &&
+      linked &&
+      updatedProduct.saleUnit === "BOX"
+        ? (updatedProduct.externalReferencePriceMinor ?? undefined)
+        : input.priceMinor === undefined
+          ? undefined
+          : BigInt(input.priceMinor));
+    if (salePrice !== undefined) {
+      const priceList = await tx.priceList.upsert({
+        where: {
+          organizationId_name: { organizationId, name: "Precio general" },
+        },
+        update: {},
+        create: { organizationId, name: "Precio general" },
+      });
+      const synchronized =
+        (input.saleUnit ?? beforeProduct.saleUnit) === "BOX" &&
+        (input.externalReferenceSource === undefined
+          ? beforeProduct.externalReferenceSource
+          : input.externalReferenceSource) &&
+        (input.externalReferenceName === undefined
+          ? beforeProduct.externalReferenceName
+          : input.externalReferenceName);
+      if (synchronized && !divided && input.priceDivisor !== null) {
+        const existingPrice = await tx.productPrice.findUnique({
+          where: {
+            productId_priceListId: {
+              productId,
+              priceListId: priceList.id,
+            },
+          },
+        });
+        const referencePrice =
+          input.externalReferenceSource &&
+          input.externalReferencePriceMinor != null
+            ? BigInt(input.externalReferencePriceMinor)
+            : existingPrice?.amountMinor;
+        if (salePrice !== referencePrice)
+          throw new BadRequestException(
+            "El precio de este producto está sincronizado. Para otro precio, usá una lista personalizada.",
+          );
+      }
+      const previousPrice =
+        divided || beforeProduct.priceDivisor != null
+          ? await tx.productPrice.findUnique({
+              where: {
+                productId_priceListId: {
+                  productId,
+                  priceListId: priceList.id,
+                },
+              },
+            })
+          : null;
+      await tx.productPrice.upsert({
+        where: {
+          productId_priceListId: { productId, priceListId: priceList.id },
+        },
+        update: { amountMinor: salePrice },
+        create: {
+          productId,
+          priceListId: priceList.id,
+          amountMinor: salePrice,
+        },
+      });
+      if (divided || beforeProduct.priceDivisor != null)
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            organizationId,
+            entityType: "PRODUCT",
+            entityId: productId,
+            action: "PRODUCT_FRACTIONAL_PRICE_CONFIGURED",
+            before: {
+              divisor: beforeProduct.priceDivisor,
+              markupBps: beforeProduct.priceMarkupBps,
+              baseMinor: beforeProduct.priceBaseMinor?.toString() ?? null,
+              amountMinor: previousPrice?.amountMinor.toString() ?? null,
+            },
+            after: {
+              divisor: updatedProduct.priceDivisor,
+              markupBps: updatedProduct.priceMarkupBps,
+              baseMinor: updatedProduct.priceBaseMinor?.toString() ?? null,
+              referencePriceMinor:
+                updatedProduct.externalReferencePriceMinor?.toString() ?? null,
+              amountMinor: salePrice.toString(),
+            },
+          },
+        });
+    }
+    // Qué datos cambió esta edición (SISTEMA-79): una edición hecha sin
+    // conexión que llega después no pisa un dato que se cambió más tarde.
+    const cambios = cambiosDelProducto(beforeProduct, updatedProduct, {
+      codigo: { antes: codigoAntes, despues: await primaryCode(tx, productId) },
+      precio: {
+        antes: precioAntes,
+        despues: await generalPrice(tx, organizationId, productId),
+      },
+      foto: imageContent !== undefined,
+    });
+    if (cambios.cambio)
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          organizationId,
+          entityType: "PRODUCT",
+          entityId: productId,
+          action: "PRODUCT_UPDATED",
+          before: cambios.before as Prisma.InputJsonValue,
+          after: { ...cambios.after, ...marca } as Prisma.InputJsonValue,
+        },
+      });
+    if (input.generateInternalBarcode)
+      await internalBarcode(tx, actorId, organizationId, productId, true);
   }
 
   async removeUnusedProduct(
@@ -1137,65 +1244,75 @@ export class CatalogService {
     productId: string,
   ) {
     await this.assert(actorId, organizationId, "CATALOG_MANAGE");
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Product" WHERE id=${productId}::uuid AND "organizationId"=${organizationId}::uuid FOR UPDATE`;
-      const product = await tx.product.findFirst({
-        where: { id: productId, organizationId },
-        select: { id: true, name: true },
-      });
-      if (!product)
-        throw new NotFoundException("El producto ya no está disponible.");
-      const [
-        purchaseItems,
-        lots,
-        movements,
-        saleItems,
-        supplierReturns,
-        transferItems,
-      ] = await Promise.all([
-        tx.purchaseItem.count({ where: { productId } }),
-        tx.productLot.count({ where: { productId, organizationId } }),
-        tx.inventoryMovement.count({ where: { productId, organizationId } }),
-        tx.saleItem.count({ where: { productId } }),
-        tx.supplierReturn.count({ where: { productId, organizationId } }),
-        tx.transferItem.count({ where: { productId } }),
-      ]);
-      if (
-        purchaseItems +
-          lots +
-          movements +
-          saleItems +
-          supplierReturns +
-          transferItems >
-        0
-      ) {
-        throw new ConflictException(
-          "No se puede eliminar definitivamente un producto con ventas, stock o historial. Usá Archivar para conservar la trazabilidad.",
-        );
-      }
-      await tx.productPrice.deleteMany({ where: { productId } });
-      await tx.productBarcode.deleteMany({ where: { productId } });
-      const branchStates = await tx.productBranchState.findMany({
-        where: { productId, organizationId },
-        select: { branchId: true, status: true },
-      });
-      await tx.auditLog.create({
-        data: {
-          actorId,
-          organizationId,
-          entityType: "PRODUCT",
-          entityId: productId,
-          action: "UNUSED_PRODUCT_DELETED",
-          before: { name: product.name, branchStates },
-          after: { deleted: true },
-        },
-      });
-      await tx.productBranchState.deleteMany({
-        where: { productId, organizationId },
-      });
-      await tx.product.delete({ where: { id: productId } });
-      return { id: productId, deleted: true };
+    return this.prisma.$transaction((tx) =>
+      this.eliminarEnTx(tx, actorId, organizationId, productId),
+    );
+  }
+
+  /** Elimina un producto sin uso dentro de una transacción (SISTEMA-79). */
+  async eliminarEnTx(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    productId: string,
+  ) {
+    await tx.$queryRaw`SELECT id FROM "Product" WHERE id=${productId}::uuid AND "organizationId"=${organizationId}::uuid FOR UPDATE`;
+    const product = await tx.product.findFirst({
+      where: { id: productId, organizationId },
+      select: { id: true, name: true },
     });
+    if (!product)
+      throw new NotFoundException("El producto ya no está disponible.");
+    const [
+      purchaseItems,
+      lots,
+      movements,
+      saleItems,
+      supplierReturns,
+      transferItems,
+    ] = await Promise.all([
+      tx.purchaseItem.count({ where: { productId } }),
+      tx.productLot.count({ where: { productId, organizationId } }),
+      tx.inventoryMovement.count({ where: { productId, organizationId } }),
+      tx.saleItem.count({ where: { productId } }),
+      tx.supplierReturn.count({ where: { productId, organizationId } }),
+      tx.transferItem.count({ where: { productId } }),
+    ]);
+    if (
+      purchaseItems +
+        lots +
+        movements +
+        saleItems +
+        supplierReturns +
+        transferItems >
+      0
+    ) {
+      throw new ConflictException(
+        "No se puede eliminar definitivamente un producto con ventas, stock o historial. Usá Archivar para conservar la trazabilidad.",
+      );
+    }
+    await tx.productPrice.deleteMany({ where: { productId } });
+    await tx.productBarcode.deleteMany({ where: { productId } });
+    const branchStates = await tx.productBranchState.findMany({
+      where: { productId, organizationId },
+      select: { branchId: true, status: true },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: "PRODUCT",
+        entityId: productId,
+        action: "UNUSED_PRODUCT_DELETED",
+        before: { name: product.name, branchStates },
+        after: { deleted: true },
+      },
+    });
+    await tx.productBranchState.deleteMany({
+      where: { productId, organizationId },
+    });
+    await tx.product.delete({ where: { id: productId } });
+    return { id: productId, deleted: true };
   }
 
   async changeNamedItem(
@@ -1570,6 +1687,56 @@ export class CatalogService {
     },
   ) {
     await this.assert(actorId, organizationId, "CATALOG_MANAGE");
+    const preparado = await this.prepararAlta(
+      this.prisma,
+      organizationId,
+      input,
+    );
+    return withProductBarcode(
+      this.prisma,
+      organizationId,
+      undefined,
+      input.barcode,
+      () =>
+        this.prisma.$transaction((tx) =>
+          this.crearEnTx(tx, actorId, organizationId, input, preparado),
+        ),
+    );
+  }
+
+  /** Validaciones del alta, antes de la transacción (SISTEMA-79). */
+  async prepararAlta(
+    db: Pick<Prisma.TransactionClient, "category" | "laboratory">,
+    organizationId: string,
+    input: {
+      generateInternalBarcode?: boolean;
+      brand?: string;
+      isMedication?: boolean;
+      priceDivisor?: number | null;
+      priceMarkupBps?: number;
+      priceBaseMinor?: number | null;
+      imageDataUrl?: string;
+      name: string;
+      categoryId?: string;
+      laboratoryId?: string;
+      laboratoryName?: string;
+      barcode?: string;
+      priceMinor: number;
+      activeIngredient?: string;
+      pharmaceuticalForm?: string;
+      concentration?: string;
+      presentation?: string;
+      externalReferenceSource?: "official" | "preciosderemedios" | "alfabeta";
+      externalReferenceName?: string;
+      externalReferencePresentation?: string;
+      externalReferenceBarcode?: string;
+      externalReferencePriceMinor?: number;
+      saleUnit?: "BOX" | "BLISTER" | "UNIT";
+      description?: string;
+      prescriptionRequired?: boolean;
+      equivalentBarcodes?: string[];
+    },
+  ) {
     const isMedication =
       input.isMedication ??
       Boolean(input.externalReferenceSource || input.prescriptionRequired);
@@ -1587,12 +1754,12 @@ export class CatalogService {
       );
     const [category, laboratory] = await Promise.all([
       input.categoryId
-        ? this.prisma.category.findFirst({
+        ? db.category.findFirst({
             where: { id: input.categoryId, organizationId, active: true },
           })
         : undefined,
       input.laboratoryId
-        ? this.prisma.laboratory.findFirst({
+        ? db.laboratory.findFirst({
             where: { id: input.laboratoryId, organizationId, active: true },
           })
         : undefined,
@@ -1605,148 +1772,169 @@ export class CatalogService {
       input.imageDataUrl == null
         ? undefined
         : decodeProductImage(input.imageDataUrl);
-    return withProductBarcode(
-      this.prisma,
-      organizationId,
-      undefined,
-      input.barcode,
-      () =>
-        this.prisma.$transaction(async (tx) => {
-          const laboratoryId = input.laboratoryId
-            ? input.laboratoryId
-            : input.laboratoryName?.trim()
-              ? (
-                  await tx.laboratory.upsert({
-                    where: {
-                      organizationId_name: {
-                        organizationId,
-                        name: input.laboratoryName.trim(),
-                      },
-                    },
-                    update: { active: true },
-                    create: {
-                      organizationId,
-                      name: input.laboratoryName.trim(),
-                    },
-                  })
-                ).id
-              : undefined;
-          const priceList = await tx.priceList.upsert({
-            where: {
-              organizationId_name: { organizationId, name: "Precio general" },
-            },
-            update: {},
-            create: { organizationId, name: "Precio general" },
-          });
-          const product = await tx.product.create({
-            data: {
-              isMedication,
-              brand: input.brand?.trim().replace(/\s+/g, " ") || null,
-              priceDivisor: input.priceDivisor,
-              priceMarkupBps: input.priceDivisor
-                ? (input.priceMarkupBps ?? 0)
-                : 0,
-              priceBaseMinor:
-                input.priceDivisor && input.priceBaseMinor != null
-                  ? BigInt(input.priceBaseMinor)
-                  : null,
-              organizationId,
-              name: input.name.trim(),
-              categoryId: input.categoryId,
-              laboratoryId,
-              activeIngredient: input.activeIngredient?.trim(),
-              pharmaceuticalForm: input.pharmaceuticalForm?.trim(),
-              concentration: input.concentration?.trim(),
-              presentation: input.presentation?.trim(),
-              externalReferenceSource: input.externalReferenceSource,
-              externalReferenceName: input.externalReferenceName?.trim(),
-              externalReferencePresentation:
-                input.externalReferencePresentation?.trim(),
-              externalReferenceBarcode: input.externalReferenceBarcode?.trim(),
-              externalReferencePriceMinor:
-                input.externalReferencePriceMinor === undefined
-                  ? undefined
-                  : BigInt(input.externalReferencePriceMinor),
-              externalReferenceCheckedAt: input.externalReferenceSource
-                ? new Date()
-                : undefined,
-              saleUnit: input.saleUnit,
-              description: input.description?.trim(),
-              prescriptionRequired: input.prescriptionRequired,
-            },
-          });
-          if (input.barcode)
-            await tx.productBarcode.create({
-              data: {
-                organizationId,
-                productId: product.id,
-                code: input.barcode.trim(),
-                primary: true,
-              },
-            });
-          const base =
-            input.externalReferenceSource && input.externalReferenceName
-              ? input.externalReferencePriceMinor
-              : input.priceBaseMinor;
-          const initialPrice =
-            input.priceDivisor != null
-              ? fractionalPrice(
-                  base == null ? null : BigInt(base),
-                  input.priceDivisor,
-                  input.priceMarkupBps ?? 0,
-                )
-              : BigInt(input.priceMinor);
-          await tx.productPrice.create({
-            data: {
-              productId: product.id,
-              priceListId: priceList.id,
-              amountMinor: initialPrice,
-            },
-          });
-          if (input.priceDivisor != null)
-            await tx.auditLog.create({
-              data: {
-                actorId,
-                organizationId,
-                entityType: "PRODUCT",
-                entityId: product.id,
-                action: "PRODUCT_FRACTIONAL_PRICE_CONFIGURED",
-                after: {
-                  divisor: input.priceDivisor,
-                  markupBps: input.priceMarkupBps ?? 0,
-                  baseMinor: base?.toString() ?? null,
-                  amountMinor: initialPrice.toString(),
+    return { isMedication, imageContent };
+  }
+
+  /** El alta dentro de una transacción; sin conexión, con el id de la PC. */
+  async crearEnTx(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    input: {
+      generateInternalBarcode?: boolean;
+      brand?: string;
+      isMedication?: boolean;
+      priceDivisor?: number | null;
+      priceMarkupBps?: number;
+      priceBaseMinor?: number | null;
+      imageDataUrl?: string;
+      name: string;
+      categoryId?: string;
+      laboratoryId?: string;
+      laboratoryName?: string;
+      barcode?: string;
+      priceMinor: number;
+      activeIngredient?: string;
+      pharmaceuticalForm?: string;
+      concentration?: string;
+      presentation?: string;
+      externalReferenceSource?: "official" | "preciosderemedios" | "alfabeta";
+      externalReferenceName?: string;
+      externalReferencePresentation?: string;
+      externalReferenceBarcode?: string;
+      externalReferencePriceMinor?: number;
+      saleUnit?: "BOX" | "BLISTER" | "UNIT";
+      description?: string;
+      prescriptionRequired?: boolean;
+      equivalentBarcodes?: string[];
+    },
+    {
+      isMedication,
+      imageContent,
+    }: Awaited<ReturnType<CatalogService["prepararAlta"]>>,
+    id?: string,
+  ) {
+    const laboratoryId = input.laboratoryId
+      ? input.laboratoryId
+      : input.laboratoryName?.trim()
+        ? (
+            await tx.laboratory.upsert({
+              where: {
+                organizationId_name: {
+                  organizationId,
+                  name: input.laboratoryName.trim(),
                 },
               },
-            });
-          await saveProductImage(
-            tx,
-            organizationId,
-            product.id,
-            actorId,
-            imageContent,
-          );
-          if (input.generateInternalBarcode)
-            await internalBarcode(
-              tx,
-              actorId,
-              organizationId,
-              product.id,
-              true,
-            );
-          // El envase importado queda asociado en la misma transacción: si un
-          // código choca con otro producto no se crea nada.
-          for (const code of input.equivalentBarcodes ?? [])
-            await addEquivalentBarcode(
-              tx,
-              actorId,
-              organizationId,
-              product.id,
-              code,
-            );
-          return { id: product.id };
-        }),
+              update: { active: true },
+              create: {
+                organizationId,
+                name: input.laboratoryName.trim(),
+              },
+            })
+          ).id
+        : undefined;
+    const priceList = await tx.priceList.upsert({
+      where: {
+        organizationId_name: { organizationId, name: "Precio general" },
+      },
+      update: {},
+      create: { organizationId, name: "Precio general" },
+    });
+    const product = await tx.product.create({
+      data: {
+        // Sin conexión, el id es la clave de la PC (SISTEMA-79).
+        ...(id ? { id } : {}),
+        isMedication,
+        brand: input.brand?.trim().replace(/\s+/g, " ") || null,
+        priceDivisor: input.priceDivisor,
+        priceMarkupBps: input.priceDivisor ? (input.priceMarkupBps ?? 0) : 0,
+        priceBaseMinor:
+          input.priceDivisor && input.priceBaseMinor != null
+            ? BigInt(input.priceBaseMinor)
+            : null,
+        organizationId,
+        name: input.name.trim(),
+        categoryId: input.categoryId,
+        laboratoryId,
+        activeIngredient: input.activeIngredient?.trim(),
+        pharmaceuticalForm: input.pharmaceuticalForm?.trim(),
+        concentration: input.concentration?.trim(),
+        presentation: input.presentation?.trim(),
+        externalReferenceSource: input.externalReferenceSource,
+        externalReferenceName: input.externalReferenceName?.trim(),
+        externalReferencePresentation:
+          input.externalReferencePresentation?.trim(),
+        externalReferenceBarcode: input.externalReferenceBarcode?.trim(),
+        externalReferencePriceMinor:
+          input.externalReferencePriceMinor === undefined
+            ? undefined
+            : BigInt(input.externalReferencePriceMinor),
+        externalReferenceCheckedAt: input.externalReferenceSource
+          ? new Date()
+          : undefined,
+        saleUnit: input.saleUnit,
+        description: input.description?.trim(),
+        prescriptionRequired: input.prescriptionRequired,
+      },
+    });
+    if (input.barcode)
+      await tx.productBarcode.create({
+        data: {
+          organizationId,
+          productId: product.id,
+          code: input.barcode.trim(),
+          primary: true,
+        },
+      });
+    const base =
+      input.externalReferenceSource && input.externalReferenceName
+        ? input.externalReferencePriceMinor
+        : input.priceBaseMinor;
+    const initialPrice =
+      input.priceDivisor != null
+        ? fractionalPrice(
+            base == null ? null : BigInt(base),
+            input.priceDivisor,
+            input.priceMarkupBps ?? 0,
+          )
+        : BigInt(input.priceMinor);
+    await tx.productPrice.create({
+      data: {
+        productId: product.id,
+        priceListId: priceList.id,
+        amountMinor: initialPrice,
+      },
+    });
+    if (input.priceDivisor != null)
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          organizationId,
+          entityType: "PRODUCT",
+          entityId: product.id,
+          action: "PRODUCT_FRACTIONAL_PRICE_CONFIGURED",
+          after: {
+            divisor: input.priceDivisor,
+            markupBps: input.priceMarkupBps ?? 0,
+            baseMinor: base?.toString() ?? null,
+            amountMinor: initialPrice.toString(),
+          },
+        },
+      });
+    await saveProductImage(
+      tx,
+      organizationId,
+      product.id,
+      actorId,
+      imageContent,
     );
+    if (input.generateInternalBarcode)
+      await internalBarcode(tx, actorId, organizationId, product.id, true);
+    // El envase importado queda asociado en la misma transacción: si un
+    // código choca con otro producto no se crea nada.
+    for (const code of input.equivalentBarcodes ?? [])
+      await addEquivalentBarcode(tx, actorId, organizationId, product.id, code);
+    return { id: product.id };
   }
 
   async assertPermission(
@@ -1780,4 +1968,32 @@ export class CatalogService {
   private async assert(actorId: string, organizationId: string, code: string) {
     return this.assertPermission(actorId, organizationId, code);
   }
+}
+
+/** Código principal de un producto (para la auditoría de la edición). */
+async function primaryCode(tx: Prisma.TransactionClient, productId: string) {
+  return (
+    (
+      await tx.productBarcode.findFirst({
+        where: { productId, primary: true },
+        select: { code: true },
+      })
+    )?.code ?? null
+  );
+}
+
+/** Precio general de un producto (para la auditoría de la edición). */
+async function generalPrice(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  productId: string,
+) {
+  const price = await tx.productPrice.findFirst({
+    where: {
+      productId,
+      priceList: { organizationId, name: "Precio general" },
+    },
+    select: { amountMinor: true },
+  });
+  return price?.amountMinor.toString() ?? null;
 }

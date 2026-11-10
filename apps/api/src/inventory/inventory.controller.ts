@@ -11,7 +11,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { Type } from "class-transformer";
+import { Type, plainToInstance } from "class-transformer";
 import {
   IsDateString,
   IsInt,
@@ -24,6 +24,11 @@ import {
   MaxLength,
   ValidateIf,
   Matches,
+  IsIn,
+  IsISO8601,
+  IsObject,
+  ValidateNested,
+  validate,
 } from "class-validator";
 
 import type { AuthenticatedRequest } from "../auth/auth.types";
@@ -31,6 +36,8 @@ import { HistorialQueryDto } from "../common/db/historial-query.dto";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { InventoryService } from "./inventory.service";
+import { DecidedWhenOccurred } from "../platform/subscription-gate";
+import type { OperacionInventarioSinConexion } from "./inventario-sin-conexion";
 import { partesPedidas } from "../catalog/catalogo-por-partes";
 
 /** Partes pedidas del stock o de los costos: "0a,1f,..." (hasta 32) (SISTEMA-77). */
@@ -81,6 +88,81 @@ class SupplierReturnDto {
   @IsString() lotId!: string;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @IsString() @IsNotEmpty() reason!: string;
+}
+
+// --- Inventario sin conexión (SISTEMA-79) ---
+/** Lote por su id, o por producto y número si se creó sin conexión. */
+class LoteOfflineDto {
+  @IsOptional() @IsUUID() lotId?: string;
+  @IsOptional() @IsUUID() productId?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) number?: string;
+}
+class AjusteOfflineDto {
+  @ValidateNested() @Type(() => LoteOfflineDto) lote!: LoteOfflineDto;
+  @IsInt() quantity!: number;
+  @IsString() @IsNotEmpty() reason!: string;
+  @IsOptional() @IsUUID() supplierId?: string | null;
+  @IsOptional() @IsInt() @Min(0) unitCostMinor?: number;
+}
+class DevolucionOfflineDto {
+  @ValidateNested() @Type(() => LoteOfflineDto) lote!: LoteOfflineDto;
+  @ValidateIf((_object, value: unknown) => value !== null)
+  @IsUUID()
+  supplierId!: string | null;
+  @IsInt() @Min(1) quantity!: number;
+  @IsString() @IsNotEmpty() reason!: string;
+}
+class EdicionLoteOfflineDto {
+  @ValidateNested() @Type(() => LoteOfflineDto) lote!: LoteOfflineDto;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) number?: string;
+  @IsOptional()
+  @ValidateIf((_object, value: unknown) => value !== null)
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  expiresAt?: string | null;
+  @IsOptional() @IsString() @Matches(/^\d{1,14}$/) unitCostMinor?: string;
+  @IsString() @MinLength(3) @MaxLength(300) reason!: string;
+}
+const CUERPO_INVENTARIO = {
+  INGRESO: ReceiveStockDto,
+  AJUSTE: AjusteOfflineDto,
+  DEVOLUCION: DevolucionOfflineDto,
+  EDICION_LOTE: EdicionLoteOfflineDto,
+} as const;
+class OfflineInventoryDto {
+  @IsIn(Object.keys(CUERPO_INVENTARIO))
+  tipo!: OperacionInventarioSinConexion["tipo"];
+  @IsUUID() clientOperationId!: string;
+  @IsISO8601({ strict: true }) occurredAt!: string;
+  @IsUUID() deviceId!: string;
+  /** El mismo cuerpo que con conexión, en el formato de su tipo. */
+  @IsObject() cuerpo!: Record<string, unknown>;
+}
+class SignedOfflineInventoryDto {
+  @IsUUID() actorId!: string;
+  @IsUUID() deviceId!: string;
+  @IsString() @MaxLength(20000) payload!: string;
+  @IsString() @MaxLength(200) signature!: string;
+}
+/** Valida la operación y su cuerpo con el DTO de su tipo. */
+async function operacionDeInventario(
+  datos: unknown,
+): Promise<OperacionInventarioSinConexion> {
+  const opciones = { whitelist: true, forbidNonWhitelisted: true };
+  const op = plainToInstance(OfflineInventoryDto, datos ?? {});
+  const DTO = CUERPO_INVENTARIO[op.tipo] as (new () => object) | undefined;
+  const cuerpo = DTO ? plainToInstance(DTO, op.cuerpo ?? {}) : null;
+  const lote = (cuerpo as { lote?: LoteOfflineDto } | null)?.lote;
+  if (
+    (await validate(op, opciones)).length ||
+    !cuerpo ||
+    (await validate(cuerpo, opciones)).length ||
+    (op.tipo !== "INGRESO" && !lote?.lotId && !(lote?.productId && lote.number))
+  )
+    throw new BadRequestException(
+      "El movimiento de inventario guardado sin conexión tiene datos inválidos.",
+    );
+  return { ...op, cuerpo } as unknown as OperacionInventarioSinConexion;
 }
 
 @Controller("organizations/:organizationId/branches/:branchId/inventory")
@@ -219,6 +301,50 @@ export class InventoryController {
       organizationId,
       branchId,
       filtro,
+    );
+  }
+
+  /** Movimiento de inventario hecho sin conexión (SISTEMA-79). */
+  @DecidedWhenOccurred()
+  @Post("offline")
+  async offline(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: OfflineInventoryDto,
+  ) {
+    return this.inventory.inventoryOffline(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      await operacionDeInventario(body),
+    );
+  }
+
+  /** El de otro usuario de esta PC: queda a nombre de quien lo hizo. */
+  @DecidedWhenOccurred()
+  @Post("offline/firmada")
+  async offlineSigned(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: SignedOfflineInventoryDto,
+  ) {
+    let datos: unknown;
+    try {
+      datos = JSON.parse(body.payload);
+    } catch {
+      throw new BadRequestException("La operación firmada no se puede leer.");
+    }
+    const op = await operacionDeInventario(datos);
+    if (op.deviceId !== body.deviceId)
+      throw new BadRequestException("La operación no corresponde a esa PC.");
+    return this.inventory.inventoryOfflineSigned(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      body,
+      op,
     );
   }
 

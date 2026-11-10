@@ -50,7 +50,7 @@ type SaleUnitValue = "BOX" | "BLISTER" | "UNIT";
 class EquivalentBarcodeDto {
   @IsString() @MinLength(8) @MaxLength(14) code!: string;
 }
-class CreateProductDto {
+export class CreateProductDto {
   @IsOptional() @IsBoolean() generateInternalBarcode?: boolean;
   @IsOptional() @IsString() @MaxLength(120) brand?: string;
   @IsOptional() @IsBoolean() isMedication?: boolean;
@@ -113,7 +113,7 @@ class SetPriceDto {
 class UpdateProductStatusDto {
   @IsBoolean() active!: boolean;
 }
-class BranchProductChangeDto {
+export class BranchProductChangeDto {
   @IsOptional() @IsDateString() expectedUpdatedAt?: string | null;
   @IsIn(["ACTIVE", "ARCHIVED", "DELETED"]) status!:
     "ACTIVE" | "ARCHIVED" | "DELETED";
@@ -136,7 +136,7 @@ class CatalogPartsQuery extends CatalogBranchQuery {
   @Matches(/^[0-9a-f]{2}(,[0-9a-f]{2}){0,31}$/)
   partes!: string;
 }
-class UpdateProductDto {
+export class UpdateProductDto {
   @IsOptional() @IsBoolean() generateInternalBarcode?: boolean;
   @IsOptional() @IsString() @MaxLength(120) brand?: string | null;
   @IsOptional() @IsBoolean() isMedication?: boolean;

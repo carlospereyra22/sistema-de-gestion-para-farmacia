@@ -55,7 +55,12 @@ export function BranchProductDialog({
     setError("");
     try {
       if (permanent)
-        await deleteUnusedCatalogProduct(token, organizationId, product.id);
+        await deleteUnusedCatalogProduct(
+          token,
+          organizationId,
+          product.id,
+          branchId,
+        );
       else
         await changeBranchProduct(token, organizationId, branchId, product.id, {
           status,

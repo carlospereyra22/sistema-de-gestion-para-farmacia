@@ -5,6 +5,8 @@ import { AuditModule } from "../audit/audit.module";
 import { CatalogPriceRefreshService } from "./catalog-price-refresh.service";
 import { CatalogController } from "./catalog.controller";
 import { CatalogService } from "./catalog.service";
+import { CatalogOfflineController } from "./catalogo-sin-conexion.controller";
+import { CatalogOfflineService } from "./catalogo-sin-conexion.service";
 import { PriceListUpdates } from "./price-list-updates";
 import { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceController } from "./medicine-reference.controller";
@@ -18,11 +20,13 @@ import { ExternalCatalogController } from "./external-catalog.controller";
     CatalogController,
     MedicineReferenceController,
     ExternalCatalogController,
+    CatalogOfflineController,
   ],
   providers: [
     ExternalCatalogService,
     AlfaBetaService,
     CatalogService,
+    CatalogOfflineService,
     PriceListUpdates,
     MedicineReferenceService,
     MedicineCatalogService,

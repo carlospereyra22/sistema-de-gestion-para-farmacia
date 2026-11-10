@@ -30,8 +30,11 @@ function setup() {
     },
     productBarcode: {
       findUnique: jest.fn().mockResolvedValue(null),
+      // Código y precio de antes y después, para la auditoría (SISTEMA-79).
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({}),
     },
+    productPrice: { findFirst: jest.fn().mockResolvedValue(null) },
     $queryRaw: jest.fn().mockResolvedValue([]),
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };

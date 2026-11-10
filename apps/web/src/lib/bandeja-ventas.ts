@@ -50,7 +50,10 @@ export type VentaPendiente = {
     | "CLIENTE"
     | "TRANSFERENCIA"
     | "PROVEEDOR"
-    | "PAGAR";
+    | "PAGAR"
+    // Productos e inventario (SISTEMA-79).
+    | "CATALOGO"
+    | "INVENTARIO";
   /** Lo que la PC sabe de la operación para mostrarla (SISTEMA-70). */
   local?: DetalleLocal;
   /** Quién la hizo, para mostrarlo en la caja (nombre o email). */

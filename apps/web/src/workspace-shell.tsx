@@ -214,6 +214,7 @@ import {
 } from "./lib/product-lots";
 import { ProductLotsDetail } from "./product-lots-detail";
 import { ProductLotCell } from "./product-lot-cell";
+import { PorEnviar } from "./por-enviar";
 import { ProductCatalogToolbar } from "./product-catalog-toolbar";
 import { matchesCatalogExtras } from "./lib/product-catalog-filters";
 import {
@@ -725,6 +726,30 @@ export function WorkspaceShell({
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal, veCompras, accessToken, organizationId, branchId]);
+  // Productos e inventario (SISTEMA-79): categorías, laboratorios y
+  // proveedores guardados en la PC, para dar de alta o editar un producto y
+  // cargar stock sin conexión aunque nadie haya entrado antes a esas pantallas.
+  const veProductos =
+    canOpenView("Productos", permissionCodes) ||
+    canOpenView("Inventario", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !veProductos ||
+      !organizationId
+    )
+      return;
+    const precargar = () =>
+      void Promise.all([
+        getCatalogOptions(accessToken, organizationId),
+        getParties(accessToken, organizationId, "suppliers"),
+      ]).catch(() => {});
+    precargar();
+    const timer = window.setInterval(precargar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [enLinea, sesionReal, veProductos, accessToken, organizationId]);
   // Lo mismo con la cuenta corriente (SISTEMA-70): clientes, saldos y
   // artículos pendientes para vender a cuenta y cobrar sin conexión.
   const veCuentas =
@@ -861,20 +886,13 @@ export function WorkspaceShell({
   // Ventas cobradas sin conexión: se mandan solas y, al llegar, se actualiza
   // el stock (SISTEMA-64).
   useSincronizarVentas(accessToken, alcance);
-  // Al llegar lo vendido sin conexión cambia el stock, no el catálogo: se
-  // actualiza sólo el stock (SISTEMA-74).
+  // Al llegar lo hecho sin conexión se actualiza todo: lo vendido cambia el
+  // stock y los productos e inventario (SISTEMA-79), el catálogo. Con el
+  // catálogo y el stock por partes sólo se baja lo que cambió (SISTEMA-77).
   useEffect(() => {
     const actualizar = () => {
-      if (
-        !accessToken ||
-        !organizationId ||
-        !branchId ||
-        !permissionCodes.includes("INVENTORY_READ")
-      )
-        return;
-      void getStock(accessToken, organizationId, branchId)
-        .then(setStock)
-        .catch(() => {});
+      if (!accessToken || !organizationId || !branchId) return;
+      void latestRefresh.current().catch(() => {});
     };
     window.addEventListener(VENTAS_SINCRONIZADAS, actualizar);
     return () => window.removeEventListener(VENTAS_SINCRONIZADAS, actualizar);
@@ -1417,12 +1435,15 @@ export function WorkspaceShell({
               }
               ventasSinEnviar={
                 // De todos los usuarios de la PC: la plata ya está en el cajón.
-                // Proveedores y cuentas por pagar no mueven Caja (SISTEMA-73).
+                // Proveedores, cuentas por pagar (SISTEMA-73), productos e
+                // inventario (SISTEMA-79) no mueven Caja.
                 bandeja.deLaPc.filter(
                   (venta) =>
                     venta.estado === "PENDIENTE" &&
                     venta.operacion !== "PROVEEDOR" &&
                     venta.operacion !== "PAGAR" &&
+                    venta.operacion !== "CATALOGO" &&
+                    venta.operacion !== "INVENTARIO" &&
                     venta.organizationId === organizationId &&
                     venta.branchId === branchId,
                 ).length
@@ -2261,87 +2282,99 @@ function Products({
             organizationId,
             editingProduct.id,
             linkImported,
+            branchId,
           );
         savedId = editingProduct.id;
-        await updateCatalogProduct(token, organizationId, editingProduct.id, {
-          generateInternalBarcode,
-          brand,
-          isMedication,
-          ...fractionInput,
-          imageDataUrl: productImage,
-          name,
-          priceMinor:
-            !initialProduct &&
-            !fractionEnabled &&
-            (selectedReference || !priceLocked)
-              ? Math.round(Number(price) * 100)
-              : undefined,
-          barcode,
-          categoryId: categoryId || null,
-          laboratoryId: laboratoryId || null,
-          activeIngredient,
-          pharmaceuticalForm,
-          concentration,
-          presentation,
-          saleUnit,
-          prescriptionRequired,
-          description,
-          ...(isMedication && selectedReference
-            ? {
-                externalReferenceSource: selectedReference.source,
-                externalReferenceName: selectedReference.name,
-                externalReferencePresentation: selectedReference.presentation,
-                externalReferenceBarcode: selectedReference.barcode,
-                externalReferencePriceMinor:
-                  selectedReference.priceMinor ?? undefined,
-              }
-            : {}),
-        });
+        await updateCatalogProduct(
+          token,
+          organizationId,
+          editingProduct.id,
+          {
+            generateInternalBarcode,
+            brand,
+            isMedication,
+            ...fractionInput,
+            imageDataUrl: productImage,
+            name,
+            priceMinor:
+              !initialProduct &&
+              !fractionEnabled &&
+              (selectedReference || !priceLocked)
+                ? Math.round(Number(price) * 100)
+                : undefined,
+            barcode,
+            categoryId: categoryId || null,
+            laboratoryId: laboratoryId || null,
+            activeIngredient,
+            pharmaceuticalForm,
+            concentration,
+            presentation,
+            saleUnit,
+            prescriptionRequired,
+            description,
+            ...(isMedication && selectedReference
+              ? {
+                  externalReferenceSource: selectedReference.source,
+                  externalReferenceName: selectedReference.name,
+                  externalReferencePresentation: selectedReference.presentation,
+                  externalReferenceBarcode: selectedReference.barcode,
+                  externalReferencePriceMinor:
+                    selectedReference.priceMinor ?? undefined,
+                }
+              : {}),
+          },
+          branchId,
+        );
       } else {
-        ({ id: savedId } = await createCatalogProduct(token, organizationId, {
-          generateInternalBarcode,
-          brand: brand || undefined,
-          isMedication,
-          ...fractionInput,
-          imageDataUrl: productImage ?? undefined,
-          name,
-          priceMinor: fractionEnabled
-            ? Number(fractionResult)
-            : Math.round(Number(price) * 100),
-          barcode: barcode || undefined,
-          categoryId: categoryId || undefined,
-          laboratoryId: laboratoryId || undefined,
-          laboratoryName:
-            laboratoryId || !suggestedLaboratoryName
-              ? undefined
-              : suggestedLaboratoryName,
-          activeIngredient: activeIngredient || undefined,
-          pharmaceuticalForm: pharmaceuticalForm || undefined,
-          concentration: concentration || undefined,
-          presentation: presentation || undefined,
-          saleUnit,
-          prescriptionRequired,
-          description: description || undefined,
-          equivalentBarcodes: [
-            ...(importedBarcode ? [importedBarcode] : []),
-            ...pendingEquivalents,
-          ].filter(
-            (code, index, all) =>
-              all.findIndex(
-                (other) => externalGtin(other) === externalGtin(code),
-              ) === index,
-          ),
-          ...(isMedication && selectedReference
-            ? {
-                externalReferenceSource: selectedReference.source,
-                externalReferenceName: selectedReference.name,
-                externalReferencePresentation: selectedReference.presentation,
-                externalReferenceBarcode: selectedReference.barcode,
-                externalReferencePriceMinor:
-                  selectedReference.priceMinor ?? undefined,
-              }
-            : {}),
-        }));
+        ({ id: savedId } = await createCatalogProduct(
+          token,
+          organizationId,
+          {
+            generateInternalBarcode,
+            brand: brand || undefined,
+            isMedication,
+            ...fractionInput,
+            imageDataUrl: productImage ?? undefined,
+            name,
+            priceMinor: fractionEnabled
+              ? Number(fractionResult)
+              : Math.round(Number(price) * 100),
+            barcode: barcode || undefined,
+            categoryId: categoryId || undefined,
+            laboratoryId: laboratoryId || undefined,
+            laboratoryName:
+              laboratoryId || !suggestedLaboratoryName
+                ? undefined
+                : suggestedLaboratoryName,
+            activeIngredient: activeIngredient || undefined,
+            pharmaceuticalForm: pharmaceuticalForm || undefined,
+            concentration: concentration || undefined,
+            presentation: presentation || undefined,
+            saleUnit,
+            prescriptionRequired,
+            description: description || undefined,
+            equivalentBarcodes: [
+              ...(importedBarcode ? [importedBarcode] : []),
+              ...pendingEquivalents,
+            ].filter(
+              (code, index, all) =>
+                all.findIndex(
+                  (other) => externalGtin(other) === externalGtin(code),
+                ) === index,
+            ),
+            ...(isMedication && selectedReference
+              ? {
+                  externalReferenceSource: selectedReference.source,
+                  externalReferenceName: selectedReference.name,
+                  externalReferencePresentation: selectedReference.presentation,
+                  externalReferenceBarcode: selectedReference.barcode,
+                  externalReferencePriceMinor:
+                    selectedReference.priceMinor ?? undefined,
+                }
+              : {}),
+          },
+          branchId,
+        ));
       }
       if (savedId) onSaved?.(savedId);
       clearForm();
@@ -2899,6 +2932,7 @@ function Products({
         name,
         options[type],
         parentId,
+        branchId,
       );
       if (type === "categories") {
         const fresh = await getCatalogOptions(token, organizationId);
@@ -3214,6 +3248,7 @@ function Products({
                               organizationId,
                               product.id,
                               image,
+                              branchId,
                             );
                             done();
                           }}
@@ -3221,7 +3256,16 @@ function Products({
                       </DataTableCell>
                       <DataTableCell>
                         <CellText
-                          primary={product.name}
+                          primary={
+                            <>
+                              {product.name}
+                              {/* Hecho sin conexión y todavía no enviado (SISTEMA-79). */}
+                              {(product.porEnviar ||
+                                lotesDelProducto(stock, product.id).some(
+                                  (lot) => lot.porEnviar,
+                                )) && <PorEnviar />}
+                            </>
+                          }
                           secondary={
                             product.presentation ||
                             product.externalReferencePresentation
@@ -4086,6 +4130,7 @@ function Products({
                         key={editingProduct.id}
                         token={token}
                         organizationId={organizationId}
+                        branchId={branchId}
                         productId={editingProduct.id}
                         initialCodes={equivalentBarcodes(editingProduct)}
                         primaryCode={barcode}

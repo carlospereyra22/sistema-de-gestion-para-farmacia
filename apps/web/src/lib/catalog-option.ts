@@ -29,6 +29,8 @@ export async function createOrSelectCatalogOption(
   name: string,
   options: CatalogOption[],
   parentId: string | null = null,
+  /** Sin conexión, la opción nueva queda en la PC (SISTEMA-79). */
+  branchId?: string,
 ) {
   const clean = cleanCatalogOptionName(name);
   if (clean.length < 2 || clean.length > 120)
@@ -49,6 +51,7 @@ export async function createOrSelectCatalogOption(
       undefined,
       undefined,
       type === "categories" ? parentId : undefined,
+      branchId,
     ))
   );
 }

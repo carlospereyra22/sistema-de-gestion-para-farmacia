@@ -22,6 +22,8 @@ import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { operacionCuentaTexto } from "./lib/cuenta-sin-conexion";
 import { operacionTransferenciaTexto } from "./lib/transferencias-sin-conexion";
 import { operacionProveedorTexto } from "./lib/proveedores-sin-conexion";
+import { operacionCatalogoTexto } from "./lib/catalogo-sin-conexion";
+import { operacionInventarioTexto } from "./lib/inventario-sin-conexion";
 import { operacionPagarTexto } from "./lib/pagar-sin-conexion";
 import { useConectividad } from "./lib/conectividad";
 
@@ -198,20 +200,24 @@ export function SincronizacionPanel({
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-slate-700">
-                        {venta.operacion === "PROVEEDOR"
-                          ? `Proveedores · ${operacionProveedorTexto(venta)}`
-                          : venta.operacion === "PAGAR"
-                            ? `Cuentas por pagar · ${operacionPagarTexto(venta)}${BigInt(venta.totalMinor) > 0n ? ` · ${pesos(venta.totalMinor)}` : ""}`
-                            : venta.operacion === "CUENTA" ||
-                                venta.operacion === "CLIENTE"
-                              ? `Cuenta corriente · ${operacionCuentaTexto(venta)}${venta.operacion === "CUENTA" && BigInt(venta.totalMinor) > 0n ? ` · ${pesos(venta.totalMinor)}` : ""}`
-                              : venta.operacion === "TRANSFERENCIA"
-                                ? `Transferencias · ${operacionTransferenciaTexto(venta)}`
-                                : venta.operacion === "COMPRA"
-                                  ? `Compras · ${tipoDeCompraTexto((venta.cuerpo as OperacionCompra).tipo)}`
-                                  : venta.operacion === "CAJA"
-                                    ? `Caja · ${operacionDeCaja(venta)} · ${pesos(venta.totalMinor)}`
-                                    : `${venta.id.slice(0, 8).toUpperCase()} · ${pesos(venta.totalMinor)}${venta.documentType === "INVOICE" ? " · con factura" : ""}`}
+                        {venta.operacion === "CATALOGO"
+                          ? `Productos · ${operacionCatalogoTexto(venta)}`
+                          : venta.operacion === "INVENTARIO"
+                            ? `Inventario · ${operacionInventarioTexto(venta)}`
+                            : venta.operacion === "PROVEEDOR"
+                              ? `Proveedores · ${operacionProveedorTexto(venta)}`
+                              : venta.operacion === "PAGAR"
+                                ? `Cuentas por pagar · ${operacionPagarTexto(venta)}${BigInt(venta.totalMinor) > 0n ? ` · ${pesos(venta.totalMinor)}` : ""}`
+                                : venta.operacion === "CUENTA" ||
+                                    venta.operacion === "CLIENTE"
+                                  ? `Cuenta corriente · ${operacionCuentaTexto(venta)}${venta.operacion === "CUENTA" && BigInt(venta.totalMinor) > 0n ? ` · ${pesos(venta.totalMinor)}` : ""}`
+                                  : venta.operacion === "TRANSFERENCIA"
+                                    ? `Transferencias · ${operacionTransferenciaTexto(venta)}`
+                                    : venta.operacion === "COMPRA"
+                                      ? `Compras · ${tipoDeCompraTexto((venta.cuerpo as OperacionCompra).tipo)}`
+                                      : venta.operacion === "CAJA"
+                                        ? `Caja · ${operacionDeCaja(venta)} · ${pesos(venta.totalMinor)}`
+                                        : `${venta.id.slice(0, 8).toUpperCase()} · ${pesos(venta.totalMinor)}${venta.documentType === "INVOICE" ? " · con factura" : ""}`}
                       </p>
                       <p className="text-xs text-slate-500">
                         {hora(venta.occurredAt)}
