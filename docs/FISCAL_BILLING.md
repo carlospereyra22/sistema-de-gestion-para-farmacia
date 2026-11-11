@@ -80,6 +80,17 @@ El estado lo calcula `lib/estado-facturacion.ts` **sólo** con `GET fiscal-setup
 
 "Facturación real" pasó al último paso: queda bloqueado diciendo qué falta y, si el servidor no lo permite, dice "Lo habilita el administrador del sistema". El aviso largo de homologación se reemplazó por la etiqueta "Modo prueba: las facturas no tienen validez fiscal", con "¿Qué significa?" desplegable. Los textos del estado no usan jerga: las siglas sólo aparecen en el detalle técnico. El paso Conexión prueba la conexión con el certificado. El paso Factura de prueba busca los puntos en ARCA, emite la prueba de $100 y muestra el historial.
 
+**Datos de la farmacia (SISTEMA-96).**
+
+- **CUIT primero:** el primer campo es el CUIT. Con **Buscar en ARCA** (`buscarCuitEnArca`, el mismo padrón que usa Clientes) se completan razón social, domicilio fiscal, localidad, provincia, código postal y condición frente al IVA. Se muestran en "¿Estos son tus datos?", con Confirmar o Corregir a mano.
+- **Si el padrón falla:** si no hay conexión o el padrón falla, se avisa y se cargan a mano, sin bloquear.
+- **Botón oculto por ahora:** el botón sigue apagado con `BUSQUEDA_ARCA` hasta terminar la búsqueda con el CUIT de Farmatec (prompt 7). El padrón hoy exige `PARTY_MANAGE` (Clientes): queda para esa tarea aceptar también a quien administra la organización.
+- **Bloques:** los campos van en tres bloques (Identificación, Domicilio fiscal y Datos impositivos), cada uno con ayuda de dónde sacar el dato. El selector es `ProductFilterSelect` compacto.
+- **Validación en pantalla:** `lib/datos-fiscales.ts` revisa el CUIT con su dígito verificador, que la fecha de inicio exista y no sea futura, y el código postal. Es sólo una vista previa: la validación de verdad la hace el servidor al guardar.
+- **Responsable inscripto:** se avisa que hoy sólo se emite factura C y no deja continuar (sí guardar el borrador).
+- **Guardar:** los botones son "Guardar y continuar" y "Guardar borrador", con aviso emergente al guardar. Se mantiene el aviso de datos sin guardar.
+- **Vista previa:** la vista previa del comprobante queda a la derecha en pantallas anchas y abajo en las angostas.
+
 El asistente reutiliza el perfil guardado y retoma según el diagnóstico del servidor. Navegar los pasos no marca requisitos cumplidos ni habilita emisión. Guardar y continuar avanza sólo después de una respuesta exitosa; un borrador incompleto sigue siendo válido como borrador y se señala en el estado.
 
 Los editores se mantienen montados al cambiar de paso para conservar los borradores. El perfil con cambios sin guardar impide avanzar a otro paso y avisa al recargar/cerrar. Cambiar de organización reinicia el estado del asistente para evitar mezclar datos. La navegación no guarda datos automáticamente: sólo los botones explícitos de guardar/asociar lo hacen.
