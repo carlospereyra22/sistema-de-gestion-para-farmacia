@@ -24,7 +24,8 @@ export class JwtAccessGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const header = request.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
-    if (!token) throw new UnauthorizedException("Access token is required.");
+    if (!token)
+      throw new UnauthorizedException("Iniciá sesión para continuar.");
 
     let mustChangePassword: boolean;
     try {
@@ -39,12 +40,16 @@ export class JwtAccessGuard implements CanActivate {
         select: { user: { select: { mustChangePassword: true } } },
       });
       if (!session)
-        throw new UnauthorizedException("Session is invalid or expired.");
+        throw new UnauthorizedException(
+          "Tu sesión venció. Volvé a iniciar sesión.",
+        );
       request.auth = payload;
       // El soporte entra como el usuario sin tener que cambiarle la clave.
       mustChangePassword = !payload.soporte && session.user.mustChangePassword;
     } catch {
-      throw new UnauthorizedException("Access token is invalid or expired.");
+      throw new UnauthorizedException(
+        "Tu sesión venció. Volvé a iniciar sesión.",
+      );
     }
     const allowed = this.reflector.getAllAndOverride<boolean | undefined>(
       ALLOW_PENDING_PASSWORD_CHANGE,

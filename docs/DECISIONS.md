@@ -344,6 +344,8 @@
 
 - Soporte desde el panel de plataforma (11/11/2026, SISTEMA-89, decisión del usuario): el superadmin puede entrar como cualquier usuario de una farmacia y operar igual que él, para reproducir y arreglar problemas, sin que la farmacia lo vea. Reemplaza la decisión del 06/11 de no entrar como una farmacia (`PLATFORM.md`). Límites: la sesión dura hasta volver al panel (tope de 7 días, sin renovación), sin ARCA producción, registro sólo en la auditoría de la plataforma. Conviene que los términos de servicio contemplen el acceso del soporte.
 
+- Mensajes de error en castellano (11/11/2026, SISTEMA-91): los mensajes de la API que llegan a la pantalla (ventas, devoluciones, stock, transferencias, catálogo, usuarios, sesión) pasan del inglés al castellano rioplatense. Los internos que nunca ve el usuario (transporte con ARCA, bóveda de credenciales, configuración) quedan como estaban. La web no compara textos de error, así que no cambia nada más. Quedan como estaban, por decisión del usuario, el login sin límite de intentos y el costo del lote que vuelve a entrar por Compras (conserva el primero, `PURCHASES_V2.md`).
+
 ## OPEN
 
 - Credential recovery policy for production.

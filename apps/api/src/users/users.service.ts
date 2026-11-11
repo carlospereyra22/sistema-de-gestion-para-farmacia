@@ -102,7 +102,7 @@ export class UsersService {
         where: { userId_organizationId: { userId, organizationId } },
       });
       if (!membership)
-        throw new ForbiddenException("User is outside the organization.");
+        throw new ForbiddenException("El usuario no es de esta farmacia.");
       const name = displayName.trim() || null;
       await tx.userOrganization.update({
         where: { id: membership.id },
@@ -273,7 +273,7 @@ export class UsersService {
     const existing = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
-    if (existing) throw new ConflictException("Email is already in use.");
+    if (existing) throw new ConflictException("Ese email ya está en uso.");
     const branches = await this.prisma.branch.findMany({
       where: { id: { in: branchIds }, organizationId, active: true },
     });
@@ -282,7 +282,7 @@ export class UsersService {
     });
     if (branches.length !== branchIds.length || roles.length !== roleIds.length)
       throw new ForbiddenException(
-        "Branch or role is outside the organization.",
+        "Revisá las sucursales y los roles: alguno no es de esta farmacia.",
       );
     if (
       roles.some((role) => role.code === "OWNER") &&

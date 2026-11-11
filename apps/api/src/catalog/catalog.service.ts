@@ -733,7 +733,9 @@ export class CatalogService {
       }),
     ]);
     if (!list || !product)
-      throw new NotFoundException("Price list or product is unavailable.");
+      throw new NotFoundException(
+        "La lista de precios o el producto no están disponibles.",
+      );
     if (list.name === "Precio general")
       throw new BadRequestException("Precio general es de solo lectura.");
     // El cambio de precio queda auditado con el anterior, en la misma
@@ -781,7 +783,8 @@ export class CatalogService {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, organizationId },
     });
-    if (!product) throw new NotFoundException("Product is unavailable.");
+    if (!product)
+      throw new NotFoundException("El producto no está disponible.");
     return this.prisma.product.update({
       where: { id: productId },
       data: { active },
@@ -884,7 +887,8 @@ export class CatalogService {
     const product = await db.product.findFirst({
       where: { id: productId, organizationId },
     });
-    if (!product) throw new NotFoundException("Product is unavailable.");
+    if (!product)
+      throw new NotFoundException("El producto no está disponible.");
     const [category, laboratory] = await Promise.all([
       input.categoryId
         ? db.category.findFirst({
@@ -898,9 +902,9 @@ export class CatalogService {
         : undefined,
     ]);
     if (input.categoryId && !category)
-      throw new NotFoundException("Category is unavailable.");
+      throw new NotFoundException("La categoría no está disponible.");
     if (input.laboratoryId && !laboratory)
-      throw new NotFoundException("Laboratory is unavailable.");
+      throw new NotFoundException("El laboratorio no está disponible.");
 
     const imageContent =
       input.imageDataUrl === undefined
@@ -1794,9 +1798,9 @@ export class CatalogService {
         : undefined,
     ]);
     if (input.categoryId && !category)
-      throw new NotFoundException("Category is unavailable.");
+      throw new NotFoundException("La categoría no está disponible.");
     if (input.laboratoryId && !laboratory)
-      throw new NotFoundException("Laboratory is unavailable.");
+      throw new NotFoundException("El laboratorio no está disponible.");
     const imageContent =
       input.imageDataUrl == null
         ? undefined

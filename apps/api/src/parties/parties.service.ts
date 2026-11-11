@@ -92,7 +92,7 @@ export class PartiesService {
         where: { id: priceListId, organizationId, active: true },
       }))
     )
-      throw new NotFoundException("Price list is unavailable.");
+      throw new NotFoundException("La lista de precios no está disponible.");
     return type === "customers"
       ? this.prisma.$transaction(async (tx) => {
           await assertCustomerDocumentAvailable(tx, organizationId, [

@@ -906,7 +906,9 @@ export class SalesService {
         "Confirmá explícitamente el ambiente fiscal disponible y la operación. No se registró ninguna venta ni cobro.",
       );
     if (!input.items.length || !input.payments.length)
-      throw new BadRequestException("A sale needs items and payments.");
+      throw new BadRequestException(
+        "La venta necesita al menos un producto y un pago.",
+      );
     if (
       new Set(
         input.items
@@ -914,7 +916,9 @@ export class SalesService {
           .map((item) => item.productId),
       ).size !== input.items.filter((item) => item.productId).length
     )
-      throw new BadRequestException("A product can only appear once per sale.");
+      throw new BadRequestException(
+        "Cada producto puede aparecer una sola vez en la venta.",
+      );
     await this.ensureBranch(organizationId, branchId);
     const customer = input.customerId
       ? await this.prisma.customer.findFirst({
@@ -947,7 +951,9 @@ export class SalesService {
     const priceListId =
       input.priceListId || customer?.priceListId || generalPriceList?.id;
     if (!priceListId)
-      throw new NotFoundException("General price list is unavailable.");
+      throw new NotFoundException(
+        "La lista de precios general no está disponible.",
+      );
     try {
       const result = await this.prisma.$transaction(
         async (tx) => {
@@ -1164,7 +1170,7 @@ export class SalesService {
             } else {
               if (!price)
                 throw new NotFoundException(
-                  "Product or its price is unavailable.",
+                  "El producto o su precio no están disponibles.",
                 );
               if (
                 line.expectedUnitPriceMinor !== undefined &&
@@ -1192,7 +1198,7 @@ export class SalesService {
             const lineSubtotalMinor = unitPriceMinor * BigInt(line.quantity);
             if (lineDiscountMinor > lineSubtotalMinor)
               throw new BadRequestException(
-                `Discount cannot exceed the subtotal for ${product.name}.`,
+                `El descuento no puede superar el subtotal de ${product.name}.`,
               );
             let remaining = line.quantity;
             let assignedDiscountMinor = 0n;
@@ -1277,7 +1283,7 @@ export class SalesService {
           );
           if (paid < total)
             throw new BadRequestException(
-              "Payments must cover the sale total.",
+              "Los pagos tienen que cubrir el total de la venta.",
             );
           const accountAmount = input.payments
             .filter((payment) => payment.method === PaymentMethod.ACCOUNT)
@@ -1743,7 +1749,7 @@ export class SalesService {
           include: { items: true, payments: true, customerReturns: true },
         });
         if (!sale)
-          throw new NotFoundException("Completed sale is unavailable.");
+          throw new NotFoundException("No encontramos esa venta completada.");
         if (sale.documentType === "INVOICE") {
           const productionDocument = await tx.fiscalDocument.findFirst({
             where: { sourceSaleId: saleId, organizationId, kind: "INVOICE" },
@@ -1769,7 +1775,7 @@ export class SalesService {
         }
         if (sale.customerReturns.length)
           throw new BadRequestException(
-            "A sale with customer returns cannot be cancelled.",
+            "No se puede anular una venta que ya tiene devoluciones.",
           );
         const cashSessionIds = sale.payments
           .map((payment) => payment.cashSessionId)
@@ -1803,7 +1809,7 @@ export class SalesService {
           if (item.productId && !item.lotId) continue;
           if (!item.lotId || !item.productId)
             throw new BadRequestException(
-              "The original lot is unavailable for cancellation.",
+              "El lote original no está disponible para anular la venta.",
             );
           await reopenForHistoricStock(
             tx,
@@ -1956,14 +1962,14 @@ export class SalesService {
     await this.assert(actorId, organizationId, "SALE_MANAGE");
     if (!input.items.length)
       throw new BadRequestException(
-        "A customer return needs at least one item.",
+        "Elegí al menos un producto para devolver.",
       );
     if (
       new Set(input.items.map((item) => item.saleItemId)).size !==
       input.items.length
     )
       throw new BadRequestException(
-        "A sale item can only appear once per return.",
+        "Cada producto de la venta puede aparecer una sola vez en la devolución.",
       );
     return this.prisma.$transaction(async (tx) => {
       // Bloquea la venta como la anulación: dos devoluciones simultáneas (doble
@@ -1974,7 +1980,8 @@ export class SalesService {
         where: { id: saleId, organizationId, branchId, status: "COMPLETED" },
         include: { items: true },
       });
-      if (!sale) throw new NotFoundException("Completed sale is unavailable.");
+      if (!sale)
+        throw new NotFoundException("No encontramos esa venta completada.");
       if (sale.documentType === "INVOICE")
         throw new BadRequestException(
           "La devolución de una venta facturada requiere una nota de crédito. Este circuito todavía no está habilitado.",
@@ -1989,7 +1996,7 @@ export class SalesService {
         );
       if (saleItems.length !== input.items.length)
         throw new BadRequestException(
-          "One or more return items do not belong to this sale.",
+          "Algún producto de la devolución no es de esta venta.",
         );
       const priorReturns = await tx.customerReturnItem.groupBy({
         by: ["saleItemId"],
@@ -2003,7 +2010,7 @@ export class SalesService {
         const quantity = requested.get(item.id)!;
         if (quantity + (alreadyReturned.get(item.id) ?? 0) > item.quantity)
           throw new BadRequestException(
-            "Returned quantity exceeds the original sale.",
+            "La cantidad a devolver supera la vendida.",
           );
       }
       const customerReturn = await tx.customerReturn.create({
@@ -2061,7 +2068,7 @@ export class SalesService {
         where: { id: branchId, organizationId, active: true },
       }))
     )
-      throw new NotFoundException("Branch is unavailable.");
+      throw new NotFoundException("La sucursal no está disponible.");
   }
   private async assert(actorId: string, organizationId: string, code: string) {
     const membership = await this.prisma.userOrganization.findUnique({

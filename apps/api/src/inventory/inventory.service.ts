@@ -748,7 +748,7 @@ export class InventoryService {
     });
     if (!product)
       throw new NotFoundException(
-        "Product is unavailable in this organization.",
+        "El producto no está disponible en esta farmacia.",
       );
     return this.prisma.$transaction((tx) =>
       this.recibirEnTx(tx, actorId, input),
@@ -901,16 +901,14 @@ export class InventoryService {
         branchId: input.branchId,
       },
     });
-    if (!lot) throw new NotFoundException("Lot is unavailable.");
+    if (!lot) throw new NotFoundException("El lote no está disponible.");
     // Sin conexión, una salida se registra hasta lo que hay (SISTEMA-79).
     if (sinConexion) {
       input = await this.ajusteSinConexion(tx, lot, input, sinConexion);
       if (!input.quantity) return { id: lot.id, quantity: lot.quantity };
     }
     if (lot.quantity + input.quantity < 0)
-      throw new ForbiddenException(
-        "The adjustment would create negative stock.",
-      );
+      throw new ForbiddenException("El ajuste dejaría el stock en negativo.");
     if (!sinConexion) await this.assertAdjustmentSupplier(tx, lot, input);
     const updated = await tx.productLot.update({
       where: { id: lot.id },
@@ -1033,9 +1031,11 @@ export class InventoryService {
         }))
       )
     )
-      throw new NotFoundException("Supplier is unavailable.");
+      throw new NotFoundException("El proveedor no está disponible.");
     if (!lot)
-      throw new ForbiddenException("Insufficient stock for supplier return.");
+      throw new ForbiddenException(
+        "No hay stock suficiente para devolver al proveedor.",
+      );
     const { suppliers, unassigned } = await this.lotStockBySupplier(tx, lot);
     // A quien entregó el lote solo se le devuelve lo suyo. El stock sin
     // proveedor sale sin proveedor o a uno que no figura en el lote.
@@ -1060,7 +1060,9 @@ export class InventoryService {
       input = { ...input, quantity: registrado };
     } else {
       if (lot.quantity < input.quantity)
-        throw new ForbiddenException("Insufficient stock for supplier return.");
+        throw new ForbiddenException(
+          "No hay stock suficiente para devolver al proveedor.",
+        );
       if (!delivered && !unassigned)
         throw new ForbiddenException(
           supplier
@@ -1635,7 +1637,7 @@ export class InventoryService {
     const branch = await this.prisma.branch.findFirst({
       where: { id: branchId, organizationId, active: true },
     });
-    if (!branch) throw new NotFoundException("Branch is unavailable.");
+    if (!branch) throw new NotFoundException("La sucursal no está disponible.");
   }
 
   private async permissionCodes(actorId: string, organizationId: string) {

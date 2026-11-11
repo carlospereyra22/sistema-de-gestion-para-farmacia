@@ -66,4 +66,31 @@ describe("panel de usuarios", () => {
     expect(html).toContain("0 de 2");
     expect(html).toContain("Crear usuario");
   });
+
+  it("a quien no es dueño no le deja tildar el rol de dueño", () => {
+    const conDueno: UserCreateOptions = {
+      ...options,
+      roles: [...options.roles, { id: "r3", code: "OWNER", name: "Dueño" }],
+    };
+    const render = (code: string) =>
+      renderToStaticMarkup(
+        <UsersPanel
+          token="t"
+          organizationId="o"
+          users={[
+            item({
+              isCurrentUser: true,
+              roles: [{ role: { id: "rx", code } }],
+            }),
+          ]}
+          options={conDueno}
+          onDone={() => undefined}
+          onError={() => undefined}
+        />,
+      );
+    const disabledCount = (html: string) =>
+      html.match(/type="checkbox"[^>]*disabled/g)?.length ?? 0;
+    expect(disabledCount(render("ADMIN"))).toBe(1);
+    expect(disabledCount(render("OWNER"))).toBe(0);
+  });
 });
