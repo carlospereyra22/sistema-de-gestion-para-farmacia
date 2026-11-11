@@ -2801,6 +2801,19 @@ export type FiscalSetup = {
   branches: { id: string; name: string }[];
   points: { id: string; branchId: string; number: number; active: boolean }[];
   checks: { code: string; ready: boolean; label: string; detail: string }[];
+  /** Última factura de prueba (SISTEMA-95). */
+  trial: {
+    status: string;
+    point: number;
+    number: number | null;
+    cae: string | null;
+    createdAt: string;
+  } | null;
+  /** Facturación real: si el servidor la permite y qué sucursales la usan. */
+  production: {
+    available: boolean;
+    branches: { branchId: string; point: number; activatedAt: string | null }[];
+  };
 };
 export type FiscalCredentialStatus = {
   environment: "HOMOLOGATION" | "PRODUCTION";

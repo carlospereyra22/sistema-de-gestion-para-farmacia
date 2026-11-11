@@ -1,18 +1,22 @@
 import type { FiscalSetup } from "./api";
 
-export type FiscalStep = 0 | 1 | 2 | 3;
+export type FiscalStep = 0 | 1 | 2 | 3 | 4;
+/** Los 5 pasos, de punta a punta (SISTEMA-95). */
 export const fiscalSteps = [
-  "Tu farmacia",
-  "Conexión ARCA",
-  "Sucursales",
-  "Revisión",
+  "Datos de la farmacia",
+  "Conexión con ARCA",
+  "Punto de venta",
+  "Factura de prueba",
+  "Facturación real",
 ] as const;
 
-// Only guides navigation. Server checks remain the source of configuration status.
+// Sólo guía la navegación. El estado de la configuración sale del servidor.
 export function resumeFiscalStep(checks: FiscalSetup["checks"]): FiscalStep {
-  if (!checks.some((check) => check.code === "PROFILE" && check.ready))
-    return 0;
-  if (!checks.some((check) => check.code === "AUTH" && check.ready)) return 1;
-  if (!checks.some((check) => check.code === "POINT" && check.ready)) return 2;
-  return 3;
+  const listo = (code: string) =>
+    checks.some((check) => check.code === code && check.ready);
+  if (!listo("PROFILE")) return 0;
+  if (!listo("AUTH")) return 1;
+  if (!listo("POINT")) return 2;
+  if (!listo("TRIAL")) return 3;
+  return 4;
 }

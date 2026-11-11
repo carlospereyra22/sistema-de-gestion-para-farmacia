@@ -65,7 +65,22 @@ Verificación del 27/09/2026: autenticación WSAA y consulta WSFE reales; homolo
 
 ### Asistente de configuración
 
-Organización → Facturación → **Configurar facturación** abre cuatro pasos: datos de la farmacia, conexión ARCA, sucursales y revisión. Reutiliza el perfil guardado y propone retomar según el diagnóstico del servidor. Después de completar datos se prioriza conexión antes de pedir puntos, incluso si ya existen números cargados localmente. Navegar los pasos no marca requisitos cumplidos ni habilita emisión. Guardar y continuar avanza sólo después de una respuesta exitosa; un borrador incompleto sigue siendo válido como borrador y se señala en el diagnóstico.
+**Entrada y estado (SISTEMA-95, 11/11/2026).** Organización → Facturación abre con una tarjeta de estado que se entiende en 5 segundos:
+
+- Un título según el estado: "Todavía no configuraste la facturación", "Te faltan N pasos para hacer tu primera factura de prueba", "Lista para facturar en pruebas" o "Facturando en real".
+- Una barra de 5 pasos: Datos de la farmacia · Conexión con ARCA · Punto de venta · Factura de prueba · Facturación real. Cada paso está completo, pendiente, con problema o bloqueado.
+- Un único botón "Continuar: <próximo paso>", que abre el asistente en ese paso.
+
+El estado lo calcula `lib/estado-facturacion.ts` **sólo** con `GET fiscal-setup`. La API agrega los checks `TRIAL` (alguna factura de prueba autorizada y la última, que marca el paso con problema si quedó rechazada o sin respuesta) y `PRODUCTION` (sucursales que facturan en real), más `production.available`, que indica si el servidor tiene `FISCAL_PRODUCTION_ISSUANCE` y `FISCAL_RECOVERY_VERIFIED`. Son sólo de lectura y no cambian ninguna regla fiscal. Cambios al estado:
+
+- `AUTH` ya no depende del acceso de ARCA de unas 12 horas, que se renueva solo al usar. Antes, la conexión aparecía pendiente al día siguiente. Ahora basta el certificado verificado, vigente y del CUIT emisor.
+- Se quitó el check `ISSUANCE`, que nunca se podía cumplir.
+- El punto de venta se completa cuando todas las sucursales activas tienen uno.
+- Un emisor responsable inscripto aparece con problema, porque hoy sólo se emite factura C.
+
+"Facturación real" pasó al último paso: queda bloqueado diciendo qué falta y, si el servidor no lo permite, dice "Lo habilita el administrador del sistema". El aviso largo de homologación se reemplazó por la etiqueta "Modo prueba: las facturas no tienen validez fiscal", con "¿Qué significa?" desplegable. Los textos del estado no usan jerga: las siglas sólo aparecen en el detalle técnico. El paso Conexión prueba la conexión con el certificado. El paso Factura de prueba busca los puntos en ARCA, emite la prueba de $100 y muestra el historial.
+
+El asistente reutiliza el perfil guardado y retoma según el diagnóstico del servidor. Navegar los pasos no marca requisitos cumplidos ni habilita emisión. Guardar y continuar avanza sólo después de una respuesta exitosa; un borrador incompleto sigue siendo válido como borrador y se señala en el estado.
 
 Los editores se mantienen montados al cambiar de paso para conservar los borradores. El perfil con cambios sin guardar impide avanzar a otro paso y avisa al recargar/cerrar. Cambiar de organización reinicia el estado del asistente para evitar mezclar datos. La navegación no guarda datos automáticamente: sólo los botones explícitos de guardar/asociar lo hacen.
 
