@@ -60,7 +60,8 @@ necesita conexión.
 | SISTEMA-81 Arreglos de la prueba: compras, cobros y avisos    | En main    |
 | SISTEMA-86 Inicio sin conexión                                | En main    |
 | Prueba completa con dos PCs (10/11/2026)                      | Hecha      |
-| SISTEMA-87 Arreglos de la prueba completa con dos PCs         | Esta etapa |
+| SISTEMA-87 Arreglos de la prueba completa con dos PCs         | En main    |
+| SISTEMA-88 Misma caja en dos PCs y reportes al entrar         | Esta etapa |
 
 ## Cómo funciona (SISTEMA-62)
 
@@ -263,6 +264,13 @@ Pedido del usuario (11/11/2026): que Inicio funcione sin internet, y que el busc
 - **Últimas ventas**: las del servidor (o su copia) más las ventas sin enviar, con "Por enviar".
 - **Precarga**: el resumen de Inicio se guarda con los reportes (cada 15 minutos).
 
+## Misma caja en dos PCs (SISTEMA-88)
+
+Segunda corrida de la prueba completa (11/11/2026), ya con SISTEMA-87: 82 ventas y 32 operaciones más, todas sincronizadas; el encargado mandó lo del cajero sin trabarse (4,4 s); cambio de turno y cierre de caja sin conexión, saldo a favor, precio cambiado (7 avisos), pedido hecho sin conexión recibido en dos partes y compra directa leyendo una factura PDF, todo bien; 21 facturas C autorizadas en homologación.
+
+- **Apertura sin conexión de una caja que otra PC ya abrió y cerró** (`cash.service.ts`, apertura): si la PC 2 abre y cierra una caja sin conexión y sincroniza antes que la PC 1, que abrió la misma caja, la apertura de la PC 1 no encontraba una sesión abierta y creaba otra sesión de la misma caja, superpuesta y sin aviso (sus ventas quedaban fuera del cierre). Ahora busca también la sesión de esa caja que se cerró después de su hora: apunta a ella con aviso `CAJA_YA_ABIERTA` (con `cerradaEl`), y lo que llega después sigue el circuito de caja cerrada (cobros pendientes con `CAJA_CERRADA`, movimientos retenidos, cierre con `CIERRE_DISTINTO`). Una caja cerrada antes de la hora de la apertura no se reusa.
+- **Reportes**: la copia se guarda a los 5 s de entrar (antes 20 s); quien entraba un momento con conexión antes de un cambio de turno quedaba sin Reportes sin conexión.
+
 ## Prueba completa con dos PCs y arreglos (SISTEMA-87)
 
 Prueba del 10/11/2026: dos PCs (mostrador y caja) sin conexión durante ~1 h 40 min simuladas, con una oficina con conexión al mismo tiempo. Se hicieron 80 ventas (20 con factura C) y 31 operaciones más (caja, compras, cuentas, clientes, transferencias, catálogo, inventario, proveedores). Al volver llegaron todas, sin duplicados, con su hora y su autor; las 20 facturas se autorizaron en homologación en 70 s; el stock cerró sin diferencias ni negativos. Se repite con los scripts del scratchpad (preparar, simular y verificar); informe en `.cache/prueba-corte/`.
@@ -290,7 +298,7 @@ Pedido del usuario (10/11/2026): que funcionen bien sin internet. Reglas en `BUS
 - **Categorías y laboratorios**: crear (con ícono y color), renombrar, mover, eliminar, cambiar el ícono y el logo quedan como `operacion: "CATALOGO"` con los tipos `OPCION`, `OPCION_EDICION`, `OPCION_BAJA`, `OPCION_ICONO` y `LOGO` (`createCatalogNamedItem`, `changeCatalogNamedItem`, `updateCategoryIcon` y `laboratoryLogo`). Las opciones (`opcionesConPendientes`) y los productos muestran los nombres, las rutas y los logos nuevos enseguida.
 - **Listas de precios**: crear (con todos los productos), renombrar o cambiar la lista de respaldo, y guardar precios quedan como `LISTA_ALTA`, `LISTA_EDICION` y `LISTA_PRECIOS` (`createPriceList`, `renamePriceList`, `saveListChanges`). La vista previa de un ajuste por porcentaje o monto se calcula en la PC (`precioAjustado`, la misma fórmula que el servidor). `getPriceLists` y los precios que usa la venta (`getEffectivePrices`) suman lo pendiente.
 - **El servidor** (`catalog/catalogo-sin-conexion.service.ts`): precio por precio, si el que había no es el que vio la PC y otra PC lo cambió después (según la hora real guardada en `PRICE_LIST_UPDATED`), queda ese y avisa; si no, aplica el de la PC. Nombres repetidos: no se cambian (`NOMBRE_REPETIDO`). Eliminar con productos asociados: rechazo (422).
-- **Reportes** (decisión del usuario): copia del servidor. Con conexión, a los 20 segundos de entrar y cada 15 minutos, la PC guarda el Resumen de Hoy, Ayer, Últimos 7 días, Últimos 30 días y Este mes, de todas las sucursales y de la actual (`precargarReportes`). Sin conexión, el Resumen muestra "Sin conexión: datos al …" y avisa que no incluye lo hecho sin conexión; otro período responde que no está guardado.
+- **Reportes** (decisión del usuario): copia del servidor. Con conexión, a los 5 segundos de entrar (antes 20, SISTEMA-88) y cada 15 minutos, la PC guarda el Resumen de Hoy, Ayer, Últimos 7 días, Últimos 30 días y Este mes, de todas las sucursales y de la actual (`precargarReportes`). Sin conexión, el Resumen muestra "Sin conexión: datos al …" y avisa que no incluye lo hecho sin conexión; otro período responde que no está guardado.
 - **Precarga**: categorías, laboratorios y proveedores para quien ve Productos, Inventario, Categorías y laboratorios o Listas de precios; listas de precios y el catálogo de la organización (por partes) para quien ve Listas de precios.
 - Migración `20261111200000_offline_options_price_lists`: tipos de operación y el aviso `NOMBRE_REPETIDO`.
 

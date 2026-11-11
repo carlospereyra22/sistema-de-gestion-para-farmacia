@@ -1435,15 +1435,33 @@ export class CashService {
         });
         if (!register)
           throw new NotFoundException("La caja no está disponible.");
-        const abierta = await tx.cashSession.findFirst({
-          where: { cashRegisterId: register.id, closedAt: null },
-        });
+        // Otra PC la abrió mientras tanto: todo se suma a esa sesión, aunque
+        // esa PC ya la haya cerrado y sincronizado antes que esta (prueba de
+        // corte del 11/11/2026: se creaba otra sesión superpuesta de la misma
+        // caja, sin aviso). Si ya está cerrada, lo que llegue después sigue el
+        // circuito de caja cerrada: cobros pendientes y movimientos retenidos.
+        const abierta =
+          (await tx.cashSession.findFirst({
+            where: { cashRegisterId: register.id, closedAt: null },
+          })) ??
+          (await tx.cashSession.findFirst({
+            where: {
+              cashRegisterId: register.id,
+              closedAt: { gte: occurredAt },
+            },
+            orderBy: { openedAt: "asc" },
+          }));
         if (abierta) {
-          // Otra PC la abrió mientras tanto: todo se suma a esa sesión.
           entityId = abierta.id;
           avisos.push({
             kind: "CAJA_YA_ABIERTA",
-            detail: { caja: register.name, cashSessionId: abierta.id },
+            detail: {
+              caja: register.name,
+              cashSessionId: abierta.id,
+              ...(abierta.closedAt
+                ? { cerradaEl: abierta.closedAt.toISOString() }
+                : {}),
+            },
           });
         } else {
           const own = await findOwnOpenSession(tx, actorId, organizationId);
