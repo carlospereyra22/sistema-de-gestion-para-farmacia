@@ -11,7 +11,11 @@ import { FiscalSetupPanel } from "./fiscal-setup";
 import { FiscalArcaGuide, FiscalWizardSteps } from "./fiscal-wizard-guide";
 import { fiscalSteps, type FiscalStep } from "./lib/fiscal-wizard";
 import { estadoDeFacturacion } from "./lib/estado-facturacion";
-import { EstadoFacturacion, ModoPrueba } from "./fiscal-estado";
+import {
+  EstadoFacturacion,
+  FacturacionLista,
+  ModoPrueba,
+} from "./fiscal-estado";
 import { FiscalTesting } from "./fiscal-testing";
 import { FiscalProductionSetup } from "./fiscal-production-setup";
 import { formatearCuit } from "./lib/cuit";
@@ -217,13 +221,33 @@ function FiscalSettingsContent({
           onEditProfile={() => navigate(0)}
         />
       )}
+      {started && step === 3 && estado?.pasos[3]?.estado === "completo" && (
+        <FacturacionLista
+          real={false}
+          onSeguir={() => navigate(4)}
+          onResumen={() => setStarted(false)}
+        />
+      )}
       {started && step === 3 && (
         <FiscalTesting
           token={token}
           organizationId={organizationId}
           modo="prueba"
+          puntos={
+            setup?.points
+              .filter((point) => point.active)
+              .map(({ number }) => number) ?? []
+          }
+          emisor={
+            profile
+              ? { nombre: profile.legalName, cuit: profile.cuit }
+              : undefined
+          }
           onTrial={() => setRevision((value) => value + 1)}
         />
+      )}
+      {started && step === 4 && estado?.pasos[4]?.estado === "completo" && (
+        <FacturacionLista real onResumen={() => setStarted(false)} />
       )}
       {started && step === 4 && (
         <PasoFacturacionReal
@@ -235,6 +259,7 @@ function FiscalSettingsContent({
               : undefined
           }
           disponible={setup?.production.available ?? false}
+          onActivado={() => setRevision((value) => value + 1)}
         />
       )}
       {started && (
@@ -287,9 +312,11 @@ export function PasoFacturacionReal({
   organizationId,
   bloqueo,
   disponible,
+  onActivado,
 }: {
   token: string;
   organizationId: string;
+  onActivado?: () => void;
   /** Qué falta, si todavía está bloqueado. */
   bloqueo?: string;
   /** El servidor permite la facturación real. */
@@ -315,7 +342,13 @@ export function PasoFacturacionReal({
           certificado real mientras tanto.
         </p>
       )}
-      <FiscalProductionSetup token={token} organizationId={organizationId} />
+      <FiscalProductionSetup
+        token={token}
+        organizationId={organizationId}
+        siempreAbierto
+        disponible={disponible}
+        onActivado={onActivado}
+      />
     </section>
   );
 }

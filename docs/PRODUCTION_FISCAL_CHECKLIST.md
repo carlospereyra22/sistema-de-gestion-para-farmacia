@@ -12,6 +12,19 @@ Estado: nueva emisión real NO declarada habilitada. Circuito C productivo y not
 
 Los apartados siguientes son el checklist de puesta en marcha; las tareas implementadas arriba siguen requiriendo validación operativa antes de activar.
 
+## En la pantalla (SISTEMA-98, 11/11/2026)
+
+La activación quedó como último paso del asistente de Organización → Facturación, bloqueada hasta completar los datos, la conexión, el punto de venta y una factura de prueba autorizada.
+
+- **Antes de activar**, la persona tilda tres requisitos:
+  - certificado real cargado;
+  - punto real exclusivo para este sistema y esta sucursal;
+  - datos confirmados con el contador.
+- Después confirma el punto exclusivo y un popup que dice que las facturas pasan a tener validez fiscal.
+- Si el servidor no tiene habilitada la emisión, se muestra "Lo habilita el administrador del sistema".
+
+Esto no reemplaza este checklist: el servidor sigue exigiendo los flags, el custodio y la configuración de siempre.
+
 ## Datos a confirmar con el titular
 
 - Certificado de PRODUCCIÓN y autorización del servicio WSFE para el CUIT emisor. No confundir con WSASS de homologación.

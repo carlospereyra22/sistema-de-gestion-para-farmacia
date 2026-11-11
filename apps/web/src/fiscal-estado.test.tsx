@@ -93,6 +93,8 @@ describe("entrada de Facturación (SISTEMA-95)", () => {
       <PasoFacturacionReal token="t" organizationId="o" disponible={false} />,
     );
     expect(html).toContain("Lo habilita el administrador del sistema");
-    expect(html).toContain("Preparar producción");
+    // Último paso: abierto, sin el botón de la vista vieja (SISTEMA-98).
+    expect(html).toContain("Verificar la conexión real");
+    expect(html).not.toContain("Preparar producción");
   });
 });

@@ -118,6 +118,25 @@ El estado lo calcula `lib/estado-facturacion.ts` **sólo** con `GET fiscal-setup
   - sólo se aceptan archivos PEM;
   - la contraseña del archivo vive sólo en memoria.
 
+**Punto de venta, factura de prueba, pase a real y "¡Listo!" (SISTEMA-98).**
+
+- **Punto de venta:** muestra una fila por sucursal, con su punto o "Sin asignar" y el botón **Asignar**.
+  - Al asignar, "Buscar mis puntos en ARCA" ofrece los puntos de ARCA como "0003 · Web services", sin los ya usados.
+  - Si ARCA no tiene puntos (602), se explica en simple cómo crear uno para Web services y se escribe el número, como antes.
+  - Desactivar y reactivar se hace en la misma fila, porque las asociaciones salieron de "Opciones avanzadas".
+  - Las reglas no cambian: no se reasignan puntos, la baja y la alta se auditan, y el número es único por farmacia.
+- **Factura de prueba:**
+  - **"Hacer factura de prueba de $100"** usa el punto asignado y abre un popup con el emisor, el punto y "no toca ventas, stock ni caja".
+  - Al terminar muestra un aviso emergente, el número y el código de autorización (CAE), y el botón Imprimir.
+  - Si ARCA no respondió, se usa "Consultar resultado", que no reenvía, con las reglas de `FiscalTrial`.
+- **Facturación real:** es el último paso y `FiscalProductionSetup` queda abierto.
+  - Primero se verifica la conexión real con ARCA, con errores traducidos.
+  - Después hay que tildar tres requisitos en lenguaje simple: certificado real, punto real exclusivo y datos confirmados con el contador. Además se confirma que el punto es exclusivo.
+  - Por último aparece un **popup de confirmación fuerte**.
+  - Si el servidor no lo permite (flags `FISCAL_PRODUCTION_ISSUANCE` y `FISCAL_RECOVERY_VERIFIED`, custodio, respaldo), se muestra "Lo habilita el administrador del sistema" en vez del error técnico.
+  - La activación sigue exigiendo en el servidor todo lo que exigía.
+- **"¡Listo!":** aparece al autorizarse la prueba o al activar la real. Dice qué hacer ahora (vender con Factura desde Ventas), tiene "Ir a Ventas" y explica cómo volver a revisar la configuración.
+
 El asistente reutiliza el perfil guardado y retoma según el diagnóstico del servidor. Navegar los pasos no marca requisitos cumplidos ni habilita emisión. Guardar y continuar avanza sólo después de una respuesta exitosa; un borrador incompleto sigue siendo válido como borrador y se señala en el estado.
 
 Los editores se mantienen montados al cambiar de paso para conservar los borradores. El perfil con cambios sin guardar impide avanzar a otro paso y avisa al recargar/cerrar. Cambiar de organización reinicia el estado del asistente para evitar mezclar datos. La navegación no guarda datos automáticamente: sólo los botones explícitos de guardar/asociar lo hacen.

@@ -13,6 +13,14 @@ import {
   type ResultadoDeConexion,
 } from "./lib/errores-arca";
 import { ResultadoConexionArca } from "./resultado-conexion-arca";
+import { OperationConfirmDialog } from "./operation-confirm-dialog";
+import { StatusToast } from "./status-toast";
+import { formatearPunto } from "./lib/puntos-de-venta";
+import { formatearCuit } from "./lib/cuit";
+
+/** "0001-00000003". */
+const numeroDeFactura = (trial: Pick<FiscalTrial, "point" | "number">) =>
+  `${formatearPunto(trial.point)}-${String(trial.number ?? 0).padStart(8, "0")}`;
 
 const money = (minor: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
@@ -24,6 +32,8 @@ export function FiscalTesting({
   onConnected,
   onTrial,
   modo,
+  puntos = [],
+  emisor,
 }: {
   token: string;
   organizationId: string;
@@ -35,6 +45,10 @@ export function FiscalTesting({
    * "prueba" hace la factura de prueba y muestra el historial.
    */
   modo?: "conexion" | "prueba";
+  /** Puntos de venta activos de la farmacia, para la prueba (SISTEMA-98). */
+  puntos?: number[];
+  /** Emisor para el resumen antes de enviar. */
+  emisor?: { nombre: string; cuit: string };
 }) {
   const conPrueba = modo !== "conexion";
   const [connection, setConnection] = useState<FiscalConnection>();
@@ -46,6 +60,12 @@ export function FiscalTesting({
   const [preview, setPreview] = useState<FiscalTrial>();
   /** Resultado de probar la conexión, en palabras simples (SISTEMA-97). */
   const [resultado, setResultado] = useState<ResultadoDeConexion>();
+  /** Popup de confirmación de la factura de prueba (SISTEMA-98). */
+  const [confirmando, setConfirmando] = useState(false);
+  const [aviso, setAviso] = useState("");
+  const [puntoDePrueba, setPuntoDePrueba] = useState(
+    puntos.length === 1 ? String(puntos[0]) : "",
+  );
   const pending = useRef(false);
   const requestId = useRef<string | undefined>(undefined);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -81,6 +101,25 @@ export function FiscalTesting({
       setBusy(false);
     }
   }
+  /** Envía la factura de prueba (mismo requestId si se reintenta). */
+  async function emitirPrueba(numeroDePunto: number) {
+    requestId.current ??= crypto.randomUUID();
+    const trial = await fiscalTesting<FiscalTrial>(
+      token,
+      organizationId,
+      "trials",
+      {
+        requestId: requestId.current,
+        point: numeroDePunto,
+        confirmHomologation: true,
+      },
+    );
+    setTrials((values) => [trial, ...values.filter((t) => t.id !== trial.id)]);
+    if (trial.status === "AUTHORIZED" || trial.status === "REJECTED")
+      requestId.current = undefined;
+    onTrial?.();
+    return trial;
+  }
   async function refresh() {
     setTrials(
       await fiscalTesting<FiscalTrial[]>(token, organizationId, "trials"),
@@ -103,49 +142,136 @@ export function FiscalTesting({
           ? "Comprobamos que ARCA reconozca tu certificado. No se emite nada."
           : "Una factura de $100 a consumidor final en modo prueba: no tiene validez fiscal y no toca ventas, stock ni caja."}
       </p>
-      <button
-        type="button"
-        disabled={busy}
-        className="mt-4 rounded-lg bg-teal-700 px-4 py-3 text-sm text-white disabled:opacity-50"
-        onClick={() =>
-          void run(async () => {
-            setConnection(undefined);
-            setConfirmed(false);
-            setResultado(undefined);
-            let result: FiscalConnection;
-            try {
-              result = await fiscalTesting<FiscalConnection>(
-                token,
-                organizationId,
-                "connect",
-                {},
+      {aviso && (
+        <StatusToast key={aviso} message={aviso} onClose={() => setAviso("")} />
+      )}
+      {modo === "prueba" && (
+        <div className="mt-4">
+          {puntos.length === 0 ? (
+            <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              Primero asigná un punto de venta a una sucursal (paso Punto de
+              venta).
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-3">
+              {puntos.length > 1 && (
+                <div className="min-w-48 text-sm">
+                  <p className="mb-1">Punto de venta</p>
+                  <ProductFilterSelect
+                    compact
+                    label="Punto de venta"
+                    icon={null}
+                    disabled={busy}
+                    value={puntoDePrueba}
+                    options={[
+                      { value: "", label: "Elegí un punto" },
+                      ...puntos.map((numero) => ({
+                        value: String(numero),
+                        label: formatearPunto(numero),
+                      })),
+                    ]}
+                    onChange={(value) => {
+                      setPuntoDePrueba(value);
+                      requestId.current = undefined;
+                    }}
+                  />
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={busy || unresolved || !puntoDePrueba}
+                onClick={() => setConfirmando(true)}
+                className="h-11 rounded-lg bg-teal-700 px-5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                Hacer factura de prueba de $100
+              </button>
+            </div>
+          )}
+          {confirmando && (
+            <OperationConfirmDialog
+              title="Hacer factura de prueba"
+              description={`Emisor: ${emisor?.nombre || "la farmacia"}${emisor?.cuit ? ` (CUIT ${formatearCuit(emisor.cuit)})` : ""}. Punto de venta ${formatearPunto(Number(puntoDePrueba))}. Factura C de $100 a consumidor final, en modo prueba: no tiene validez fiscal y no toca ventas, stock ni caja.`}
+              onConfirm={async () => {
+                const trial = await emitirPrueba(Number(puntoDePrueba));
+                if (trial.status === "AUTHORIZED") {
+                  setAviso(
+                    `ARCA autorizó la factura de prueba ${numeroDeFactura(trial)}.`,
+                  );
+                  setMessage("");
+                } else if (trial.status === "REJECTED")
+                  setMessage(
+                    `ARCA rechazó la factura de prueba. ${trial.detail ?? ""}`.trim(),
+                  );
+                else
+                  setMessage(
+                    "ARCA todavía no respondió. Tocá «Consultar resultado» en la factura (no se vuelve a enviar).",
+                  );
+              }}
+              onClose={() => setConfirmando(false)}
+            />
+          )}
+          {trials[0]?.status === "AUTHORIZED" && (
+            <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900">
+              <p className="font-semibold">
+                Factura de prueba {numeroDeFactura(trials[0])} autorizada
+              </p>
+              <p className="mt-1">
+                Código de autorización (CAE): {trials[0].cae ?? "—"}
+              </p>
+              <button
+                type="button"
+                onClick={() => setPreview(trials[0])}
+                className="mt-3 rounded-lg bg-teal-700 px-4 py-2 text-sm text-white"
+              >
+                Imprimir
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {modo !== "prueba" && (
+        <button
+          type="button"
+          disabled={busy}
+          className="mt-4 rounded-lg bg-teal-700 px-4 py-3 text-sm text-white disabled:opacity-50"
+          onClick={() =>
+            void run(async () => {
+              setConnection(undefined);
+              setConfirmed(false);
+              setResultado(undefined);
+              let result: FiscalConnection;
+              try {
+                result = await fiscalTesting<FiscalConnection>(
+                  token,
+                  organizationId,
+                  "connect",
+                  {},
+                );
+              } catch (cause) {
+                setResultado(traducirErrorDeArca(cause));
+                return;
+              }
+              setConnection(result);
+              setPoint(
+                result.points.length === 1
+                  ? String(result.points[0]!.number)
+                  : "",
               );
-            } catch (cause) {
-              setResultado(traducirErrorDeArca(cause));
-              return;
-            }
-            setConnection(result);
-            setPoint(
-              result.points.length === 1
-                ? String(result.points[0]!.number)
-                : "",
-            );
-            if (modo === "conexion") setResultado(CONECTADO);
-            else setMessage(result.message);
-            onConnected?.();
-          })
-        }
-      >
-        {busy
-          ? "Procesando…"
-          : modo === "prueba"
-            ? "1. Buscar mis puntos de venta en ARCA"
+              if (modo === "conexion") setResultado(CONECTADO);
+              else setMessage(result.message);
+              onConnected?.();
+            })
+          }
+        >
+          {busy
+            ? "Procesando…"
             : modo === "conexion"
               ? "Probar conexión con ARCA"
               : "1. Probar conexión con ARCA"}
-      </button>
+        </button>
+      )}
       {resultado && <ResultadoConexionArca resultado={resultado} />}
-      {conPrueba && connection && (
+      {modo !== "prueba" && conPrueba && connection && (
         <div className="mt-4 rounded-xl border bg-white p-4">
           {connection.points.length > 0 ? (
             <div className="text-sm">
