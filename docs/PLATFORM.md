@@ -142,8 +142,15 @@ Ahora:
 - **Sesión del superadmin:** la cookie no es persistente (se borra al cerrar el navegador) y la
   sesión vence a las 12 horas aunque se use, o a la hora sin uso. Para los usuarios de farmacia
   no cambia nada.
-- Si una pestaña de farmacia queda con la cookie del superadmin, se pausa (SISTEMA-92) y no
-  muestra datos de plataforma: sin el token, el panel no responde.
+- **Cookie propia (SISTEMA-100, decisión del usuario, opción A):** el superadmin guarda su
+  sesión en `gestion_plataforma`, no persistente y separada de `gestion_refresh` de la farmacia.
+  Iniciar sesión en el panel en la PC de una farmacia ya no reemplaza su sesión: conviven, y
+  las pestañas de la farmacia siguen trabajando sin pausarse. Cada pestaña renueva y cierra su
+  propia cookie (`POST /auth/refresh` y `/auth/logout` con `sesion: "plataforma"`). Al abrir una
+  pestaña se prueba primero la sesión que va con la dirección (`/plataforma`: la del panel; si
+  no, la de la farmacia) y, si no hay, la otra. Las sesiones de superadmin que hayan quedado en
+  `gestion_refresh` de antes de este cambio siguen andando hasta que se cierran; al volver a
+  entrar ya usan la cookie propia.
 
 ## Ciclo de cobro y corte
 
