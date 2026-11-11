@@ -2882,6 +2882,43 @@ export type FiscalTrial = {
   detail: string | null;
   issuer: FiscalProfile;
 };
+/**
+ * Problema con ARCA al probar la conexión (SISTEMA-97): ARCA rechazó
+ * (`ARCA_RECHAZO`) o no respondió (`ARCA_SIN_RESPUESTA`). `falla` es el código
+ * técnico de ARCA, para el detalle desplegable.
+ */
+export class ErrorDeArca extends Error {
+  constructor(
+    message: string,
+    readonly tipo: "ARCA_RECHAZO" | "ARCA_SIN_RESPUESTA",
+    readonly falla?: string,
+  ) {
+    super(message);
+    this.name = "ErrorDeArca";
+  }
+}
+
+/** Error de una respuesta fiscal, con el de ARCA si lo es. */
+async function errorFiscal(response: Response, fallback: string) {
+  const result = (await response.json().catch(() => ({}))) as {
+    message?: string | string[];
+    code?: string;
+    details?: { codigo?: unknown };
+  };
+  const mensaje = Array.isArray(result.message)
+    ? result.message.join(", ")
+    : (result.message ?? fallback);
+  if (result.code === "ARCA_RECHAZO" || result.code === "ARCA_SIN_RESPUESTA")
+    return new ErrorDeArca(
+      mensaje,
+      result.code,
+      typeof result.details?.codigo === "string"
+        ? result.details.codigo
+        : undefined,
+    );
+  return new Error(mensaje);
+}
+
 export async function fiscalTesting<T>(
   token: string,
   organizationId: string,
@@ -2897,7 +2934,7 @@ export async function fiscalTesting<T>(
     },
   );
   if (!response.ok)
-    throw await responseError(
+    throw await errorFiscal(
       response,
       "No se pudo completar la prueba con ARCA.",
     );
@@ -2974,9 +3011,9 @@ export async function checkProductionConnection(
     { method: "POST", headers: authJson(token) },
   );
   if (!response.ok)
-    throw await responseError(
+    throw await errorFiscal(
       response,
-      "No se pudo verificar producción. Revisá el certificado y la autorización WSFE.",
+      "No se pudo verificar la facturación real. Revisá el certificado y su autorización.",
     );
   return response.json();
 }

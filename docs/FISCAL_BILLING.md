@@ -91,6 +91,33 @@ El estado lo calcula `lib/estado-facturacion.ts` **sólo** con `GET fiscal-setup
 - **Guardar:** los botones son "Guardar y continuar" y "Guardar borrador", con aviso emergente al guardar. Se mantiene el aviso de datos sin guardar.
 - **Vista previa:** la vista previa del comprobante queda a la derecha en pantallas anchas y abajo en las angostas.
 
+**Conexión con ARCA y certificado (SISTEMA-97).**
+
+- **Pregunta inicial:** dos tarjetas grandes, "Es la primera vez" y "Ya tengo el certificado y la clave". La lógica de cada camino no cambia.
+- **Primera vez, en modo prueba:** es una guía numerada con casillas que la persona va tildando (`guia-certificado.tsx`). Las casillas son sólo ayuda visual: no guardan nada ni marcan la configuración. Cada punto tiene una línea sin jerga, la acción y "Ver más" con el detalle y las siglas entre paréntesis:
+  1. Descargar el pedido de certificado.
+  2. Entrar a ARCA y sumar "Certificados de prueba" (WSASS).
+  3. Subir el pedido y bajar el certificado.
+  4. Autorizar la factura electrónica (wsfe) para el CUIT de la farmacia.
+  5. Volver y subir el certificado.
+- **Facturación real:** el camino de producción conserva su guía.
+- **Probar la conexión:** "Probar conexión con ARCA" muestra el resultado traducido por `lib/errores-arca.ts`, con qué hacer y "Ver detalle técnico" con el mensaje y el código de ARCA. Los resultados posibles son:
+  - conectado;
+  - falta un certificado vigente;
+  - certificado vencido;
+  - servicio no autorizado;
+  - el CUIT no coincide;
+  - certificado no aceptado;
+  - acceso ya dado a otra instalación;
+  - sin conexión con ARCA.
+- **Corrección:** `fiscal-testing/connect` y `fiscal-production/authenticate|points` devolvían 502 cuando ARCA rechazaba o no respondía. La web lo tomaba como corte de internet: mostraba "Sin conexión" y pasaba la app al modo sin internet. Ahora responden 422 con `ARCA_RECHAZO` o `ARCA_SIN_RESPUESTA` y el código de falla de ARCA, sin el cuerpo SOAP (`arca-rechazo.ts`).
+- **Seguridad:** las garantías no cambian:
+  - la clave privada nunca vuelve al navegador;
+  - no se pide la clave fiscal;
+  - se confirma explícitamente antes de reemplazar archivos;
+  - sólo se aceptan archivos PEM;
+  - la contraseña del archivo vive sólo en memoria.
+
 El asistente reutiliza el perfil guardado y retoma según el diagnóstico del servidor. Navegar los pasos no marca requisitos cumplidos ni habilita emisión. Guardar y continuar avanza sólo después de una respuesta exitosa; un borrador incompleto sigue siendo válido como borrador y se señala en el estado.
 
 Los editores se mantienen montados al cambiar de paso para conservar los borradores. El perfil con cambios sin guardar impide avanzar a otro paso y avisa al recargar/cerrar. Cambiar de organización reinicia el estado del asistente para evitar mezclar datos. La navegación no guarda datos automáticamente: sólo los botones explícitos de guardar/asociar lo hacen.

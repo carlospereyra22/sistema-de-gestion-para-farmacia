@@ -1,3 +1,4 @@
+import { conRechazoDeArca } from "./arca-rechazo";
 import {
   Body,
   Controller,
@@ -106,7 +107,9 @@ export class FiscalProductionController {
     @Req() req: AuthenticatedRequest,
   ) {
     this.secure(req);
-    await this.connection.access(req.auth!.sub, org, "setup", "PRODUCTION");
+    await conRechazoDeArca(
+      this.connection.access(req.auth!.sub, org, "setup", "PRODUCTION"),
+    );
     return {
       environment: "PRODUCTION",
       authenticated: true,
@@ -120,14 +123,10 @@ export class FiscalProductionController {
     @Req() req: AuthenticatedRequest,
   ) {
     this.secure(req);
-    const access = await this.connection.access(
-      req.auth!.sub,
-      org,
-      "setup",
-      "PRODUCTION",
-      true,
+    const access = await conRechazoDeArca(
+      this.connection.access(req.auth!.sub, org, "setup", "PRODUCTION", true),
     );
-    const points = await this.connection.points(access);
+    const points = await conRechazoDeArca(this.connection.points(access));
     await this.prisma.fiscalCredential.updateMany({
       where: {
         organizationId: org,
