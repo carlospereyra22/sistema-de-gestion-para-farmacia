@@ -15,6 +15,7 @@ import type { AuthenticatedRequest } from "../auth/auth.types";
 import { ArcaConnectionService } from "./arca-connection.service";
 import { FiscalTrialService } from "./fiscal-trial.service";
 import { AllowWhenReadOnly } from "../platform/subscription-gate";
+import { conRechazoDeArca } from "./arca-rechazo";
 class TrialDto {
   @IsUUID() requestId!: string;
   @IsInt() @Min(1) @Max(99999) point!: number;
@@ -31,7 +32,7 @@ export class FiscalTestingController {
     @Req() req: AuthenticatedRequest,
     @Param("organizationId", ParseUUIDPipe) org: string,
   ) {
-    return this.connection.connect(req.auth!.sub, org);
+    return conRechazoDeArca(this.connection.connect(req.auth!.sub, org));
   }
   @Get("trials") @Header("Cache-Control", "no-store") history(
     @Req() req: AuthenticatedRequest,

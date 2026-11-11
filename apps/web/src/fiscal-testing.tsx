@@ -7,6 +7,12 @@ import {
 } from "./lib/api";
 import { printTicketFrame } from "./lib/browser-ticket-print";
 import { ProductFilterSelect } from "./product-filter-select";
+import {
+  CONECTADO,
+  traducirErrorDeArca,
+  type ResultadoDeConexion,
+} from "./lib/errores-arca";
+import { ResultadoConexionArca } from "./resultado-conexion-arca";
 
 const money = (minor: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
@@ -38,6 +44,8 @@ export function FiscalTesting({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<FiscalTrial>();
+  /** Resultado de probar la conexión, en palabras simples (SISTEMA-97). */
+  const [resultado, setResultado] = useState<ResultadoDeConexion>();
   const pending = useRef(false);
   const requestId = useRef<string | undefined>(undefined);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -103,19 +111,27 @@ export function FiscalTesting({
           void run(async () => {
             setConnection(undefined);
             setConfirmed(false);
-            const result = await fiscalTesting<FiscalConnection>(
-              token,
-              organizationId,
-              "connect",
-              {},
-            );
+            setResultado(undefined);
+            let result: FiscalConnection;
+            try {
+              result = await fiscalTesting<FiscalConnection>(
+                token,
+                organizationId,
+                "connect",
+                {},
+              );
+            } catch (cause) {
+              setResultado(traducirErrorDeArca(cause));
+              return;
+            }
             setConnection(result);
             setPoint(
               result.points.length === 1
                 ? String(result.points[0]!.number)
                 : "",
             );
-            setMessage(result.message);
+            if (modo === "conexion") setResultado(CONECTADO);
+            else setMessage(result.message);
             onConnected?.();
           })
         }
@@ -128,6 +144,7 @@ export function FiscalTesting({
               ? "Probar conexión con ARCA"
               : "1. Probar conexión con ARCA"}
       </button>
+      {resultado && <ResultadoConexionArca resultado={resultado} />}
       {conPrueba && connection && (
         <div className="mt-4 rounded-xl border bg-white p-4">
           {connection.points.length > 0 ? (

@@ -7,6 +7,7 @@ import {
 } from "./lib/api";
 import { readFiscalFile } from "./lib/fiscal-file";
 import { avisoCuit, digitosCuit, formatearCuit } from "./lib/cuit";
+import { ENLACE_ARCA, EnlaceExterno, GuiaPrimeraVez } from "./guia-certificado";
 
 const control =
   "mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm";
@@ -95,6 +96,193 @@ export function FiscalCertificateSetup({
   }
   const allowed = status && status.storage !== "UNAVAILABLE";
   const needKey = mode === "existing" || !status?.hasRequest;
+  // Partes que se usan en la guía de primera vez y en el camino de siempre.
+  const campoTitular = (
+    <>
+      <label className="mt-4 block max-w-md text-sm">
+        {environment === "PRODUCTION"
+          ? "CUIT del titular del certificado de producción"
+          : "CUIT de quien entra a ARCA con su clave fiscal"}
+        <input
+          disabled={busy}
+          value={formatearCuit(holderCuit)}
+          onChange={(event) => setHolderCuit(digitosCuit(event.target.value))}
+          inputMode="numeric"
+          maxLength={13}
+          placeholder="20-12345678-9"
+          className={control}
+        />
+        {avisoCuit(holderCuit) && (
+          <span className="mt-1 block text-xs text-amber-700">
+            {avisoCuit(holderCuit)}
+          </span>
+        )}
+      </label>
+      <p className="mt-1 text-xs leading-5 text-slate-500">
+        Puede ser el tuyo o el de la farmacia (
+        {formatearCuit(status?.representedCuit ?? "") ||
+          "completalo en Datos de la farmacia"}
+        ). Si es otro, en ARCA lo autorizás a facturar por la farmacia.
+      </p>
+    </>
+  );
+  const casillaReemplazo = (
+    <>
+      {(status?.version ?? 0) > 0 && (
+        <label className="mt-4 flex items-start gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            disabled={busy}
+            checked={replace}
+            onChange={(event) => setReplace(event.target.checked)}
+          />
+          Confirmo reemplazar los archivos anteriores si genero una nueva
+          solicitud o cargo otro par. Esto no revoca certificados en ARCA.
+        </label>
+      )}
+    </>
+  );
+  const botonPedido = (
+    <button
+      type="button"
+      disabled={!allowed || busy || holderCuit.length !== 11}
+      onClick={() =>
+        void perform(async () => {
+          const next = await fiscalCredentials(
+            token,
+            organizationId,
+            "request",
+            {
+              holderCuit,
+              expectedVersion: status?.version ?? 0,
+              replace,
+            },
+            environment,
+          );
+          setStatus(next);
+          setReplace(false);
+          await download();
+          setMessage("Pedido descargado. Seguí con el paso siguiente en ARCA.");
+        })
+      }
+      className="mt-3 rounded-lg bg-teal-700 px-4 py-2.5 text-sm text-white disabled:opacity-50"
+    >
+      {busy
+        ? "Procesando…"
+        : status?.hasRequest && !replace
+          ? "Descargar mi solicitud"
+          : "Preparar y descargar solicitud"}
+    </button>
+  );
+  const formularioCarga = (
+    <form
+      className="mt-5 rounded-lg border p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void perform(async () => {
+          if (!window.isSecureContext)
+            throw new Error(
+              "Para cargar archivos necesitás HTTPS o la app local en localhost.",
+            );
+          const certificateText = await readFiscalFile(
+            certificate,
+            "certificate",
+          );
+          const privateKey = needKey
+            ? await readFiscalFile(key, "privateKey")
+            : undefined;
+          const next = await fiscalCredentials(
+            token,
+            organizationId,
+            "certificate",
+            {
+              holderCuit,
+              expectedVersion: status?.version ?? 0,
+              replace,
+              certificate: certificateText,
+              ...(privateKey
+                ? { privateKey, passphrase: passphrase || undefined }
+                : {}),
+            },
+            environment,
+          );
+          setStatus(next);
+          setCertificate(undefined);
+          setKey(undefined);
+          setReplace(false);
+          if (certInput.current) certInput.current.value = "";
+          if (keyInput.current) keyInput.current.value = "";
+          setMessage(
+            "Certificado guardado. Ahora tocá «Probar conexión con ARCA».",
+          );
+        });
+      }}
+    >
+      <h4 className="text-sm font-semibold">
+        {mode === "new"
+          ? "Subí el certificado que te dio ARCA"
+          : "Cargá tus archivos del mismo trámite"}
+      </h4>
+      <label className="mt-3 block text-sm">
+        Certificado (.crt, .cer o .pem en formato PEM)
+        <input
+          ref={certInput}
+          type="file"
+          accept=".crt,.cer,.pem"
+          required
+          disabled={!allowed || busy}
+          onChange={(event) => setCertificate(event.target.files?.[0])}
+          className={control}
+        />
+      </label>
+      {needKey ? (
+        <>
+          <label className="mt-3 block text-sm">
+            Clave privada (.key o .pem)
+            <input
+              ref={keyInput}
+              type="file"
+              accept=".key,.pem"
+              required
+              disabled={!allowed || busy}
+              onChange={(event) => setKey(event.target.files?.[0])}
+              className={control}
+            />
+          </label>
+          <label className="mt-3 block text-sm">
+            Contraseña del archivo, sólo si tiene una
+            <input
+              type="password"
+              autoComplete="off"
+              value={passphrase}
+              disabled={busy}
+              onChange={(event) => setPassphrase(event.target.value)}
+              className={control}
+            />
+          </label>
+          <p className="mt-1 text-xs text-slate-500">
+            No es tu clave fiscal. No se guarda esta contraseña.
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 text-xs text-slate-500">
+          Ya tenemos protegida la clave de la solicitud. No hace falta cargarla
+          otra vez.
+        </p>
+      )}
+      <p className="mt-3 text-xs text-slate-500">
+        No se aceptan fotos, PDF ni PFX. Los archivos se comprueban antes de
+        reemplazar lo guardado.
+      </p>
+      <button
+        disabled={!allowed || busy || holderCuit.length !== 11}
+        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm text-white disabled:opacity-50"
+      >
+        <Upload size={16} />
+        Validar y guardar archivos
+      </button>
+    </form>
+  );
   return (
     <section className="mt-5 rounded-xl border border-teal-200 bg-white p-5">
       <h3 className="flex items-center gap-2 font-semibold">
@@ -169,10 +357,18 @@ export function FiscalCertificateSetup({
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {(
               [
-                ["new", "No tengo certificado"],
-                ["existing", "Ya tengo certificado y clave"],
+                [
+                  "new",
+                  "Es la primera vez",
+                  "No tengo certificado: te guiamos para pedirlo en ARCA.",
+                ],
+                [
+                  "existing",
+                  "Ya tengo el certificado y la clave",
+                  "Subí los dos archivos y probá la conexión.",
+                ],
               ] as const
-            ).map(([value, label]) => (
+            ).map(([value, label, detalle]) => (
               <button
                 type="button"
                 key={value}
@@ -183,228 +379,167 @@ export function FiscalCertificateSetup({
                   setPassphrase("");
                   setReplace(false);
                 }}
-                className={`rounded-xl border p-4 text-left text-sm ${mode === value ? "border-teal-600 bg-teal-50 text-teal-900" : "border-slate-200"}`}
+                className={`rounded-xl border-2 p-5 text-left ${mode === value ? "border-teal-600 bg-teal-50 text-teal-900" : "border-slate-200 hover:border-teal-300"}`}
               >
-                {label}
+                <span className="block font-semibold">{label}</span>
+                <span className="mt-1 block text-sm text-slate-600">
+                  {detalle}
+                </span>
               </button>
             ))}
           </div>
-          <label className="mt-4 block max-w-md text-sm">
-            {environment === "PRODUCTION"
-              ? "CUIT del titular del certificado de producción"
-              : "CUIT de la persona que ingresa a WSASS"}
-            <input
-              disabled={busy}
-              value={formatearCuit(holderCuit)}
-              onChange={(event) =>
-                setHolderCuit(digitosCuit(event.target.value))
-              }
-              inputMode="numeric"
-              maxLength={13}
-              placeholder="20-12345678-9"
-              className={control}
+          {mode === "new" && environment === "HOMOLOGATION" ? (
+            <GuiaPrimeraVez
+              pasos={[
+                {
+                  titulo: "Descargá el pedido de certificado",
+                  resumen:
+                    "Es un archivo que le dice a ARCA quién va a facturar. No contiene tu clave ni ningún secreto.",
+                  accion: (
+                    <>
+                      {campoTitular}
+                      {casillaReemplazo}
+                      {botonPedido}
+                    </>
+                  ),
+                  verMas: (
+                    <p>
+                      El pedido (CSR) sale de una clave del sistema que se
+                      genera y queda protegida en el servidor: nunca vuelve al
+                      navegador. Usa la razón social guardada en Datos de la
+                      farmacia.
+                    </p>
+                  ),
+                },
+                {
+                  titulo:
+                    "Entrá a ARCA con tu clave fiscal y sumá «Certificados de prueba»",
+                  resumen:
+                    "Se hace una sola vez por persona. Tu clave fiscal se usa sólo en la web de ARCA.",
+                  accion: (
+                    <EnlaceExterno href={ENLACE_ARCA}>
+                      Entrar a ARCA
+                    </EnlaceExterno>
+                  ),
+                  verMas: (
+                    <p>
+                      En ARCA: Administrador de Relaciones de Clave Fiscal →
+                      Adherir servicio → ARCA → Servicios interactivos → «WSASS
+                      - Autogestión Certificados Homologación». Confirmá, salí y
+                      volvé a entrar para que aparezca.
+                    </p>
+                  ),
+                },
+                {
+                  titulo: "Subí el pedido y bajá el certificado",
+                  resumen:
+                    "En «Certificados de prueba» creás el certificado con el pedido del paso 1.",
+                  accion: csr ? (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-teal-800">
+                        Ver el pedido para copiar en ARCA
+                      </summary>
+                      <textarea
+                        readOnly
+                        aria-label="Solicitud pública de certificado"
+                        value={csr}
+                        className="mt-2 h-40 w-full rounded-lg border p-3 font-mono text-xs"
+                      />
+                      <p className="text-xs text-slate-500">
+                        Copiá todo, incluidas las líneas BEGIN y END. Esto no es
+                        la clave privada.
+                      </p>
+                    </details>
+                  ) : undefined,
+                  verMas: (
+                    <p>
+                      En WSASS elegí «Nuevo Certificado», poné un nombre que no
+                      hayas usado (por ejemplo <strong>gestion-pruebas</strong>)
+                      y pegá el contenido del pedido. Guardá el texto que
+                      devuelve ARCA como <strong>certificado.pem</strong>.{" "}
+                      <EnlaceExterno href="https://www.arca.gob.ar/ws/WSASS/html/crearcertificado.html">
+                        Guía oficial
+                      </EnlaceExterno>
+                    </p>
+                  ),
+                },
+                {
+                  titulo:
+                    "Autorizá la factura electrónica para ese certificado",
+                  resumen:
+                    "Sin este paso ARCA reconoce el certificado pero no lo deja facturar.",
+                  verMas: (
+                    <p>
+                      En WSASS entrá a «Crear autorización a servicio», elegí el
+                      nombre del certificado, el CUIT de la farmacia (
+                      <strong>
+                        {formatearCuit(status.representedCuit) ||
+                          "completalo en Datos de la farmacia"}
+                      </strong>
+                      ) y el servicio de factura electrónica (
+                      <strong>wsfe</strong>).
+                    </p>
+                  ),
+                },
+                {
+                  titulo: "Volvé acá y subí el certificado",
+                  resumen:
+                    "Después tocá «Probar conexión con ARCA» para comprobar que quedó todo bien.",
+                  accion: status.hasRequest ? (
+                    formularioCarga
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      Primero descargá el pedido (paso 1).
+                    </p>
+                  ),
+                },
+              ]}
             />
-            {avisoCuit(holderCuit) && (
-              <span className="mt-1 block text-xs text-amber-700">
-                {avisoCuit(holderCuit)}
-              </span>
-            )}
-          </label>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Es el titular del certificado. Puede ser distinto del CUIT de la
-            farmacia ({status.representedCuit || "completalo en Tus datos"});
-            luego debe autorizarse la representación en ARCA.
-          </p>
-          {status.version > 0 && (
-            <label className="mt-4 flex items-start gap-2 text-xs text-slate-600">
-              <input
-                type="checkbox"
-                disabled={busy}
-                checked={replace}
-                onChange={(event) => setReplace(event.target.checked)}
-              />
-              Confirmo reemplazar los archivos anteriores si genero una nueva
-              solicitud o cargo otro par. Esto no revoca certificados en ARCA.
-            </label>
-          )}
-          {mode === "new" && (
-            <div className="mt-4 space-y-4">
-              <div className="rounded-lg bg-slate-50 p-4">
-                <h4 className="text-sm font-semibold">
-                  1. Prepará la solicitud acá
-                </h4>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Usamos la razón social guardada y el CUIT del titular. Se
-                  genera la clave técnica y se protege en el servidor; no tenés
-                  que escribir comandos.
-                </p>
-                <button
-                  type="button"
-                  disabled={!allowed || busy || holderCuit.length !== 11}
-                  onClick={() =>
-                    void perform(async () => {
-                      const next = await fiscalCredentials(
-                        token,
-                        organizationId,
-                        "request",
-                        {
-                          holderCuit,
-                          expectedVersion: status.version,
-                          replace,
-                        },
-                        environment,
-                      );
-                      setStatus(next);
-                      setReplace(false);
-                      await download();
-                      setMessage(
-                        "Solicitud preparada. Seguí el paso 2 para obtener el certificado de ARCA.",
-                      );
-                    })
-                  }
-                  className="mt-3 rounded-lg bg-teal-700 px-4 py-2.5 text-sm text-white disabled:opacity-50"
-                >
-                  {busy
-                    ? "Procesando…"
-                    : status.hasRequest && !replace
-                      ? "Descargar mi solicitud"
-                      : "Preparar y descargar solicitud"}
-                </button>
-              </div>
-              {status.hasRequest && (
-                <CertificateInstructions
-                  holderCuit={status.holderCuit}
-                  representedCuit={status.representedCuit}
-                  environment={environment}
-                />
-              )}
-              {csr && (
-                <details className="text-sm">
-                  <summary className="cursor-pointer text-teal-800">
-                    Ver solicitud para copiar en ARCA
-                  </summary>
-                  <textarea
-                    readOnly
-                    aria-label="Solicitud pública de certificado"
-                    value={csr}
-                    className="mt-2 h-40 w-full rounded-lg border p-3 font-mono text-xs"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Copiá todo, incluidas las líneas BEGIN y END. Esto no es la
-                    clave privada.
-                  </p>
-                </details>
-              )}
-            </div>
-          )}
-          {(mode === "existing" || status.hasRequest) && (
-            <form
-              className="mt-5 rounded-lg border p-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void perform(async () => {
-                  if (!window.isSecureContext)
-                    throw new Error(
-                      "Para cargar archivos necesitás HTTPS o la app local en localhost.",
-                    );
-                  const certificateText = await readFiscalFile(
-                    certificate,
-                    "certificate",
-                  );
-                  const privateKey = needKey
-                    ? await readFiscalFile(key, "privateKey")
-                    : undefined;
-                  const next = await fiscalCredentials(
-                    token,
-                    organizationId,
-                    "certificate",
-                    {
-                      holderCuit,
-                      expectedVersion: status.version,
-                      replace,
-                      certificate: certificateText,
-                      ...(privateKey
-                        ? { privateKey, passphrase: passphrase || undefined }
-                        : {}),
-                    },
-                    environment,
-                  );
-                  setStatus(next);
-                  setCertificate(undefined);
-                  setKey(undefined);
-                  setReplace(false);
-                  if (certInput.current) certInput.current.value = "";
-                  if (keyInput.current) keyInput.current.value = "";
-                  setMessage(
-                    "Archivos guardados y comprobados localmente. Todavía falta verificar autorización con ARCA; esto no habilita facturas.",
-                  );
-                });
-              }}
-            >
-              <h4 className="text-sm font-semibold">
-                {mode === "new"
-                  ? "3. Cargá el certificado que te dio ARCA"
-                  : "Cargá tus archivos del mismo trámite"}
-              </h4>
-              <label className="mt-3 block text-sm">
-                Certificado (.crt, .cer o .pem en formato PEM)
-                <input
-                  ref={certInput}
-                  type="file"
-                  accept=".crt,.cer,.pem"
-                  required
-                  disabled={!allowed || busy}
-                  onChange={(event) => setCertificate(event.target.files?.[0])}
-                  className={control}
-                />
-              </label>
-              {needKey ? (
-                <>
-                  <label className="mt-3 block text-sm">
-                    Clave privada (.key o .pem)
-                    <input
-                      ref={keyInput}
-                      type="file"
-                      accept=".key,.pem"
-                      required
-                      disabled={!allowed || busy}
-                      onChange={(event) => setKey(event.target.files?.[0])}
-                      className={control}
+          ) : (
+            <>
+              {campoTitular}
+              {casillaReemplazo}
+              {mode === "new" && (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <h4 className="text-sm font-semibold">
+                      1. Prepará la solicitud acá
+                    </h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      Usamos la razón social guardada y el CUIT del titular. Se
+                      genera la clave técnica y se protege en el servidor; no
+                      tenés que escribir comandos.
+                    </p>
+                    {botonPedido}
+                  </div>
+                  {status.hasRequest && (
+                    <CertificateInstructions
+                      holderCuit={status.holderCuit}
+                      representedCuit={status.representedCuit}
+                      environment={environment}
                     />
-                  </label>
-                  <label className="mt-3 block text-sm">
-                    Contraseña del archivo, sólo si tiene una
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      value={passphrase}
-                      disabled={busy}
-                      onChange={(event) => setPassphrase(event.target.value)}
-                      className={control}
-                    />
-                  </label>
-                  <p className="mt-1 text-xs text-slate-500">
-                    No es tu clave fiscal. No se guarda esta contraseña.
-                  </p>
-                </>
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">
-                  Ya tenemos protegida la clave de la solicitud. No hace falta
-                  cargarla otra vez.
-                </p>
+                  )}
+                  {csr && (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-teal-800">
+                        Ver solicitud para copiar en ARCA
+                      </summary>
+                      <textarea
+                        readOnly
+                        aria-label="Solicitud pública de certificado"
+                        value={csr}
+                        className="mt-2 h-40 w-full rounded-lg border p-3 font-mono text-xs"
+                      />
+                      <p className="text-xs text-slate-500">
+                        Copiá todo, incluidas las líneas BEGIN y END. Esto no es
+                        la clave privada.
+                      </p>
+                    </details>
+                  )}
+                </div>
               )}
-              <p className="mt-3 text-xs text-slate-500">
-                No se aceptan fotos, PDF ni PFX. Los archivos se comprueban
-                antes de reemplazar lo guardado.
-              </p>
-              <button
-                disabled={!allowed || busy || holderCuit.length !== 11}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm text-white disabled:opacity-50"
-              >
-                <Upload size={16} />
-                Validar y guardar archivos
-              </button>
-            </form>
+              {(mode === "existing" || status.hasRequest) && formularioCarga}
+            </>
           )}
           {status.hasCertificate && (
             <div className="mt-4 rounded-lg bg-teal-50 p-4">
