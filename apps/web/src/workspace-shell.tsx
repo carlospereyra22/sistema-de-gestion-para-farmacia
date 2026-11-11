@@ -69,6 +69,7 @@ import { canDismissProductBackdrop } from "./lib/product-backdrop";
 import { SaleQuantityInput } from "./sale-quantity-input";
 import { SaleCatalogTable } from "./sale-catalog-table";
 import { SaleProductDetail } from "./sale-product-detail";
+import { SaleStockSwitch } from "./sale-stock-switch";
 import {
   filterSaleCatalog,
   nextSaleCatalogSelection,
@@ -6687,19 +6688,14 @@ function Sales({
                 }}
               />
             </div>
-            <button
-              type="button"
-              aria-pressed={catalogInStockOnly}
-              onClick={() => {
-                setCatalogInStockOnly((current) => !current);
+            <SaleStockSwitch
+              checked={catalogInStockOnly}
+              onChange={(checked) => {
+                setCatalogInStockOnly(checked);
                 setProductId("");
                 focusProductSearch();
               }}
-              className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-sm font-medium ${catalogInStockOnly ? "border-teal-300 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-            >
-              {catalogInStockOnly && <Check size={15} />}
-              Con stock
-            </button>
+            />
           </div>
           <SaleCatalogTable
             token={token}
@@ -6740,11 +6736,6 @@ function Sales({
             onFinished={focusProductSearch}
             onInvalid={error}
           />
-          <p className="sale-shortcuts text-xs text-slate-500">
-            Doble clic o Enter agrega · <strong>F2</strong> buscar ·{" "}
-            <strong>+ / −</strong> última línea · <strong>Ctrl + Enter</strong>{" "}
-            cobrar
-          </p>
         </form>
       </section>
 
@@ -7216,6 +7207,8 @@ function Sales({
           totalMinor={Number(receipt.sale.totalMinor)}
           customerName={receipt.customerName}
           payments={receipt.payments}
+          storeName={storeName}
+          documentType={receipt.sale.documentType}
           aviso={
             receipt.ticketLocal && receipt.sale.documentType === "INVOICE"
               ? "Sin conexión: la factura C se emite sola en ARCA cuando vuelva internet. Ahora se imprime el comprobante provisorio."

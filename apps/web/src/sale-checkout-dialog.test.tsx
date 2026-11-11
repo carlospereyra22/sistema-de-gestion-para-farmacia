@@ -51,7 +51,8 @@ it("shows quick cash amounts and the change to deliver", () => {
   expect(html).toContain("Exacto");
   expect(html).toContain('placeholder="0,00"');
   expect(html).toContain(",00</span>");
-  expect(html).toContain("Vuelto a entregar");
+  expect(html).toContain("Vuelto");
+  expect(html).toContain("Vuelto</p>");
   expect(html).toContain('aria-live="polite"');
   expect(html).toMatch(/2\.930,00/);
 });
@@ -75,16 +76,59 @@ it("shows partial payments, the remaining balance and the split link", () => {
   expect(html).toContain("Pagado");
   expect(html).toContain("Resta");
   expect(html).toContain('aria-label="Quitar pago en Tarjeta"');
-  expect(html).toContain("¿Con qué medio se completa?");
+  expect(html).toMatch(/Completar.*\$\s2\.070,00/);
   // Ofrece los otros medios, sin el actual ni cuenta corriente deshabilitada.
-  const choices = html.slice(html.indexOf("¿Con qué medio"));
+  const choices = html.slice(html.indexOf("Completar"));
   expect(choices).toContain("Tarjeta");
   expect(choices).toContain("Transferencia");
-  expect(choices).not.toContain(">Cuenta corriente<");
+  expect(choices).not.toContain("Cuenta corriente");
+  // El atajo de Enter va junto a la etiqueta del importe, antes del campo.
+  const amountLabel = html.slice(
+    html.indexOf("Efectivo recibido"),
+    html.indexOf('placeholder="0,00"'),
+  );
+  expect(amountLabel).toMatch(
+    /Enter<\/kbd><span[^>]*><strong[^>]*>Registrar \$\s5\.000,00<\/strong> y seguir/,
+  );
+  expect(render()).not.toContain("y seguir");
 });
 
 it("keeps errors inside the window and offers a retry", () => {
   const html = render({ errorMessage: "No se pudo completar la venta." });
   expect(html).toContain('role="alert"');
   expect(html).toContain("Reintentar");
+});
+
+it("marca el monto sugerido elegido y muestra el vuelto en cero sin efectivo extra", () => {
+  const html = render({ amount: "17.070", receivedMinor: 1_707_000 });
+  expect(html).toMatch(/bg-teal-50 text-teal-800"[^>]*>\$\s17\.070,00/);
+  expect(html).toMatch(/Vuelto<\/p><p[^>]*>\$\s0,00/);
+});
+
+it("con el cobro cubierto no pide importe y avisa que está completo", () => {
+  const html = render({
+    method: "CARD",
+    paidMinor: 1_707_000,
+    payments: [{ method: "CARD", amountMinor: 1_707_000 }],
+  });
+  expect(html).toContain("Cobro completo");
+  expect(html).not.toContain('placeholder="0,00"');
+  expect(html).toContain("Pagos registrados");
+});
+
+it("muestra el aviso de caja en el pie con su ícono", () => {
+  const html = render({
+    sessionNotice: "El cobro quedará pendiente de asignación a una caja.",
+  });
+  expect(html).toContain(
+    "El cobro quedará pendiente de asignación a una caja.",
+  );
+  expect(html).toContain('aria-label="Volver"');
+});
+
+it("muestra lo que falta en el mismo panel del vuelto, con lo recibido", () => {
+  const html = render({ amount: "5.000", receivedMinor: 500_000 });
+  expect(html).toMatch(/Faltan<\/p><p[^>]*text-amber-700[^>]*>\$\s12\.070,00/);
+  expect(html).toMatch(/Recibido \$\s5\.000,00 de \$\s17\.070,00/);
+  expect(html).not.toContain("Vuelto</p>");
 });

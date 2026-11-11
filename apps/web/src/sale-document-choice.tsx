@@ -1,4 +1,4 @@
-import { FileCheck2, ReceiptText, Ellipsis } from "lucide-react";
+import { FileCheck2, ReceiptText, SlidersHorizontal } from "lucide-react";
 
 export function SaleDocumentChoice({
   value,
@@ -23,9 +23,9 @@ export function SaleDocumentChoice({
   sinCaja?: boolean;
 }) {
   return (
-    <fieldset className="mt-3">
+    <fieldset>
       <legend className="sr-only">Tipo de comprobante</legend>
-      <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+      <div className="flex flex-wrap gap-2">
         {(
           [
             ["INTERNAL", "Comprobante interno", ReceiptText],
@@ -48,9 +48,9 @@ export function SaleDocumentChoice({
                 : "No va a ARCA. Se puede enviar después desde el historial."
             }
             onClick={() => onChange(id)}
-            className={`flex min-h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 ${id === "INVOICE" && invoiceDisabled ? "text-slate-400" : value === id ? "bg-white font-semibold text-teal-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+            className={`flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 ${id === "INVOICE" && invoiceDisabled ? "border-slate-200 text-slate-400" : value === id ? "border-teal-500 bg-teal-50 text-teal-900 ring-1 ring-teal-500" : "border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/40"}`}
           >
-            <Icon size={14} aria-hidden="true" />
+            <Icon size={16} aria-hidden="true" />
             {label}
           </button>
         ))}
@@ -62,31 +62,32 @@ export function SaleDocumentChoice({
             aria-label="Configuración de facturación"
             aria-haspopup="dialog"
             title="Configurar receptor y tipo de factura"
-            className="flex min-h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-50"
+            // A la derecha y con nombre: abre receptor y tipo de factura.
+            className="ml-auto flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-medium text-teal-800 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-50"
           >
-            <Ellipsis size={18} />
+            <SlidersHorizontal size={16} aria-hidden="true" />
+            Datos de facturación
           </button>
         )}
       </div>
-      {/* Lugar fijo para los avisos: cambiar de comprobante no mueve la
-          ventana de cobro. */}
-      <div className="min-h-[52px]">
+      {/* Avisos de la factura elegida. */}
+      <div>
         {value === "INVOICE" &&
           !invoiceDisabled &&
           environment === "HOMOLOGATION" && (
-            <p className="mt-1 text-right text-[11px] text-amber-700">
+            <p className="mt-1.5 text-[11px] text-amber-700">
               Homologación · Sin validez fiscal
             </p>
           )}
         {value === "INVOICE" && !invoiceDisabled && sinCaja && (
-          <p className="mt-1 text-right text-[11px] text-amber-700">
+          <p className="mt-1.5 text-[11px] text-amber-700">
             Sin caja abierta: la factura se emite al incorporar el cobro a una
             caja.
           </p>
         )}
         {value === "INVOICE" && !invoiceDisabled && summary && (
           <p
-            className="mt-1 truncate text-right text-[11px] text-slate-500"
+            className="mt-1.5 truncate text-[11px] text-slate-500"
             title={summary}
           >
             {summary}

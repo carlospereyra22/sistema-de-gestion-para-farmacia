@@ -28,11 +28,13 @@ it("confirms the sale with close, actions and a preview on demand", () => {
   expect(html).toContain("Venta confirmada");
   expect(html).toContain("Tarjeta");
   expect(html).toContain("Público general");
-  expect(html).toContain("Código interno");
-  expect(html).toContain("F1C2A6DD");
+  expect(html).toContain("Comprobante");
+  expect(html).toMatch(/Interno N°.*F1C2A6DD/);
+  expect(html).toContain("La venta se registró correctamente.");
   // Imprimir es la acción principal (Enter); Nueva venta queda en Esc.
   expect(html).toMatch(/bg-teal-700[^"]*"[^>]*>.*Imprimir ticket.*Enter/);
   expect(html).toMatch(/Nueva venta<kbd[^>]*>Esc</);
+  expect(html).not.toContain("Farmacia Juncos");
   expect(html).toContain("Ver ventas");
   // La vista previa no se muestra ni se carga hasta pedirla.
   expect(html).toContain('aria-pressed="false"');
@@ -62,4 +64,24 @@ it("avisa que la factura sale al volver internet en una venta sin conexión", ()
   expect(render([{ method: "CASH", amountMinor: 1 }])).not.toContain(
     'role="status"',
   );
+});
+
+it("muestra la farmacia en el encabezado y distingue la factura", () => {
+  const html = renderToStaticMarkup(
+    <SaleConfirmedDialog
+      saleId="f1c2a6dd-0000-4000-8000-000000000000"
+      totalMinor={279_200}
+      customerName="Público general"
+      payments={[{ method: "CASH", amountMinor: 279_200 }]}
+      storeName="Farmacia Juncos"
+      documentType="INVOICE"
+      loadTicket={() => new Promise<ThermalTicket>(() => {})}
+      onPrint={() => {}}
+      onViewSale={() => {}}
+      onNewSale={() => {}}
+    />,
+  );
+  expect(html).toContain("Farmacia Juncos");
+  expect(html).toMatch(/Factura · Cód\..*F1C2A6DD/);
+  expect(html).not.toContain("Interno N°");
 });
