@@ -158,12 +158,16 @@ export async function login(
   email: string,
   password: string,
 ): Promise<{ accessToken: string }> {
-  const response = await fetch(`${apiBaseUrl}/auth/login`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+  const response = await fetch(
+    `${apiBaseUrl}/auth/login`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    },
+    { probarRed: true },
+  );
   if (!response.ok) throw new Error("No se pudo iniciar sesion.");
   return (await response.json()) as { accessToken: string };
 }
@@ -3055,11 +3059,10 @@ export async function sendOfflineSale(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la venta sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return response.json();
 }
@@ -3084,11 +3087,10 @@ export async function sendSignedOfflineSale(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la venta sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return response.json();
 }
@@ -3105,11 +3107,10 @@ export async function sendOfflineCash(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la operación de caja sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return response.json();
 }
@@ -3131,11 +3132,10 @@ export async function sendSignedOfflineCash(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la operación de caja sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return response.json();
 }
@@ -3152,11 +3152,10 @@ export async function sendOfflinePurchase(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la operación de compras sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return (await response.json()) as { offlineIssues?: unknown[] };
 }
@@ -3178,11 +3177,10 @@ export async function sendSignedOfflinePurchase(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la operación de compras sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return (await response.json()) as { offlineIssues?: unknown[] };
 }
@@ -3412,6 +3410,24 @@ function authJson(token: string): HeadersInit {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
+}
+
+/**
+ * Rechazo del servidor a una operación hecha sin conexión, con el código del
+ * error (`PARA_SU_DUENO` cuando la tiene que mandar quien la hizo).
+ */
+async function envioRechazado(
+  response: Response,
+  fallback: string,
+): Promise<EnvioRechazado> {
+  const result = (await response.json().catch(() => ({}))) as {
+    message?: string | string[];
+    code?: string;
+  };
+  const mensaje = Array.isArray(result.message)
+    ? result.message.join(", ")
+    : (result.message ?? fallback);
+  return new EnvioRechazado(mensaje, response.status, result.code);
 }
 
 async function responseError(
@@ -3845,11 +3861,10 @@ export async function sendOfflineTransfer(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la transferencia sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return (await response.json()) as { offlineIssues?: unknown[] };
 }
@@ -3871,11 +3886,10 @@ export async function sendSignedOfflineTransfer(
     { method: "POST", headers: authJson(token), body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    const error = await responseError(
+    throw await envioRechazado(
       response,
       "El servidor no aceptó la transferencia sin conexión.",
     );
-    throw new EnvioRechazado(error.message, response.status);
   }
   return (await response.json()) as { offlineIssues?: unknown[] };
 }
@@ -4619,8 +4633,7 @@ async function enviarSinConexion(
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const error = await responseError(response, mensaje);
-    throw new EnvioRechazado(error.message, response.status);
+    throw await envioRechazado(response, mensaje);
   }
   return (await response.json()) as { offlineIssues?: unknown[] };
 }

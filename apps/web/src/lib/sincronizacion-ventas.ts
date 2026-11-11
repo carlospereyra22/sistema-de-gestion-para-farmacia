@@ -13,6 +13,8 @@ export class EnvioRechazado extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Código del error de la API (`code`), si lo trae. */
+    readonly codigo?: string,
   ) {
     super(message);
     this.name = "EnvioRechazado";
@@ -31,13 +33,28 @@ export function rechazoDefinitivo(status: number) {
   return status >= 400 && status < 500 && ![401, 408, 429].includes(status);
 }
 
+/** Código con el que la API marca lo que tiene que mandar quien lo hizo. */
+export const PARA_SU_DUENO = "PARA_SU_DUENO";
+
 /**
- * Venta de otro usuario de la PC que esta sesión no puede mandar: no tiene
- * acceso a esa sucursal (403/404) o la PC todavía no registró la clave de su
- * dueño (409). Queda pendiente para otro; no es un rechazo.
+ * Operación de otro usuario de la PC que esta sesión no puede mandar: quien
+ * manda no tiene acceso a la sucursal o a la farmacia (403), o la PC todavía no
+ * registró la clave de su dueño (código `PARA_SU_DUENO`). Queda pendiente para
+ * otro; no es un rechazo. Cualquier otro 404/409 es un conflicto de la
+ * operación (por ejemplo, un pedido que otra PC ya recibió): rechazo
+ * definitivo, para que no frene al resto de la sucursal (prueba de corte del
+ * 10/11/2026).
  */
-export function quedaParaSuDueno(status: number) {
-  return [403, 404, 409].includes(status);
+export function quedaParaSuDueno(
+  status: number,
+  codigo?: string,
+  mensaje = "",
+) {
+  if (status === 403 || codigo === PARA_SU_DUENO) return true;
+  // API anterior a SISTEMA-87: el 409 de la clave venía sin código.
+  return status === 409 && !codigo?.length
+    ? /registró la clave/i.test(mensaje)
+    : false;
 }
 
 /** ¿Esta sesión puede mandar la venta? Las de otros, sólo firmadas. */
@@ -108,7 +125,7 @@ export async function sincronizarVentas(opciones: {
       if (
         !propia &&
         cause instanceof EnvioRechazado &&
-        quedaParaSuDueno(cause.status)
+        quedaParaSuDueno(cause.status, cause.codigo, cause.message)
       ) {
         frenadas.add(sucursal);
         continue;

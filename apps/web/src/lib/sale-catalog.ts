@@ -19,7 +19,15 @@ type SaleCatalogProduct = Pick<
   | "presentation"
   | "barcodes"
   | "category"
->;
+> &
+  Partial<Pick<CatalogProduct, "laboratory">>;
+
+/** Minúsculas y sin tildes: "Losartán" se encuentra escribiendo "losartan". */
+export const textoBuscable = (texto: string) =>
+  texto
+    .toLocaleLowerCase("es-AR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
 export const saleCatalogRowId = (idPrefix: string, productId: string) =>
   `${idPrefix}-${productId}`;
@@ -49,7 +57,7 @@ export function filterSaleCatalog<T extends SaleCatalogProduct>(
   stockOf: (productId: string) => SaleCatalogStock,
   filters: SaleCatalogFilters,
 ): T[] {
-  const term = filters.query.trim().toLocaleLowerCase("es-AR");
+  const term = textoBuscable(filters.query.trim());
   return products.filter(
     (product) =>
       (!filters.categoryId || product.category?.id === filters.categoryId) &&
@@ -62,13 +70,15 @@ export function filterSaleCatalog<T extends SaleCatalogProduct>(
 const textosDeVenta = new WeakMap<SaleCatalogProduct, string>();
 const textoDeVenta = (product: SaleCatalogProduct) =>
   textoEnCache(textosDeVenta, product, (p) =>
-    [
-      p.name,
-      p.activeIngredient ?? "",
-      ...p.barcodes.map((barcode) => barcode.code),
-    ]
-      .join(" ")
-      .toLocaleLowerCase("es-AR"),
+    textoBuscable(
+      [
+        p.name,
+        p.activeIngredient ?? "",
+        // Laboratorio: la cajera también busca "Bagó" o "Roemmers".
+        p.laboratory?.name ?? "",
+        ...p.barcodes.map((barcode) => barcode.code),
+      ].join(" "),
+    ),
   );
 
 export function saleCategoryOptions(

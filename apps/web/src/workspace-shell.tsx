@@ -5,6 +5,7 @@ import { precargarCompras } from "./lib/precarga-compras";
 import { precargarCuentas } from "./lib/precarga-cuentas";
 import { precargarModulos } from "./lib/precargar-modulos";
 import { precargarCaja } from "./lib/precarga-caja";
+import { precargarVentas } from "./lib/precarga-ventas";
 import { precargarCuentasPorPagar } from "./supplier-payables/api";
 import { enviarExhibidoresPendientes } from "./lib/base-medicamentos-local";
 import { SupplierPayablesWorkspace } from "./supplier-payables/workspace";
@@ -731,32 +732,49 @@ export function WorkspaceShell({
     canOpenView("Categorías y laboratorios", permissionCodes) ||
     canOpenView("Listas de precios", permissionCodes);
   const veListas = canOpenView("Listas de precios", permissionCodes);
+  // Productos y Transferencias usan el catálogo de la organización: sin esta
+  // precarga, quien los ve sólo con CATALOG_READ los encontraba vacíos sin
+  // conexión si no los había abierto antes (prueba de corte, SISTEMA-87).
+  const usaCatalogoDeLaOrganizacion =
+    veListas ||
+    canOpenView("Productos", permissionCodes) ||
+    canOpenView("Transferencias", permissionCodes);
   useEffect(() => {
     if (
       !enLinea ||
       !sesionReal ||
       !accessToken ||
-      !veProductos ||
+      !(veProductos || usaCatalogoDeLaOrganizacion) ||
       !organizationId
     )
       return;
     const precargar = () =>
       void Promise.all([
-        getCatalogOptions(accessToken, organizationId),
-        getParties(accessToken, organizationId, "suppliers"),
-        // Listas de precios y el catálogo de la organización (por partes:
-        // sólo baja lo que cambió) para editarlas sin conexión (SISTEMA-80).
-        ...(veListas
+        ...(veProductos
           ? [
-              getPriceLists(accessToken, organizationId),
-              getCatalogProducts(accessToken, organizationId),
+              getCatalogOptions(accessToken, organizationId),
+              getParties(accessToken, organizationId, "suppliers"),
             ]
+          : []),
+        // Listas de precios (SISTEMA-80) y el catálogo de la organización (por
+        // partes: sólo baja lo que cambió).
+        ...(veListas ? [getPriceLists(accessToken, organizationId)] : []),
+        ...(usaCatalogoDeLaOrganizacion
+          ? [getCatalogProducts(accessToken, organizationId)]
           : []),
       ]).catch(() => {});
     precargar();
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
-  }, [enLinea, sesionReal, veProductos, veListas, accessToken, organizationId]);
+  }, [
+    enLinea,
+    sesionReal,
+    veProductos,
+    veListas,
+    usaCatalogoDeLaOrganizacion,
+    accessToken,
+    organizationId,
+  ]);
   // Reportes (SISTEMA-80, decisión del usuario): sin conexión se ve la copia
   // del servidor de los períodos habituales. Se guarda cada 15 minutos.
   const veReportes = canOpenView("Reportes", permissionCodes);
@@ -824,6 +842,27 @@ export function WorkspaceShell({
     const timer = window.setInterval(precargar, 10 * 60_000);
     return () => window.clearInterval(timer);
   }, [enLinea, sesionReal, veCaja, accessToken, organizationId, branchId]);
+  // Ventas: opciones fiscales, para poder facturar sin conexión aunque no se
+  // haya abierto Ventas antes del corte (prueba de corte del 10/11/2026).
+  const veVentas = canOpenView("Ventas", permissionCodes);
+  useEffect(() => {
+    if (
+      !enLinea ||
+      !sesionReal ||
+      !accessToken ||
+      !veVentas ||
+      !organizationId ||
+      !branchId
+    )
+      return;
+    const precargar = () =>
+      void precargarVentas(accessToken, organizationId, branchId).catch(
+        () => {},
+      );
+    precargar();
+    const timer = window.setInterval(precargar, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [enLinea, sesionReal, veVentas, accessToken, organizationId, branchId]);
   // Proveedores y Cuentas por pagar (SISTEMA-73): la ficha de proveedores y la
   // copia de las deudas, para usarlos sin conexión aunque nadie haya entrado
   // antes a esas pantallas.
@@ -5680,7 +5719,15 @@ function Sales({
       requestedQuantity < 1 ||
       requestedQuantity > available(selectedProductId)
     ) {
-      error("Revisá el producto y su stock disponible.");
+      const disponible = available(selectedProductId);
+      const nombre =
+        products.find((product) => product.id === selectedProductId)?.name ??
+        "El producto";
+      error(
+        disponible > 0
+          ? `Hay ${disponible} disponibles de ${nombre}. Revisá la cantidad.`
+          : `${nombre} no tiene stock disponible en esta sucursal. Si llegó mercadería, ingresala desde Inventario o Compras.`,
+      );
       return false;
     }
     setLines((current) => {
@@ -6589,7 +6636,7 @@ function Sales({
                 }
                 className="h-11 w-full rounded-lg border border-teal-400 bg-white pl-10 pr-20 text-sm"
                 value={productQuery}
-                placeholder="Escaneá o buscá por nombre, droga o código"
+                placeholder="Escaneá o buscá por nombre, droga, laboratorio o código"
                 autoComplete="off"
                 onChange={(event) => {
                   setProductQuery(event.target.value);
@@ -7167,6 +7214,11 @@ function Sales({
           totalMinor={Number(receipt.sale.totalMinor)}
           customerName={receipt.customerName}
           payments={receipt.payments}
+          aviso={
+            receipt.ticketLocal && receipt.sale.documentType === "INVOICE"
+              ? "Sin conexión: la factura C se emite sola en ARCA cuando vuelva internet. Ahora se imprime el comprobante provisorio."
+              : undefined
+          }
           template={
             documentTemplate && {
               ...documentTemplate,

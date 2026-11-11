@@ -5,6 +5,7 @@ import { SaleConfirmedDialog } from "./sale-confirmed-dialog";
 
 const render = (
   payments: Parameters<typeof SaleConfirmedDialog>[0]["payments"],
+  aviso?: string,
 ) =>
   renderToStaticMarkup(
     <SaleConfirmedDialog
@@ -12,6 +13,7 @@ const render = (
       totalMinor={279_200}
       customerName="Público general"
       payments={payments}
+      aviso={aviso}
       loadTicket={() => new Promise<ThermalTicket>(() => {})}
       onPrint={() => {}}
       onViewSale={() => {}}
@@ -26,7 +28,7 @@ it("confirms the sale with close, actions and a preview on demand", () => {
   expect(html).toContain("Venta confirmada");
   expect(html).toContain("Tarjeta");
   expect(html).toContain("Público general");
-  expect(html).toContain("Comprobante interno");
+  expect(html).toContain("Código interno");
   expect(html).toContain("F1C2A6DD");
   // Imprimir es la acción principal (Enter); Nueva venta queda en Esc.
   expect(html).toMatch(/bg-teal-700[^"]*"[^>]*>.*Imprimir ticket.*Enter/);
@@ -48,4 +50,16 @@ it("shows the change to deliver when cash exceeded the total", () => {
   expect(html).toContain("Vuelto a entregar");
   expect(html).toMatch(/3\.000,00/);
   expect(html).toMatch(/Recibido \$\s5\.000,00 en efectivo/);
+});
+
+it("avisa que la factura sale al volver internet en una venta sin conexión", () => {
+  const html = render(
+    [{ method: "CASH", amountMinor: 279_200 }],
+    "Sin conexión: la factura C se emite sola en ARCA cuando vuelva internet.",
+  );
+  expect(html).toContain('role="status"');
+  expect(html).toContain("se emite sola en ARCA");
+  expect(render([{ method: "CASH", amountMinor: 1 }])).not.toContain(
+    'role="status"',
+  );
 });

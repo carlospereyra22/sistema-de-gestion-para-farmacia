@@ -54,6 +54,21 @@ describe("sale catalog", () => {
     expect(ids("IBUPRO")).toEqual(["p2"]);
     expect(ids("7790001")).toEqual(["p1"]);
   });
+
+  it("busca también por laboratorio y sin importar las tildes", () => {
+    const conLab = [
+      product("p4", "Cozaar 50 mg", {
+        activeIngredient: "Losartán",
+        laboratory: { id: "l1", name: "Organon Arg." },
+      }),
+      ...products,
+    ];
+    const ids = (query: string) =>
+      filterSaleCatalog(conLab, stock, { ...none, query }).map((p) => p.id);
+    expect(ids("losartan")).toEqual(["p4"]);
+    expect(ids("organon")).toEqual(["p4"]);
+    expect(ids("capsulas")).toEqual([]);
+  });
   it("filters by category and sellable stock", () => {
     expect(
       filterSaleCatalog(products, stock, { ...none, categoryId: "c1" }),

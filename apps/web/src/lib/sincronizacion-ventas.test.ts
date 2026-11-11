@@ -8,7 +8,9 @@ import {
 } from "./bandeja-ventas";
 import {
   EnvioRechazado,
+  PARA_SU_DUENO,
   conCandado,
+  quedaParaSuDueno,
   rechazoDefinitivo,
   sincronizarVentas,
 } from "./sincronizacion-ventas";
@@ -220,17 +222,65 @@ describe("ventas de otros usuarios de la PC (cambio de turno)", () => {
   });
 
   it("si esta sesión no puede mandarla, queda para su dueño sin marcarla rechazada", async () => {
-    for (const status of [403, 404, 409]) {
+    for (const rechazo of [
+      new EnvioRechazado("No tenés acceso a esta sucursal.", 403),
+      new EnvioRechazado("Sin clave", 409, PARA_SU_DUENO),
+      // API anterior: el 409 de la clave venía sin código.
+      new EnvioRechazado(
+        "Esta PC todavía no registró la clave de quien hizo la venta.",
+        409,
+      ),
+    ]) {
       await sincronizarVentas({
         alcance: ALCANCE,
         enviar: () => Promise.resolve({}),
-        enviarDeOtro: () => Promise.reject(new EnvioRechazado("No", status)),
+        enviarDeOtro: () => Promise.reject(rechazo),
       });
       const firmada = (await ventasDeLaPc()).find(
         (item) => item.id === "firmada",
       );
       expect(firmada?.estado).toBe("PENDIENTE");
     }
+  });
+
+  it("un conflicto de la operación de otro usuario se rechaza y no frena la sucursal", async () => {
+    // Prueba de corte (10/11/2026): la oficina recibió el pedido que la PC
+    // recibió sin conexión; el 409 trababa todo lo que venía detrás.
+    await guardarVentaPendiente(
+      venta("sin-firma", 5, { alcance: "carla@farmacia.ar" }),
+    );
+    await guardarVentaPendiente(
+      venta("despues", 4, {
+        alcance: "beto@farmacia.ar",
+        vendedorId: "beto",
+        payload: "{}",
+        firma: "firma",
+      }),
+    );
+    const enviarDeOtro = vi.fn((item: VentaPendiente) =>
+      item.id === "firmada"
+        ? Promise.reject(
+            new EnvioRechazado(
+              "La cantidad supera el pendiente actual. Actualizá la compra.",
+              409,
+              "Conflict",
+            ),
+          )
+        : Promise.resolve({}),
+    );
+    await sincronizarVentas({
+      alcance: ALCANCE,
+      enviar: () => Promise.resolve({}),
+      enviarDeOtro,
+    });
+    const estados = Object.fromEntries(
+      (await ventasDeLaPc()).map((item) => [item.id, item.estado]),
+    );
+    expect(estados.firmada).toBe("RECHAZADA");
+    expect(estados.despues).toBe("ENVIADA");
+    expect(
+      quedaParaSuDueno(404, "Not Found", "No se encontró la compra."),
+    ).toBe(false);
   });
 
   it("una firma inválida sí queda rechazada para revisar", async () => {

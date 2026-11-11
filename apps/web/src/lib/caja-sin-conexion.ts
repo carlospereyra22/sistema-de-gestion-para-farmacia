@@ -391,3 +391,20 @@ export function cobrosConPendientes<
   }
   return r;
 }
+
+/**
+ * Cajas abiertas como las vería el servidor con lo pendiente de la PC: también
+ * la que se abrió sin conexión. Cuentas corrientes la usa para que un cobro en
+ * efectivo entre en esa caja y no quede como cobro pendiente de asignar
+ * (prueba de corte del 10/11/2026).
+ */
+export function sesionesAbiertasConPendientes(
+  sesiones: readonly CashSession[],
+  bandeja: readonly VentaPendiente[],
+  organizationId: string,
+  branchId: string,
+): CashSession[] {
+  return aplicarCajaLocal(sesiones, bandeja, organizationId, branchId).filter(
+    (sesion) => !sesion.closedAt,
+  );
+}

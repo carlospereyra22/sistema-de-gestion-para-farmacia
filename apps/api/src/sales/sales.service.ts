@@ -51,6 +51,7 @@ import { productionIssuanceAvailable } from "../fiscal/production-document";
 import { firmaValida } from "./firma-venta";
 import { sesionReal } from "../cash/offline-cash";
 import { obj, str, list } from "../fiscal/arca-soap";
+import { sinClaveRegistrada } from "./operacion-firmada";
 
 type SaleInput = {
   fiscalEnvironment?: "HOMOLOGATION" | "PRODUCTION";
@@ -695,10 +696,7 @@ export class SalesService {
       },
     });
     // Sin clave registrada todavía: la venta queda para que la mande su dueño.
-    if (!clave)
-      throw new ConflictException(
-        "Esta PC todavía no registró la clave de quien hizo la venta. La va a enviar esa persona al entrar con conexión.",
-      );
+    if (!clave) throw sinClaveRegistrada("la venta");
     if (!firmaValida(clave.publicKey, firma.payload, firma.signature))
       throw new BadRequestException(
         "La firma de la venta no es válida: no se registra a nombre de otro usuario.",
@@ -1639,6 +1637,8 @@ export class SalesService {
               changeMinor: changeMinor.toString(),
               ...(offline
                 ? {
+                    // Igual que el resto de los módulos: se filtra por origen.
+                    origen: "SIN_CONEXION",
                     offline: {
                       occurredAt: completedAt.toISOString(),
                       deviceId: offline.deviceId,

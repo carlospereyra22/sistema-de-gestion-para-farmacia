@@ -4,6 +4,7 @@ import {
   getCashManagement,
   getCashPendingCollections,
   getCashRecentActivity,
+  getLatestCashClosure,
 } from "./api";
 import { defaultClosureRange } from "./cash-session-view";
 
@@ -37,8 +38,14 @@ export async function precargarCaja(
     ).catch(() => undefined),
   ]);
   // De a uno: no compite con lo que se está usando en pantalla.
-  for (const caja of gestion.registers)
+  for (const caja of gestion.registers) {
     await getCashRecentActivity(token, organizationId, branchId, caja.id).catch(
       () => undefined,
     );
+    // Último cierre de cada caja: sin conexión, Caja lo mostraba "sin datos
+    // guardados" si nadie había elegido esa caja con conexión (prueba de corte).
+    await getLatestCashClosure(token, organizationId, branchId, caja.id).catch(
+      () => undefined,
+    );
+  }
 }

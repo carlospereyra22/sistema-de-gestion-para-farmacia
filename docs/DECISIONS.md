@@ -334,6 +334,8 @@
 
 - Cola fiscal automática (07/11/2026, SISTEMA-61): las facturas y notas de crédito que quedan en cola o por confirmar se envían y concilian solas cada minuto, dentro del proceso de la API, sin servicios ni colas externas. Reemplaza la decisión anterior de "no hay worker". Es la base para facturar ventas hechas sin internet (epic "Modo sin internet"). Las facturas de ventas ya hechas se emiten aunque la farmacia esté bloqueada por falta de pago. No activa emisión productiva: en producción sólo corre con la bandera habilitada.
 
+- Envío de operaciones de otro usuario de la PC (11/11/2026, SISTEMA-87, prueba completa con dos PCs): "queda para su dueño" se decide por una señal explícita de la API (`code: "PARA_SU_DUENO"` en el 409 de la clave no registrada) o por un 403 de quien manda, no por el número de estado. Los 404/409 de negocio (conflictos de la operación) son rechazos definitivos: frenar la sucursal por ellos trababa todas las ventas de la PC hasta que volviera a entrar quien las hizo.
+
 ## OPEN
 
 - Credential recovery policy for production.

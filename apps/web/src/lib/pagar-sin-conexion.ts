@@ -163,6 +163,29 @@ function pendientesDe(
 }
 
 /** ¿La deuda tiene algo sin enviar en la PC? Lo nuevo va detrás. */
+
+/** Pedido hecho sin conexión que sigue en la bandeja (por su clave de la PC). */
+function pedidoDeLaPc(
+  bandeja: readonly VentaPendiente[],
+  clave: string | undefined,
+): { supplierId?: string; reference?: string | null } | undefined {
+  if (!clave) return undefined;
+  for (const item of bandeja) {
+    if (item.operacion !== "COMPRA") continue;
+    const op = item.cuerpo as {
+      tipo?: string;
+      cuerpo?: {
+        clientOperationId?: string;
+        supplierId?: string;
+        reference?: string | null;
+      };
+    };
+    if (op.tipo === "PEDIDO" && op.cuerpo?.clientOperationId === clave)
+      return op.cuerpo;
+  }
+  return undefined;
+}
+
 export function deudaConPendientes(
   bandeja: readonly VentaPendiente[],
   org: string,
@@ -224,7 +247,11 @@ function deudasDeCompras(
           : undefined;
     if (!debt || !clave) return [];
     const compra = compras.find((c) => c.id === op.purchaseId);
-    const supplierId = op.cuerpo.supplierId ?? compra?.supplierId ?? "";
+    // Recepción de un pedido hecho sin conexión: el pedido todavía no está en
+    // el servidor, se busca en la bandeja (antes se veía "Proveedor" sin nombre).
+    const pedido = compra ? undefined : pedidoDeLaPc(bandeja, op.purchaseId);
+    const supplierId =
+      op.cuerpo.supplierId ?? compra?.supplierId ?? pedido?.supplierId ?? "";
     return [
       {
         ...deudaNueva({
@@ -233,7 +260,7 @@ function deudasDeCompras(
           supplierName:
             proveedores.find((p) => p.id === supplierId)?.name ?? "Proveedor",
           purchaseId: op.purchaseId ?? clave,
-          purchaseReference: compra?.reference ?? null,
+          purchaseReference: compra?.reference ?? pedido?.reference ?? null,
           documentType: "OTRO",
           pointOfSale: "",
           documentNumber: "",
