@@ -462,7 +462,8 @@ export class AccountsService {
         const customer = await tx.customer.findFirst({
           where: { id: customerId, organizationId },
         });
-        if (!customer) throw new NotFoundException("Customer is unavailable.");
+        if (!customer)
+          throw new NotFoundException("El cliente no está disponible.");
         await tx.customer.update({
           where: { id: customerId },
           data: {
@@ -909,7 +910,9 @@ export class AccountsService {
           include: { accountMovements: true },
         });
         if (!customer)
-          throw new NotFoundException("Customer account is unavailable.");
+          throw new NotFoundException(
+            "La cuenta corriente no está disponible.",
+          );
         let adjustmentTotal = 0n;
         if (
           !contexto &&

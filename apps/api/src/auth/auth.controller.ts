@@ -72,7 +72,8 @@ export class AuthController {
   @AllowPendingPasswordChange()
   async me(@Req() request: AuthenticatedRequest) {
     const profile = await this.auth.getProfile(request.auth!.sub);
-    if (!profile) throw new UnauthorizedException("User is unavailable.");
+    if (!profile)
+      throw new UnauthorizedException("El usuario no está disponible.");
     const { platformAdmin, ...user } = profile;
     return { ...user, isPlatformAdmin: platformAdmin?.active ?? false };
   }

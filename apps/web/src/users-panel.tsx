@@ -14,6 +14,7 @@ import {
   type UserCreateOptions,
   type UserListItem,
 } from "./lib/api";
+import { bloqueoDeDueno } from "./lib/usuarios-dueno";
 import { StatusToast } from "./status-toast";
 import { field, primary, secondary } from "./supplier-payables/dialog";
 import { useFitToViewport } from "./use-fit-to-viewport";
@@ -193,6 +194,9 @@ export function UsersPanel({
   const editing = users.find(({ user }) => user.id === editingId);
   // Los accesos propios los cambia otro administrador; el nombre sí se edita.
   const ownAccess = Boolean(editing?.isCurrentUser);
+  // Sólo un dueño cambia los accesos de otro dueño o da el rol de dueño.
+  const { accesoBloqueado, rolDuenoBloqueado } = bloqueoDeDueno(users, editing);
+  const accessLocked = ownAccess || accesoBloqueado;
   const roles = options?.roles ?? [];
   const branches = options?.branches ?? [];
   const startNew = () => {
@@ -383,19 +387,19 @@ export function UsersPanel({
         {editing && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
             <label
-              className={`flex items-center gap-2.5 text-sm font-medium text-slate-700 ${ownAccess ? "" : "cursor-pointer"}`}
+              className={`flex items-center gap-2.5 text-sm font-medium text-slate-700 ${accessLocked ? "" : "cursor-pointer"}`}
             >
               <input
                 type="checkbox"
                 role="switch"
                 className="size-4 accent-teal-700"
                 checked={active}
-                disabled={ownAccess}
+                disabled={accessLocked}
                 onChange={(event) => setActive(event.target.checked)}
               />
               {active ? "Usuario activo" : "Usuario desactivado"}
             </label>
-            {!ownAccess && (
+            {!accessLocked && (
               <button
                 type="button"
                 onClick={() => setPasswordUser(editing)}
@@ -413,6 +417,12 @@ export function UsersPanel({
             los cambia otro administrador.
           </p>
         )}
+        {!ownAccess && accesoBloqueado && (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Es un dueño de la farmacia: podés cambiarle el nombre, pero sus
+            roles, sucursales, estado y contraseña los cambia otro dueño.
+          </p>
+        )}
         <div className="side-config-scroll mt-4">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold text-slate-900">Roles</h3>
@@ -428,7 +438,9 @@ export function UsersPanel({
                 title={role.name}
                 detail={role.code}
                 checked={roleIds.includes(role.id)}
-                disabled={ownAccess}
+                disabled={
+                  accessLocked || (rolDuenoBloqueado && role.code === "OWNER")
+                }
                 onChange={(enabled) =>
                   setRoleIds((current) => toggle(current, role.id, enabled))
                 }
@@ -451,7 +463,7 @@ export function UsersPanel({
                 title={branch.name}
                 detail={branch.code}
                 checked={branchIds.includes(branch.id)}
-                disabled={ownAccess}
+                disabled={accessLocked}
                 onChange={(enabled) =>
                   setBranchIds((current) => toggle(current, branch.id, enabled))
                 }

@@ -146,7 +146,7 @@ export class ReportsService {
       Number.isNaN(end.valueOf()) ||
       start > end
     )
-      throw new ForbiddenException("The report date range is invalid.");
+      throw new ForbiddenException("Revisá el rango de fechas del reporte.");
     const salesWhere = {
       organizationId,
       branchId,

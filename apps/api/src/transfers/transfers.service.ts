@@ -104,7 +104,9 @@ export class TransfersService {
         transfer.sourceBranchId !== sourceBranchId ||
         transfer.status !== "PREPARED"
       )
-        throw new NotFoundException("Prepared transfer is unavailable.");
+        throw new NotFoundException(
+          "La transferencia preparada no está disponible.",
+        );
       return this.despacharEnTx(
         tx,
         { actorId, organizationId, branchId: sourceBranchId },
@@ -126,7 +128,9 @@ export class TransfersService {
         transfer.destinationBranchId !== destinationBranchId ||
         transfer.status !== "IN_TRANSIT"
       )
-        throw new NotFoundException("Transfer in transit is unavailable.");
+        throw new NotFoundException(
+          "La transferencia en camino no está disponible.",
+        );
       return this.recibirEnTx(
         tx,
         { actorId, organizationId, branchId: destinationBranchId },
@@ -335,14 +339,20 @@ export class TransfersService {
       if (previa) return previa;
     }
     if (!input.items.length)
-      throw new BadRequestException("A transfer requires at least one item.");
+      throw new BadRequestException(
+        "La transferencia necesita al menos un producto.",
+      );
     if (sourceBranchId === input.destinationBranchId)
-      throw new BadRequestException("Source and destination must differ.");
+      throw new BadRequestException(
+        "La sucursal de origen y la de destino tienen que ser distintas.",
+      );
     const destination = await tx.branch.findFirst({
       where: { id: input.destinationBranchId, organizationId, active: true },
     });
     if (!destination)
-      throw new BadRequestException("Destination branch is unavailable.");
+      throw new BadRequestException(
+        "La sucursal de destino no está disponible.",
+      );
     const lots = [];
     for (const item of input.items) {
       const lot = await tx.productLot.findFirst({
@@ -358,11 +368,13 @@ export class TransfersService {
         throw new BadRequestException(
           contexto
             ? "Un lote de la transferencia no existe en la sucursal de origen."
-            : "Insufficient stock for transfer.",
+            : "No hay stock suficiente para la transferencia.",
         );
       if (lot.quantity < item.quantity) {
         if (!contexto)
-          throw new BadRequestException("Insufficient stock for transfer.");
+          throw new BadRequestException(
+            "No hay stock suficiente para la transferencia.",
+          );
         contexto.avisos.push({
           kind: "STOCK_FALTANTE",
           detail: {
@@ -380,7 +392,9 @@ export class TransfersService {
       lots.push({ lot, quantity: item.quantity });
     }
     if (new Set(lots.map(({ lot }) => lot.id)).size !== lots.length)
-      throw new BadRequestException("A lot can only appear once per transfer.");
+      throw new BadRequestException(
+        "Cada lote puede aparecer una sola vez en la transferencia.",
+      );
     const transfer = await tx.transfer.create({
       data: {
         organizationId,

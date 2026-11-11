@@ -27,7 +27,7 @@ export class AuthService {
       where: { email: email.trim().toLowerCase() },
     });
     if (!user?.active || !(await verify(user.passwordHash, password)))
-      throw new UnauthorizedException("Invalid email or password.");
+      throw new UnauthorizedException("Email o contraseña incorrectos.");
     return this.createSession(user.id, user.email);
   }
 
@@ -78,10 +78,14 @@ export class AuthService {
 
   async refresh(refreshToken: string | undefined) {
     if (!refreshToken)
-      throw new UnauthorizedException("Refresh session is invalid or expired.");
+      throw new UnauthorizedException(
+        "Tu sesión venció. Volvé a iniciar sesión.",
+      );
     const parsedToken = this.parseRefreshToken(refreshToken);
     if (!parsedToken)
-      throw new UnauthorizedException("Refresh session is invalid or expired.");
+      throw new UnauthorizedException(
+        "Tu sesión venció. Volvé a iniciar sesión.",
+      );
     const session = await this.prisma.authSession.findFirst({
       where: {
         id: parsedToken.sessionId,
@@ -91,9 +95,11 @@ export class AuthService {
       include: { user: true },
     });
     if (!session || !(await verify(session.tokenHash, parsedToken.secret)))
-      throw new UnauthorizedException("Refresh session is invalid or expired.");
+      throw new UnauthorizedException(
+        "Tu sesión venció. Volvé a iniciar sesión.",
+      );
     if (!session.user.active)
-      throw new UnauthorizedException("User is inactive.");
+      throw new UnauthorizedException("El usuario está desactivado.");
     await this.prisma.authSession.update({
       where: { id: session.id },
       data: { expiresAt: null },
