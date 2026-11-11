@@ -1,7 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Circle, Plus, RefreshCw } from "lucide-react";
-import { getFiscalSetup, saveFiscalPoint, type FiscalSetup } from "./lib/api";
+import { CheckCircle2, Circle, Plus, RefreshCw, Search } from "lucide-react";
+import {
+  fiscalTesting,
+  getFiscalSetup,
+  saveFiscalPoint,
+  type FiscalConnection,
+  type FiscalSetup,
+} from "./lib/api";
+import {
+  filasDePuntos,
+  formatearPunto,
+  opcionesDePuntosArca,
+} from "./lib/puntos-de-venta";
+import {
+  traducirErrorDeArca,
+  type ResultadoDeConexion,
+} from "./lib/errores-arca";
 import { ProductFilterSelect } from "./product-filter-select";
+import { ResultadoConexionArca } from "./resultado-conexion-arca";
+import { StatusToast } from "./status-toast";
 
 export function FiscalSetupPanel({
   token,
@@ -17,12 +34,16 @@ export function FiscalSetupPanel({
   pointsOnly?: boolean;
 }) {
   const [data, setData] = useState<FiscalSetup>();
-  const [branchId, setBranchId] = useState("");
-  const [number, setNumber] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [manual, setManual] = useState(false);
+  const [aviso, setAviso] = useState("");
+  /** Sucursal a la que se le está asignando un punto. */
+  const [asignando, setAsignando] = useState<string>();
+  const [numero, setNumero] = useState("");
+  /** Puntos que informó ARCA (vacío: ARCA respondió sin puntos, 602). */
+  const [deArca, setDeArca] = useState<{ number: number }[]>();
+  const [resultado, setResultado] = useState<ResultadoDeConexion>();
   const pending = useRef(false);
   useEffect(() => {
     let active = true;
@@ -30,13 +51,6 @@ export function FiscalSetupPanel({
       .then((value) => {
         if (active) {
           setData(value);
-          setBranchId((current) =>
-            value.branches.some((branch) => branch.id === current)
-              ? current
-              : value.branches.length === 1
-                ? value.branches[0]!.id
-                : "",
-          );
           onLoaded?.(value);
         }
       })
@@ -53,6 +67,7 @@ export function FiscalSetupPanel({
   async function save(
     input:
       { branchId: string; number: number } | { id: string; active: boolean },
+    hecho: string,
   ) {
     if (pending.current) return;
     pending.current = true;
@@ -60,11 +75,10 @@ export function FiscalSetupPanel({
     setMessage("");
     try {
       await saveFiscalPoint(token, organizationId, input);
-      setMessage(
-        "Configuración local guardada. Esto no da de alta ni verifica el punto en ARCA.",
-      );
+      setAviso(hecho);
       setRefresh((value) => value + 1);
-      if (!("id" in input)) setNumber("");
+      setAsignando(undefined);
+      setNumero("");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se pudo guardar.",
@@ -74,15 +88,42 @@ export function FiscalSetupPanel({
       setBusy(false);
     }
   }
+  async function buscarEnArca() {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setResultado(undefined);
+    try {
+      const conexion = await fiscalTesting<FiscalConnection>(
+        token,
+        organizationId,
+        "connect",
+        {},
+      );
+      setDeArca(conexion.points);
+    } catch (cause) {
+      setResultado(traducirErrorDeArca(cause));
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  }
   return (
     <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
+      {aviso && (
+        <StatusToast key={aviso} message={aviso} onClose={() => setAviso("")} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-semibold">
-            {pointsOnly ? "Dónde vas a facturar" : "Preparación para pruebas"}
+            {pointsOnly ? "Punto de venta" : "Preparación para pruebas"}
           </h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Es el número que ARCA asigna para facturar. Cada sucursal necesita
+            el suyo.
+          </p>
           <p className="mt-1 text-xs text-slate-500">
-            Homologación · Estos puntos son sólo de prueba
+            Modo prueba · Estos puntos son sólo de prueba
           </p>
         </div>
         <button
@@ -90,8 +131,8 @@ export function FiscalSetupPanel({
           onClick={() => setRefresh((value) => value + 1)}
           className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
         >
-          <RefreshCw size={14} />
-          Actualizar estado local
+          <RefreshCw size={14} aria-hidden="true" />
+          Actualizar
         </button>
       </div>
       {!data && !message && (
@@ -100,132 +141,252 @@ export function FiscalSetupPanel({
       {data && (
         <>
           {!pointsOnly && <FiscalChecklist checks={data.checks} />}
-          <div className="mt-5 border-t pt-4">
-            <h4 className="text-sm font-semibold">
-              Puntos de venta por sucursal
-            </h4>
-            <p className="mt-2 rounded-lg bg-teal-50 p-3 text-sm leading-6 text-teal-900">
-              En Conexión ARCA podés consultar los puntos disponibles y emitir
-              una prueba. La asociación a una sucursal se guarda acá; no crea un
-              punto real en ARCA. Podés dejar este paso pendiente para probar.
-            </p>
-            <p className="mt-3 text-xs text-slate-500">
-              {data.branches.length === 1
-                ? `Sucursal detectada: ${data.branches[0]!.name}.`
-                : `${data.branches.length} sucursales activas detectadas.`}{" "}
-              No se asoció ningún número automáticamente.
-            </p>
-            <button
-              type="button"
-              aria-expanded={manual}
-              onClick={() => setManual((value) => !value)}
-              className="mt-4 text-xs text-slate-600 underline"
-            >
-              {manual
-                ? "Ocultar carga manual"
-                : "Opciones avanzadas: ya conozco mi punto de prueba"}
-            </button>
-            {manual && (
-              <>
-                <p className="mt-3 text-xs leading-5 text-slate-500">
-                  Sólo para configuración asistida por soporte. Guardar un
-                  número aquí no lo registra ni verifica en ARCA. No se reasigna
-                  a otra sucursal.
-                </p>
-                <form
-                  className="mt-3 flex flex-wrap items-end gap-3"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void save({ branchId, number: Number(number) });
-                  }}
-                >
-                  <div className="min-w-48 flex-1 text-xs">
-                    <p className="mb-1">Sucursal</p>
-                    <ProductFilterSelect
-                      compact
-                      label="Sucursal"
-                      icon={null}
-                      disabled={busy}
-                      value={branchId}
-                      options={[
-                        { value: "", label: "Seleccionar sucursal" },
-                        ...data.branches.map((branch) => ({
-                          value: branch.id,
-                          label: branch.name,
-                        })),
-                      ]}
-                      onChange={setBranchId}
-                    />
-                  </div>
-                  <label className="text-xs">
-                    Punto de venta
-                    <input
-                      required
-                      disabled={busy}
-                      type="number"
-                      min={1}
-                      max={99999}
-                      step={1}
-                      value={number}
-                      onChange={(e) => setNumber(e.target.value)}
-                      className="mt-1 block h-10 w-36 rounded-lg border px-3"
-                      placeholder="Número confirmado"
-                    />
-                  </label>
-                  <button
-                    disabled={busy || !data.branches.length || !branchId}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 text-xs text-white disabled:opacity-50"
-                  >
-                    <Plus size={16} />
-                    Asociar punto
-                  </button>
-                </form>
-              </>
-            )}
-            <div className="mt-4 space-y-2">
-              {data.points.map((point) => (
-                <div
-                  key={point.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
-                >
-                  <div>
-                    <strong>{String(point.number).padStart(5, "0")}</strong>
-                    <span className="ml-3">
-                      {data.branches.find((b) => b.id === point.branchId)
-                        ?.name ?? "Sucursal inactiva"}
-                    </span>
-                    <span className="ml-3 text-xs text-slate-500">
-                      {point.active ? "Configurado localmente" : "Desactivado"}{" "}
-                      · Sin verificar en ARCA
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void save({ id: point.id, active: !point.active })
-                    }
-                    className="rounded-lg border px-3 py-2 text-xs"
-                  >
-                    {point.active ? "Desactivar" : "Reactivar"}
-                  </button>
-                </div>
-              ))}
-              {!data.points.length && (
-                <p className="text-sm text-slate-500">
-                  Todavía no hay puntos asociados.
-                </p>
-              )}
-            </div>
-          </div>
+          <PuntosPorSucursal
+            setup={data}
+            busy={busy}
+            asignando={asignando}
+            numero={numero}
+            deArca={deArca}
+            resultado={resultado}
+            onAsignar={(branchId) => {
+              setAsignando(branchId);
+              setNumero("");
+            }}
+            onCancelar={() => setAsignando(undefined)}
+            onNumero={setNumero}
+            onBuscarEnArca={() => void buscarEnArca()}
+            onGuardar={(branchId, branchName) =>
+              void save(
+                { branchId, number: Number(numero) },
+                `Le asignaste el punto ${formatearPunto(Number(numero))} a ${branchName}.`,
+              )
+            }
+            onCambiarEstado={(point, branchName) =>
+              void save(
+                { id: point.id, active: !point.active },
+                point.active
+                  ? `Desactivaste el punto ${formatearPunto(point.number)} de ${branchName}.`
+                  : `Reactivaste el punto ${formatearPunto(point.number)} de ${branchName}.`,
+              )
+            }
+          />
         </>
       )}
       {message && (
-        <p role="status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
+        <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm">
           {message}
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * Una fila por sucursal con su punto o "Sin asignar" (SISTEMA-98). Sin
+ * estado propio: lo maneja FiscalSetupPanel.
+ */
+export function PuntosPorSucursal({
+  setup,
+  busy,
+  asignando,
+  numero,
+  deArca,
+  resultado,
+  onAsignar,
+  onCancelar,
+  onNumero,
+  onBuscarEnArca,
+  onGuardar,
+  onCambiarEstado,
+}: {
+  setup: FiscalSetup;
+  busy: boolean;
+  asignando?: string;
+  numero: string;
+  deArca?: { number: number }[];
+  resultado?: ResultadoDeConexion;
+  onAsignar: (branchId: string) => void;
+  onCancelar: () => void;
+  onNumero: (valor: string) => void;
+  onBuscarEnArca: () => void;
+  onGuardar: (branchId: string, branchName: string) => void;
+  onCambiarEstado: (
+    point: FiscalSetup["points"][number],
+    branchName: string,
+  ) => void;
+}) {
+  const filas = filasDePuntos(setup);
+  const opciones = deArca ? opcionesDePuntosArca(deArca, setup.points) : [];
+  if (!filas.length)
+    return (
+      <p className="mt-4 text-sm text-slate-500">
+        No hay sucursales activas. Crealas en Organización → Sucursales.
+      </p>
+    );
+  return (
+    <ul className="mt-4 space-y-2" aria-label="Puntos de venta por sucursal">
+      {filas.map((fila) => (
+        <li key={fila.branch.id} className="rounded-xl border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {fila.activo ? (
+                <CheckCircle2
+                  size={18}
+                  className="text-teal-700"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Circle
+                  size={18}
+                  className="text-slate-400"
+                  aria-hidden="true"
+                />
+              )}
+              <span className="font-medium">{fila.branch.name}</span>
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-xs ${fila.activo ? "bg-teal-50 font-semibold text-teal-800" : "bg-slate-100 text-slate-600"}`}
+              >
+                {fila.activo
+                  ? `Punto ${formatearPunto(fila.activo.number)}`
+                  : "Sin asignar"}
+              </span>
+            </div>
+            {fila.activo ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onCambiarEstado(fila.activo!, fila.branch.name)}
+                className="rounded-lg border px-3 py-2 text-xs"
+              >
+                Desactivar
+              </button>
+            ) : (
+              asignando !== fila.branch.id && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onAsignar(fila.branch.id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-xs font-medium text-white"
+                >
+                  <Plus size={14} aria-hidden="true" />
+                  Asignar
+                </button>
+              )
+            )}
+          </div>
+          {fila.inactivos.map((punto) => (
+            <div
+              key={punto.id}
+              className="mt-2 flex flex-wrap items-center justify-between gap-2 pl-8 text-xs text-slate-500"
+            >
+              <span>Punto {formatearPunto(punto.number)} · desactivado</span>
+              <button
+                type="button"
+                disabled={busy || !!fila.activo}
+                title={
+                  fila.activo
+                    ? "Primero desactivá el punto que está en uso."
+                    : undefined
+                }
+                onClick={() => onCambiarEstado(punto, fila.branch.name)}
+                className="rounded-lg border px-2.5 py-1.5"
+              >
+                Reactivar
+              </button>
+            </div>
+          ))}
+          {asignando === fila.branch.id && (
+            <form
+              className="mt-3 rounded-lg bg-slate-50 p-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onGuardar(fila.branch.id, fila.branch.name);
+              }}
+            >
+              {!deArca && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={onBuscarEnArca}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-teal-600 bg-white px-3 text-sm text-teal-800"
+                  >
+                    <Search size={15} aria-hidden="true" />
+                    {busy ? "Buscando…" : "Buscar mis puntos en ARCA"}
+                  </button>
+                  <span className="text-xs text-slate-500">
+                    Necesita la conexión con ARCA del paso anterior.
+                  </span>
+                </div>
+              )}
+              {resultado && <ResultadoConexionArca resultado={resultado} />}
+              {deArca && opciones.length > 0 && (
+                <div className="max-w-sm text-sm">
+                  <p className="mb-1">Punto de venta</p>
+                  <ProductFilterSelect
+                    compact
+                    label="Punto de venta"
+                    icon={null}
+                    disabled={busy}
+                    value={numero}
+                    options={[
+                      { value: "", label: "Elegí un punto" },
+                      ...opciones,
+                    ]}
+                    onChange={onNumero}
+                  />
+                </div>
+              )}
+              {deArca && opciones.length === 0 && (
+                <div className="text-sm">
+                  <p className="rounded-lg bg-amber-50 p-3 leading-6 text-amber-950">
+                    ARCA todavía no tiene puntos de venta para este sistema. En
+                    modo prueba es normal: escribí un número (por ejemplo 1).
+                    Para facturar en real vas a tener que crear uno en ARCA:
+                    «Administración de puntos de venta y domicilios» → nuevo
+                    punto para «Factura electrónica - Web services».
+                  </p>
+                  <label className="mt-3 block max-w-48 text-xs font-medium text-slate-600">
+                    Número de punto de venta
+                    <input
+                      required
+                      type="number"
+                      min={1}
+                      max={99999}
+                      step={1}
+                      disabled={busy}
+                      value={numero}
+                      onChange={(event) => onNumero(event.target.value)}
+                      className="mt-1 block h-10 w-full rounded-lg border px-3 text-sm"
+                      placeholder="Por ejemplo: 1"
+                    />
+                  </label>
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {deArca && (
+                  <button
+                    type="submit"
+                    disabled={busy || !numero}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm text-white disabled:opacity-50"
+                  >
+                    Asignar a {fila.branch.name}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onCancelar}
+                  className="h-10 rounded-lg border bg-white px-4 text-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 

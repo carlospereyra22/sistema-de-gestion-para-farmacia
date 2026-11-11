@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
@@ -154,6 +155,67 @@ export function EstadoFacturacion({
           {estado.pasos[4]!.detalle}
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * Pantalla final (SISTEMA-98): qué puede hacer ahora y cómo volver a revisar
+ * la configuración.
+ */
+export function FacturacionLista({
+  real,
+  onSeguir,
+  onResumen,
+}: {
+  /** Ya factura en real (si no, quedó lista en modo prueba). */
+  real: boolean;
+  /** Seguir con la facturación real (sólo en modo prueba). */
+  onSeguir?: () => void;
+  onResumen: () => void;
+}): ReactElement {
+  return (
+    <section className="mt-5 rounded-xl border border-teal-200 bg-teal-50 p-6 text-center">
+      <CheckCircle2
+        size={36}
+        className="mx-auto text-teal-700"
+        aria-hidden="true"
+      />
+      <h3 className="mt-3 text-xl font-semibold text-teal-900">¡Listo!</h3>
+      <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-700">
+        {real
+          ? "Tu farmacia ya factura en real. En Ventas elegí «Factura» al cobrar: el comprobante sale con su código de autorización (CAE) y el QR de ARCA."
+          : "Tu farmacia ya puede facturar en modo prueba. En Ventas elegí «Factura · prueba» al cobrar: mueve stock y caja de este sistema, pero la factura no tiene validez fiscal."}
+      </p>
+      <div className="mt-4 flex flex-wrap justify-center gap-3">
+        <Link
+          to={{ search: "?pagina=ventas" }}
+          className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-medium text-white"
+        >
+          Ir a Ventas
+          <ArrowRight size={16} aria-hidden="true" />
+        </Link>
+        {!real && onSeguir && (
+          <button
+            type="button"
+            onClick={onSeguir}
+            className="rounded-lg border border-teal-600 bg-white px-4 py-2.5 text-sm text-teal-800"
+          >
+            Seguir: Facturación real
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onResumen}
+          className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700"
+        >
+          Revisar la configuración
+        </button>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Podés volver a esta sección cuando quieras desde Organización →
+        Facturación.
+      </p>
     </section>
   );
 }
