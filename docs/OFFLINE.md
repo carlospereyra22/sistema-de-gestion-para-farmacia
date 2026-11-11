@@ -58,8 +58,9 @@ necesita conexión.
 | SISTEMA-79 Productos e inventario sin conexión                | En main    |
 | SISTEMA-80 Categorías, laboratorios, listas y reportes        | En main    |
 | SISTEMA-81 Arreglos de la prueba: compras, cobros y avisos    | En main    |
-| SISTEMA-86 Inicio sin conexión                                | Esta etapa |
-| Prueba completa con dos PCs                                   | Pendiente  |
+| SISTEMA-86 Inicio sin conexión                                | En main    |
+| Prueba completa con dos PCs (10/11/2026)                      | Hecha      |
+| SISTEMA-87 Arreglos de la prueba completa con dos PCs         | Esta etapa |
 
 ## Cómo funciona (SISTEMA-62)
 
@@ -261,6 +262,18 @@ Pedido del usuario (11/11/2026): que Inicio funcione sin internet, y que el busc
 - **Buscador de medicamentos**: la fuente "Nuestra base · en la PC" busca en nuestra base de medicamentos guardada en la PC (`buscarMedicamentosEnLaPc`, SISTEMA-69), con o sin conexión, y avisa de qué día son los precios. AlfaBeta necesita internet: al cortarse, el buscador pasa solo de AlfaBeta a nuestra base y, al volver, vuelve a AlfaBeta (si la fuente se eligió a mano, no se cambia). Si AlfaBeta no responde por falta de conexión, también se busca en nuestra base. La fecha informada de nuestra base se muestra como fecha de Argentina.
 - **Últimas ventas**: las del servidor (o su copia) más las ventas sin enviar, con "Por enviar".
 - **Precarga**: el resumen de Inicio se guarda con los reportes (cada 15 minutos).
+
+## Prueba completa con dos PCs y arreglos (SISTEMA-87)
+
+Prueba del 10/11/2026: dos PCs (mostrador y caja) sin conexión durante ~1 h 40 min simuladas, con una oficina con conexión al mismo tiempo. Se hicieron 80 ventas (20 con factura C) y 31 operaciones más (caja, compras, cuentas, clientes, transferencias, catálogo, inventario, proveedores). Al volver llegaron todas, sin duplicados, con su hora y su autor; las 20 facturas se autorizaron en homologación en 70 s; el stock cerró sin diferencias ni negativos. Se repite con los scripts del scratchpad (preparar, simular y verificar); informe en `.cache/prueba-corte/`.
+
+Arreglos:
+
+- **Un conflicto no traba la sucursal** (`lib/sincronizacion-ventas.ts`, `sales/operacion-firmada.ts`): antes, si la sesión abierta era de otro usuario, todo 403/404/409 de una operación ajena se tomaba como "queda para su dueño" y frenaba lo que venía detrás. Una recepción que la oficina ya había recibido (409 "La cantidad supera el pendiente") dejó 48 operaciones de la PC (24 ventas) esperando 12 minutos y reenviándose cada 30 s. Ahora queda para su dueño sólo el 403 (quien manda no tiene la sucursal o la farmacia) y el 409 de la clave no registrada, que la API marca con `code: "PARA_SU_DUENO"`; cualquier otro 404/409 es un rechazo definitivo para revisar y la cola sigue. La web acepta todavía el 409 de la clave sin código (API anterior).
+- **Cobros de cuenta corriente en la caja abierta sin conexión** (`customer-accounts.tsx`, `sesionesAbiertasConPendientes`): Cuentas corrientes ofrecía sólo las cajas del servidor; con la caja abierta en la PC decía "No hay una caja abierta" y el cobro quedaba pendiente de asignación. Ahora aplica lo pendiente de la PC, como Ventas, y se recalcula al cambiar la bandeja.
+- **Entrar siempre prueba la red** (`apiFetch(..., { probarRed: true })` en `login`): si la app había quedado marcada sin conexión, durante hasta 15 s después de volver el servidor el ingreso ni salía a la red y decía "Sin conexión sólo pueden entrar…".
+- **Precargas nuevas**: las opciones fiscales de Ventas (`lib/precarga-ventas.ts`; sin ellas, "Factura" quedaba deshabilitada sin conexión si no se había abierto Ventas antes del corte), el último cierre de cada caja (`precarga-caja.ts`) y el catálogo de la organización para quien ve Productos o Transferencias, no sólo Listas de precios (`scripts/probar-sin-conexion.mjs` encontraba Productos vacío sin conexión con un rol de mostrador).
+- **Mejoras**: Ventas busca también por laboratorio y sin importar tildes ("losartan" encuentra "Losartán"); la deuda de una recepción de un pedido hecho sin conexión muestra el proveedor y la referencia del pedido; vender un producto sin stock dice cuál y qué hacer; la confirmación de una venta sin conexión con factura avisa que la factura sale al volver internet (y la etiqueta del código pasa a "Código interno"); las ventas sin conexión llevan `origen: SIN_CONEXION` en la auditoría, como el resto.
 
 ## Arreglos de la prueba sin conexión (SISTEMA-81)
 

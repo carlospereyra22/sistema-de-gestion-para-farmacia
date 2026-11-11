@@ -37,6 +37,8 @@ import { MoneyInput } from "./money-input";
 import { accountTicket } from "./lib/thermal-ticket";
 import { DirectTicketPrint } from "./direct-ticket-print";
 import { VENTAS_SINCRONIZADAS } from "./lib/sincronizacion-ventas";
+import { suscribirBandeja, ventasDeLaPc } from "./lib/bandeja-ventas";
+import { sesionesAbiertasConPendientes } from "./lib/caja-sin-conexion";
 import {
   ShieldCheck,
   Infinity as InfinityIcon,
@@ -285,6 +287,9 @@ export function CustomerAccounts({
       error("El cliente se creó, pero no se pudo actualizar la lista.");
     }
   };
+  // Una caja abierta (o cerrada) sin conexión cambia la bandeja: recargar cajas.
+  const [versionBandeja, setVersionBandeja] = useState(0);
+  useEffect(() => suscribirBandeja(() => setVersionBandeja((v) => v + 1)), []);
   useEffect(() => {
     if (!active) return;
     setLoading(true);
@@ -297,9 +302,23 @@ export function CustomerAccounts({
         ),
       )
       .finally(() => setLoading(false));
-    void getCash(token, organizationId, branchId)
-      .then((cash) => {
-        const open = cash.sessions.filter((session) => !session.closedAt);
+  }, [token, organizationId, branchId, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Cajas para el cobro, con lo pendiente de la PC aplicado; se recalcula
+  // cuando cambia la bandeja (apertura o cierre sin conexión).
+  useEffect(() => {
+    if (!active) return;
+    void Promise.all([
+      getCash(token, organizationId, branchId),
+      ventasDeLaPc().catch(() => []),
+    ])
+      .then(([cash, bandeja]) => {
+        // Con lo pendiente de la PC: la caja abierta sin conexión también cuenta.
+        const open = sesionesAbiertasConPendientes(
+          cash.sessions,
+          bandeja,
+          organizationId,
+          branchId,
+        );
         setSessions(
           open.map((session) => ({
             ...session,
@@ -307,13 +326,17 @@ export function CustomerAccounts({
           })),
         );
         setAllowWithoutSession(cash.settings?.allowWithoutSession ?? true);
-        setSessionId(preferredCashSessionId(open, organizationId, branchId));
+        setSessionId((actual) =>
+          open.some((session) => session.id === actual)
+            ? actual
+            : preferredCashSessionId(open, organizationId, branchId),
+        );
       })
       .catch(() => {
         setSessions([]);
         setSessionId("");
       });
-  }, [token, organizationId, branchId, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token, organizationId, branchId, active, versionBandeja]);
   // Lo hecho sin conexión ya llegó al servidor: se vuelve a pedir la cuenta,
   // que ahora lo trae (SISTEMA-70).
   useEffect(() => {

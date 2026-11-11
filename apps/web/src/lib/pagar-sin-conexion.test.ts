@@ -258,6 +258,56 @@ describe("cuentas por pagar sin conexión", () => {
     expect(deudaConPendientes(bandeja, "o1", "b1", "r-1")).toBe(true);
   });
 
+  it("la recepción de un pedido hecho sin conexión muestra el proveedor del pedido", async () => {
+    const base = {
+      version: 1 as const,
+      alcance: "ana@farmacia.com",
+      organizationId: "o1",
+      branchId: "b1",
+      totalMinor: "0",
+      documentType: "INTERNAL" as const,
+      unidades: [],
+      estado: "PENDIENTE" as const,
+      intentos: 0,
+      operacion: "COMPRA" as const,
+    };
+    await guardarVentaPendiente({
+      ...base,
+      id: "ped-pc",
+      occurredAt: "2026-11-10T12:00:00.000Z",
+      cuerpo: {
+        tipo: "PEDIDO",
+        occurredAt: "2026-11-10T12:00:00.000Z",
+        cuerpo: {
+          clientOperationId: "ped-pc",
+          supplierId: "s1",
+          reference: "PED-CORTE",
+        },
+      },
+    });
+    await guardarVentaPendiente({
+      ...base,
+      id: "rec-pc",
+      occurredAt: "2026-11-10T13:00:00.000Z",
+      cuerpo: {
+        tipo: "RECEPCION",
+        occurredAt: "2026-11-10T13:00:00.000Z",
+        purchaseId: "ped-pc",
+        cuerpo: {
+          operationId: "rec-pc",
+          debt: { amountMinor: "1000", dueOn: null },
+        },
+      },
+    });
+    const bandeja = await ventasDeLaPc();
+    const [deuda] = deudasConPendientes([], bandeja, "o1", "b1", HOY, contexto);
+    expect(deuda).toMatchObject({
+      id: "rec-pc",
+      supplierName: "Droguería Sur",
+      purchaseReference: "PED-CORTE",
+    });
+  });
+
   it("filtra, ordena y pagina como el listado del servidor", () => {
     const vencida = delServidor();
     const saldada = presentarDeuda(

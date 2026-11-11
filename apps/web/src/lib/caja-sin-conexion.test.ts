@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CashSession } from "./api";
 import type { VentaPendiente } from "./bandeja-ventas";
-import { aplicarCajaLocal, type OperacionCaja } from "./caja-sin-conexion";
+import {
+  aplicarCajaLocal,
+  sesionesAbiertasConPendientes,
+  type OperacionCaja,
+} from "./caja-sin-conexion";
 
 const base = {
   version: 1 as const,
@@ -182,5 +186,35 @@ describe("último cierre hecho en la PC", () => {
       differenceMinor: "0",
       sinEnviar: true,
     });
+  });
+});
+
+describe("cajas para cobrar una cuenta corriente sin conexión", () => {
+  it("incluye la caja abierta en la PC, para que el cobro entre en ella", () => {
+    const abiertas = sesionesAbiertasConPendientes(
+      [abierta({ id: "cerrada", closedAt: "2026-11-08T09:00:00.000Z" })],
+      [
+        caja(1, {
+          tipo: "APERTURA",
+          clientOperationId: "ap",
+          cashRegisterId: "r1",
+          openingAmountMinor: 5000,
+        }),
+      ],
+      "o1",
+      "b1",
+    );
+    expect(abiertas.map((sesion) => sesion.id)).toEqual(["ap"]);
+  });
+
+  it("no ofrece la que se cerró en la PC", () => {
+    expect(
+      sesionesAbiertasConPendientes(
+        [abierta()],
+        [caja(1, { tipo: "CIERRE", sessionId: "s1", closingAmountMinor: 1 })],
+        "o1",
+        "b1",
+      ),
+    ).toEqual([]);
   });
 });

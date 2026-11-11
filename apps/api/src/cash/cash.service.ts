@@ -37,6 +37,7 @@ import {
   defaultCashSettings,
   cashSettingsView,
 } from "./cash-settings";
+import { sinClaveRegistrada } from "../sales/operacion-firmada";
 
 @Injectable()
 export class CashService {
@@ -1846,10 +1847,7 @@ export class CashService {
         userId_deviceId: { userId: firma.actorId, deviceId: firma.deviceId },
       },
     });
-    if (!clave)
-      throw new ConflictException(
-        "Esta PC todavía no registró la clave de quien hizo la operación. La va a enviar esa persona al entrar con conexión.",
-      );
+    if (!clave) throw sinClaveRegistrada("la operación");
     if (!firmaValida(clave.publicKey, firma.payload, firma.signature))
       throw new BadRequestException(
         "La firma de la operación de caja no es válida: no se registra a nombre de otro usuario.",

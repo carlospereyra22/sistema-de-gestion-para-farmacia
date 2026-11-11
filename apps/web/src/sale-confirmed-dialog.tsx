@@ -39,7 +39,10 @@ export function SaleConfirmedDialog({
   onPrint,
   onViewSale,
   onNewSale,
+  aviso,
 }: {
+  /** Aclaración bajo los datos (venta sin conexión con factura pendiente). */
+  aviso?: string;
   saleId: string;
   totalMinor: number;
   customerName: string;
@@ -146,12 +149,20 @@ export function SaleConfirmedDialog({
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-slate-500">Comprobante interno</dt>
+              <dt className="text-slate-500">Código interno</dt>
               <dd className="font-mono text-xs font-semibold text-slate-900">
                 {saleId.slice(0, 8).toUpperCase()}
               </dd>
             </div>
           </dl>
+          {aviso ? (
+            <p
+              role="status"
+              className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+            >
+              {aviso}
+            </p>
+          ) : null}
           {changeMinor > 0 ? (
             <div
               aria-live="polite"

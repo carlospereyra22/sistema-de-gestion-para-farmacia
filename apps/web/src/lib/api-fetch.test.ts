@@ -133,6 +133,29 @@ describe("apiFetch sin conexión", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("entrar prueba la red aunque la app esté marcada sin conexión", async () => {
+    // Prueba de corte (10/11/2026): volvía el servidor y, hasta el próximo
+    // sondeo, el ingreso con conexión ni salía a la red.
+    marcarSinConexion();
+    const fetch = vi.fn().mockResolvedValue(
+      new Response('{"accessToken":"t"}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    const response = await apiFetch(
+      "/api/v1/auth/login",
+      { method: "POST", body: "{}" },
+      { probarRed: true },
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(conectividad().enLinea).toBe(true);
+  });
+
   it("el proxy sin servidor (502) también usa la copia", async () => {
     await guardarStock();
     vi.stubGlobal(

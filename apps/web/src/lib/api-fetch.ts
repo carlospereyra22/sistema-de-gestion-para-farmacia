@@ -83,12 +83,23 @@ function esErrorDeRed(error: unknown) {
 export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
+  opciones: {
+    /**
+     * Acción explícita de la persona (entrar): se prueba la red aunque la app
+     * esté marcada sin conexión. Si no, durante hasta 15 s después de volver el
+     * servidor, el ingreso con conexión fallaba con "Sin conexión sólo pueden
+     * entrar…" (prueba de corte del 10/11/2026).
+     */
+    probarRed?: boolean;
+  } = {},
 ): Promise<Response> {
   const url = urlDe(input);
   const metodo = metodoDe(input, init);
   // Sin conexión conocida no se sale a la red: se responde con la copia de
   // la PC. Cuando vuelve, lo detecta el sondeo de /health (cada 15 s).
-  const sinConexion = trabajaSinConexion(init) || !conectividad().enLinea;
+  const sinConexion =
+    trabajaSinConexion(init) ||
+    (!opciones.probarRed && !conectividad().enLinea);
   let response: Response | undefined;
   if (!sinConexion) {
     try {
