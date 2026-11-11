@@ -271,6 +271,71 @@ describe("caja sin conexión (base local con rollback)", () => {
       ).toMatchObject({ cashSessionId: otra.id });
     }));
 
+  it("si otra PC abrió y cerró la caja antes de sincronizar, no crea otra sesión: va a esa, con aviso", () =>
+    enRollback(async (tx, f) => {
+      // Prueba de corte (11/11/2026): la PC 2 abrió y cerró sin conexión y
+      // sincronizó primero; la apertura de la PC 1 creaba una sesión superpuesta.
+      const otra = await tx.cashSession.create({
+        data: {
+          cashRegisterId: f.register.id,
+          openedById: f.beto.id,
+          openingAmountMinor: 0n,
+          openedAt: new Date(Date.now() - 90 * MINUTO),
+          closedAt: new Date(Date.now() - 20 * MINUTO),
+          closingAmountMinor: 0n,
+        },
+      });
+      const aperturaId = randomUUID();
+      const abierta = await f.caja(f.ana.id, {
+        tipo: "APERTURA",
+        clientOperationId: aperturaId,
+        occurredAt: f.hace(60),
+        cashRegisterId: f.register.id,
+        openingAmountMinor: 0,
+      });
+      expect(abierta.entityId).toBe(otra.id);
+      expect(abierta.offlineIssues.map((aviso) => aviso.kind)).toEqual([
+        "CAJA_YA_ABIERTA",
+      ]);
+      expect(
+        await tx.cashSession.count({
+          where: { cashRegisterId: f.register.id },
+        }),
+      ).toBe(1);
+      // La venta de esa caja ya no entra en el cierre: queda como cobro pendiente.
+      const venta = await f.vender(aperturaId, 50);
+      expect(venta.offlineIssues.map((aviso) => aviso.kind)).toEqual([
+        "CAJA_CERRADA",
+      ]);
+      expect(
+        await tx.salePayment.findFirstOrThrow({ where: { saleId: venta.id } }),
+      ).toMatchObject({ cashSessionId: null });
+    }));
+
+  it("una caja cerrada antes de la apertura de la PC no se reusa: abre una sesión nueva", () =>
+    enRollback(async (tx, f) => {
+      await tx.cashSession.create({
+        data: {
+          cashRegisterId: f.register.id,
+          openedById: f.beto.id,
+          openingAmountMinor: 0n,
+          openedAt: new Date(Date.now() - 300 * MINUTO),
+          closedAt: new Date(Date.now() - 200 * MINUTO),
+          closingAmountMinor: 0n,
+        },
+      });
+      const aperturaId = randomUUID();
+      const abierta = await f.caja(f.ana.id, {
+        tipo: "APERTURA",
+        clientOperationId: aperturaId,
+        occurredAt: f.hace(60),
+        cashRegisterId: f.register.id,
+        openingAmountMinor: 0,
+      });
+      expect(abierta.entityId).toBe(aperturaId);
+      expect(abierta.offlineIssues).toEqual([]);
+    }));
+
   it("cierre con otro esperado, egreso de más y movimiento con la caja ya cerrada: avisos", () =>
     enRollback(async (tx, f) => {
       const aperturaId = randomUUID();

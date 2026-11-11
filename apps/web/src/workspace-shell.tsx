@@ -792,7 +792,9 @@ export function WorkspaceShell({
       void precargarReportes(accessToken, organizationId, branchId).catch(
         () => {},
       );
-    const inicio = window.setTimeout(precargar, 20_000);
+    // A los 5 s (antes 20 s): quien entra un momento con conexión antes de un
+    // cambio de turno también se lleva la copia (prueba de corte, SISTEMA-88).
+    const inicio = window.setTimeout(precargar, 5_000);
     const timer = window.setInterval(precargar, 15 * 60_000);
     return () => {
       window.clearTimeout(inicio);
