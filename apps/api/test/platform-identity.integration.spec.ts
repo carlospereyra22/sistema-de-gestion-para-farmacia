@@ -378,6 +378,7 @@ describe("identidad de plataforma por HTTP (esquema aislado)", () => {
         password,
       });
       const cookie = login.headers.get("set-cookie")!;
+      expect(cookie).toMatch(/^gestion_plataforma=/);
       expect(cookie).not.toMatch(/Max-Age|Expires/i);
       const sesion = await http.db.authSession.findFirstOrThrow({
         where: { user: { email } },
@@ -388,7 +389,7 @@ describe("identidad de plataforma por HTTP (esquema aislado)", () => {
       const renovada = await http.request(
         "/auth/refresh",
         undefined,
-        {},
+        { sesion: "plataforma" },
         "POST",
         { Cookie: cookie.split(";")[0]! },
       );
@@ -402,6 +403,62 @@ describe("identidad de plataforma por HTTP (esquema aislado)", () => {
         password,
       });
       expect(suya.headers.get("set-cookie")).toMatch(/Max-Age=/);
+    });
+
+    it("el superadmin no reemplaza la sesión de la farmacia del navegador (SISTEMA-100)", async () => {
+      // El navegador de la farmacia ya tiene su sesión.
+      const { email: deFarmacia } = await pharmacyUser();
+      const farmacia = await http.request("/auth/login", undefined, {
+        email: deFarmacia,
+        password,
+      });
+      const cookieFarmacia = farmacia.headers.get("set-cookie")!.split(";")[0]!;
+      expect(cookieFarmacia).toMatch(/^gestion_refresh=/);
+      // El superadmin entra en ese mismo navegador.
+      const email = `${randomUUID()}@example.invalid`;
+      await createPlatformAdmin(http.db, email, await hash(password));
+      const admin = await http.request(
+        "/auth/login",
+        undefined,
+        { email, password },
+        "POST",
+        { Cookie: cookieFarmacia },
+      );
+      const puestas = admin.headers.getSetCookie();
+      expect(puestas).toHaveLength(1);
+      expect(puestas[0]).toMatch(/^gestion_plataforma=/);
+      const cookiePlataforma = puestas[0]!.split(";")[0]!;
+      const navegador = `${cookieFarmacia}; ${cookiePlataforma}`;
+      const renovar = (body: object) =>
+        http.request("/auth/refresh", undefined, body, "POST", {
+          Cookie: navegador,
+        });
+      const usuarioDe = async (response: Response) => {
+        const { accessToken } = (await response.json()) as {
+          accessToken: string;
+        };
+        return (await (await http.request("/auth/me", accessToken)).json())
+          .email as string;
+      };
+      // Cada pestaña renueva su propia sesión.
+      expect(await usuarioDe(await renovar({}))).toBe(deFarmacia);
+      expect(await usuarioDe(await renovar({ sesion: "plataforma" }))).toBe(
+        email,
+      );
+      // Salir del panel sólo borra la cookie del superadmin.
+      const salir = await http.request(
+        "/auth/logout",
+        undefined,
+        { sesion: "plataforma" },
+        "POST",
+        { Cookie: navegador },
+      );
+      expect(salir.status).toBe(204);
+      expect(salir.headers.getSetCookie().join()).toMatch(
+        /^gestion_plataforma=;/,
+      );
+      expect((await renovar({ sesion: "plataforma" })).status).toBe(401);
+      expect((await renovar({})).status).toBe(200);
     });
   });
 

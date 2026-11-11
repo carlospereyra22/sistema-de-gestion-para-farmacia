@@ -1,5 +1,6 @@
 import {
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -47,6 +48,21 @@ export class RefreshDto {
   @IsOptional()
   @IsUUID()
   deviceId?: string;
+
+  /**
+   * Qué cookie renovar (SISTEMA-100): "plataforma" usa la del superadmin.
+   * Sin el campo, la de la farmacia, como siempre.
+   */
+  @IsOptional()
+  @IsIn(["plataforma"])
+  sesion?: "plataforma";
+}
+
+/** Cerrar sesión: qué cookie (SISTEMA-100). Sin el campo, la de la farmacia. */
+export class LogoutDto {
+  @IsOptional()
+  @IsIn(["plataforma"])
+  sesion?: "plataforma";
 }
 
 /** Clave de esta PC para firmar ventas sin conexión (SISTEMA-66). */

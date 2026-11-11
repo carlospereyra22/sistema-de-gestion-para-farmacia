@@ -35,7 +35,9 @@ import {
   login,
   logout,
   refreshSession,
+  sesionesAProbar,
   registerOfflineKey,
+  type TipoDeSesion,
   SessionExpiredError,
   SesionDeOtroUsuarioError,
   apiBaseUrl,
@@ -203,6 +205,8 @@ export function App(): ReactElement {
   const usuarioDeLaPestana = useRef<{ id: string; email: string } | undefined>(
     undefined,
   );
+  /** Qué cookie usa esta pestaña: farmacia o superadmin (SISTEMA-100). */
+  const tipoDeSesion = useRef<TipoDeSesion | undefined>(undefined);
   const [pausa, setPausa] = useState<{
     propioEmail: string;
     otroEmail?: string;
@@ -280,6 +284,10 @@ export function App(): ReactElement {
   const applyProfile = (profile: CurrentUserProfile, token: string) => {
     if (profile.id)
       usuarioDeLaPestana.current = { id: profile.id, email: profile.email };
+    // Al entrar con contraseña la API eligió la cookie según el usuario.
+    tipoDeSesion.current ??= profile.isPlatformAdmin
+      ? "plataforma"
+      : "farmacia";
     setMustChangePassword(profile.mustChangePassword ?? false);
     setIsPlatformAdmin(profile.isPlatformAdmin ?? false);
     setUser(profile.email);
@@ -338,6 +346,8 @@ export function App(): ReactElement {
       }
       // La sesión nueva reemplaza a la que quedó por cerrar: no se la revoca.
       olvidarCierreDeSesion();
+      // La API eligió la cookie según el usuario: se toma del perfil.
+      tipoDeSesion.current = undefined;
       credenciales.current = undefined;
       sinConexion.current = undefined;
       // La dirección conserva la pantalla de la sesión anterior: se empieza por Inicio.
@@ -402,8 +412,27 @@ export function App(): ReactElement {
           credenciales.current = undefined;
           await startSession(token, { password: conCredenciales.password });
         } else {
-          const { accessToken: token } = await refreshSession();
-          if (!active) return;
+          // Cada sesión tiene su cookie (SISTEMA-100). Quien trabajaba sin
+          // conexión sólo puede ser de farmacia; si no, se prueba primero la
+          // que corresponde a la dirección y después la otra.
+          const orden: TipoDeSesion[] = sinConexion.current
+            ? ["farmacia"]
+            : sesionesAProbar(window.location.pathname);
+          let token: string | undefined;
+          for (const [indice, tipo] of orden.entries()) {
+            try {
+              ({ accessToken: token } = await refreshSession(undefined, tipo));
+              tipoDeSesion.current = tipo;
+              break;
+            } catch (cause) {
+              if (
+                !(cause instanceof SessionExpiredError) ||
+                indice === orden.length - 1
+              )
+                throw cause;
+            }
+          }
+          if (!active || !token) return;
           // Si alguien trabajaba sin conexión, la sesión tiene que ser suya:
           // nunca se cambia de usuario por la cookie de otro.
           await startSession(token, { esperado: sinConexion.current });
@@ -463,7 +492,10 @@ export function App(): ReactElement {
       const esperado = usuarioDeLaPestana.current;
       let resultado: ResultadoDeRenovar;
       try {
-        const { accessToken: token } = await refreshSession(esperado?.id);
+        const { accessToken: token } = await refreshSession(
+          esperado?.id,
+          tipoDeSesion.current,
+        );
         resultado = { tipo: "ok", token };
       } catch (cause) {
         resultado =
@@ -688,7 +720,11 @@ export function App(): ReactElement {
     sinConexion.current = undefined;
     void cerrarSesionLocal().catch(() => {});
     recordarCierreDeSesion();
-    void logout()
+    // Sólo se cierra la sesión de esta pestaña: la del superadmin no toca la
+    // de la farmacia del navegador, ni al revés (SISTEMA-100).
+    const tipo = tipoDeSesion.current;
+    tipoDeSesion.current = undefined;
+    void logout(tipo)
       .then(() => {
         olvidarCierreDeSesion();
         avisarOtrasPestanas("cierre");
