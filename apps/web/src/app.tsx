@@ -51,6 +51,11 @@ const PlatformShell = lazy(() => import("./platform-shell"));
 import { LoginScreen } from "./login-screen";
 import { SubscriptionGate } from "./subscription-gate";
 import { SoporteSesion } from "./soporte-sesion";
+import {
+  olvidarSesionDeSoporte,
+  recordarSesionDeSoporte,
+  sesionDeSoporteSinCerrar,
+} from "./lib/soporte";
 import type { SesionSoporte } from "./lib/platform-api";
 import type { EntrarComo } from "./lib/soporte-panel";
 import { useNavigate } from "react-router-dom";
@@ -598,6 +603,7 @@ export function App(): ReactElement {
       organizationId,
       usuario.id,
     );
+    recordarSesionDeSoporte(sesion.sessionId);
     setSoporte({
       sesion,
       etiqueta: `${usuario.displayName || usuario.email} · ${organizationName}`,
@@ -610,9 +616,21 @@ export function App(): ReactElement {
         .then(({ salirDeSoporte }) =>
           salirDeSoporte(accessToken, sesionDeSoporte),
         )
+        .then(olvidarSesionDeSoporte)
         .catch(() => {});
     setSoporte(undefined);
   }, [accessToken, sesionDeSoporte]);
+  // Una sesión de soporte que quedó abierta (se cerró la pestaña estando
+  // adentro) se corta al volver a abrir el panel.
+  const enSoporte = !!soporte;
+  useEffect(() => {
+    const pendiente = sesionDeSoporteSinCerrar();
+    if (!isPlatformAdmin || !accessToken || enSoporte || !pendiente) return;
+    void import("./lib/platform-api")
+      .then(({ salirDeSoporte }) => salirDeSoporte(accessToken, pendiente))
+      .then(olvidarSesionDeSoporte)
+      .catch(() => {});
+  }, [isPlatformAdmin, accessToken, enSoporte]);
   const endSession = () => {
     // La app deja de abrirse sola, pero la copia queda: sirve para volver a
     // entrar con la contraseña aun sin internet (cambio de turno, SISTEMA-66).

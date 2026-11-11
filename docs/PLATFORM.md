@@ -49,12 +49,15 @@ Decisión del usuario (11/11/2026): desde el panel se entra como cualquier usuar
 farmacia, para reproducir y arreglar un problema; se puede hacer todo lo que hace ese usuario.
 Sin motivo ni avisos: la farmacia no lo ve. La landing no cambia.
 
-- Sección **Soporte** del panel (y botón "Entrar como" en cada usuario del detalle de una
-  farmacia). La app se ve exactamente como la ve ese usuario; un botón flotante "Volver al panel"
-  (que ve solo el superadmin) vuelve al panel.
+- Sección **Soporte** del panel: un buscador elige la farmacia y otro, opcional, la sucursal
+  (muestra solo a quienes tienen acceso a ella); cada usuario activo tiene "Entrar como". También
+  está en cada usuario del detalle de una farmacia. La app se ve exactamente como la ve ese
+  usuario; un botón chico y oscuro abajo a la izquierda (que ve solo el superadmin) vuelve al
+  panel, a la misma sección y con la misma farmacia elegida.
 - `POST platform/organizations/:id/users/:userId/soporte` crea una sesión del usuario sin clave
-  de renovación, que vence a las 4 horas, y entrega un token con la marca `soporte` (firmada por
-  el servidor). `POST platform/soporte/:sessionId/salir` la corta. Usuarios inactivos y otras
+  de renovación, que dura hasta volver al panel (tope técnico de 7 días; si se cierra la
+  pestaña estando adentro, el panel la corta la próxima vez que se abre), y entrega un token con
+  la marca `soporte` (firmada por el servidor). `POST platform/soporte/:sessionId/salir` la corta. Usuarios inactivos y otras
   cuentas de plataforma no se pueden usar.
 - La sesión del superadmin sigue viva y se renueva aparte. En la PC del superadmin no queda copia
   local de la farmacia (no hay "alcance" de usuario) ni se puede vender sin conexión.
@@ -65,6 +68,17 @@ Sin motivo ni avisos: la farmacia no lo ve. La landing no cambia.
 - Registro interno: `PlatformAuditLog` con `SOPORTE_ENTRO` y `SOPORTE_SALIO` (quién, a qué
   usuario y farmacia, la sesión). La auditoría de la farmacia no registra nada; lo que se hace
   adentro queda a nombre del usuario, y la hora de entrada y salida permite separarlo.
+  La sección Auditoría del panel muestra la farmacia y el usuario de cada registro, y filtra por
+  tipo (soporte, cobros y planes, farmacias y usuarios, accesos, ARCA).
+
+### Diseño del panel
+
+El panel usa el mismo lenguaje visual que el sistema de gestión: barra lateral plegable
+(`NavigationRail`, grupos Clientes y Herramientas), encabezado con la sección actual, tarjetas
+de indicadores con ícono y paneles con título (`platform-ui.tsx`). La sección elegida se recuerda
+en la pestaña (`sessionStorage`). En Planes, un ejemplo calcula el abono de una farmacia de 2
+sucursales y 4 usuarios con los precios que se están escribiendo (vista previa; el abono real lo
+calcula la API).
 
 ### Comandos
 

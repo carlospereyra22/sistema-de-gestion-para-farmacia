@@ -1,6 +1,18 @@
 import { BotonEntrarComo } from "./platform-soporte";
 import { useCallback, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, KeyRound, Plus, ShieldCheck, UserPlus } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  CalendarCheck,
+  KeyRound,
+  Plus,
+  Store,
+  UserPlus,
+  Users,
+  Wallet,
+  ClipboardList,
+  ShieldCheck,
+} from "lucide-react";
 import {
   DataTable,
   DataTableCell,
@@ -33,6 +45,14 @@ import { PlatformBillingSection } from "./platform-billing";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
 import { ProductFilterSelect } from "./product-filter-select";
+import {
+  PlatformError,
+  PlatformKpi,
+  PlatformKpis,
+  PlatformLoading,
+  PlatformPageHeader,
+  PlatformPanel,
+} from "./platform-ui";
 import { StatusToast } from "./status-toast";
 import { ars } from "./supplier-payables/api";
 import {
@@ -302,85 +322,90 @@ function SubscriptionForm({
   };
   const agreedValue = agreedMinor;
   return (
-    <form
-      onSubmit={review}
-      className="rounded-xl border border-slate-200 bg-white p-5"
-    >
-      <h2 className="font-semibold">Plan contratado</h2>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm">
-          Usuarios adicionales
-          <input
-            required
-            type="number"
-            min={0}
-            max={1000}
-            value={extraUsers}
-            onChange={(event) => setExtraUsers(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-        <label className="block text-sm">
-          Sucursales adicionales
-          <input
-            required
-            type="number"
-            min={0}
-            max={1000}
-            value={extraBranches}
-            onChange={(event) => setExtraBranches(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-      </div>
-      <MoneyInput
-        label="Precio acordado"
-        value={agreed}
-        required={false}
-        onChange={setAgreed}
-      />
-      <p className="mt-1 text-xs text-slate-500">
-        Si lo dejás vacío, se usa la fórmula del plan.
-      </p>
-      <h2 className="mt-5 font-semibold">Contacto</h2>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm">
-          Nombre
-          <input
-            maxLength={120}
-            value={contactName}
-            onChange={(event) => setContactName(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-        <label className="block text-sm">
-          Teléfono
-          <input
-            maxLength={60}
-            value={contactPhone}
-            onChange={(event) => setContactPhone(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          Correo
-          <input
-            type="email"
-            maxLength={200}
-            value={contactEmail}
-            onChange={(event) => setContactEmail(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-      </div>
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {error}
+    <form onSubmit={review}>
+      <PlatformPanel
+        icon={<ClipboardList size={16} />}
+        title="Plan contratado"
+        description="Cupos extra, precio acordado y contacto de cobro."
+        bodyClassName="p-5"
+      >
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm">
+            Usuarios adicionales
+            <input
+              required
+              type="number"
+              min={0}
+              max={1000}
+              value={extraUsers}
+              onChange={(event) => setExtraUsers(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+          <label className="block text-sm">
+            Sucursales adicionales
+            <input
+              required
+              type="number"
+              min={0}
+              max={1000}
+              value={extraBranches}
+              onChange={(event) => setExtraBranches(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+        </div>
+        <MoneyInput
+          label="Precio acordado"
+          value={agreed}
+          required={false}
+          onChange={setAgreed}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Si lo dejás vacío, se usa la fórmula del plan.
         </p>
-      )}
-      <div className="mt-5 flex justify-end">
-        <button className={primary}>Guardar cambios</button>
-      </div>
+        <h3 className="mt-6 border-t border-[#e6eef3] pt-4 text-sm font-semibold text-slate-800">
+          Contacto
+        </h3>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm">
+            Nombre
+            <input
+              maxLength={120}
+              value={contactName}
+              onChange={(event) => setContactName(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+          <label className="block text-sm">
+            Teléfono
+            <input
+              maxLength={60}
+              value={contactPhone}
+              onChange={(event) => setContactPhone(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+          <label className="block text-sm sm:col-span-2">
+            Correo
+            <input
+              type="email"
+              maxLength={200}
+              value={contactEmail}
+              onChange={(event) => setContactEmail(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+        </div>
+        {error && (
+          <p role="alert" className="mt-4 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        <div className="mt-5 flex justify-end">
+          <button className={primary}>Guardar cambios</button>
+        </div>
+      </PlatformPanel>
       {confirming && (
         <PayableDialog
           title="Guardar cambios"
@@ -440,7 +465,11 @@ export function PlatformOrganizationDetail({
   const [notice, setNotice] = useState("");
 
   const back = (
-    <button type="button" className={secondary} onClick={onBack}>
+    <button
+      type="button"
+      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-white hover:text-[#087f70]"
+      onClick={onBack}
+    >
       <ArrowLeft size={16} />
       {backLabel}
     </button>
@@ -449,18 +478,18 @@ export function PlatformOrganizationDetail({
     return (
       <>
         {back}
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {error}
-        </p>
+        <div className="mt-4">
+          <PlatformError>{error}</PlatformError>
+        </div>
       </>
     );
   if (!data)
     return (
       <>
         {back}
-        <p role="status" className="mt-4 text-sm text-slate-500">
-          Cargando farmacia…
-        </p>
+        <div className="mt-4">
+          <PlatformLoading>Cargando farmacia…</PlatformLoading>
+        </div>
       </>
     );
   const subscription = data.subscription;
@@ -473,51 +502,60 @@ export function PlatformOrganizationDetail({
     !!subscription &&
     quotaFull(activeBranches, subscription.quota.branches, subscription.exempt);
   return (
-    <>
+    <div className="space-y-5">
       {back}
-      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{data.name}</h1>
-        {subscription && (
-          <StatusLabel large tone={stageTone(subscription.stage)}>
-            {stageLabel(subscription.stage)}
-            {subscription.daysOverdue > 0 &&
-              ` · ${subscription.daysOverdue} días de atraso`}
-          </StatusLabel>
-        )}
-      </div>
+      <PlatformPageHeader
+        icon={<Building2 size={22} />}
+        title={data.name}
+        description={`${activeBranches} ${activeBranches === 1 ? "sucursal activa" : "sucursales activas"} · ${activeUsers} ${activeUsers === 1 ? "usuario activo" : "usuarios activos"}`}
+        actions={
+          subscription && (
+            <StatusLabel large tone={stageTone(subscription.stage)}>
+              {stageLabel(subscription.stage)}
+              {subscription.daysOverdue > 0 &&
+                ` · ${subscription.daysOverdue} días de atraso`}
+            </StatusLabel>
+          )
+        }
+      />
       {subscription && (
-        <dl className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {[
-            ["Abono mensual", ars(subscription.feeMinor)],
-            ["Cubierta hasta", coveredUntilLabel(subscription)],
-            [
-              "Usuarios",
-              usageLabel(
-                activeUsers,
-                subscription.quota.users,
-                subscription.exempt,
-                " de ",
-              ),
-            ],
-            [
-              "Sucursales",
-              usageLabel(
-                activeBranches,
-                subscription.quota.branches,
-                subscription.exempt,
-                " de ",
-              ),
-            ],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3"
-            >
-              <dt className="text-sm text-slate-500">{label}</dt>
-              <dd className="mt-0.5 text-xl font-semibold">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <PlatformKpis>
+          <PlatformKpi
+            icon={<Wallet size={18} />}
+            label="Abono mensual"
+            value={ars(subscription.feeMinor)}
+          />
+          <PlatformKpi
+            icon={<CalendarCheck size={18} />}
+            tone="sky"
+            label="Cubierta hasta"
+            value={coveredUntilLabel(subscription)}
+          />
+          <PlatformKpi
+            icon={<Users size={18} />}
+            tone={usersFull ? "amber" : "teal"}
+            label="Usuarios"
+            value={usageLabel(
+              activeUsers,
+              subscription.quota.users,
+              subscription.exempt,
+              " de ",
+            )}
+            hint={usersFull ? "Cupo completo" : undefined}
+          />
+          <PlatformKpi
+            icon={<Store size={18} />}
+            tone={branchesFull ? "amber" : "teal"}
+            label="Sucursales"
+            value={usageLabel(
+              activeBranches,
+              subscription.quota.branches,
+              subscription.exempt,
+              " de ",
+            )}
+            hint={branchesFull ? "Cupo completo" : undefined}
+          />
+        </PlatformKpis>
       )}
       {subscription && !subscription.exempt && (
         <PlatformBillingSection
@@ -529,115 +567,126 @@ export function PlatformOrganizationDetail({
           }}
         />
       )}
-      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="min-w-0">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="font-semibold">Usuarios</h2>
-            <button
-              type="button"
-              disabled={usersFull}
-              className={secondary}
-              onClick={() => setAdding(true)}
-            >
-              <UserPlus size={16} />
-              Nuevo usuario
-            </button>
-          </div>
-          {usersFull && (
-            <p className="mb-3 text-sm text-amber-700">
-              Cupo completo: sumá usuarios adicionales en el plan contratado.
-            </p>
-          )}
-          <DataTable
-            label="Usuarios de la farmacia"
-            minWidthClass="min-w-160"
-            columns={[
-              { label: "Correo" },
-              { label: "Rol" },
-              { label: "Estado" },
-              { label: "", align: "right" },
-            ]}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="min-w-0 space-y-5">
+          <PlatformPanel
+            icon={<Users size={16} />}
+            title="Usuarios"
+            description={
+              usersFull
+                ? "Cupo completo: sumá usuarios adicionales en el plan contratado."
+                : "Podés entrar como cualquiera de los activos."
+            }
+            bodyClassName="p-3"
+            actions={
+              <button
+                type="button"
+                disabled={usersFull}
+                className={secondary}
+                onClick={() => setAdding(true)}
+              >
+                <UserPlus size={16} />
+                Nuevo usuario
+              </button>
+            }
           >
-            {data.users.length === 0 ? (
-              <DataTableEmpty colSpan={4}>
-                Esta farmacia no tiene usuarios.
-              </DataTableEmpty>
-            ) : (
-              data.users.map((user) => (
-                <DataTableRow key={user.id}>
-                  <DataTableCell className="font-medium text-slate-900">
-                    {user.email}
-                    {user.displayName && (
-                      <span className="block text-xs font-normal text-slate-500">
-                        {user.displayName}
-                      </span>
-                    )}
-                  </DataTableCell>
+            <DataTable
+              label="Usuarios de la farmacia"
+              minWidthClass="min-w-160"
+              columns={[
+                { label: "Correo" },
+                { label: "Rol" },
+                { label: "Estado" },
+                { label: "", align: "right" },
+              ]}
+            >
+              {data.users.length === 0 ? (
+                <DataTableEmpty colSpan={4}>
+                  Esta farmacia no tiene usuarios.
+                </DataTableEmpty>
+              ) : (
+                data.users.map((user) => (
+                  <DataTableRow key={user.id}>
+                    <DataTableCell className="font-medium text-slate-900">
+                      {user.email}
+                      {user.displayName && (
+                        <span className="block text-xs font-normal text-slate-500">
+                          {user.displayName}
+                        </span>
+                      )}
+                    </DataTableCell>
+                    <DataTableCell>
+                      {user.roles.map(({ name }) => name).join(", ") ||
+                        "Sin rol"}
+                    </DataTableCell>
+                    <DataTableCell>
+                      <StatusLabel tone={user.active ? "ok" : "muted"}>
+                        {!user.active
+                          ? "Inactivo"
+                          : user.mustChangePassword
+                            ? "Debe cambiar la clave"
+                            : "Activo"}
+                      </StatusLabel>
+                    </DataTableCell>
+                    <DataTableCell align="right">
+                      <BotonEntrarComo
+                        organizationId={data.id}
+                        organizationName={data.name}
+                        usuario={user}
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Resetear la clave de ${user.email}`}
+                        title="Resetear clave"
+                        className="rounded-lg p-2 text-slate-500 hover:bg-teal-50 hover:text-teal-800"
+                        onClick={() => setResetting(user)}
+                      >
+                        <KeyRound size={16} />
+                      </button>
+                    </DataTableCell>
+                  </DataTableRow>
+                ))
+              )}
+            </DataTable>
+          </PlatformPanel>
+          <PlatformPanel
+            icon={<Store size={16} />}
+            title="Sucursales"
+            description={
+              branchesFull
+                ? "Cupo completo: sumá sucursales adicionales en el plan contratado."
+                : undefined
+            }
+            bodyClassName="p-3"
+            actions={
+              <button
+                type="button"
+                disabled={branchesFull}
+                className={secondary}
+                onClick={() => setAddingBranch(true)}
+              >
+                <Plus size={16} />
+                Nueva sucursal
+              </button>
+            }
+          >
+            <DataTable
+              label="Sucursales de la farmacia"
+              columns={[{ label: "Nombre" }, { label: "Estado" }]}
+            >
+              {data.branches.map((branch) => (
+                <DataTableRow key={branch.id}>
+                  <DataTableCell>{branch.name}</DataTableCell>
                   <DataTableCell>
-                    {user.roles.map(({ name }) => name).join(", ") || "Sin rol"}
-                  </DataTableCell>
-                  <DataTableCell>
-                    <StatusLabel tone={user.active ? "ok" : "muted"}>
-                      {!user.active
-                        ? "Inactivo"
-                        : user.mustChangePassword
-                          ? "Debe cambiar la clave"
-                          : "Activo"}
+                    <StatusLabel tone={branch.active ? "ok" : "muted"}>
+                      {branch.active ? "Activa" : "Inactiva"}
                     </StatusLabel>
                   </DataTableCell>
-                  <DataTableCell align="right">
-                    <BotonEntrarComo
-                      organizationId={data.id}
-                      organizationName={data.name}
-                      usuario={user}
-                    />
-                    <button
-                      type="button"
-                      aria-label={`Resetear la clave de ${user.email}`}
-                      title="Resetear clave"
-                      className="rounded-lg p-2 text-slate-500 hover:bg-teal-50 hover:text-teal-800"
-                      onClick={() => setResetting(user)}
-                    >
-                      <KeyRound size={16} />
-                    </button>
-                  </DataTableCell>
                 </DataTableRow>
-              ))
-            )}
-          </DataTable>
-          <div className="mb-3 mt-5 flex items-center justify-between gap-3">
-            <h2 className="font-semibold">Sucursales</h2>
-            <button
-              type="button"
-              disabled={branchesFull}
-              className={secondary}
-              onClick={() => setAddingBranch(true)}
-            >
-              <Plus size={16} />
-              Nueva sucursal
-            </button>
-          </div>
-          {branchesFull && (
-            <p className="mb-3 text-sm text-amber-700">
-              Cupo completo: sumá sucursales adicionales en el plan contratado.
-            </p>
-          )}
-          <DataTable
-            label="Sucursales de la farmacia"
-            columns={[{ label: "Nombre" }, { label: "Estado" }]}
-          >
-            {data.branches.map((branch) => (
-              <DataTableRow key={branch.id}>
-                <DataTableCell>{branch.name}</DataTableCell>
-                <DataTableCell>
-                  <StatusLabel tone={branch.active ? "ok" : "muted"}>
-                    {branch.active ? "Activa" : "Inactiva"}
-                  </StatusLabel>
-                </DataTableCell>
-              </DataTableRow>
-            ))}
-          </DataTable>
-        </section>
+              ))}
+            </DataTable>
+          </PlatformPanel>
+        </div>
         {subscription && (
           <SubscriptionForm
             key={subscription.feeMinor + subscription.contactName}
@@ -700,6 +749,6 @@ export function PlatformOrganizationDetail({
         />
       )}
       {notice && <StatusToast message={notice} onClose={() => setNotice("")} />}
-    </>
+    </div>
   );
 }

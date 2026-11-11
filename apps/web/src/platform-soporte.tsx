@@ -1,25 +1,55 @@
 import { useCallback, useContext, useMemo, useState } from "react";
-import { LogIn, Search } from "lucide-react";
+import {
+  Clock3,
+  EyeOff,
+  Landmark,
+  LifeBuoy,
+  LogIn,
+  MonitorSmartphone,
+  MapPin,
+  Search,
+  Store,
+  Users,
+} from "lucide-react";
 import {
   getPlatformOrganization,
   getPlatformOrganizations,
 } from "./lib/platform-api";
+import {
+  eleccionDeSoporteGuardada,
+  guardarEleccionDeSoporte,
+} from "./lib/platform-navegacion";
 import { usePlatformData } from "./lib/use-platform-data";
 import {
   SoporteContext,
-  filtrarFarmacias,
+  eleccionDeSoporte,
+  iniciales,
+  opcionesDeFarmacias,
+  opcionesDeSucursales,
+  valorDeSoporte,
   type UsuarioDeFarmacia,
 } from "./lib/soporte-panel";
+import {
+  PlatformEmpty,
+  PlatformError,
+  PlatformPageHeader,
+  PlatformPanel,
+} from "./platform-ui";
+import { ProductFilterSelect } from "./product-filter-select";
+import { SearchableSaleSelect } from "./searchable-sale-select";
 
 /** Botón "Entrar como" de un usuario; no se muestra si el panel no lo ofrece. */
 export function BotonEntrarComo({
   organizationId,
   organizationName,
   usuario,
+  destacado = false,
 }: {
   organizationId: string;
   organizationName: string;
   usuario: UsuarioDeFarmacia;
+  /** Botón lleno (tarjetas de Soporte) en vez de enlace (tablas). */
+  destacado?: boolean;
 }) {
   const entrarComo = useContext(SoporteContext);
   const [entrando, setEntrando] = useState(false);
@@ -32,7 +62,11 @@ export function BotonEntrarComo({
         disabled={entrando}
         aria-label={`Entrar como ${usuario.email}`}
         title="Entrar como este usuario"
-        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+        className={
+          destacado
+            ? "inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#cce8de] bg-[#f1fbf7] px-3 text-sm font-semibold text-[#087f70] transition-colors hover:border-[#087f70] hover:bg-[#087f70] hover:text-white disabled:opacity-50"
+            : "inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+        }
         onClick={() => {
           setEntrando(true);
           setError("");
@@ -49,13 +83,37 @@ export function BotonEntrarComo({
         {entrando ? "Entrando…" : "Entrar como"}
       </button>
       {error && (
-        <span role="alert" className="text-xs text-red-700">
+        <span role="alert" className="mt-1 text-xs text-red-700">
           {error}
         </span>
       )}
     </span>
   );
 }
+
+const reglas = [
+  {
+    icono: MonitorSmartphone,
+    titulo: "Ves lo mismo que el usuario",
+    texto: "Sus permisos, su sucursal y sus pantallas.",
+  },
+  {
+    icono: EyeOff,
+    titulo: "La farmacia no lo ve",
+    texto: "Queda solo en la auditoría de la plataforma.",
+  },
+  {
+    icono: Landmark,
+    titulo: "Sin ARCA producción",
+    texto: "Homologación sí; facturas reales, no.",
+  },
+  {
+    icono: Clock3,
+    titulo: "Hasta que vuelvas",
+    texto:
+      "Dura lo que haga falta. Volvés con el botón de abajo a la izquierda.",
+  },
+];
 
 /** Sección "Soporte": elegís la farmacia y entrás como uno de sus usuarios. */
 export function PlatformSoporte({
@@ -67,85 +125,118 @@ export function PlatformSoporte({
 }) {
   const cargar = useCallback(() => getPlatformOrganizations(token), [token]);
   const { data, error } = usePlatformData(cargar, onVerificationExpired);
-  const [texto, setTexto] = useState("");
-  const [elegida, setElegida] = useState<string>();
-  const farmacias = useMemo(
-    () => filtrarFarmacias(data ?? [], texto),
-    [data, texto],
-  );
+  const [elegida, setElegida] = useState(eleccionDeSoporteGuardada);
+  const farmacias = useMemo(() => opcionesDeFarmacias(data ?? []), [data]);
+  const elegidaAntes = eleccionDeSoporte(elegida);
+  const farmacia = data?.find(({ id }) => id === elegidaAntes.organizationId);
+  // Una elección guardada de una farmacia o sucursal que ya no está no se usa.
+  const organizationId = !data || farmacia ? elegidaAntes.organizationId : "";
+  const branchId =
+    elegidaAntes.branchId &&
+    (!farmacia ||
+      farmacia.branches?.some(({ id }) => id === elegidaAntes.branchId))
+      ? elegidaAntes.branchId
+      : undefined;
+  const elegir = (valor: string) => {
+    setElegida(valor);
+    guardarEleccionDeSoporte(valor);
+  };
   return (
-    <section>
-      <h1 className="text-xl font-semibold">Soporte</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        Entrá como un usuario de una farmacia para ver lo que ve y reproducir un
-        problema. Volvés al panel con el botón de abajo a la izquierda.
-      </p>
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-red-700">
-          {error}
-        </p>
+    <div className="space-y-5">
+      <PlatformPageHeader
+        icon={<LifeBuoy size={22} />}
+        title="Soporte"
+        description="Entrá como un usuario de una farmacia para ver lo que ve y reproducir un problema."
+      />
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {reglas.map(({ icono: Icono, titulo, texto }) => (
+          <li
+            key={titulo}
+            className="flex items-start gap-3 rounded-xl border border-[#dce7ef] bg-white/70 px-4 py-3"
+          >
+            <Icono
+              size={18}
+              aria-hidden="true"
+              className="mt-0.5 shrink-0 text-[#087f70]"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-slate-800">
+                {titulo}
+              </span>
+              <span className="block text-xs leading-5 text-slate-500">
+                {texto}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {error && <PlatformError>{error}</PlatformError>}
+      <PlatformPanel
+        icon={<Search size={16} />}
+        title="Farmacia y sucursal"
+        description="Buscá la farmacia por su nombre. Si querés, después elegí una sucursal para ver solo a quienes trabajan ahí."
+        bodyClassName="grid gap-3 p-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
+      >
+        <div className="min-w-0">
+          <p className="mb-1 text-xs font-semibold text-slate-600">Farmacia</p>
+          <SearchableSaleSelect
+            label="Farmacia"
+            placeholder="Escribí el nombre de la farmacia…"
+            value={organizationId}
+            options={farmacias}
+            onChange={(valor) => elegir(valor)}
+            floatingOptions
+          />
+        </div>
+        <div className="min-w-0">
+          <p className="mb-1 text-xs font-semibold text-slate-600">Sucursal</p>
+          <ProductFilterSelect
+            label="Sucursal"
+            value={branchId ?? ""}
+            options={opcionesDeSucursales(farmacia)}
+            icon={<MapPin size={16} />}
+            disabled={!farmacia}
+            compact
+            onChange={(valor) =>
+              elegir(valorDeSoporte(organizationId, valor || undefined))
+            }
+          />
+        </div>
+      </PlatformPanel>
+      {organizationId ? (
+        <UsuariosDeFarmacia
+          key={organizationId}
+          token={token}
+          organizationId={organizationId}
+          branchId={branchId}
+          onVerificationExpired={onVerificationExpired}
+        />
+      ) : (
+        <PlatformPanel
+          icon={<Users size={16} />}
+          title="Usuarios"
+          bodyClassName=""
+        >
+          <PlatformEmpty icon={<Store size={22} />} title="Elegí una farmacia">
+            Vas a ver sus usuarios activos y podés entrar como cualquiera de
+            ellos.
+          </PlatformEmpty>
+        </PlatformPanel>
       )}
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-            <Search size={16} className="text-slate-400" aria-hidden="true" />
-            <input
-              aria-label="Buscar farmacia"
-              placeholder="Buscar farmacia"
-              value={texto}
-              onChange={(event) => setTexto(event.target.value)}
-              className="min-w-0 flex-1 text-sm outline-none"
-            />
-          </label>
-          <ul className="mt-2 max-h-[60vh] overflow-y-auto">
-            {farmacias.map((f) => (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  aria-current={elegida === f.id ? "true" : undefined}
-                  onClick={() => setElegida(f.id)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-sm ${elegida === f.id ? "bg-teal-50 font-medium text-teal-800" : "hover:bg-slate-50"}`}
-                >
-                  {f.name}
-                  <span className="block text-xs text-slate-500">
-                    {f.activeUsers} usuarios · {f.activeBranches} sucursales
-                  </span>
-                </button>
-              </li>
-            ))}
-            {data && farmacias.length === 0 && (
-              <li className="px-3 py-2 text-sm text-slate-500">
-                No hay farmacias con ese nombre.
-              </li>
-            )}
-          </ul>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          {elegida ? (
-            <UsuariosDeFarmacia
-              key={elegida}
-              token={token}
-              organizationId={elegida}
-              onVerificationExpired={onVerificationExpired}
-            />
-          ) : (
-            <p className="p-3 text-sm text-slate-500">
-              Elegí una farmacia para ver sus usuarios.
-            </p>
-          )}
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }
 
 function UsuariosDeFarmacia({
   token,
   organizationId,
+  branchId,
   onVerificationExpired,
 }: {
   token: string;
   organizationId: string;
+  /** Sólo los usuarios con acceso a esta sucursal. */
+  branchId?: string;
   onVerificationExpired: () => void;
 }) {
   const cargar = useCallback(
@@ -153,40 +244,100 @@ function UsuariosDeFarmacia({
     [token, organizationId],
   );
   const { data, error } = usePlatformData(cargar, onVerificationExpired);
-  if (error)
+  if (error) return <PlatformError>{error}</PlatformError>;
+  if (!data)
     return (
-      <p role="alert" className="p-3 text-sm text-red-700">
-        {error}
-      </p>
-    );
-  if (!data) return <p className="p-3 text-sm text-slate-500">Cargando…</p>;
-  return (
-    <>
-      <h2 className="px-3 pt-1 font-semibold">{data.name}</h2>
-      <ul className="mt-2 divide-y divide-slate-100">
-        {data.users.map((usuario) => (
-          <li
-            key={usuario.id}
-            className="flex items-center justify-between gap-3 px-3 py-2"
-          >
-            <span className="min-w-0 text-sm">
-              <span className="block truncate font-medium text-slate-900">
-                {usuario.displayName || usuario.email}
-              </span>
-              <span className="block truncate text-xs text-slate-500">
-                {usuario.email} ·{" "}
-                {usuario.roles.map(({ name }) => name).join(", ") || "Sin rol"}
-                {usuario.active ? "" : " · Inactivo"}
-              </span>
-            </span>
-            <BotonEntrarComo
-              organizationId={data.id}
-              organizationName={data.name}
-              usuario={usuario}
+      <PlatformPanel icon={<Users size={16} />} title="Usuarios">
+        <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+          {[0, 1, 2].map((indice) => (
+            <div
+              key={indice}
+              aria-hidden="true"
+              className="h-[76px] animate-pulse rounded-xl bg-slate-100 motion-reduce:animate-none"
             />
-          </li>
-        ))}
-      </ul>
-    </>
+          ))}
+        </div>
+        <p role="status" className="sr-only">
+          Cargando usuarios…
+        </p>
+      </PlatformPanel>
+    );
+  const sucursal = branchId
+    ? data.branches.find((branch) => branch.id === branchId)
+    : undefined;
+  const usuarios = (
+    branchId
+      ? data.users.filter((usuario) => usuario.branchIds?.includes(branchId))
+      : data.users
+  )
+    .slice()
+    // Primero los activos: son los únicos con los que se puede entrar.
+    .sort((a, b) => Number(b.active) - Number(a.active));
+  return (
+    <PlatformPanel
+      icon={<Users size={16} />}
+      title={`${data.name}${sucursal ? ` · ${sucursal.name}` : ""}`}
+      description={`${usuarios.length} ${usuarios.length === 1 ? "usuario" : "usuarios"}${sucursal ? " con acceso a esta sucursal" : ""}`}
+      bodyClassName={usuarios.length === 0 ? "" : "p-4"}
+    >
+      {usuarios.length === 0 ? (
+        <PlatformEmpty icon={<Users size={22} />} title="Sin usuarios">
+          No hay usuarios con acceso a esta sucursal.
+        </PlatformEmpty>
+      ) : (
+        <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+          {usuarios.map((usuario) => {
+            const nombre = usuario.displayName || usuario.email;
+            return (
+              <li
+                key={usuario.id}
+                className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-colors ${usuario.active ? "border-[#e2ebf0] bg-white hover:border-[#cce8de] hover:bg-[#fbfefd]" : "border-dashed border-slate-200 bg-slate-50/60"}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold tracking-wide ${usuario.active ? "bg-[#e4f6f0] text-[#087f70]" : "bg-slate-200 text-slate-500"}`}
+                >
+                  {iniciales(nombre)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-slate-900">
+                    {nombre}
+                  </span>
+                  {usuario.displayName && (
+                    <span className="block truncate text-xs text-slate-500">
+                      {usuario.email}
+                    </span>
+                  )}
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {(usuario.roles.length
+                      ? usuario.roles.map(({ name }) => name)
+                      : ["Sin rol"]
+                    ).map((rol) => (
+                      <span
+                        key={rol}
+                        className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
+                      >
+                        {rol}
+                      </span>
+                    ))}
+                    {!usuario.active && (
+                      <span className="rounded-md bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+                        Inactivo
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <BotonEntrarComo
+                  organizationId={data.id}
+                  organizationName={data.name}
+                  usuario={usuario}
+                  destacado
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </PlatformPanel>
   );
 }

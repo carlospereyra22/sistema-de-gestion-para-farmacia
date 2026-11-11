@@ -45,3 +45,39 @@ const dateFormat = new Intl.DateTimeFormat("es-AR", {
 export function platformDateLabel(value: string): string {
   return dateFormat.format(new Date(value));
 }
+
+/** Tipos de registro, para filtrar la auditoría. */
+export type PlatformAuditGroup =
+  "soporte" | "cobros" | "farmacias" | "accesos" | "arca";
+
+export const platformAuditGroups: { value: string; label: string }[] = [
+  { value: "ALL", label: "Todos los registros" },
+  { value: "soporte", label: "Soporte" },
+  { value: "cobros", label: "Cobros y planes" },
+  { value: "farmacias", label: "Farmacias y usuarios" },
+  { value: "accesos", label: "Accesos al panel" },
+  { value: "arca", label: "ARCA" },
+];
+
+export function platformAuditGroup(action: string): PlatformAuditGroup {
+  if (action.startsWith("SOPORTE_")) return "soporte";
+  if (action.startsWith("PADRON_")) return "arca";
+  if (/PAYMENT|CHARGE|EXTENSION|PLAN_UPDATED|SUBSCRIPTION/.test(action))
+    return "cobros";
+  if (/TOTP|PLATFORM_ADMIN/.test(action)) return "accesos";
+  return "farmacias";
+}
+
+/** En soporte, a qué usuario se entró: queda en `after.email`. */
+export function platformAuditDetail(entry: {
+  action: string;
+  after?: unknown;
+}): string | undefined {
+  if (!entry.action.startsWith("SOPORTE_")) return undefined;
+  const after = entry.after;
+  if (after && typeof after === "object" && "email" in after) {
+    const email = (after as { email: unknown }).email;
+    if (typeof email === "string") return `Como ${email}`;
+  }
+  return undefined;
+}

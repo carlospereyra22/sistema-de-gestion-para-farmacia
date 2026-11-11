@@ -11,8 +11,11 @@ import type { AccessTokenPayload } from "../auth/auth.types";
 import { PrismaService } from "../prisma/prisma.service";
 import { recordPlatformAudit } from "./platform-audit";
 
-/** Cuánto dura una sesión de soporte: después hay que volver a entrar. */
-export const DURACION_SOPORTE_MS = 4 * 60 * 60 * 1000;
+/**
+ * La sesión de soporte dura lo que haga falta: se corta al volver al panel.
+ * Este tope solo evita que una sesión olvidada quede viva para siempre.
+ */
+export const DURACION_SOPORTE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Entrar como un usuario de una farmacia, para reproducir y arreglar un problema
@@ -91,7 +94,7 @@ export class PlatformSoporteService {
         action: "SOPORTE_ENTRO",
         after: { path: ["sessionId"], equals: sessionId },
       },
-      select: { entityId: true, organizationId: true },
+      select: { entityId: true, organizationId: true, after: true },
     });
     if (!entrada)
       throw new NotFoundException("Sesión de soporte no encontrada.");
@@ -107,8 +110,17 @@ export class PlatformSoporteService {
           entityType: "User",
           entityId: entrada.entityId,
           organizationId: entrada.organizationId,
-          after: { sessionId },
+          // El correo del usuario, para leer la auditoría sin cruzar registros.
+          after: { sessionId, email: correoDeLaEntrada(entrada.after) },
         });
     });
   }
+}
+
+function correoDeLaEntrada(after: unknown): string | null {
+  if (after && typeof after === "object" && "email" in after) {
+    const { email } = after as { email: unknown };
+    if (typeof email === "string") return email;
+  }
+  return null;
 }

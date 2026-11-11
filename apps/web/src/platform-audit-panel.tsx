@@ -1,4 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Building2,
+  Filter,
+  KeyRound,
+  Landmark,
+  LifeBuoy,
+  ScrollText,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import {
   DataTable,
   DataTableCell,
@@ -13,13 +23,37 @@ import {
 import {
   platformActionLabel,
   platformActorLabel,
+  platformAuditDetail,
+  platformAuditGroup,
+  platformAuditGroups,
   platformDateLabel,
+  type PlatformAuditGroup,
 } from "./lib/platform-audit";
+import {
+  PlatformError,
+  PlatformLoading,
+  PlatformPageHeader,
+} from "./platform-ui";
+import { ProductFilterSelect } from "./product-filter-select";
+
+const groupStyle: Record<PlatformAuditGroup, [LucideIcon, string]> = {
+  soporte: [LifeBuoy, "bg-violet-50 text-violet-700"],
+  cobros: [Wallet, "bg-[#e8faf5] text-[#087f70]"],
+  farmacias: [Building2, "bg-sky-50 text-sky-700"],
+  accesos: [KeyRound, "bg-amber-50 text-amber-700"],
+  arca: [Landmark, "bg-slate-100 text-slate-600"],
+};
 import { Pagination } from "./pagination";
 
 const PAGE_SIZE = 10;
 
-export function PlatformAuditTable({ rows }: { rows: PlatformAuditEntry[] }) {
+export function PlatformAuditTable({
+  rows,
+  emptyText = "Todavía no hay registros.",
+}: {
+  rows: PlatformAuditEntry[];
+  emptyText?: string;
+}) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const current = Math.min(page, totalPages);
@@ -27,7 +61,12 @@ export function PlatformAuditTable({ rows }: { rows: PlatformAuditEntry[] }) {
   return (
     <DataTable
       label="Auditoría de la plataforma"
-      columns={[{ label: "Fecha" }, { label: "Acción" }, { label: "Quién" }]}
+      columns={[
+        { label: "Fecha" },
+        { label: "Acción" },
+        { label: "Farmacia" },
+        { label: "Quién" },
+      ]}
       minWidthClass="min-w-180"
       footer={
         rows.length > PAGE_SIZE ? (
@@ -44,19 +83,53 @@ export function PlatformAuditTable({ rows }: { rows: PlatformAuditEntry[] }) {
       }
     >
       {visible.length === 0 ? (
-        <DataTableEmpty colSpan={3}>Todavía no hay registros.</DataTableEmpty>
+        <DataTableEmpty colSpan={4}>{emptyText}</DataTableEmpty>
       ) : (
         visible.map((row) => (
           <DataTableRow key={row.id}>
             <DataTableCell className="whitespace-nowrap">
               {platformDateLabel(row.createdAt)}
             </DataTableCell>
-            <DataTableCell>{platformActionLabel(row.action)}</DataTableCell>
-            <DataTableCell>{platformActorLabel(row.actorEmail)}</DataTableCell>
+            <DataTableCell>
+              <AuditAction row={row} />
+            </DataTableCell>
+            <DataTableCell>
+              {row.organizationName ?? (
+                <span className="text-slate-400">—</span>
+              )}
+            </DataTableCell>
+            <DataTableCell className="text-slate-600">
+              {platformActorLabel(row.actorEmail)}
+            </DataTableCell>
           </DataTableRow>
         ))
       )}
     </DataTable>
+  );
+}
+
+function AuditAction({ row }: { row: PlatformAuditEntry }) {
+  const [Icon, tone] = groupStyle[platformAuditGroup(row.action)];
+  const detail = platformAuditDetail(row);
+  return (
+    <span className="flex items-center gap-2.5">
+      <span
+        aria-hidden="true"
+        className={`grid size-7 shrink-0 place-items-center rounded-lg ${tone}`}
+      >
+        <Icon size={14} />
+      </span>
+      <span className="min-w-0">
+        <span className="block font-medium text-slate-800">
+          {platformActionLabel(row.action)}
+        </span>
+        {detail && (
+          <span className="block truncate text-xs text-slate-500">
+            {detail}
+          </span>
+        )}
+      </span>
+    </span>
   );
 }
 
@@ -69,6 +142,14 @@ export function PlatformAuditPanel({
 }) {
   const [rows, setRows] = useState<PlatformAuditEntry[]>();
   const [error, setError] = useState("");
+  const [group, setGroup] = useState("ALL");
+  const filtered = useMemo(
+    () =>
+      rows?.filter(
+        ({ action }) => group === "ALL" || platformAuditGroup(action) === group,
+      ),
+    [rows, group],
+  );
   useEffect(() => {
     let active = true;
     getPlatformAudit(token)
@@ -94,24 +175,39 @@ export function PlatformAuditPanel({
     };
   }, [token, onVerificationExpired]);
   return (
-    <>
-      <h1 className="text-2xl font-semibold">Auditoría</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Últimas 100 acciones hechas en la plataforma.
-      </p>
-      <div className="mt-4">
-        {error ? (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        ) : rows ? (
-          <PlatformAuditTable rows={rows} />
-        ) : (
-          <p role="status" className="text-sm text-slate-500">
-            Cargando…
-          </p>
-        )}
-      </div>
-    </>
+    <div className="space-y-5">
+      <PlatformPageHeader
+        icon={<ScrollText size={22} />}
+        title="Auditoría"
+        description="Las últimas 100 acciones hechas en la plataforma, incluidas las entradas de soporte. Las farmacias no ven estos registros."
+        actions={
+          <div className="w-64">
+            <ProductFilterSelect
+              label="Tipo de registro"
+              value={group}
+              options={platformAuditGroups}
+              icon={<Filter size={16} />}
+              onChange={setGroup}
+              compact
+            />
+          </div>
+        }
+      />
+      {error ? (
+        <PlatformError>{error}</PlatformError>
+      ) : filtered ? (
+        <PlatformAuditTable
+          key={group}
+          rows={filtered}
+          emptyText={
+            group === "ALL"
+              ? undefined
+              : "No hay registros de este tipo entre los últimos 100."
+          }
+        />
+      ) : (
+        <PlatformLoading>Cargando auditoría…</PlatformLoading>
+      )}
+    </div>
   );
 }

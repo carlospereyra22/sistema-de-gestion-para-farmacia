@@ -84,12 +84,35 @@ describe("soporte: entrar como un usuario de una farmacia (esquema aislado)", ()
     });
     expect(auditoria).toHaveLength(1);
     expect(auditoria[0]!.after).toMatchObject({ sessionId });
+    // El panel muestra la farmacia de cada registro por su nombre.
+    const panel = (await (
+      await http.request("/platform/audit", admin)
+    ).json()) as { id: string; organizationName: string | null }[];
+    expect(
+      panel.find(({ id }) => id === auditoria[0]!.id)?.organizationName,
+    ).toBe("Farmacia Soporte");
     // La farmacia no ve nada: su auditoría no registra la entrada.
     expect(
       await http.db.auditLog.count({
         where: { organizationId: f.id, action: { contains: "SOPORTE" } },
       }),
     ).toBe(0);
+  });
+
+  it("lista farmacias con sus sucursales y, en el detalle, las sucursales de cada usuario", async () => {
+    const f = await farmacia();
+    const lista = (await (
+      await http.request("/platform/organizations", admin)
+    ).json()) as { id: string; branches: { id: string; name: string }[] }[];
+    expect(lista.find((o) => o.id === f.id)?.branches).toEqual([
+      { id: f.branchId, name: "Central" },
+    ]);
+    const detalle = (await (
+      await http.request(`/platform/organizations/${f.id}`, admin)
+    ).json()) as { users: { id: string; branchIds: string[] }[] };
+    expect(detalle.users.find((u) => u.id === f.ownerId)?.branchIds).toEqual([
+      f.branchId,
+    ]);
   });
 
   it("como soporte no se emite en ARCA producción", async () => {

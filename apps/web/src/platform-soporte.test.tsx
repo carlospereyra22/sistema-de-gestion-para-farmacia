@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BotonEntrarComo } from "./platform-soporte";
-import { SoporteContext, filtrarFarmacias } from "./lib/soporte-panel";
+import {
+  SoporteContext,
+  eleccionDeSoporte,
+  iniciales,
+  opcionesDeFarmacias,
+  opcionesDeSucursales,
+  valorDeSoporte,
+} from "./lib/soporte-panel";
 
 const usuario = (active: boolean) => ({
   id: "u1",
@@ -33,11 +40,44 @@ describe("soporte en el panel", () => {
     expect(boton(true, false)).toBe("");
   });
 
-  it("busca farmacias por nombre, sin importar mayúsculas", () => {
-    const farmacias = [{ name: "Farmacia Centro" }, { name: "Botica Sur" }];
-    expect(filtrarFarmacias(farmacias, "centro")).toEqual([
-      { name: "Farmacia Centro" },
+  it("un buscador elige la farmacia y otro, la sucursal", () => {
+    const farmacias = [
+      {
+        id: "o1",
+        name: "Farmacia Centro",
+        branches: [
+          { id: "b1", name: "Casa Central" },
+          { id: "b2", name: "Sucursal Norte" },
+        ],
+      },
+      { id: "o2", name: "Botica Sur" },
+    ];
+    expect(opcionesDeFarmacias(farmacias)).toEqual([
+      { value: "o2", label: "Botica Sur" },
+      { value: "o1", label: "Farmacia Centro" },
     ]);
-    expect(filtrarFarmacias(farmacias, "")).toHaveLength(2);
+    expect(opcionesDeSucursales(farmacias[0])).toEqual([
+      { value: "", label: "Todas las sucursales" },
+      { value: "b1", label: "Casa Central" },
+      { value: "b2", label: "Sucursal Norte" },
+    ]);
+    expect(opcionesDeSucursales(undefined)).toEqual([
+      { value: "", label: "Todas las sucursales" },
+    ]);
+    expect(eleccionDeSoporte(valorDeSoporte("o1", "b2"))).toEqual({
+      organizationId: "o1",
+      branchId: "b2",
+    });
+    expect(eleccionDeSoporte(valorDeSoporte("o2"))).toEqual({
+      organizationId: "o2",
+      branchId: undefined,
+    });
+  });
+
+  it("arma las iniciales del usuario", () => {
+    expect(iniciales("Ana Pérez")).toBe("AP");
+    expect(iniciales("cajero.a@demo.com")).toBe("CA");
+    expect(iniciales("ana@x.com")).toBe("AN");
+    expect(iniciales("Cajero A (mostrador)")).toBe("CM");
   });
 });

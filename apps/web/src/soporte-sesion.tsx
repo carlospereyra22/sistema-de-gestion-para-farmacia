@@ -46,13 +46,13 @@ export function SoporteSesion({
     <button
       type="button"
       onClick={onVolver}
+      aria-label={`Volver al panel (estás como ${etiqueta})`}
       title={`Soporte: estás como ${etiqueta}`}
-      className="fixed bottom-4 left-4 z-[100] inline-flex items-center gap-2 rounded-full bg-slate-900/90 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-slate-900"
+      className="group fixed bottom-3 left-3 z-[100] inline-flex h-8 items-center gap-0 rounded-full border border-white/10 bg-[#1b2735]/90 px-2 text-slate-200 shadow-[0_4px_14px_rgb(15_23_42_/_28%)] backdrop-blur transition-all duration-200 hover:gap-1.5 hover:bg-[#1b2735] hover:pr-3 hover:text-white focus-visible:gap-1.5 focus-visible:pr-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 motion-reduce:transition-none"
     >
-      <ArrowLeft size={16} aria-hidden="true" />
-      Volver al panel
-      <span className="hidden max-w-[220px] truncate text-xs font-normal text-slate-300 sm:inline">
-        {etiqueta}
+      <ArrowLeft size={15} aria-hidden="true" className="shrink-0" />
+      <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-semibold transition-[max-width] duration-200 group-hover:max-w-40 group-focus-visible:max-w-40 motion-reduce:transition-none">
+        Volver al panel
       </span>
     </button>
   );

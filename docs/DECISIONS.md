@@ -336,7 +336,7 @@
 
 - Envío de operaciones de otro usuario de la PC (11/11/2026, SISTEMA-87, prueba completa con dos PCs): "queda para su dueño" se decide por una señal explícita de la API (`code: "PARA_SU_DUENO"` en el 409 de la clave no registrada) o por un 403 de quien manda, no por el número de estado. Los 404/409 de negocio (conflictos de la operación) son rechazos definitivos: frenar la sucursal por ellos trababa todas las ventas de la PC hasta que volviera a entrar quien las hizo.
 
-- Soporte desde el panel de plataforma (11/11/2026, SISTEMA-89, decisión del usuario): el superadmin puede entrar como cualquier usuario de una farmacia y operar igual que él, para reproducir y arreglar problemas, sin que la farmacia lo vea. Reemplaza la decisión del 06/11 de no entrar como una farmacia (`PLATFORM.md`). Límites: sesión de 4 h sin renovación, sin ARCA producción, registro sólo en la auditoría de la plataforma. Conviene que los términos de servicio contemplen el acceso del soporte.
+- Soporte desde el panel de plataforma (11/11/2026, SISTEMA-89, decisión del usuario): el superadmin puede entrar como cualquier usuario de una farmacia y operar igual que él, para reproducir y arreglar problemas, sin que la farmacia lo vea. Reemplaza la decisión del 06/11 de no entrar como una farmacia (`PLATFORM.md`). Límites: la sesión dura hasta volver al panel (tope de 7 días, sin renovación), sin ARCA producción, registro sólo en la auditoría de la plataforma. Conviene que los términos de servicio contemplen el acceso del soporte.
 
 ## OPEN
 

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ShieldCheck } from "lucide-react";
 import {
   confirmPlatformCode,
   enrollPlatformCode,
@@ -79,9 +80,23 @@ export function PlatformAccess({
   };
   const asksCode = enrolled || enrollment;
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-6 sm:px-6">
-      <section className="w-full max-w-md rounded-xl border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-[#f4f8fa] bg-[radial-gradient(#d3e1e6_1px,transparent_1px)] px-4 py-6 [background-size:22px_22px] sm:px-6">
+      <p className="mb-5 flex items-center gap-2.5 text-[#233a42]">
+        <img
+          src="/icons/app-192.png"
+          alt=""
+          className="size-9 rounded-lg border border-[#dce7ef] bg-white p-0.5"
+        />
+        <span className="text-lg font-bold">Farmatec</span>
+        <span className="rounded-full border border-[#cce8de] bg-white px-2.5 py-0.5 text-xs font-semibold text-[#087f70]">
+          Plataforma
+        </span>
+      </p>
+      <section className="w-full max-w-sm rounded-2xl border border-[#dce7ef] bg-white p-7 shadow-[0_12px_40px_-20px_rgba(35,58,66,0.35)]">
+        <span className="grid size-11 place-items-center rounded-full bg-[#eaf3f5] text-[#2c7380]">
+          <ShieldCheck size={20} aria-hidden="true" />
+        </span>
+        <h1 className="mt-4 text-xl font-bold text-slate-900">
           {enrolled ? "Ingresá tu código" : "Configurá tu código"}
         </h1>
         <p className="mt-1 break-all text-sm text-slate-500">{email}</p>
@@ -107,7 +122,7 @@ export function PlatformAccess({
                   setEnrollment(await enrollPlatformCode(token)),
                 )
               }
-              className="mt-4 w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2c7380] text-sm font-semibold text-white shadow-sm hover:bg-[#245f6a] disabled:opacity-60"
             >
               {busy ? "Preparando…" : "Empezar"}
             </button>
@@ -122,7 +137,7 @@ export function PlatformAccess({
             <p className="mt-3 text-xs text-slate-500">
               Si no podés escanearlo, cargá esta clave a mano:
             </p>
-            <p className="mt-1 break-all rounded-lg bg-slate-50 p-2 font-mono text-sm">
+            <p className="mt-1 break-all rounded-lg border border-[#e6eef3] bg-slate-50 p-2.5 font-mono text-sm text-slate-700">
               {enrollment.secret}
             </p>
           </>
@@ -135,7 +150,7 @@ export function PlatformAccess({
               submit();
             }}
           >
-            <label className="mt-4 block text-sm">
+            <label className="mt-5 block text-sm font-medium text-slate-700">
               Código de 6 dígitos
               <input
                 type="text"
@@ -147,19 +162,22 @@ export function PlatformAccess({
                 onChange={(event) =>
                   setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
                 }
-                className="mt-1 h-11 w-full rounded-lg border px-3 text-center font-mono text-lg tracking-[0.4em]"
+                className="mt-1.5 h-12 w-full rounded-lg border border-[#dce7ef] bg-white px-3 text-center font-mono text-xl tracking-[0.5em] text-slate-900 shadow-sm focus:border-[#3d7f8a] focus:outline-none focus:ring-2 focus:ring-[#3d7f8a]/20"
               />
             </label>
             <button
               disabled={busy}
-              className="mt-4 w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2c7380] text-sm font-semibold text-white shadow-sm hover:bg-[#245f6a] disabled:opacity-60"
             >
               {busy ? "Verificando…" : enrolled ? "Entrar" : "Confirmar"}
             </button>
           </form>
         )}
         {error && (
-          <p role="alert" className="mt-3 text-sm text-red-700">
+          <p
+            role="alert"
+            className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+          >
             {error}
           </p>
         )}
@@ -167,7 +185,7 @@ export function PlatformAccess({
           type="button"
           disabled={busy}
           onClick={onLogout}
-          className="mt-3 w-full rounded-lg border px-4 py-2 text-sm"
+          className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#cfe2e6] text-sm font-semibold text-[#2c7380] hover:bg-[#f1f7f8] disabled:opacity-60"
         >
           Cerrar sesión
         </button>

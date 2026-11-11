@@ -13,13 +13,51 @@ export type EntrarComo = (
 
 export const SoporteContext = createContext<EntrarComo | undefined>(undefined);
 
-/** Lista de farmacias, por nombre. */
-export function filtrarFarmacias<T extends { name: string }>(
-  farmacias: readonly T[],
-  texto: string,
+type FarmaciaConSucursales = {
+  id: string;
+  name: string;
+  branches?: { id: string; name: string }[];
+};
+
+/** Primer buscador de Soporte: las farmacias, por nombre. */
+export function opcionesDeFarmacias(
+  farmacias: readonly FarmaciaConSucursales[],
 ) {
-  const buscado = texto.trim().toLocaleLowerCase("es-AR");
-  return farmacias.filter((f) =>
-    f.name.toLocaleLowerCase("es-AR").includes(buscado),
-  );
+  return farmacias
+    .map((farmacia) => ({ value: farmacia.id, label: farmacia.name }))
+    .sort((a, b) => a.label.localeCompare(b.label, "es-AR"));
+}
+
+/** Segundo buscador: las sucursales de la farmacia elegida, o todas. */
+export function opcionesDeSucursales(farmacia?: FarmaciaConSucursales) {
+  return [
+    { value: "", label: "Todas las sucursales" },
+    ...(farmacia?.branches ?? []).map((sucursal) => ({
+      value: sucursal.id,
+      label: sucursal.name,
+    })),
+  ];
+}
+
+/** Valor guardado de la elección: `farmacia` o `farmacia|sucursal`. */
+export function valorDeSoporte(organizationId: string, branchId?: string) {
+  return branchId ? `${organizationId}|${branchId}` : organizationId;
+}
+
+/** Farmacia y sucursal (si se eligió una) del valor del selector. */
+export function eleccionDeSoporte(valor: string) {
+  const [organizationId, branchId] = valor.split("|");
+  return { organizationId: organizationId ?? "", branchId };
+}
+
+/** Dos letras para el avatar de un usuario: "Ana Pérez" → "AP", "ana@x.com" → "AN". */
+export function iniciales(nombre: string): string {
+  const base = nombre.split("@")[0] ?? "";
+  // Sólo letras y números: "Cajero A (mostrador)" → "CM", no "C(".
+  const palabras = base.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const letras =
+    palabras.length > 1
+      ? `${palabras[0]?.[0] ?? ""}${palabras.at(-1)?.[0] ?? ""}`
+      : (palabras[0] ?? "").slice(0, 2);
+  return letras.toLocaleUpperCase("es-AR") || "?";
 }

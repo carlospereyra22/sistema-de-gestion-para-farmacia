@@ -1,5 +1,12 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Ban, CalendarClock, HandCoins, WalletCards } from "lucide-react";
+import {
+  Ban,
+  CalendarClock,
+  HandCoins,
+  ReceiptText,
+  WalletCards,
+} from "lucide-react";
+import { PlatformPanel } from "./platform-ui";
 import {
   DataTable,
   DataTableCell,
@@ -568,15 +575,13 @@ export function PlatformBillingSection({
   const [waiving, setWaiving] = useState<PlatformCharge>();
   const extended = subscription.stage === "EXTENDED";
   return (
-    <section className="mt-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-3">
-          <h2 className="font-semibold">Pagos</h2>
-          <p className="text-sm font-medium text-slate-600">
-            {balanceLabel(billing)}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <PlatformPanel
+      icon={<ReceiptText size={16} />}
+      title="Cuenta de la farmacia"
+      description={balanceLabel(billing)}
+      bodyClassName="space-y-3 p-3"
+      actions={
+        <>
           <button
             type="button"
             className={secondary}
@@ -593,10 +598,11 @@ export function PlatformBillingSection({
             <WalletCards size={16} />
             Registrar pago
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
       {extended && subscription.extendedUntil && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
           <p className="min-w-0">
             Con prórroga hasta {dateLabel(subscription.extendedUntil)}
             {subscription.extendedReason && `: ${subscription.extendedReason}`}
@@ -610,7 +616,7 @@ export function PlatformBillingSection({
           </button>
         </div>
       )}
-      <div className="mt-3 grid items-start gap-4 xl:grid-cols-2">
+      <div className="grid items-start gap-3 xl:grid-cols-2">
         <ChargesTable charges={billing.charges} onWaive={setWaiving} />
         <PaymentsTable payments={billing.payments} onVoid={setVoiding} />
       </div>
@@ -688,6 +694,6 @@ export function PlatformBillingSection({
           }}
         />
       )}
-    </section>
+    </PlatformPanel>
   );
 }

@@ -19,6 +19,10 @@ export type PlatformAuditEntry = {
   action: string;
   actorEmail: string | null;
   createdAt: string;
+  /** Farmacia del registro, si es de una (SISTEMA-89). */
+  organizationName?: string | null;
+  /** Datos del cambio; en soporte, el correo del usuario. */
+  after?: unknown;
 };
 export type PlatformSubscription = {
   stage: SubscriptionStage;
@@ -50,6 +54,8 @@ export type PlatformOrganization = {
   balanceMinor: string;
   activeBranches: number;
   activeUsers: number;
+  /** Sucursales activas, para el selector de Soporte. */
+  branches?: { id: string; name: string }[];
   subscription: PlatformSubscription | null;
 };
 export type PlatformCharge = {
@@ -106,6 +112,8 @@ export type PlatformOrganizationDetail = {
     email: string;
     active: boolean;
     displayName: string | null;
+    /** Sucursales de la farmacia a las que tiene acceso. */
+    branchIds?: string[];
     mustChangePassword: boolean;
     roles: { code: string; name: string }[];
   }[];

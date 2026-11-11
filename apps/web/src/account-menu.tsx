@@ -21,6 +21,7 @@ export function AccountMenu({
   branchName,
   branchSelector,
   accessToken,
+  placeIcon,
   onLogout,
 }: {
   email: string;
@@ -29,6 +30,8 @@ export function AccountMenu({
   branchName: string;
   branchSelector?: ReactNode;
   accessToken?: string;
+  /** Ícono de la línea de ubicación; por defecto, el de la sucursal. */
+  placeIcon?: ReactNode;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -146,9 +149,8 @@ export function AccountMenu({
               )
             )}
             <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
-              {!branchSelector && (
-                <MapPin size={13} className="mt-0.5 shrink-0" />
-              )}
+              {!branchSelector &&
+                (placeIcon ?? <MapPin size={13} className="mt-0.5 shrink-0" />)}
               {branchSelector ?? (
                 <span className="break-words">{branchName}</span>
               )}

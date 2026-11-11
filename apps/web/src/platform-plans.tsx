@@ -1,4 +1,5 @@
 import { useCallback, useState, type FormEvent } from "react";
+import { Calculator, Layers, Save } from "lucide-react";
 import { formatAmountTyping } from "./lib/amount-typing";
 import { lotCostInput, typedCostMinor } from "./lib/lot-cost";
 import {
@@ -7,8 +8,15 @@ import {
   type PlatformPlan,
 } from "./lib/platform-api";
 import { usePlatformData } from "./lib/use-platform-data";
+import { abonoDeEjemplo } from "./lib/platform-plan-ejemplo";
 import { MoneyInput } from "./money-input";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
+import {
+  PlatformError,
+  PlatformLoading,
+  PlatformPageHeader,
+  PlatformPanel,
+} from "./platform-ui";
 import { StatusToast } from "./status-toast";
 import { ars } from "./supplier-payables/api";
 import { PayableDialog, primary } from "./supplier-payables/dialog";
@@ -63,36 +71,80 @@ function PlanForm({
       setBusy(false);
     }
   };
+  const ejemplo = abonoDeEjemplo(plan, { base, extraUser, extraBranch });
   return (
-    <form
-      onSubmit={review}
-      className="max-w-xl rounded-xl border border-slate-200 bg-white p-5"
-    >
-      <h2 className="font-semibold">{plan.name}</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Incluye {plan.includedBranches} sucursal y {plan.includedUsers} usuario.
-        El abono se calcula con esta fórmula, salvo que la farmacia tenga un
-        precio acordado.
-      </p>
-      <MoneyInput label="Abono base" value={base} onChange={setBase} />
-      <MoneyInput
-        label="Por cada usuario adicional"
-        value={extraUser}
-        onChange={setExtraUser}
-      />
-      <MoneyInput
-        label="Por cada sucursal adicional"
-        value={extraBranch}
-        onChange={setExtraBranch}
-      />
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <div className="mt-5 flex justify-end">
-        <button className={primary}>Guardar precios</button>
-      </div>
+    <form onSubmit={review}>
+      <PlatformPanel
+        icon={<Layers size={16} />}
+        title={plan.name}
+        description={`Incluye ${plan.includedBranches} ${plan.includedBranches === 1 ? "sucursal" : "sucursales"} y ${plan.includedUsers} ${plan.includedUsers === 1 ? "usuario" : "usuarios"}. Vale salvo que la farmacia tenga un precio acordado.`}
+        className="max-w-5xl"
+        bodyClassName="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_320px]"
+      >
+        <div className="min-w-0 [&>label:first-child]:mt-0">
+          <MoneyInput label="Abono base" value={base} onChange={setBase} />
+          <MoneyInput
+            label="Por cada usuario adicional"
+            value={extraUser}
+            onChange={setExtraUser}
+          />
+          <MoneyInput
+            label="Por cada sucursal adicional"
+            value={extraBranch}
+            onChange={setExtraBranch}
+          />
+          {error && (
+            <div className="mt-4">
+              <PlatformError>{error}</PlatformError>
+            </div>
+          )}
+          <div className="mt-5 flex justify-end">
+            <button className={primary}>
+              <Save size={16} aria-hidden="true" />
+              Guardar precios
+            </button>
+          </div>
+        </div>
+        <aside className="rounded-xl border border-[#d8ece5] bg-[#f4fbf8] p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold text-[#0b6b5f]">
+            <Calculator size={16} aria-hidden="true" />
+            Así queda un abono
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            Una farmacia con {ejemplo.sucursales} sucursales y{" "}
+            {ejemplo.usuarios} usuarios.
+          </p>
+          {ejemplo.filas ? (
+            <>
+              <dl className="mt-3 space-y-1.5 text-sm">
+                {ejemplo.filas.map(([concepto, importe]) => (
+                  <div
+                    key={concepto}
+                    className="flex items-baseline justify-between gap-3"
+                  >
+                    <dt className="text-slate-600">{concepto}</dt>
+                    <dd className="font-medium tabular-nums text-slate-800">
+                      {ars(importe)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 flex items-baseline justify-between gap-3 border-t border-[#d8ece5] pt-3">
+                <span className="text-sm font-semibold text-slate-700">
+                  Por mes
+                </span>
+                <span className="text-xl font-bold tabular-nums tracking-tight text-[#087f70]">
+                  {ars(ejemplo.totalMinor)}
+                </span>
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-amber-700">
+              Completá los importes para ver el ejemplo.
+            </p>
+          )}
+        </aside>
+      </PlatformPanel>
       {prices && (
         <PayableDialog
           title="Guardar precios"
@@ -132,35 +184,30 @@ export function PlatformPlans({
   const { data, error, reload } = usePlatformData(load, onVerificationExpired);
   const [notice, setNotice] = useState("");
   return (
-    <>
-      <h1 className="text-2xl font-semibold">Planes</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Los precios nuevos se aplican desde el próximo período de cada farmacia.
-      </p>
-      <div className="mt-4 space-y-4">
-        {error ? (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        ) : data ? (
-          data.map((plan) => (
-            <PlanForm
-              key={`${plan.id}:${plan.baseMinor}:${plan.extraUserMinor}:${plan.extraBranchMinor}`}
-              token={token}
-              plan={plan}
-              onSaved={() => {
-                setNotice("Precios actualizados.");
-                reload();
-              }}
-            />
-          ))
-        ) : (
-          <p role="status" className="text-sm text-slate-500">
-            Cargando planes…
-          </p>
-        )}
-      </div>
+    <div className="space-y-5">
+      <PlatformPageHeader
+        icon={<Layers size={22} />}
+        title="Planes"
+        description="Precios de lista del abono. Los precios nuevos se aplican desde el próximo período de cada farmacia."
+      />
+      {error ? (
+        <PlatformError>{error}</PlatformError>
+      ) : data ? (
+        data.map((plan) => (
+          <PlanForm
+            key={`${plan.id}:${plan.baseMinor}:${plan.extraUserMinor}:${plan.extraBranchMinor}`}
+            token={token}
+            plan={plan}
+            onSaved={() => {
+              setNotice("Precios actualizados.");
+              reload();
+            }}
+          />
+        ))
+      ) : (
+        <PlatformLoading>Cargando planes…</PlatformLoading>
+      )}
       {notice && <StatusToast message={notice} onClose={() => setNotice("")} />}
-    </>
+    </div>
   );
 }
