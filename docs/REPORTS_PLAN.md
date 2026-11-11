@@ -15,6 +15,34 @@ entradas siguientes muestran todo directo; un cambio de filtros sólo hace una t
 corta en los gráficos. Sin conexión, con la copia guardada o con "reducir movimiento" no
 hay animación. Lógica en `lib/animacion-reportes.ts`.
 
+### Movimiento afinado (SISTEMA-90, 11/11/2026)
+
+Sólo presentación: no cambia datos, cálculos, consultas ni la API.
+
+- **Tiempos centralizados** en `MOVIMIENTO` (`lib/animacion-reportes.ts`).
+- **KPI**: cuentan desde 0 en 2,3 s con `easeOutPower` (`1 - (1 - t)^3,2`: al 35 % del
+  tiempo ya recorrió ~75 %, después desacelera sin saltos), escalonados 65 ms. Los cuadros
+  intermedios se redondean al centavo; el último muestra el dato original exacto. El lector
+  de pantalla lee sólo el valor final. Un 0 real no se anima.
+- **Cambio de filtros**: el Resumen sigue mostrando lo anterior (atenuado, con
+  "Actualizando…" si tarda más de 150 ms) en vez del esqueleto; al llegar lo nuevo los
+  números van del valor visible al nuevo en 700 ms y los gráficos interpolan en 500 ms.
+  Con error o de otra organización nunca se muestra lo viejo.
+- **Primera entrada a pantalla** (`useEntrada`, `IntersectionObserver` al 12 %): cada
+  tarjeta/panel lleva `data-entrada` (`pendiente` → `entrando` → `lista`); sólo en
+  `entrando` hay animación CSS, así los widgets de abajo aparecen cuando se ven y un
+  filtro, una página o un re-render no repiten nada. Los gráficos se montan recién ahí.
+- **Gráficos** (`opcionAnimada`, ECharts): la línea se dibuja de izquierda a derecha en
+  1,75 s con avance constante (ECharts hace aparecer cada punto según su X, así coincide
+  con el trazo) y la comparativa, punteada, 250 ms después. Las barras crecen desde el eje
+  con desfase de 50–85 ms según cantidad. Ejes y escalas no se tocan. Cada barra lleva su
+  nombre: al cambiar filtros ECharts la reconoce y la anima desde su largo anterior.
+- **Tablas, alertas y cierres**: las filas aparecen con 3 px y 200 ms (tope 180 ms de
+  desfase) sólo en la primera entrada; sus cifras nunca cuentan. Los tres totales de
+  cierres cuentan 2,1 s con su signo real. Las alertas tienen hover de 1 px.
+- **Pestañas**: el contenido entra con 220 ms al cambiar de pestaña (no en la primera carga).
+- CSS con `backwards` (no `both`): al terminar no queda transformación que tape tooltips.
+
 ## Punto de partida (31/10/2026)
 
 - API: `apps/api/src/reports/` con `GET .../branches/:branchId/reports/summary` y

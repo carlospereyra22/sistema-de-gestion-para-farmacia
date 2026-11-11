@@ -57,6 +57,7 @@ import { PurchaseReceptionProgress } from "./purchase-reception-progress";
 import { PurchaseReceiptTable } from "./purchase-receipt-table";
 import { PurchaseRowActions } from "./purchase-row-actions";
 import { PurchaseExcelImport } from "./purchase-excel-import";
+import { importNotice } from "./lib/purchase-excel";
 import { ProductThumbnail } from "./product-image";
 import {
   Plus,
@@ -79,6 +80,7 @@ import {
 } from "./lib/api";
 import {
   preparePurchaseLines,
+  purchaseLineMinor,
   PurchaseRequestError,
   prepareReceiptLines,
   purchasePending,
@@ -533,10 +535,7 @@ export function PurchasesWorkspace({
     0,
   );
   const totalCost =
-    draft?.lines.reduce(
-      (sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.cost) || 0) * 100,
-      0,
-    ) ?? 0;
+    draft?.lines.reduce((sum, l) => sum + purchaseLineMinor(l), 0) ?? 0;
   const submit = async () => {
     if (!draft || pending.current) return;
     let request = draft.locked;
@@ -1200,12 +1199,10 @@ export function PurchasesWorkspace({
                   setNotice("");
                   setError(message);
                 }}
-                onImport={(lines) => {
+                onImport={(lines, { source, yaEnCompra }) => {
                   patch({ lines: [...draft.lines, ...lines] });
                   setError("");
-                  setNotice(
-                    `Se agregaron ${lines.length} productos desde el Excel. Revisá cantidades y costos antes de guardar.`,
-                  );
+                  setNotice(importNotice(lines.length, source, yaEnCompra));
                 }}
               />
             )
@@ -1645,7 +1642,7 @@ export function PurchasesWorkspace({
                     </div>
                     <div className="max-h-[32dvh] overflow-auto rounded-lg border border-slate-200">
                       <table className="w-full text-left text-sm">
-                        <thead className="sticky top-0 bg-slate-50">
+                        <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_rgb(226_232_240)]">
                           <tr>
                             {[
                               "Producto",
@@ -1717,11 +1714,7 @@ export function PurchasesWorkspace({
                                 </div>
                               </td>
                               <td className="p-2 whitespace-nowrap">
-                                {money(
-                                  (Number(l.cost) || 0) *
-                                    (Number(l.quantity) || 0) *
-                                    100,
-                                )}
+                                {money(purchaseLineMinor(l))}
                               </td>
                               <td>
                                 <button

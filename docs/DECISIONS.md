@@ -2,6 +2,12 @@
 
 ## DECIDED
 
+- 11/11/2026 (SISTEMA-90): al cambiar un filtro, el Resumen de Reportes conserva lo que se
+  ve (atenuado, con "Actualizando…") hasta que llega la respuesta, en vez de volver al
+  esqueleto; así números y gráficos pasan de lo anterior a lo nuevo. Reemplaza lo de
+  SISTEMA-11 de mostrar el esqueleto con filtros distintos. Con error o de otra organización
+  no se muestra lo viejo. Los KPI cuentan en 2,3 s con `easeOutPower` y cada widget anima su
+  entrada al verse por primera vez (`docs/REPORTS_PLAN.md`). Sin librerías nuevas.
 - 11/11/2026 (SISTEMA-87): Reportes tiene una entrada animada (pedido del usuario): los
   números de los KPI suben desde 0, las tarjetas y los paneles aparecen de a uno, la línea
   de evolución se dibuja y las barras crecen. Sólo la primera vez que se abre Reportes en la

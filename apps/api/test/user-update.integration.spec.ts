@@ -166,4 +166,125 @@ describe("edición de usuarios (datos locales que se descartan)", () => {
       ),
     ).rejects.toBe(rollback);
   });
+
+  it("un administrador que no es dueño no puede crear dueños ni desplazar al dueño", async () => {
+    const rollback = new Error("ROLLBACK_OWNER_GUARD_FIXTURES");
+    await expect(
+      prisma.$transaction(
+        async (tx) => {
+          const org = await tx.organization.create({
+            data: { name: "Dueños fixture" },
+          });
+          const centro = await tx.branch.create({
+            data: { organizationId: org.id, name: "CENTRO", code: "CENTRO" },
+          });
+          const manage = await tx.permission.findMany({
+            where: { code: { in: ["USER_READ", "USER_MANAGE"] } },
+          });
+          const conPermisos = {
+            create: manage.map((p) => ({ permissionId: p.id })),
+          };
+          const ownerRole = await tx.role.create({
+            data: {
+              organizationId: org.id,
+              name: "Owner",
+              code: "OWNER",
+              permissions: conPermisos,
+            },
+          });
+          const adminRole = await tx.role.create({
+            data: {
+              organizationId: org.id,
+              name: "Admin",
+              code: "ADMIN",
+              permissions: conPermisos,
+            },
+          });
+          const createUser = async (roleIds: string[]) => {
+            const user = await tx.user.create({
+              data: {
+                email: `${randomUUID()}@example.invalid`,
+                passwordHash: "test-only",
+                branches: { create: { branchId: centro.id } },
+              },
+            });
+            await tx.userOrganization.create({
+              data: {
+                organizationId: org.id,
+                userId: user.id,
+                roles: { create: roleIds.map((roleId) => ({ roleId })) },
+              },
+            });
+            return user;
+          };
+          const dueno = await createUser([ownerRole.id]);
+          const segundoDueno = await createUser([ownerRole.id]);
+          const admin = await createUser([adminRole.id]);
+          const otro = await createUser([adminRole.id]);
+          const scoped = new Proxy(tx, {
+            get(target, key) {
+              return key === "$transaction"
+                ? (
+                    fn: (client: Prisma.TransactionClient) => Promise<unknown>,
+                  ) => fn(tx)
+                : Reflect.get(target, key);
+            },
+          });
+          const service = new UsersService(scoped as unknown as PrismaService);
+          const acceso = (roleIds: string[], active = true) => ({
+            active,
+            roleIds,
+            branchIds: [centro.id],
+          });
+
+          // No puede darle el rol de dueño a otra cuenta…
+          await expect(
+            service.update(admin.id, org.id, otro.id, acceso([ownerRole.id])),
+          ).rejects.toThrow("Sólo un dueño");
+          await expect(
+            service.create(
+              admin.id,
+              org.id,
+              `${randomUUID()}@example.invalid`,
+              "una-clave-de-prueba-larga",
+              [centro.id],
+              [ownerRole.id],
+            ),
+          ).rejects.toThrow("Sólo un dueño");
+          // …ni sacarle el rol o desactivar a un dueño, aunque haya dos.
+          await expect(
+            service.update(
+              admin.id,
+              org.id,
+              segundoDueno.id,
+              acceso([adminRole.id]),
+            ),
+          ).rejects.toThrow("Sólo un dueño");
+          await expect(
+            service.update(
+              admin.id,
+              org.id,
+              segundoDueno.id,
+              acceso([ownerRole.id], false),
+            ),
+          ).rejects.toThrow("Sólo un dueño");
+          // Sí puede cambiarle el nombre a un dueño y administrar al resto.
+          await service.update(admin.id, org.id, segundoDueno.id, {
+            ...acceso([ownerRole.id]),
+            displayName: "Socio",
+          });
+          await service.update(admin.id, org.id, otro.id, acceso([]));
+          // Un dueño sí puede.
+          await service.update(
+            dueno.id,
+            org.id,
+            otro.id,
+            acceso([ownerRole.id]),
+          );
+          throw rollback;
+        },
+        { timeout: 20000 },
+      ),
+    ).rejects.toBe(rollback);
+  });
 });

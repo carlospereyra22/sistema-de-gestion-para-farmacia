@@ -177,3 +177,24 @@ export function prepareReceiptLines(
     throw new Error("La suma de los lotes supera el pendiente de un artículo.");
   return result;
 }
+
+/**
+ * Subtotal en centavos de una línea del borrador, calculado igual que al
+ * guardar (`preparePurchaseLines`): primero el costo unitario al centavo y
+ * después por la cantidad. Así el importe estimado coincide con lo guardado
+ * aunque la factura traiga costos con más de dos decimales.
+ */
+export function purchaseLineMinor(
+  line: Pick<PurchaseDraftLine, "quantity" | "cost">,
+) {
+  const quantity = Number(line.quantity);
+  const unitCostMinor = Math.round(Number(line.cost) * 100);
+  if (
+    !Number.isSafeInteger(quantity) ||
+    quantity < 1 ||
+    !Number.isSafeInteger(unitCostMinor) ||
+    unitCostMinor < 0
+  )
+    return 0;
+  return quantity * unitCostMinor;
+}

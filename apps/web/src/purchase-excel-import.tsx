@@ -99,7 +99,14 @@ export function PurchaseExcelImport({
   products: CatalogProduct[];
   existingLines: PurchaseDraftLine[];
   disabled?: boolean;
-  onImport: (lines: PurchaseDraftLine[]) => void;
+  /**
+   * `yaEnCompra`: productos del archivo que ya estaban en la compra; no se
+   * agregan de nuevo (se revisa su cantidad a mano).
+   */
+  onImport: (
+    lines: PurchaseDraftLine[],
+    detalle: { source: ImportSource; yaEnCompra: number },
+  ) => void;
   onError: (message: string) => void;
   onCreateProduct?: (draft: {
     barcode: string;
@@ -342,9 +349,10 @@ export function PurchaseExcelImport({
             })
           }
           onCancel={() => setLoaded(undefined)}
-          onConfirm={(lines) => {
+          onConfirm={(lines, yaEnCompra) => {
+            const source = loaded.source;
             setLoaded(undefined);
-            onImport(lines);
+            onImport(lines, { source, yaEnCompra });
           }}
         />
       )}
@@ -404,7 +412,7 @@ export function PurchaseExcelReview({
     factor: number,
   ) => Promise<void>;
   onCancel: () => void;
-  onConfirm: (lines: PurchaseDraftLine[]) => void;
+  onConfirm: (lines: PurchaseDraftLine[], yaEnCompra: number) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [linking, setLinking] = useState<number>();
@@ -436,9 +444,13 @@ export function PurchaseExcelReview({
       r.quantity &&
       (assigned[r.rowNumber] || r.productId),
   );
-  const chosenProducts = new Set(
+  const chosenIds = new Set(
     chosen.map((r) => assigned[r.rowNumber] || r.productId),
-  ).size;
+  );
+  const chosenProducts = chosenIds.size;
+  const yaEnCompra = existingLines.filter((line) =>
+    chosenIds.has(line.productId),
+  ).length;
   const pendingReview = rows.filter(
     (r) => !(assigned[r.rowNumber] || r.productId) || !r.quantity,
   ).length;
@@ -480,6 +492,7 @@ export function PurchaseExcelReview({
         },
         existingLines,
       ),
+      yaEnCompra,
     );
   };
   // Las facturas informan el total de unidades: sirve para controlar la lectura.
@@ -801,7 +814,7 @@ export function PurchaseExcelReview({
           <button
             type="button"
             disabled={!lines.length || bulkBusy}
-            onClick={() => onConfirm(lines)}
+            onClick={() => onConfirm(lines, yaEnCompra)}
             className="h-10 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
             Agregar {lines.length}{" "}

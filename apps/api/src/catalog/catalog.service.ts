@@ -736,10 +736,39 @@ export class CatalogService {
       throw new NotFoundException("Price list or product is unavailable.");
     if (list.name === "Precio general")
       throw new BadRequestException("Precio general es de solo lectura.");
-    return this.prisma.productPrice.upsert({
-      where: { productId_priceListId: { productId, priceListId } },
-      update: { amountMinor: BigInt(amountMinor) },
-      create: { productId, priceListId, amountMinor: BigInt(amountMinor) },
+    // El cambio de precio queda auditado con el anterior, en la misma
+    // transacción, como el resto de los cambios del catálogo.
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.productPrice.findUnique({
+        where: { productId_priceListId: { productId, priceListId } },
+        select: { amountMinor: true },
+      });
+      const saved = await tx.productPrice.upsert({
+        where: { productId_priceListId: { productId, priceListId } },
+        update: { amountMinor: BigInt(amountMinor) },
+        create: { productId, priceListId, amountMinor: BigInt(amountMinor) },
+      });
+      if (before?.amountMinor !== saved.amountMinor)
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            organizationId,
+            entityType: "PRODUCT",
+            entityId: productId,
+            action: "PRICE_LIST_PRICE_SET",
+            before: {
+              priceListId,
+              priceListName: list.name,
+              amountMinor: before?.amountMinor.toString() ?? null,
+            },
+            after: {
+              priceListId,
+              priceListName: list.name,
+              amountMinor: saved.amountMinor.toString(),
+            },
+          },
+        });
+      return saved;
     });
   }
   async updateProductStatus(

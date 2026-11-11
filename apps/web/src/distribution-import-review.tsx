@@ -352,7 +352,7 @@ export function DistributionImportReview({
           </button>
           <div className="max-h-[52vh] overflow-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="sticky top-0 bg-slate-100">
+              <thead className="sticky top-0 z-10 bg-slate-100">
                 <tr>
                   {[
                     "Pedido / cantidad",

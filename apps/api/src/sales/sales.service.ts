@@ -1966,6 +1966,10 @@ export class SalesService {
         "A sale item can only appear once per return.",
       );
     return this.prisma.$transaction(async (tx) => {
+      // Bloquea la venta como la anulación: dos devoluciones simultáneas (doble
+      // clic, dos PCs) no pueden pasar las dos el control de cantidad, y no se
+      // registra una devolución mientras otra PC la anula.
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${saleId}::uuid AND "organizationId" = ${organizationId}::uuid AND "branchId" = ${branchId}::uuid FOR UPDATE`;
       const sale = await tx.sale.findFirst({
         where: { id: saleId, organizationId, branchId, status: "COMPLETED" },
         include: { items: true },

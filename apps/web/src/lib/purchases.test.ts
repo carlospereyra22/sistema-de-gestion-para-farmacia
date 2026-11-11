@@ -6,6 +6,7 @@ import {
   receiptLotChange,
   receiptLotMax,
   purchaseStatus,
+  purchaseLineMinor,
 } from "./purchases";
 
 const item = {
@@ -144,5 +145,22 @@ describe("receiptLotChange", () => {
   it("limpia la fecha traída al pasar de un lote existente a uno nuevo", () => {
     const picked = receiptLotChange(row, "A1", lots);
     expect(receiptLotChange(picked, "A12", lots).expiresAt).toBe("");
+  });
+});
+
+describe("importe estimado de la compra", () => {
+  it("redondea el costo al centavo antes de multiplicar, igual que al guardar", () => {
+    // Costo de factura con 4 decimales: se guarda 953276 centavos por unidad (antes la vista previa mostraba un centavo de más).
+    const line = { productId: "p", quantity: "3", cost: "9532.7649" };
+    const [guardada] = preparePurchaseLines([line]);
+    expect(purchaseLineMinor(line)).toBe(
+      guardada!.quantity * guardada!.unitCostMinor,
+    );
+    expect(purchaseLineMinor(line)).toBe(2859828);
+  });
+
+  it("una línea incompleta no suma", () => {
+    expect(purchaseLineMinor({ quantity: "", cost: "10" })).toBe(0);
+    expect(purchaseLineMinor({ quantity: "1.5", cost: "10" })).toBe(0);
   });
 });
