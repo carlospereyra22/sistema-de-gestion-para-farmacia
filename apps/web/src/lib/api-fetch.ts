@@ -29,6 +29,7 @@ function conTiempoMaximo(senal?: AbortSignal | null) {
     : senal;
 }
 import { registrarHoraServidor } from "./venta-sin-conexion";
+import { frenaPedido, PestanaPausadaError } from "./sesion-entre-pestanas";
 
 /** Evento que avisa que la API cortó por el estado de la suscripción. */
 export const SUBSCRIPTION_RESTRICTED = "farmatec:suscripcion-restringida";
@@ -95,6 +96,8 @@ export async function apiFetch(
 ): Promise<Response> {
   const url = urlDe(input);
   const metodo = metodoDe(input, init);
+  // Pestaña pausada por la sesión de otro usuario (SISTEMA-92): no sale nada.
+  if (frenaPedido(url)) throw new PestanaPausadaError();
   // Sin conexión conocida no se sale a la red: se responde con la copia de
   // la PC. Cuando vuelve, lo detecta el sondeo de /health (cada 15 s).
   const sinConexion =

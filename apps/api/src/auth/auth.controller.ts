@@ -12,7 +12,12 @@ import {
 import type { Response } from "express";
 
 import { AllowPendingPasswordChange } from "./allow-pending-password-change.decorator";
-import { ChangePasswordDto, LoginDto, OfflineKeyDto } from "./auth.dto";
+import {
+  ChangePasswordDto,
+  LoginDto,
+  OfflineKeyDto,
+  RefreshDto,
+} from "./auth.dto";
 import { AuthService } from "./auth.service";
 import { JwtAccessGuard } from "./jwt-access.guard";
 import type { AuthenticatedRequest } from "./auth.types";
@@ -47,9 +52,11 @@ export class AuthController {
   async refresh(
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: Response,
+    @Body() body: RefreshDto = {},
   ) {
     const result = await this.auth.refresh(
       request.cookies?.gestion_refresh as string | undefined,
+      body?.usuarioEsperado,
     );
     this.setRefreshCookie(response, result.refreshToken);
     return { accessToken: result.accessToken };

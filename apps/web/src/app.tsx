@@ -37,6 +37,7 @@ import {
   refreshSession,
   registerOfflineKey,
   SessionExpiredError,
+  SesionDeOtroUsuarioError,
   apiBaseUrl,
   type CurrentUserProfile,
   type UserCreateOptions,
@@ -92,6 +93,17 @@ import {
   olvidarCierreDeSesion,
   recordarCierreDeSesion,
 } from "./lib/cierre-sesion-pendiente";
+import {
+  avisarOtrasPestanas,
+  decidirTrasRenovar,
+  escucharOtrasPestanas,
+  pausarPedidos,
+  pestanaPausada,
+  reanudarPedidos,
+  type AvisoDeSesion,
+  type ResultadoDeRenovar,
+} from "./lib/sesion-entre-pestanas";
+import { PestanaPausada } from "./pestana-pausada";
 
 /** Sólo farmacias: la plataforma y el cambio de contraseña necesitan el servidor. */
 const puedeTrabajarSinConexion = (perfil: CurrentUserProfile) =>
@@ -186,6 +198,15 @@ export function App(): ReactElement {
     etiqueta: string;
   }>();
   const [permissionCodes, setPermissionCodes] = useState<string[]>([]);
+  // Sesión de otro usuario en otra pestaña (SISTEMA-92): con quién empezó esta
+  // pestaña y, si se pausó, con quién quedó la cookie del navegador.
+  const usuarioDeLaPestana = useRef<{ id: string; email: string } | undefined>(
+    undefined,
+  );
+  const [pausa, setPausa] = useState<{
+    propioEmail: string;
+    otroEmail?: string;
+  }>();
   const navigate = useNavigate();
   // Sesiones sin internet (SISTEMA-66). Quien entró sin conexión con su
   // contraseña: al volver internet se inicia su sesión real con estos datos,
@@ -257,6 +278,8 @@ export function App(): ReactElement {
     abrirSinConexion(resultado.sesion);
   };
   const applyProfile = (profile: CurrentUserProfile, token: string) => {
+    if (profile.id)
+      usuarioDeLaPestana.current = { id: profile.id, email: profile.email };
     setMustChangePassword(profile.mustChangePassword ?? false);
     setIsPlatformAdmin(profile.isPlatformAdmin ?? false);
     setUser(profile.email);
@@ -320,6 +343,8 @@ export function App(): ReactElement {
       // La dirección conserva la pantalla de la sesión anterior: se empieza por Inicio.
       navigate("/", { replace: true });
       await startSession(result.accessToken, { password });
+      // Las otras pestañas comprueban enseguida si la sesión sigue siendo suya.
+      avisarOtrasPestanas("inicio");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se pudo iniciar sesion.",
@@ -430,26 +455,49 @@ export function App(): ReactElement {
     let refreshing = false;
     let active = true;
     let retryTimer: number | undefined;
-    const renewAccessToken = async () => {
-      if (refreshing) return;
+    const renewAccessToken = async (motivo?: AvisoDeSesion["tipo"]) => {
+      if (refreshing || pestanaPausada()) return;
       refreshing = true;
+      // La pestaña manda con qué usuario empezó: si la cookie ya es de otro,
+      // la API no entrega su token (SISTEMA-92).
+      const esperado = usuarioDeLaPestana.current;
+      let resultado: ResultadoDeRenovar;
       try {
-        const { accessToken: refreshedToken } = await refreshSession();
-        if (active) setAccessToken(refreshedToken);
+        const { accessToken: token } = await refreshSession(esperado?.id);
+        resultado = { tipo: "ok", token };
       } catch (cause) {
-        if (active && cause instanceof SessionExpiredError) {
-          setAccessToken(undefined);
-          setUser(undefined);
-          setOrganizationId(undefined);
-          setMessage("La sesión venció. Iniciá sesión nuevamente.");
-        } else if (active) {
-          window.clearTimeout(retryTimer);
-          retryTimer = window.setTimeout(() => void renewAccessToken(), 15000);
-        }
+        resultado =
+          cause instanceof SesionDeOtroUsuarioError
+            ? { tipo: "otro-usuario", email: cause.email }
+            : cause instanceof SessionExpiredError
+              ? { tipo: "vencida" }
+              : { tipo: "fallo" };
       } finally {
         refreshing = false;
       }
+      if (!active) return;
+      const decision = decidirTrasRenovar(esperado?.id, resultado, motivo);
+      if (decision.accion === "seguir") setAccessToken(decision.token);
+      else if (decision.accion === "pausar") {
+        pausarPedidos();
+        setPausa({
+          propioEmail: esperado?.email ?? "",
+          otroEmail: decision.otroEmail,
+        });
+      } else if (decision.accion === "ingresar") {
+        setAccessToken(undefined);
+        setUser(undefined);
+        setOrganizationId(undefined);
+        setMessage(decision.aviso);
+      } else {
+        window.clearTimeout(retryTimer);
+        retryTimer = window.setTimeout(() => void renewAccessToken(), 15000);
+      }
     };
+    // Otra pestaña inició o cerró sesión: se comprueba ya, sin esperar.
+    const dejarDeEscuchar = escucharOtrasPestanas(
+      (aviso) => void renewAccessToken(aviso.tipo),
+    );
     const intervalId = window.setInterval(
       () => {
         void renewAccessToken();
@@ -461,6 +509,7 @@ export function App(): ReactElement {
     };
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
+      dejarDeEscuchar();
       active = false;
       window.clearInterval(intervalId);
       window.clearTimeout(retryTimer);
@@ -640,33 +689,74 @@ export function App(): ReactElement {
     void cerrarSesionLocal().catch(() => {});
     recordarCierreDeSesion();
     void logout()
-      .then(olvidarCierreDeSesion)
+      .then(() => {
+        olvidarCierreDeSesion();
+        avisarOtrasPestanas("cierre");
+      })
       .catch(() => {});
     setUser(undefined);
     setAccessToken(undefined);
     setOrganizationId(undefined);
   };
+  /** Vuelve a entrar con el usuario de la pestaña pausada, sin perder nada. */
+  const entrarDesdePausa = async (contrasena: string) => {
+    const propio = usuarioDeLaPestana.current;
+    if (!propio) return;
+    const { accessToken: token } = await login(propio.email, contrasena);
+    olvidarCierreDeSesion();
+    reanudarPedidos();
+    try {
+      await startSession(token, {
+        password: contrasena,
+        esperado: alcanceDe(propio),
+      });
+    } catch (cause) {
+      pausarPedidos();
+      throw cause;
+    }
+    setPausa(undefined);
+    avisarOtrasPestanas("inicio");
+  };
+  /**
+   * Con la pestaña pausada, lo que había queda debajo, inerte y sin
+   * desmontarse: la venta a medio cargar no se pierde.
+   */
+  const conPausa = (nodo: ReactElement): ReactElement => (
+    <>
+      <div inert={pausa ? true : undefined} className="contents">
+        {nodo}
+      </div>
+      {pausa && (
+        <PestanaPausada
+          propioEmail={pausa.propioEmail}
+          otroEmail={pausa.otroEmail}
+          onSeguirComoOtro={() => window.location.reload()}
+          onEntrar={entrarDesdePausa}
+        />
+      )}
+    </>
+  );
 
   if (user && accessToken && mustChangePassword)
-    return (
+    return conPausa(
       <ForcedPasswordChange
         token={accessToken}
         email={user}
         onDone={() => setMustChangePassword(false)}
         onLogout={endSession}
-      />
+      />,
     );
   if (user && accessToken && isPlatformAdmin && soporte)
-    return (
+    return conPausa(
       <SoporteSesion
         key={soporte.sesion.sessionId}
         sesion={soporte.sesion}
         etiqueta={soporte.etiqueta}
         onVolver={volverDeSoporte}
-      />
+      />,
     );
   if (user && accessToken && isPlatformAdmin)
-    return (
+    return conPausa(
       <Suspense fallback={<SessionStartup failed={false} />}>
         <PlatformShell
           token={accessToken}
@@ -674,12 +764,14 @@ export function App(): ReactElement {
           onLogout={endSession}
           onEntrarComo={entrarComo}
         />
-      </Suspense>
+      </Suspense>,
     );
   if (user && accessToken && !organizationId)
-    return <NoOrganizationScreen email={user} onLogout={endSession} />;
+    return conPausa(
+      <NoOrganizationScreen email={user} onLogout={endSession} />,
+    );
   if (user)
-    return (
+    return conPausa(
       <ProductImageSession key={user}>
         <SubscriptionGate
           token={accessToken}
@@ -697,7 +789,7 @@ export function App(): ReactElement {
             onLogout={endSession}
           />
         </SubscriptionGate>
-      </ProductImageSession>
+      </ProductImageSession>,
     );
   if (showLegacyWorkspace && user)
     return (

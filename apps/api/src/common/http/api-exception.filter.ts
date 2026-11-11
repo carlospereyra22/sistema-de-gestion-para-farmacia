@@ -75,12 +75,18 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
     const details = (response as { message?: string | string[] }).message;
     const error = (response as { error?: string }).error;
+    // Datos extra para la web, por ejemplo el email de la otra sesión.
+    const extra = (response as { details?: unknown }).details;
     return {
       code: error ?? HttpStatus[status] ?? "HTTP_ERROR",
       message: Array.isArray(details)
         ? details.join(", ")
         : (details ?? exception.message),
-      ...(Array.isArray(details) ? { details } : {}),
+      ...(Array.isArray(details)
+        ? { details }
+        : extra !== undefined
+          ? { details: extra }
+          : {}),
       requestId,
     };
   }
