@@ -12,7 +12,10 @@ import {
   Wallet,
   ClipboardList,
   Phone,
-  ShieldCheck,
+  Check,
+  PauseCircle,
+  PlayCircle,
+  Ban,
 } from "lucide-react";
 import {
   DataTable,
@@ -28,6 +31,8 @@ import {
   addPlatformUser,
   getPlatformOrganization,
   resetPlatformUserPassword,
+  changePlatformOrganizationStatus,
+  type PlatformStatusAction,
   updatePlatformSubscription,
   type PlatformOrganizationDetail as Detail,
   type PlatformTemporaryAccess,
@@ -45,7 +50,6 @@ import { OperationConfirmDialog } from "./operation-confirm-dialog";
 import { PlatformBillingSection } from "./platform-billing";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
-import { ProductFilterSelect } from "./product-filter-select";
 import {
   PlatformError,
   PlatformKpi,
@@ -127,7 +131,7 @@ function AddUserDialog({
               className={`${field} mt-1`}
             />
           </label>
-          <label className="block text-sm">
+          <label className="block text-sm sm:col-span-2">
             Nombre
             <input
               maxLength={120}
@@ -137,19 +141,35 @@ function AddUserDialog({
               className={`${field} mt-1`}
             />
           </label>
-          <div className="text-sm">
-            <p className="mb-1">Rol</p>
-            <ProductFilterSelect
-              compact
-              label="Rol"
-              value={roleCode}
-              options={roles.map(({ code, name }) => ({
-                value: code,
-                label: name,
-              }))}
-              icon={<ShieldCheck size={16} />}
-              onChange={setRoleCode}
-            />
+          <div className="text-sm sm:col-span-2">
+            <p id="rol-del-usuario" className="mb-1">
+              Rol
+            </p>
+            {/* Botones en vez de una lista desplegable: dentro del diálogo la
+                lista se abría hacia arriba y tapaba el correo. */}
+            <div
+              role="radiogroup"
+              aria-labelledby="rol-del-usuario"
+              className="flex flex-wrap gap-2"
+            >
+              {roles.map(({ code, name }) => {
+                const elegido = roleCode === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    role="radio"
+                    aria-checked={elegido}
+                    disabled={busy}
+                    onClick={() => setRoleCode(code)}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "border-[#9fd9c8] bg-[#eefaf6] text-[#087f70]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800"}`}
+                  >
+                    {elegido && <Check size={14} aria-hidden="true" />}
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         {error && (
@@ -441,6 +461,33 @@ function SubscriptionForm({
   );
 }
 
+const textoDeEstado: Record<
+  PlatformStatusAction,
+  { titulo: string; descripcion: string; ejemplo: string; aviso: string }
+> = {
+  SUSPEND: {
+    titulo: "Suspender",
+    descripcion:
+      "La farmacia queda bloqueada al instante: nadie puede usar el sistema hasta que la reactives. No se borra nada.",
+    ejemplo: "Por ejemplo: lo pidió el dueño por vacaciones",
+    aviso: "Farmacia suspendida.",
+  },
+  CANCEL: {
+    titulo: "Dar de baja",
+    descripcion:
+      "La farmacia queda bloqueada. Sus datos se conservan y se puede reactivar más adelante.",
+    ejemplo: "Por ejemplo: dejó de usar el sistema",
+    aviso: "Farmacia dada de baja.",
+  },
+  REACTIVATE: {
+    titulo: "Reactivar",
+    descripcion:
+      "La farmacia vuelve a usar el sistema según lo que tenga pago. Pueden generarse los meses que pasó cortada: condonalos desde la cuenta si corresponde.",
+    ejemplo: "Por ejemplo: volvió a pagar",
+    aviso: "Farmacia reactivada.",
+  },
+};
+
 export function PlatformOrganizationDetail({
   token,
   organizationId,
@@ -463,6 +510,7 @@ export function PlatformOrganizationDetail({
   const [addingBranch, setAddingBranch] = useState(false);
   const [resetting, setResetting] = useState<Detail["users"][number]>();
   const [access, setAccess] = useState<PlatformTemporaryAccess>();
+  const [cambioDeEstado, setCambioDeEstado] = useState<PlatformStatusAction>();
   const [notice, setNotice] = useState("");
 
   const back = (
@@ -518,6 +566,40 @@ export function PlatformOrganizationDetail({
               </StatusLabel>
             </span>
           )
+        }
+        actions={
+          subscription &&
+          !subscription.exempt &&
+          (subscription.stage === "SUSPENDED" ||
+          subscription.stage === "CANCELLED" ? (
+            <button
+              type="button"
+              className={primary}
+              onClick={() => setCambioDeEstado("REACTIVATE")}
+            >
+              <PlayCircle size={16} aria-hidden="true" />
+              Reactivar
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={secondary}
+                onClick={() => setCambioDeEstado("SUSPEND")}
+              >
+                <PauseCircle size={16} aria-hidden="true" />
+                Suspender
+              </button>
+              <button
+                type="button"
+                className={`${secondary} border-rose-200 text-rose-700 hover:bg-rose-50`}
+                onClick={() => setCambioDeEstado("CANCEL")}
+              >
+                <Ban size={16} aria-hidden="true" />
+                Dar de baja
+              </button>
+            </>
+          ))
         }
         chips={[
           {
@@ -784,6 +866,23 @@ export function PlatformOrganizationDetail({
           email={access.email}
           password={access.temporaryPassword}
           onClose={() => setAccess(undefined)}
+        />
+      )}
+      {cambioDeEstado && (
+        <OperationConfirmDialog
+          requireReason
+          title={textoDeEstado[cambioDeEstado].titulo}
+          description={textoDeEstado[cambioDeEstado].descripcion}
+          reasonPlaceholder={textoDeEstado[cambioDeEstado].ejemplo}
+          onClose={() => setCambioDeEstado(undefined)}
+          onConfirm={async (reason) => {
+            await changePlatformOrganizationStatus(token, data.id, {
+              action: cambioDeEstado,
+              reason,
+            });
+            setNotice(textoDeEstado[cambioDeEstado].aviso);
+            reload();
+          }}
         />
       )}
       {notice && <StatusToast message={notice} onClose={() => setNotice("")} />}

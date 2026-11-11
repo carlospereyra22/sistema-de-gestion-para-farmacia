@@ -325,4 +325,61 @@ describe("corte por falta de pago por HTTP (esquema aislado)", () => {
       inDays: 15,
     });
   });
+
+  describe("suspender, dar de baja y reactivar desde el panel (SISTEMA-89)", () => {
+    const cambiar = (id: string, action: string, reason = "Pedido del dueño") =>
+      http.request(`/platform/organizations/${id}/status`, admin, {
+        action,
+        reason,
+      });
+
+    it("suspendida queda bloqueada al instante y reactivar la devuelve, con auditoría", async () => {
+      const { id, owner } = await pharmacy(-5);
+      expect((await read(id, owner)).status).toBe(200);
+
+      expect((await cambiar(id, "SUSPEND")).status).toBe(200);
+      const bloqueada = await read(id, owner);
+      expect(bloqueada.status).toBe(402);
+      expect(await code(bloqueada)).toBe("SUBSCRIPTION_BLOCKED");
+      expect((await status(id, owner)).stage).toBe("SUSPENDED");
+      // Dos veces no: ya está suspendida.
+      expect((await cambiar(id, "SUSPEND")).status).toBe(409);
+
+      expect((await cambiar(id, "REACTIVATE")).status).toBe(200);
+      expect((await read(id, owner)).status).toBe(200);
+      expect((await cambiar(id, "REACTIVATE")).status).toBe(409);
+
+      const auditoria = await http.db.platformAuditLog.findMany({
+        where: {
+          organizationId: id,
+          action: {
+            in: [
+              "PLATFORM_ORGANIZATION_SUSPENDED",
+              "PLATFORM_ORGANIZATION_REACTIVATED",
+            ],
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      expect(auditoria.map(({ action }) => action)).toEqual([
+        "PLATFORM_ORGANIZATION_SUSPENDED",
+        "PLATFORM_ORGANIZATION_REACTIVATED",
+      ]);
+      expect(auditoria[0]!.after).toMatchObject({ reason: "Pedido del dueño" });
+    });
+
+    it("dada de baja queda bloqueada, pide motivo y no se aplica a una exenta", async () => {
+      const { id, owner } = await pharmacy(-5);
+      expect((await cambiar(id, "CANCEL", "  ")).status).toBe(400);
+      expect((await cambiar(id, "CANCEL")).status).toBe(200);
+      expect((await status(id, owner)).stage).toBe("CANCELLED");
+      expect((await cambiar(id, "SUSPEND")).status).toBe(409);
+
+      await http.db.organizationSubscription.update({
+        where: { organizationId: id },
+        data: { exempt: true, cancelledAt: null },
+      });
+      expect((await cambiar(id, "SUSPEND")).status).toBe(409);
+    });
+  });
 });

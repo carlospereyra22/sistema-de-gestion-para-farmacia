@@ -307,6 +307,19 @@ export const extendPlatformSubscription = (
     input,
   );
 
+/** Suspender, dar de baja o reactivar una farmacia, con motivo (SISTEMA-89). */
+export type PlatformStatusAction = "SUSPEND" | "CANCEL" | "REACTIVATE";
+export const changePlatformOrganizationStatus = (
+  token: string,
+  organizationId: string,
+  input: { action: PlatformStatusAction; reason: string },
+) =>
+  platformRequest<{ action: PlatformStatusAction }>(
+    token,
+    `/organizations/${organizationId}/status`,
+    input,
+  );
+
 export const getPlatformPlans = (token: string) =>
   platformRequest<PlatformPlan[]>(token, "/plans");
 

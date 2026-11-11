@@ -29,6 +29,22 @@ const RUN_EVERY_MS = 6 * 60 * 60 * 1000;
 const CHARGE_LEAD_DAYS = 5;
 const MAX_CHARGES_PER_RUN = 24;
 const RECENT_PAYMENTS = 200;
+
+export type OrganizationStatusAction = "SUSPEND" | "CANCEL" | "REACTIVATE";
+const STATUS_AUDIT: Record<OrganizationStatusAction, string> = {
+  SUSPEND: "PLATFORM_ORGANIZATION_SUSPENDED",
+  CANCEL: "PLATFORM_ORGANIZATION_CANCELLED",
+  REACTIVATE: "PLATFORM_ORGANIZATION_REACTIVATED",
+};
+
+function serializeDates(data: Record<string, Date | null>) {
+  return Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [
+      key,
+      value ? value.toISOString() : null,
+    ]),
+  );
+}
 const MONTHS_CHARTED = 12;
 
 /** Los últimos `count` meses ("2026-11"), del más viejo al actual. */
@@ -534,6 +550,63 @@ export class PlatformBillingService implements OnModuleInit, OnModuleDestroy {
         after: { until: input.until, reason: input.reason.trim() },
       });
       return { extendedUntil: input.until };
+    });
+  }
+
+  /**
+   * Suspender, dar de baja o reactivar a mano (SISTEMA-89). No borra nada: deja
+   * la fecha en la suscripción y el motivo en la auditoría de la plataforma. Una
+   * suspendida o dada de baja queda bloqueada y no genera cargos; reactivar
+   * genera los meses que pasó suspendida (se condonan a mano).
+   */
+  async changeStatus(
+    actorId: string,
+    organizationId: string,
+    input: { action: OrganizationStatusAction; reason: string },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.lock(tx, organizationId);
+      const before = await tx.organizationSubscription.findUniqueOrThrow({
+        where: { organizationId },
+      });
+      if (before.exempt)
+        throw new ConflictException(
+          "Una farmacia exenta no se suspende ni se da de baja.",
+        );
+      const now = new Date();
+      let data: { suspendedAt?: Date | null; cancelledAt?: Date | null };
+      if (input.action === "SUSPEND") {
+        if (before.cancelledAt)
+          throw new ConflictException("La farmacia ya está dada de baja.");
+        if (before.suspendedAt)
+          throw new ConflictException("La farmacia ya está suspendida.");
+        data = { suspendedAt: now };
+      } else if (input.action === "CANCEL") {
+        if (before.cancelledAt)
+          throw new ConflictException("La farmacia ya está dada de baja.");
+        data = { cancelledAt: now };
+      } else {
+        if (!before.suspendedAt && !before.cancelledAt)
+          throw new ConflictException("La farmacia no está suspendida.");
+        data = { suspendedAt: null, cancelledAt: null };
+      }
+      await tx.organizationSubscription.update({
+        where: { organizationId },
+        data,
+      });
+      await recordPlatformAudit(tx, {
+        actorId,
+        action: STATUS_AUDIT[input.action],
+        entityType: "OrganizationSubscription",
+        entityId: before.id,
+        organizationId,
+        before: {
+          suspendedAt: before.suspendedAt?.toISOString() ?? null,
+          cancelledAt: before.cancelledAt?.toISOString() ?? null,
+        },
+        after: { ...serializeDates(data), reason: input.reason.trim() },
+      });
+      return { action: input.action };
     });
   }
 

@@ -1,6 +1,6 @@
 import { typedCostMinor } from "./lot-cost";
 
-/** Farmacia de ejemplo para mostrar cómo queda el abono en Planes. */
+/** Farmacia con la que abre la calculadora de Planes. */
 export const EJEMPLO_SUCURSALES = 2;
 export const EJEMPLO_USUARIOS = 4;
 
@@ -12,14 +12,23 @@ export const EJEMPLO_USUARIOS = 4;
 export function abonoDeEjemplo(
   plan: { includedUsers: number; includedBranches: number },
   precios: { base: string; extraUser: string; extraBranch: string },
+  /** Farmacia a calcular; por defecto, 2 sucursales y 4 usuarios. */
+  cantidad?: { sucursales: number; usuarios: number },
 ): {
   sucursales: number;
   usuarios: number;
   filas?: [string, string][];
   totalMinor: string;
 } {
-  const sucursales = Math.max(EJEMPLO_SUCURSALES, plan.includedBranches);
-  const usuarios = Math.max(EJEMPLO_USUARIOS, plan.includedUsers);
+  // Nunca menos de lo que el plan incluye: eso ya está en el abono base.
+  const sucursales = Math.max(
+    cantidad?.sucursales ?? EJEMPLO_SUCURSALES,
+    plan.includedBranches,
+  );
+  const usuarios = Math.max(
+    cantidad?.usuarios ?? EJEMPLO_USUARIOS,
+    plan.includedUsers,
+  );
   try {
     const base = BigInt(typedCostMinor(precios.base));
     const porUsuario = BigInt(typedCostMinor(precios.extraUser));

@@ -28,6 +28,7 @@ import {
   stageTone,
   summarizeOrganizations,
 } from "./lib/platform-subscription";
+import { fichaGuardada, guardarFicha } from "./lib/platform-navegacion";
 import { usePage } from "./lib/use-page";
 import { usePlatformData } from "./lib/use-platform-data";
 import { Pagination } from "./pagination";
@@ -167,7 +168,11 @@ export function PlatformOrganizations({
   const { data, error, reload } = usePlatformData(load, onVerificationExpired);
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("ALL");
-  const [opened, setOpened] = useState<string>();
+  const [opened, setOpenedState] = useState(fichaGuardada);
+  const setOpened = (id: string | undefined) => {
+    setOpenedState(id);
+    guardarFicha(id);
+  };
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<PlatformOrganizationCreated>();
   const rows = useMemo(

@@ -29,7 +29,10 @@ import {
 
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { PlatformAdminGuard } from "./platform-admin.guard";
-import { PlatformBillingService } from "./platform-billing.service";
+import {
+  PlatformBillingService,
+  type OrganizationStatusAction,
+} from "./platform-billing.service";
 import { PlatformOrganizationsService } from "./platform-organizations.service";
 
 const MINOR = /^\d{1,14}$/;
@@ -83,6 +86,11 @@ class ExtensionDto extends ReasonDto {
   @Matches(CIVIL_DATE)
   @IsDateString({ strict: true })
   until!: string | null;
+}
+
+class StatusDto extends ReasonDto {
+  @IsIn(["SUSPEND", "CANCEL", "REACTIVATE"])
+  action!: OrganizationStatusAction;
 }
 
 class PlanPricesDto {
@@ -208,6 +216,17 @@ export class PlatformOrganizationsController {
     @Body() body: ExtensionDto,
   ) {
     return this.billing.extend(request.auth!.sub, id, body);
+  }
+
+  /** Suspender, dar de baja o reactivar una farmacia, con motivo (SISTEMA-89). */
+  @Post("organizations/:id/status")
+  @HttpCode(200)
+  changeStatus(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: StatusDto,
+  ) {
+    return this.billing.changeStatus(request.auth!.sub, id, body);
   }
 
   @Get("plans")

@@ -204,7 +204,7 @@ function PanelVerificado({
               className="size-full object-contain"
             />
           </span>
-          <div className="workspace-brand-text">
+          <div className="workspace-brand-text max-sm:hidden">
             <p className="font-semibold">Farmatec</p>
             <p className="text-xs text-slate-500">Panel de plataforma</p>
           </div>

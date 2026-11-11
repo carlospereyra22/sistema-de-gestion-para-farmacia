@@ -19,6 +19,9 @@ const actionLabels: Record<string, string> = {
   PLATFORM_CHARGE_WAIVED: "Cargo condonado",
   PLATFORM_EXTENSION_GRANTED: "Prórroga otorgada",
   PLATFORM_EXTENSION_REMOVED: "Prórroga quitada",
+  PLATFORM_ORGANIZATION_SUSPENDED: "Farmacia suspendida",
+  PLATFORM_ORGANIZATION_CANCELLED: "Farmacia dada de baja",
+  PLATFORM_ORGANIZATION_REACTIVATED: "Farmacia reactivada",
   PADRON_CERTIFICADO_SOLICITUD: "Solicitud de certificado del padrón de ARCA",
   PADRON_CERTIFICADO_CARGADO: "Certificado del padrón de ARCA cargado",
 };
@@ -68,13 +71,22 @@ export function platformAuditGroup(action: string): PlatformAuditGroup {
   return "farmacias";
 }
 
-/** En soporte, a qué usuario se entró: queda en `after.email`. */
+/** En soporte, a qué usuario se entró; en una suspensión o baja, el motivo. */
 export function platformAuditDetail(entry: {
   action: string;
   after?: unknown;
 }): string | undefined {
-  if (!entry.action.startsWith("SOPORTE_")) return undefined;
   const after = entry.after;
+  if (
+    entry.action.startsWith("PLATFORM_ORGANIZATION_") &&
+    after &&
+    typeof after === "object" &&
+    "reason" in after
+  ) {
+    const reason = (after as { reason: unknown }).reason;
+    return typeof reason === "string" ? `Motivo: ${reason}` : undefined;
+  }
+  if (!entry.action.startsWith("SOPORTE_")) return undefined;
   if (after && typeof after === "object" && "email" in after) {
     const email = (after as { email: unknown }).email;
     if (typeof email === "string") return `Como ${email}`;

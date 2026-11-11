@@ -44,6 +44,17 @@ export function guardarSeccion(seccion: SeccionDelPanel) {
   guardar(CLAVE_SECCION, seccion);
 }
 
+const CLAVE_FICHA = "plataforma:farmacia-abierta";
+
+/** Ficha de farmacia abierta en Farmacias, para volver a ella desde soporte. */
+export function fichaGuardada(): string | undefined {
+  return leer(CLAVE_FICHA) ?? undefined;
+}
+
+export function guardarFicha(organizationId: string | undefined) {
+  guardar(CLAVE_FICHA, organizationId ?? "");
+}
+
 /** Farmacia o sucursal elegida en Soporte (`org` u `org|sucursal`). */
 export function eleccionDeSoporteGuardada(): string {
   return leer(CLAVE_SOPORTE) ?? "";

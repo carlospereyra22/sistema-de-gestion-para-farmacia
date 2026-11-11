@@ -39,7 +39,6 @@ import { MoneyInput } from "./money-input";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
 import { Pagination } from "./pagination";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
-import { ProductFilterSelect } from "./product-filter-select";
 import { ars, dateLabel, paymentMethods } from "./supplier-payables/api";
 import {
   PayableDialog,
@@ -220,19 +219,36 @@ function PaymentDialog({
               className={`${field} mt-1`}
             />
           </label>
-          <div className="text-sm">
-            <p className="mb-1">Medio de pago</p>
-            <ProductFilterSelect
-              compact
-              label="Medio de pago"
-              value={method}
-              options={methodOptions}
-              icon={<WalletCards size={16} />}
-              disabled={busy || Boolean(locked)}
-              onChange={setMethod}
-            />
+          <div className="text-sm sm:col-span-2">
+            <p id="medio-de-pago" className="mb-1">
+              Medio de pago
+            </p>
+            {/* Cuatro opciones: botones de un toque en vez de una lista
+                desplegable, que dentro del diálogo quedaba tapada o cortada. */}
+            <div
+              role="radiogroup"
+              aria-labelledby="medio-de-pago"
+              className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:grid-cols-4"
+            >
+              {methodOptions.map(({ value, label }) => {
+                const elegido = method === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={elegido}
+                    disabled={busy || Boolean(locked)}
+                    onClick={() => setMethod(value)}
+                    className={`h-9 rounded-lg px-2 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "bg-white text-[#087f70] shadow-sm ring-1 ring-[#cce8de]" : "text-slate-600 hover:bg-white/70 hover:text-slate-800"}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <label className="block text-sm">
+          <label className="block text-sm sm:col-span-2">
             Referencia (opcional)
             <input
               maxLength={160}

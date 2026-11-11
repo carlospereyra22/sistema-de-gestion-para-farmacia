@@ -72,10 +72,12 @@ export function PlatformKpi({
   tone?: PlatformTone;
 }) {
   return (
-    <article className={`${reportCardClass} flex gap-3 px-4 py-3.5`}>
+    <article
+      className={`${reportCardClass} flex gap-3 px-3 py-3 last:odd:col-span-2 sm:px-4 sm:py-3.5 xl:last:odd:col-span-1`}
+    >
       <span
         aria-hidden="true"
-        className={`grid size-10 shrink-0 place-items-center rounded-full ${iconTone[tone]}`}
+        className={`grid size-10 shrink-0 place-items-center rounded-full max-sm:hidden ${iconTone[tone]}`}
       >
         {icon}
       </span>
@@ -83,7 +85,7 @@ export function PlatformKpi({
         <h3 className="truncate text-xs font-semibold text-slate-600">
           {label}
         </h3>
-        <p className="mt-1 truncate text-2xl font-bold leading-8 tracking-tight text-slate-900 tabular-nums">
+        <p className="mt-1 truncate text-xl font-bold leading-7 tracking-tight text-slate-900 tabular-nums sm:text-2xl sm:leading-8">
           {value}
         </p>
         {hint && (
@@ -104,7 +106,7 @@ export function PlatformKpis({
 }) {
   return (
     <div
-      className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${columns === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
+      className={`grid grid-cols-2 gap-3 ${columns === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
     >
       {children}
     </div>

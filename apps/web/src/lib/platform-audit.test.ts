@@ -51,5 +51,14 @@ describe("filtro y detalle de la auditoría (SISTEMA-89)", () => {
     expect(
       platformAuditDetail({ action: "PLATFORM_USER_CREATED", after: {} }),
     ).toBeUndefined();
+    expect(
+      platformAuditDetail({
+        action: "PLATFORM_ORGANIZATION_SUSPENDED",
+        after: { reason: "No paga hace meses" },
+      }),
+    ).toBe("Motivo: No paga hace meses");
+    expect(platformAuditGroup("PLATFORM_ORGANIZATION_SUSPENDED")).toBe(
+      "farmacias",
+    );
   });
 });

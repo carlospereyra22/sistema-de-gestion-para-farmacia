@@ -83,8 +83,13 @@ en la pestaña (`sessionStorage`).
 - Detalle de una farmacia: cabecera con iniciales, estado, fecha de alta y contacto.
 - Pagos: gráfico de lo cobrado en los últimos 12 meses (`GET platform/payments` devuelve
   `monthly`, pagos vigentes por mes).
-- Planes: un ejemplo calcula el abono de una farmacia de 2 sucursales y 4 usuarios con los
-  precios que se están escribiendo (vista previa; el abono real lo calcula la API).
+- Planes: tarjeta del plan con los precios vigentes y cuántas farmacias pagan el precio de lista;
+  edición de cada precio con aviso de cambios sin guardar; calculadora con sucursales y usuarios
+  elegibles y la diferencia contra los precios de hoy (vista previa; el abono real lo calcula la
+  API).
+- Ficha de farmacia: se recuerda la ficha abierta, así al volver de soporte se cae en ella.
+- En los diálogos, el medio de pago y el rol se eligen con botones en vez de una lista
+  desplegable, que dentro del diálogo quedaba tapada o cortada.
 
 ### Comandos
 
@@ -256,8 +261,15 @@ dispara un evento). Si no contesta, deja usar el sistema.
 
 En el panel, la solapa Pagos muestra el próximo corte de cada farmacia que debe.
 
-Falta: suspender o dar de baja a mano desde el panel, avisos por mail y un resumen de lo que
-vence en el panel.
+**Suspender, dar de baja y reactivar (SISTEMA-89):** desde la ficha de la farmacia en el panel,
+con motivo obligatorio. `POST platform/organizations/:id/status` con `action` `SUSPEND`, `CANCEL`
+o `REACTIVATE`. Deja `suspendedAt` o `cancelledAt` en la suscripción (reactivar los limpia) y el
+motivo en la auditoría de la plataforma (`PLATFORM_ORGANIZATION_SUSPENDED`, `_CANCELLED`,
+`_REACTIVATED`). No borra nada. Bloquea al instante, como cualquier corte. Una exenta no se
+suspende ni se da de baja (409), y repetir el mismo estado también da 409. Al reactivar pueden
+generarse los meses que pasó cortada: se condonan a mano.
+
+Falta: avisos por mail.
 
 ## Alta de una farmacia
 
