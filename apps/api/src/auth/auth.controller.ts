@@ -1,15 +1,19 @@
 import {
   Body,
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
   HttpCode,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
   Res,
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 
 import { AllowPendingPasswordChange } from "./allow-pending-password-change.decorator";
 import {
@@ -18,7 +22,7 @@ import {
   OfflineKeyDto,
   RefreshDto,
 } from "./auth.dto";
-import { AuthService } from "./auth.service";
+import { AuthService, type DatosDeSesion } from "./auth.service";
 import { JwtAccessGuard } from "./jwt-access.guard";
 import type { AuthenticatedRequest } from "./auth.types";
 
@@ -26,23 +30,50 @@ import type { AuthenticatedRequest } from "./auth.types";
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  /**
+   * La cookie dura lo mismo que el plazo de inactividad y se renueva con cada
+   * uso (vencimiento deslizante, SISTEMA-93). Antes eran 400 días fijos.
+   */
   private setRefreshCookie(response: Response, refreshToken: string): void {
     response.cookie("gestion_refresh", refreshToken, {
       httpOnly: true,
       sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/api/v1/auth",
-      maxAge: 400 * 86400000,
+      maxAge: this.auth.inactividadMs,
     });
+  }
+
+  /** Navegador, IP e id de la PC para reconocer la sesión (sin secretos). */
+  private datosDeSesion(request: Request, deviceId?: string): DatosDeSesion {
+    return {
+      userAgent: request.headers["user-agent"],
+      ip: request.ip,
+      deviceId,
+    };
+  }
+
+  /** El soporte del superadmin no ve ni cierra las sesiones del usuario. */
+  private sinSoporte(request: AuthenticatedRequest) {
+    if (request.auth?.soporte)
+      throw new ForbiddenException(
+        "Las sesiones las administra el usuario, no el soporte.",
+      );
+    return request.auth!;
   }
 
   @Post("login")
   @HttpCode(200)
   async login(
+    @Req() request: Request,
     @Body() body: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.auth.login(body.email, body.password);
+    const result = await this.auth.login(
+      body.email,
+      body.password,
+      this.datosDeSesion(request, body.deviceId),
+    );
     this.setRefreshCookie(response, result.refreshToken);
     return { accessToken: result.accessToken };
   }
@@ -57,8 +88,12 @@ export class AuthController {
     const result = await this.auth.refresh(
       request.cookies?.gestion_refresh as string | undefined,
       body?.usuarioEsperado,
+      this.datosDeSesion(request, body?.deviceId),
     );
-    this.setRefreshCookie(response, result.refreshToken);
+    // Sólo cuando la clave rotó: si se usó la anterior dentro del margen, la
+    // cookie nueva ya la guardó otra pestaña.
+    if (result.refreshToken)
+      this.setRefreshCookie(response, result.refreshToken);
     return { accessToken: result.accessToken };
   }
 
@@ -98,6 +133,36 @@ export class AuthController {
       body.deviceId,
       body.publicKey,
     );
+  }
+
+  /** Sesiones abiertas del usuario (menú de la cuenta, SISTEMA-93). */
+  @Get("sessions")
+  @UseGuards(JwtAccessGuard)
+  @AllowPendingPasswordChange()
+  sessions(@Req() request: AuthenticatedRequest) {
+    const { sub, sessionId } = this.sinSoporte(request);
+    return this.auth.listarSesionesPropias(sub, sessionId);
+  }
+
+  @Post("sessions/close-others")
+  @HttpCode(200)
+  @UseGuards(JwtAccessGuard)
+  @AllowPendingPasswordChange()
+  closeOtherSessions(@Req() request: AuthenticatedRequest) {
+    const { sub, sessionId } = this.sinSoporte(request);
+    return this.auth.cerrarSesionesPropias(sub, sessionId);
+  }
+
+  @Delete("sessions/:sessionId")
+  @HttpCode(200)
+  @UseGuards(JwtAccessGuard)
+  @AllowPendingPasswordChange()
+  closeSession(
+    @Req() request: AuthenticatedRequest,
+    @Param("sessionId", ParseUUIDPipe) sesion: string,
+  ) {
+    const { sub, sessionId } = this.sinSoporte(request);
+    return this.auth.cerrarSesionesPropias(sub, sessionId, sesion);
   }
 
   @Post("change-password")

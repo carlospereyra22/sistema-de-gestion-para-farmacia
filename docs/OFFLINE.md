@@ -192,6 +192,19 @@ un pedido frenado queda para reintentar (no se marca rechazado) y lo manda
 después su dueño. Los borradores de compras, distribución y pagos se guardan por
 usuario, así que nunca se envían con otro.
 
+## Vencimiento de la sesión (SISTEMA-93)
+
+La sesión del servidor vence si no se usa durante `SESSION_INACTIVITY_DAYS`
+(7 días por defecto, nunca menos de 72 h). 24 h sin internet no la vencen: al
+volver, `restore` la renueva sin pedir la contraseña. La clave de la cookie
+rota en cada renovación; la anterior vale 2 minutos, para que varias pestañas o
+un reintento por mala conexión no corten la sesión. Si la PC no se usó en más
+días que el plazo, se pide la contraseña una vez, con el aviso de siempre. Sin
+conexión se sigue entrando como antes (sesión guardada o contraseña de la PC):
+el vencimiento sólo se nota al volver internet. Cerrar una sesión desde "Sesiones
+abiertas" no borra lo que esa PC hizo sin conexión: al volver se pide la
+contraseña y se sincroniza con su dueño.
+
 ## Caja sin conexión (SISTEMA-67)
 
 - **Abrir, mover y cerrar sin internet**: la operación queda en la bandeja de la PC (`operacion: "CAJA"`), firmada por quien la hizo, y se manda sola al volver, en orden con las ventas (`POST cash/offline`, o `cash/offline/firmada` si la hizo otro usuario de la PC). Si el envío se corta en el momento, también queda en la PC.

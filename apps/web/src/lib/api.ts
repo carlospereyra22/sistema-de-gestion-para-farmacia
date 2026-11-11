@@ -1,4 +1,5 @@
 import { apiFetch as fetch, SinConexionError } from "./api-fetch";
+import { idDeEstaPc } from "./venta-sin-conexion";
 import type { PurchasePack } from "./purchase-pack";
 import type { HealthResponse } from "@gestion/contracts";
 import { categoryPath } from "./category-tree";
@@ -164,7 +165,8 @@ export async function login(
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      // Id de esta PC: la reconoce en "Sesiones abiertas" (SISTEMA-93).
+      body: JSON.stringify({ email, password, deviceId: idDeEstaPc() }),
     },
     { probarRed: true },
   );
@@ -191,12 +193,11 @@ export async function refreshSession(
     method: "POST",
     credentials: "include",
     signal: AbortSignal.timeout(10000),
-    ...(usuarioEsperado
-      ? {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ usuarioEsperado }),
-        }
-      : {}),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...(usuarioEsperado ? { usuarioEsperado } : {}),
+      deviceId: idDeEstaPc(),
+    }),
   });
   if (response.status === 401)
     throw new SessionExpiredError("La sesión ya no es válida.");
@@ -215,6 +216,86 @@ export async function refreshSession(
   if (!response.ok)
     throw new Error("No se pudo renovar la conexión. Se reintentará.");
   return (await response.json()) as { accessToken: string };
+}
+
+/** Una sesión abierta del usuario (SISTEMA-93). Sin secretos. */
+export type SesionAbierta = {
+  id: string;
+  /** Navegador y sistema resumidos ("Edge · Windows"). */
+  navegador: string | null;
+  ip: string | null;
+  deviceId: string | null;
+  iniciada: string;
+  ultimoUso: string;
+  /** Es la sesión de esta pestaña. */
+  actual: boolean;
+};
+
+export async function listarSesionesPropias(
+  token: string,
+): Promise<SesionAbierta[]> {
+  const response = await fetch(`${apiBaseUrl}/auth/sessions`, {
+    headers: authJson(token),
+  });
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron ver las sesiones.");
+  return (await response.json()) as SesionAbierta[];
+}
+
+export async function cerrarSesionPropia(
+  token: string,
+  sesion: string,
+): Promise<{ cerradas: number }> {
+  const response = await fetch(`${apiBaseUrl}/auth/sessions/${sesion}`, {
+    method: "DELETE",
+    headers: authJson(token),
+  });
+  if (!response.ok)
+    throw await responseError(response, "No se pudo cerrar la sesión.");
+  return (await response.json()) as { cerradas: number };
+}
+
+export async function cerrarOtrasSesiones(
+  token: string,
+): Promise<{ cerradas: number }> {
+  const response = await fetch(`${apiBaseUrl}/auth/sessions/close-others`, {
+    method: "POST",
+    headers: authJson(token),
+  });
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron cerrar las sesiones.");
+  return (await response.json()) as { cerradas: number };
+}
+
+/** Sesiones abiertas de un usuario de la farmacia (administración). */
+export async function listarSesionesDeUsuario(
+  token: string,
+  organizationId: string,
+  userId: string,
+): Promise<SesionAbierta[]> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/users/${userId}/sessions`,
+    { headers: authJson(token) },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron ver las sesiones.");
+  return (await response.json()) as SesionAbierta[];
+}
+
+export async function cerrarSesionDeUsuario(
+  token: string,
+  organizationId: string,
+  userId: string,
+  sesion?: string,
+): Promise<{ cerradas: number }> {
+  const base = `${apiBaseUrl}/organizations/${organizationId}/users/${userId}/sessions`;
+  const response = await fetch(
+    sesion ? `${base}/${sesion}` : `${base}/close-all`,
+    { method: sesion ? "DELETE" : "POST", headers: authJson(token) },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron cerrar las sesiones.");
+  return (await response.json()) as { cerradas: number };
 }
 
 export async function logout(): Promise<void> {

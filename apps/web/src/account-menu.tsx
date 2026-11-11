@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -7,12 +8,26 @@ import {
   type ReactNode,
 } from "react";
 import { saleCostTooltipController } from "./lib/sale-cost-tooltip";
-import { ChevronDown, KeyRound, LogOut, MapPin, UserRound } from "lucide-react";
+import {
+  ChevronDown,
+  KeyRound,
+  LogOut,
+  MapPin,
+  MonitorSmartphone,
+  UserRound,
+} from "lucide-react";
 import { FullscreenMenuButton } from "./fullscreen-menu-button";
 import { StatusToast } from "./status-toast";
 import { InstallMenuButton } from "./install-menu-button";
 import { passwordChangedMessage } from "./lib/password-change";
 import { OwnPasswordDialog } from "./own-password-dialog";
+import {
+  cerrarOtrasSesiones,
+  cerrarSesionPropia,
+  listarSesionesPropias,
+} from "./lib/api";
+import { idDeEstaPc } from "./lib/venta-sin-conexion";
+import { SesionesAbiertasDialog } from "./sesiones-abiertas-dialog";
 
 export function AccountMenu({
   email,
@@ -37,6 +52,11 @@ export function AccountMenu({
   const [open, setOpen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [viendoSesiones, setViendoSesiones] = useState(false);
+  const cargarSesiones = useCallback(
+    () => listarSesionesPropias(accessToken ?? ""),
+    [accessToken],
+  );
   const [notice, setNotice] = useState("");
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -190,6 +210,19 @@ export function AccountMenu({
                 Cambiar contraseña
               </button>
             )}
+            {accessToken && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setViendoSesiones(true);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-600"
+              >
+                <MonitorSmartphone size={17} />
+                Sesiones abiertas
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -220,6 +253,18 @@ export function AccountMenu({
             setChangingPassword(false);
             setNotice(passwordChangedMessage(revokedSessions));
           }}
+        />
+      )}
+      {viendoSesiones && accessToken && (
+        <SesionesAbiertasDialog
+          titulo="Sesiones abiertas"
+          subtitulo="Las PC y navegadores donde tu usuario tiene la sesión iniciada."
+          idDeEstaPc={idDeEstaPc()}
+          textoCerrarTodas="Cerrar todas las demás"
+          cargar={cargarSesiones}
+          cerrarUna={(id) => cerrarSesionPropia(accessToken, id)}
+          cerrarTodas={() => cerrarOtrasSesiones(accessToken)}
+          onClose={() => setViendoSesiones(false)}
         />
       )}
       {notice && (

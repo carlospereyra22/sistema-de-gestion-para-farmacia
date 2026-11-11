@@ -74,6 +74,9 @@ const EXCEPTIONS = [
   `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/ticket`,
   `READ_ONLY PATCH organizations/:organizationId/users/:userId`,
   `READ_ONLY PATCH organizations/:organizationId/users/:userId/password`,
+  // Cortarle el acceso a un empleado (SISTEMA-93), como darlo de baja.
+  `READ_ONLY DELETE organizations/:organizationId/users/:userId/sessions/:sessionId`,
+  `READ_ONLY POST organizations/:organizationId/users/:userId/sessions/close-all`,
   `READ_ONLY POST ${cash}/pending-collections/:collectionId/assign`,
   `READ_ONLY POST ${cash}/pending-collections/:collectionId/destination`,
   `READ_ONLY POST ${cash}/pending-collections/:collectionId/destination/clear`,

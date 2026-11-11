@@ -1,8 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -104,6 +107,44 @@ export class UsersController {
       organizationId,
       userId,
       body.displayName,
+    );
+  }
+
+  /** Sesiones abiertas de un usuario de la farmacia (SISTEMA-93). */
+  @Get(":userId/sessions")
+  sessions(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.users.listarSesiones(request.auth!.sub, organizationId, userId);
+  }
+
+  /** Cierra todas las sesiones del usuario (dar de baja a un empleado). */
+  @AllowWhenReadOnly()
+  @Post(":userId/sessions/close-all")
+  @HttpCode(200)
+  closeAllSessions(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.users.cerrarSesiones(request.auth!.sub, organizationId, userId);
+  }
+
+  @AllowWhenReadOnly()
+  @Delete(":userId/sessions/:sessionId")
+  closeSession(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Param("sessionId", ParseUUIDPipe) sessionId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.users.cerrarSesiones(
+      request.auth!.sub,
+      organizationId,
+      userId,
+      sessionId,
     );
   }
 

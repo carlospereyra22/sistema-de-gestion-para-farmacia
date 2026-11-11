@@ -14,6 +14,11 @@ export class LoginDto {
   @IsString()
   @MinLength(12)
   password!: string;
+
+  /** Id de esta PC (idDeEstaPc), para reconocer la sesión (SISTEMA-93). */
+  @IsOptional()
+  @IsUUID()
+  deviceId?: string;
 }
 
 export class ChangePasswordDto {
@@ -37,6 +42,11 @@ export class RefreshDto {
   @IsOptional()
   @IsUUID()
   usuarioEsperado?: string;
+
+  /** Id de esta PC, para reconocer la sesión (SISTEMA-93). */
+  @IsOptional()
+  @IsUUID()
+  deviceId?: string;
 }
 
 /** Clave de esta PC para firmar ventas sin conexión (SISTEMA-66). */

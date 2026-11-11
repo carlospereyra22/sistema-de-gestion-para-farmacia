@@ -1,7 +1,13 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import {
+  useCallback,
+  useState,
+  type FormEvent,
+  type ReactElement,
+} from "react";
 import {
   Check,
   KeyRound,
+  MonitorSmartphone,
   Pencil,
   Plus,
   Save,
@@ -9,12 +15,15 @@ import {
   Store,
 } from "lucide-react";
 import {
+  cerrarSesionDeUsuario,
   createUser,
+  listarSesionesDeUsuario,
   updateUser,
   type UserCreateOptions,
   type UserListItem,
 } from "./lib/api";
 import { bloqueoDeDueno } from "./lib/usuarios-dueno";
+import { SesionesAbiertasDialog } from "./sesiones-abiertas-dialog";
 import { StatusToast } from "./status-toast";
 import { field, primary, secondary } from "./supplier-payables/dialog";
 import { useFitToViewport } from "./use-fit-to-viewport";
@@ -190,6 +199,12 @@ export function UsersPanel({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [passwordUser, setPasswordUser] = useState<UserListItem>();
+  const [sesionesDe, setSesionesDe] = useState<UserListItem>();
+  const sesionesId = sesionesDe?.user.id;
+  const cargarSesiones = useCallback(
+    () => listarSesionesDeUsuario(token, organizationId, sesionesId ?? ""),
+    [token, organizationId, sesionesId],
+  );
   const { panelRef, panelHeight } = useFitToViewport<HTMLFormElement>();
   const editing = users.find(({ user }) => user.id === editingId);
   // Los accesos propios los cambia otro administrador; el nombre sí se edita.
@@ -275,6 +290,22 @@ export function UsersPanel({
           onClose={() => setNotice("")}
         />
       ) : null}
+      {sesionesDe && (
+        <SesionesAbiertasDialog
+          key={`${organizationId}:${sesionesDe.user.id}`}
+          titulo="Sesiones abiertas"
+          subtitulo={`Dónde tiene la sesión iniciada ${sesionesDe.displayName || sesionesDe.user.email}. Cerrarlas le corta el acceso en esas PC.`}
+          textoCerrarTodas="Cerrar todas"
+          cargar={cargarSesiones}
+          cerrarUna={(id) =>
+            cerrarSesionDeUsuario(token, organizationId, sesionesDe.user.id, id)
+          }
+          cerrarTodas={() =>
+            cerrarSesionDeUsuario(token, organizationId, sesionesDe.user.id)
+          }
+          onClose={() => setSesionesDe(undefined)}
+        />
+      )}
       {passwordUser && (
         <UserPasswordDialog
           key={`${organizationId}:${passwordUser.user.id}`}
@@ -407,6 +438,16 @@ export function UsersPanel({
               >
                 <KeyRound size={15} aria-hidden="true" />
                 Restablecer contraseña
+              </button>
+            )}
+            {!ownAccess && (
+              <button
+                type="button"
+                onClick={() => setSesionesDe(editing)}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-900"
+              >
+                <MonitorSmartphone size={15} aria-hidden="true" />
+                Sesiones abiertas
               </button>
             )}
           </div>
