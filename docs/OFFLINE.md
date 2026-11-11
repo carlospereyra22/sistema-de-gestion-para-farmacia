@@ -198,7 +198,9 @@ La sesión del servidor vence si no se usa durante `SESSION_INACTIVITY_DAYS`
 (7 días por defecto, nunca menos de 72 h). 24 h sin internet no la vencen: al
 volver, `restore` la renueva sin pedir la contraseña. La clave de la cookie
 rota en cada renovación; la anterior vale 2 minutos, para que varias pestañas o
-un reintento por mala conexión no corten la sesión. Si la PC no se usó en más
+un reintento por mala conexión no corten la sesión: con la clave anterior dentro
+del margen el servidor vuelve a entregar la misma clave nueva (SISTEMA-101), así
+una respuesta perdida no deja a nadie afuera. Si la PC no se usó en más
 días que el plazo, se pide la contraseña una vez, con el aviso de siempre. Sin
 conexión se sigue entrando como antes (sesión guardada o contraseña de la PC):
 el vencimiento sólo se nota al volver internet. Cerrar una sesión desde "Sesiones

@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 /**
  * Reglas de vigencia de las sesiones (SISTEMA-93). Sin base de datos, para
  * probarlas aparte.
@@ -38,6 +40,25 @@ export function vencidaPorInactividad(
   limiteMs: number,
 ): boolean {
   return ahora.getTime() - ultimoUso.getTime() > limiteMs;
+}
+
+/**
+ * Clave que sigue a la presentada (SISTEMA-101). Se deriva de la anterior con
+ * un secreto del servidor en vez de sortearse: si la respuesta de una
+ * renovación se pierde (Wi-Fi que se corta, pestaña que se cierra) y la PC
+ * reintenta con la clave anterior dentro del margen, el servidor le vuelve a
+ * entregar la misma clave nueva. Antes el reintento andaba pero la cookie
+ * quedaba vieja y, pasado el margen, la sesión se cortaba como si la hubieran
+ * copiado. Sin el secreto del servidor nadie puede calcularla.
+ */
+export function claveSiguiente(
+  secretoDelServidor: string,
+  sessionId: string,
+  secreto: string,
+): string {
+  return createHmac("sha256", secretoDelServidor)
+    .update(`sesion:${sessionId}:${secreto}`)
+    .digest("base64url");
 }
 
 /** Claves retiradas después de rotar: la anterior pasa adelante. */

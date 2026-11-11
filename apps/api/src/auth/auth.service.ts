@@ -16,6 +16,7 @@ import type { AccessTokenPayload } from "./auth.types";
 import { clavePublicaValida } from "../sales/firma-venta";
 import {
   GRACIA_ROTACION_MS,
+  claveSiguiente,
   PLATAFORMA_SESION_INACTIVIDAD_MS,
   PLATAFORMA_SESION_MAXIMA_MS,
   inactividadMs,
@@ -176,8 +177,13 @@ export class AuthService {
     const clave = leerClaveDeSesion(refreshToken);
     if (!clave) throw new UnauthorizedException(VENCIDA);
     const ahora = new Date();
-    // El hash de la clave nueva se calcula antes de bloquear la fila.
-    const nuevoSecreto = randomBytes(48).toString("base64url");
+    // La clave nueva sale de la presentada (SISTEMA-101) y su hash se calcula
+    // antes de bloquear la fila.
+    const nuevoSecreto = claveSiguiente(
+      this.environment.jwtAccessSecret ?? "",
+      clave.sessionId,
+      clave.secret,
+    );
     const nuevoHash = await hash(nuevoSecreto);
     const resultado = await this.prisma.$transaction(async (tx) => {
       // Dos renovaciones a la vez no se pisan: la segunda espera a la primera.
@@ -239,6 +245,10 @@ export class AuthService {
       // se toca su sesión, que sigue siendo válida para esa pestaña.
       if (usuarioEsperado && session.user.id !== usuarioEsperado)
         return { tipo: "otro", email: session.user.email } as const;
+      // Con la anterior dentro del margen se vuelve a entregar la clave
+      // actual (otra pestaña o un reintento cuya respuesta se perdió).
+      const reenviada =
+        enGracia && (await verify(session.tokenHash, nuevoSecreto));
       await tx.authSession.update({
         where: { id: session.id },
         data: {
@@ -263,7 +273,7 @@ export class AuthService {
         tipo: "ok",
         user: session.user,
         sessionId: session.id,
-        rotada: esActual,
+        rotada: esActual || reenviada,
         plataforma,
       } as const;
     });
