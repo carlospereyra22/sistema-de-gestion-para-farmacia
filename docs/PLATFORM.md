@@ -39,8 +39,32 @@ y qué tiene cada una, y cortar a quien no paga, con posibilidad de postergar.
 - Código de un solo uso (TOTP) obligatorio. El bloqueo por intentos va en el paso del código,
   no en la clave: si no, cualquiera con el correo podría sacarnos del panel.
 - Auditoría propia, porque `AuditLog.organizationId` es obligatorio.
-- El panel muestra solo datos comerciales: sin ventas, clientes ni stock, y sin entrar como
-  una farmacia. La landing promete "Cada farmacia ve solo sus datos".
+- El panel muestra solo datos comerciales: sin ventas, clientes ni stock. Para ver lo de una
+  farmacia hay que entrar como uno de sus usuarios (Soporte, abajo). La decisión del 06/11 de
+  no entrar como una farmacia queda reemplazada (decisión del usuario, 11/11/2026).
+
+### Soporte: entrar como un usuario (SISTEMA-89)
+
+Decisión del usuario (11/11/2026): desde el panel se entra como cualquier usuario de una
+farmacia, para reproducir y arreglar un problema; se puede hacer todo lo que hace ese usuario.
+Sin motivo ni avisos: la farmacia no lo ve. La landing no cambia.
+
+- Sección **Soporte** del panel (y botón "Entrar como" en cada usuario del detalle de una
+  farmacia). La app se ve exactamente como la ve ese usuario; un botón flotante "Volver al panel"
+  (que ve solo el superadmin) vuelve al panel.
+- `POST platform/organizations/:id/users/:userId/soporte` crea una sesión del usuario sin clave
+  de renovación, que vence a las 4 horas, y entrega un token con la marca `soporte` (firmada por
+  el servidor). `POST platform/soporte/:sessionId/salir` la corta. Usuarios inactivos y otras
+  cuentas de plataforma no se pueden usar.
+- La sesión del superadmin sigue viva y se renueva aparte. En la PC del superadmin no queda copia
+  local de la farmacia (no hay "alcance" de usuario) ni se puede vender sin conexión.
+- Como soporte no se emiten ni reprocesan comprobantes en ARCA producción (venta con factura
+  productiva, notas de crédito, reprocesar, reencolar, emitir un interno, configuración productiva):
+  `403 SOPORTE_SIN_ARCA_PRODUCCION`. Homologación sí.
+- Una clave pendiente de cambio no frena al soporte (no se cambia la clave de nadie).
+- Registro interno: `PlatformAuditLog` con `SOPORTE_ENTRO` y `SOPORTE_SALIO` (quién, a qué
+  usuario y farmacia, la sesión). La auditoría de la farmacia no registra nada; lo que se hace
+  adentro queda a nombre del usuario, y la hora de entrada y salida permite separarlo.
 
 ### Comandos
 
@@ -279,5 +303,5 @@ Producción solo tiene Farmacia Juncos y no se le puede afectar nada:
 ## Fuera de alcance
 
 Facturar el abono desde el sistema, mail, recuperación autónoma de clave, pago en autoservicio,
-entrar como una farmacia, segundo factor para usuarios de farmacia, selector de varias
+segundo factor para usuarios de farmacia, selector de varias
 farmacias, demos gratis y asistente de primer uso.

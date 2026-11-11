@@ -8,12 +8,15 @@ import { PlatformPadron } from "./platform-padron";
 import { BUSQUEDA_ARCA } from "./lib/funciones-ocultas";
 import { PlatformPayments } from "./platform-payments";
 import { PlatformPlans } from "./platform-plans";
+import { PlatformSoporte } from "./platform-soporte";
+import { SoporteContext, type EntrarComo } from "./lib/soporte-panel";
 import { SessionStartup } from "./session-startup";
 
 const sections = [
   ["farmacias", "Farmacias"],
   ["pagos", "Pagos"],
   ["planes", "Planes"],
+  ["soporte", "Soporte"],
   ["arca", "ARCA"],
   ["auditoria", "Auditoría"],
 ] as const;
@@ -24,10 +27,13 @@ export default function PlatformShell({
   token,
   email,
   onLogout,
+  onEntrarComo,
 }: {
   token: string;
   email: string;
   onLogout: () => void;
+  /** Entrar como un usuario de una farmacia (SISTEMA-89). */
+  onEntrarComo?: EntrarComo;
 }) {
   const [session, setSession] = useState<PlatformSession>();
   const [error, setError] = useState("");
@@ -127,38 +133,46 @@ export default function PlatformShell({
             </button>
           ))}
       </nav>
-      <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
-        {section === "farmacias" && (
-          <PlatformOrganizations
-            token={token}
-            onVerificationExpired={verificationExpired}
-          />
-        )}
-        {section === "pagos" && (
-          <PlatformPayments
-            token={token}
-            onVerificationExpired={verificationExpired}
-          />
-        )}
-        {section === "planes" && (
-          <PlatformPlans
-            token={token}
-            onVerificationExpired={verificationExpired}
-          />
-        )}
-        {BUSQUEDA_ARCA && section === "arca" && (
-          <PlatformPadron
-            token={token}
-            onVerificationExpired={verificationExpired}
-          />
-        )}
-        {section === "auditoria" && (
-          <PlatformAuditPanel
-            token={token}
-            onVerificationExpired={verificationExpired}
-          />
-        )}
-      </main>
+      <SoporteContext.Provider value={onEntrarComo}>
+        <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
+          {section === "farmacias" && (
+            <PlatformOrganizations
+              token={token}
+              onVerificationExpired={verificationExpired}
+            />
+          )}
+          {section === "pagos" && (
+            <PlatformPayments
+              token={token}
+              onVerificationExpired={verificationExpired}
+            />
+          )}
+          {section === "planes" && (
+            <PlatformPlans
+              token={token}
+              onVerificationExpired={verificationExpired}
+            />
+          )}
+          {BUSQUEDA_ARCA && section === "arca" && (
+            <PlatformPadron
+              token={token}
+              onVerificationExpired={verificationExpired}
+            />
+          )}
+          {section === "soporte" && (
+            <PlatformSoporte
+              token={token}
+              onVerificationExpired={verificationExpired}
+            />
+          )}
+          {section === "auditoria" && (
+            <PlatformAuditPanel
+              token={token}
+              onVerificationExpired={verificationExpired}
+            />
+          )}
+        </main>
+      </SoporteContext.Provider>
     </div>
   );
 }

@@ -10,6 +10,9 @@ describe("auditoría de plataforma", () => {
     expect(platformActionLabel("PLATFORM_TOTP_ENROLLED")).toBe(
       "Código configurado",
     );
+    expect(platformActionLabel("SOPORTE_ENTRO")).toBe(
+      "Entró como usuario (soporte)",
+    );
   });
 
   it("muestra tal cual una acción nueva, sin perderla", () => {

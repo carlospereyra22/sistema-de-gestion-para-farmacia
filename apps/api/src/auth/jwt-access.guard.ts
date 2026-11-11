@@ -41,7 +41,8 @@ export class JwtAccessGuard implements CanActivate {
       if (!session)
         throw new UnauthorizedException("Session is invalid or expired.");
       request.auth = payload;
-      mustChangePassword = session.user.mustChangePassword;
+      // El soporte entra como el usuario sin tener que cambiarle la clave.
+      mustChangePassword = !payload.soporte && session.user.mustChangePassword;
     } catch {
       throw new UnauthorizedException("Access token is invalid or expired.");
     }

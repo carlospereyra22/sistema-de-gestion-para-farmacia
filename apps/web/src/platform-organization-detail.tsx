@@ -1,3 +1,4 @@
+import { BotonEntrarComo } from "./platform-soporte";
 import { useCallback, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, KeyRound, Plus, ShieldCheck, UserPlus } from "lucide-react";
 import {
@@ -585,6 +586,11 @@ export function PlatformOrganizationDetail({
                     </StatusLabel>
                   </DataTableCell>
                   <DataTableCell align="right">
+                    <BotonEntrarComo
+                      organizationId={data.id}
+                      organizationName={data.name}
+                      usuario={user}
+                    />
                     <button
                       type="button"
                       aria-label={`Resetear la clave de ${user.email}`}

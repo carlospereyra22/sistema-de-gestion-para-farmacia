@@ -1,5 +1,7 @@
 const actionLabels: Record<string, string> = {
   PLATFORM_ADMIN_GRANTED: "Cuenta de plataforma creada",
+  SOPORTE_ENTRO: "Entró como usuario (soporte)",
+  SOPORTE_SALIO: "Volvió al panel (soporte)",
   PLATFORM_ADMIN_REVOKED: "Cuenta de plataforma revocada",
   PLATFORM_TOTP_ENROLLED: "Código configurado",
   PLATFORM_TOTP_VERIFIED: "Ingreso con código",

@@ -366,3 +366,34 @@ export const uploadPlatformPadron = (
     "/padron-certificado/certificado",
     input,
   );
+
+/** Sesión de soporte: el superadmin entra como un usuario de una farmacia (SISTEMA-89). */
+export type SesionSoporte = {
+  accessToken: string;
+  sessionId: string;
+  expiresAt: string;
+};
+
+export const entrarComoUsuario = (
+  token: string,
+  organizationId: string,
+  userId: string,
+) =>
+  platformRequest<SesionSoporte>(
+    token,
+    `/organizations/${organizationId}/users/${userId}/soporte`,
+    {},
+  );
+
+/** Volver al panel: la sesión de soporte deja de servir en el servidor. */
+export async function salirDeSoporte(token: string, sessionId: string) {
+  const response = await fetch(
+    `${apiBaseUrl}/platform/soporte/${sessionId}/salir`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok && response.status !== 404)
+    throw new Error("No se pudo cerrar la sesión de soporte.");
+}

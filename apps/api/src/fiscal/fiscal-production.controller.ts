@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
+import { SinSoporteEnProduccionGuard } from "../auth/soporte";
 import { FiscalCredentialsService } from "./fiscal-credentials.service";
 import {
   PrepareCredentialDto,
@@ -28,7 +29,7 @@ class ActivateProductionDto {
 
 // Preparation and explicit activation. Issuance only through branch-scoped Sales routes.
 @Controller("organizations/:organizationId/fiscal-production")
-@UseGuards(JwtAccessGuard)
+@UseGuards(JwtAccessGuard, SinSoporteEnProduccionGuard)
 export class FiscalProductionController {
   constructor(
     private readonly credentials: FiscalCredentialsService,
