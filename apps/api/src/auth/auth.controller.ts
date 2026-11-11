@@ -34,13 +34,18 @@ export class AuthController {
    * La cookie dura lo mismo que el plazo de inactividad y se renueva con cada
    * uso (vencimiento deslizante, SISTEMA-93). Antes eran 400 días fijos.
    */
-  private setRefreshCookie(response: Response, refreshToken: string): void {
+  private setRefreshCookie(
+    response: Response,
+    refreshToken: string,
+    persistente: boolean,
+  ): void {
     response.cookie("gestion_refresh", refreshToken, {
       httpOnly: true,
       sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/api/v1/auth",
-      maxAge: this.auth.inactividadMs,
+      // Superadmin (SISTEMA-94): sin maxAge, se borra al cerrar el navegador.
+      ...(persistente ? { maxAge: this.auth.inactividadMs } : {}),
     });
   }
 
@@ -74,7 +79,7 @@ export class AuthController {
       body.password,
       this.datosDeSesion(request, body.deviceId),
     );
-    this.setRefreshCookie(response, result.refreshToken);
+    this.setRefreshCookie(response, result.refreshToken, result.persistente);
     return { accessToken: result.accessToken };
   }
 
@@ -93,7 +98,7 @@ export class AuthController {
     // Sólo cuando la clave rotó: si se usó la anterior dentro del margen, la
     // cookie nueva ya la guardó otra pestaña.
     if (result.refreshToken)
-      this.setRefreshCookie(response, result.refreshToken);
+      this.setRefreshCookie(response, result.refreshToken, result.persistente);
     return { accessToken: result.accessToken };
   }
 

@@ -12,12 +12,21 @@ import {
   Layers,
   LifeBuoy,
   LogOut,
+  MonitorSmartphone,
   ScrollText,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { AccountMenu } from "./account-menu";
-import { getPlatformSession, type PlatformSession } from "./lib/platform-api";
+import { SesionesAbiertasDialog } from "./sesiones-abiertas-dialog";
+import {
+  cerrarOtrasSesionesDelPanel,
+  cerrarSesionDelPanel,
+  getPlatformSession,
+  listarSesionesDelPanel,
+  salirDelPanel,
+  type PlatformSession,
+} from "./lib/platform-api";
 import { BUSQUEDA_ARCA } from "./lib/funciones-ocultas";
 import {
   guardarSeccion,
@@ -179,6 +188,17 @@ function PanelVerificado({
   onVerificationExpired: () => void;
 }) {
   const sidebar = useWorkspaceSidebar();
+  const [viendoSesiones, setViendoSesiones] = useState(false);
+  const cargarSesiones = useCallback(
+    () => listarSesionesDelPanel(token),
+    [token],
+  );
+  // Revoca el token de esta pestaña y cierra la sesión del navegador.
+  const salir = () => {
+    void salirDelPanel(token)
+      .catch(() => {})
+      .finally(onLogout);
+  };
   const actual = grupos
     .flatMap(({ secciones }) => secciones)
     .find(({ valor }) => valor === section)!;
@@ -221,14 +241,42 @@ function PanelVerificado({
             <ShieldCheck size={14} aria-hidden="true" />
             Acceso verificado
           </span>
+          <button
+            type="button"
+            onClick={() => setViendoSesiones(true)}
+            aria-label="Sesiones del panel"
+            title="Sesiones del panel"
+            className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          >
+            <MonitorSmartphone size={18} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={salir}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+          >
+            <LogOut size={16} aria-hidden="true" />
+            <span className="max-sm:hidden">Salir del panel</span>
+          </button>
           <AccountMenu
             email={email}
             displayName="Superadmin"
             organizationName="Farmatec"
             branchName="Panel de plataforma"
             placeIcon={<ShieldCheck size={13} className="mt-0.5 shrink-0" />}
-            onLogout={onLogout}
+            onLogout={salir}
           />
+          {viendoSesiones && (
+            <SesionesAbiertasDialog
+              titulo="Sesiones del panel"
+              subtitulo="Pestañas donde se ingresó el código. Cerrarlas pide el código de nuevo ahí."
+              textoCerrarTodas="Cerrar todas las demás"
+              cargar={cargarSesiones}
+              cerrarUna={(id) => cerrarSesionDelPanel(token, id)}
+              cerrarTodas={() => cerrarOtrasSesionesDelPanel(token)}
+              onClose={() => setViendoSesiones(false)}
+            />
+          )}
         </div>
       </header>
       <div

@@ -68,20 +68,46 @@ export async function startHttpApp(prefix: string) {
   await app.listen(0, "127.0.0.1");
   const base = (await app.getUrl()).replace("[::1]", "127.0.0.1");
 
-  const request = (
+  /**
+   * Token de plataforma de cada "pestaña" (SISTEMA-94): como la web, se guarda
+   * al ingresar el código y se manda solo en los pedidos con ese access token.
+   * Para simular otra pestaña, pasar `X-Plataforma` vacío en `extra`.
+   */
+  const plataforma = new Map<string, string>();
+  const request = async (
     path: string,
     token?: string,
     body?: object,
     method = body ? "POST" : "GET",
-  ) =>
-    fetch(`${base}/api/v1${path}`, {
+    /** Encabezados extra (cookie, token de plataforma...). */
+    extra: Record<string, string> = {},
+  ) => {
+    const propio: Record<string, string> =
+      token && plataforma.has(token) && !("X-Plataforma" in extra)
+        ? { "X-Plataforma": plataforma.get(token)! }
+        : {};
+    const response = await fetch(`${base}/api/v1${path}`, {
       method,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...propio,
+        ...extra,
       },
       body: body ? JSON.stringify(body) : undefined,
     });
+    if (
+      token &&
+      response.ok &&
+      /^\/platform\/totp\/(confirm|verify)$/.test(path)
+    ) {
+      const { token: deLaPestana } = (await response.clone().json()) as {
+        token?: string;
+      };
+      if (deLaPestana) plataforma.set(token, deLaPestana);
+    }
+    return response;
+  };
 
   const login = async (email: string, password: string) => {
     const response = await request("/auth/login", undefined, {
@@ -103,7 +129,7 @@ export async function startHttpApp(prefix: string) {
     await main.close();
   };
 
-  return { app, db, request, login, close };
+  return { app, db, base: `${base}/api/v1`, request, login, close };
 }
 
 export type HttpApp = Awaited<ReturnType<typeof startHttpApp>>;

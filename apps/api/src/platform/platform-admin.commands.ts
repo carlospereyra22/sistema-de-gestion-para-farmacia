@@ -50,6 +50,10 @@ export async function createPlatformAdmin(
       where: { userId: user.id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    await tx.platformToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
     const admin = await tx.platformAdmin.upsert({
       where: { userId: user.id },
       update: { active: true },
@@ -77,6 +81,10 @@ export async function revokePlatformAdmin(prisma: PrismaClient, email: string) {
       where: { userId: admin.userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    await tx.platformToken.updateMany({
+      where: { userId: admin.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
     await recordPlatformAudit(tx, {
       action: "PLATFORM_ADMIN_REVOKED",
       entityType: "PlatformAdmin",
@@ -99,9 +107,10 @@ export async function resetPlatformCode(prisma: PrismaClient, email: string) {
         lockedUntil: null,
       },
     });
-    await tx.authSession.updateMany({
-      where: { userId: admin.userId },
-      data: { platformVerifiedAt: null },
+    // Cortar las verificaciones: los tokens de plataforma (SISTEMA-94).
+    await tx.platformToken.updateMany({
+      where: { userId: admin.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
     });
     await recordPlatformAudit(tx, {
       action: "PLATFORM_TOTP_RESET",

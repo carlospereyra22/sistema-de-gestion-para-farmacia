@@ -10,21 +10,18 @@ import { Reflector } from "@nestjs/core";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { PrismaService } from "../prisma/prisma.service";
+import { ENCABEZADO_PLATAFORMA } from "./platform-token";
+import { PlatformTokenService } from "./platform-token.service";
 import { PLATFORM_VERIFICATION_OPTIONAL } from "./platform-verification-optional.decorator";
-
-const VERIFICATION_MS = 12 * 60 * 60 * 1000;
-
-export function isPlatformSessionVerified(
-  verifiedAt: Date | null | undefined,
-  now: Date,
-) {
-  return !!verifiedAt && now.getTime() - verifiedAt.getTime() < VERIFICATION_MS;
-}
 
 /**
  * Las rutas de plataforma no existen para nadie más: un anónimo o un usuario de farmacia
  * recibe la misma respuesta que en una ruta inexistente. La base se consulta en cada pedido,
  * así que revocar una cuenta corta el acceso al instante.
+ *
+ * Desde SISTEMA-94 el código no queda en la sesión (que comparten todas las
+ * pestañas del navegador): cada pedido trae el token de plataforma de la
+ * pestaña donde se ingresó, del mismo usuario y sesión del access token.
  */
 @Injectable()
 export class PlatformAdminGuard implements CanActivate {
@@ -32,6 +29,7 @@ export class PlatformAdminGuard implements CanActivate {
     private readonly jwtAccess: JwtAccessGuard,
     private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
+    private readonly tokens: PlatformTokenService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -54,11 +52,13 @@ export class PlatformAdminGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
     if (optional) return true;
-    const session = await this.prisma.authSession.findUnique({
-      where: { id: sessionId },
-      select: { platformVerifiedAt: true },
-    });
-    if (!isPlatformSessionVerified(session?.platformVerifiedAt, new Date()))
+    const tokenId = await this.tokens.validar(
+      request.headers[ENCABEZADO_PLATAFORMA],
+      { userId: sub, sessionId },
+      { ip: request.ip, userAgent: request.headers["user-agent"] },
+    );
+    if (tokenId) request.plataforma = { tokenId };
+    else
       throw new ForbiddenException({
         message: "Ingresá el código de tu aplicación para seguir.",
         error: "PLATFORM_VERIFICATION_REQUIRED",

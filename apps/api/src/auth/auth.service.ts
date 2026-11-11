@@ -16,6 +16,8 @@ import type { AccessTokenPayload } from "./auth.types";
 import { clavePublicaValida } from "../sales/firma-venta";
 import {
   GRACIA_ROTACION_MS,
+  PLATAFORMA_SESION_INACTIVIDAD_MS,
+  PLATAFORMA_SESION_MAXIMA_MS,
   inactividadMs,
   leerClaveDeSesion,
   resumenNavegador,
@@ -96,10 +98,16 @@ export class AuthService {
       throw new UnauthorizedException("Authentication is not configured.");
     const user = await this.prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
+      include: { platformAdmin: { select: { active: true } } },
     });
     if (!user?.active || !(await verify(user.passwordHash, password)))
       throw new UnauthorizedException("Email o contraseña incorrectos.");
-    return this.createSession(user.id, user.email, datos);
+    // Superadmin: sesión con vencimiento y cookie no persistente (SISTEMA-94).
+    const plataforma = user.platformAdmin?.active ?? false;
+    return {
+      ...(await this.createSession(user.id, user.email, datos, plataforma)),
+      persistente: !plataforma,
+    };
   }
 
   /**
@@ -159,7 +167,12 @@ export class AuthService {
     refreshToken: string | undefined,
     usuarioEsperado?: string,
     datos: DatosDeSesion = {},
-  ): Promise<{ accessToken: string; refreshToken?: string }> {
+  ): Promise<{
+    accessToken: string;
+    refreshToken?: string;
+    /** La cookie sobrevive al cierre del navegador (no para superadmin). */
+    persistente: boolean;
+  }> {
     const clave = leerClaveDeSesion(refreshToken);
     if (!clave) throw new UnauthorizedException(VENCIDA);
     const ahora = new Date();
@@ -175,11 +188,18 @@ export class AuthService {
           revokedAt: null,
           OR: [{ expiresAt: null }, { expiresAt: { gt: ahora } }],
         },
-        include: { user: true },
+        include: {
+          user: { include: { platformAdmin: { select: { active: true } } } },
+        },
       });
+      const plataforma = session?.user.platformAdmin?.active ?? false;
       if (
         !session ||
-        vencidaPorInactividad(session.lastUsedAt, ahora, this.inactividadMs)
+        vencidaPorInactividad(
+          session.lastUsedAt,
+          ahora,
+          plataforma ? PLATAFORMA_SESION_INACTIVIDAD_MS : this.inactividadMs,
+        )
       )
         return { tipo: "vencida" } as const;
       const esActual = await verify(session.tokenHash, clave.secret);
@@ -244,6 +264,7 @@ export class AuthService {
         user: session.user,
         sessionId: session.id,
         rotada: esActual,
+        plataforma,
       } as const;
     });
     switch (resultado.tipo) {
@@ -270,6 +291,7 @@ export class AuthService {
       ...(resultado.rotada
         ? { refreshToken: `${resultado.sessionId}.${nuevoSecreto}` }
         : {}),
+      persistente: !resultado.plataforma,
     };
   }
 
@@ -392,6 +414,11 @@ export class AuthService {
         where: { userId, revokedAt: null, id: { not: sessionId } },
         data: { revokedAt: new Date() },
       });
+      // Superadmin: el panel vuelve a pedir el código en todas las pestañas.
+      await tx.platformToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
       await tx.auditLog.createMany({
         data: user.organizations.map(({ organizationId }) => ({
           organizationId,
@@ -410,13 +437,16 @@ export class AuthService {
     userId: string,
     email: string,
     datos: DatosDeSesion,
+    plataforma = false,
   ) {
     const refreshSecret = randomBytes(48).toString("base64url");
     const session = await this.prisma.authSession.create({
       data: {
         userId,
         tokenHash: await hash(refreshSecret),
-        expiresAt: null,
+        expiresAt: plataforma
+          ? new Date(Date.now() + PLATAFORMA_SESION_MAXIMA_MS)
+          : null,
         ...datosGuardados(datos),
       },
     });

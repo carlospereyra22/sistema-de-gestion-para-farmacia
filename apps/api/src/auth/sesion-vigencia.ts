@@ -11,6 +11,14 @@ export const INACTIVIDAD_POR_DEFECTO_DIAS = 7;
  * un reintento por mala conexión pueden renovar casi a la vez con la vieja.
  */
 export const GRACIA_ROTACION_MS = 2 * 60_000;
+/**
+ * Superadmin (SISTEMA-94): su sesión nunca queda abierta en una PC ajena.
+ * Vence a las 12 h aunque se use y a la hora sin uso; la cookie no es
+ * persistente (se borra al cerrar el navegador).
+ */
+export const PLATAFORMA_SESION_MAXIMA_MS = 12 * 60 * 60_000;
+export const PLATAFORMA_SESION_INACTIVIDAD_MS = 60 * 60_000;
+
 /** Cuántas claves retiradas se recuerdan para detectar una cookie copiada. */
 export const CLAVES_RETIRADAS = 5;
 

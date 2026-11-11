@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { hash } from "@node-rs/argon2";
 import type { PrismaService } from "../src/prisma/prisma.service";
-import { cookieDe, levantarApiAislada } from "./api-http-aislada";
+import { startHttpApp, type HttpApp } from "./support/http-app";
+
+/** La cookie de sesión de una respuesta ("gestion_refresh=..."), si vino. */
+const cookieDe = (response: Response) =>
+  response.headers.get("set-cookie")?.split(";")[0];
 
 /**
  * Vencimiento y control de sesiones (SISTEMA-93), por HTTP como el navegador:
@@ -9,7 +13,7 @@ import { cookieDe, levantarApiAislada } from "./api-http-aislada";
  * sesiones abiertas propias y de los usuarios de la farmacia.
  */
 describe("sesiones con vencimiento y rotación (HTTP, esquema aislado)", () => {
-  let api: Awaited<ReturnType<typeof levantarApiAislada>>;
+  let api: HttpApp;
   let db: PrismaService;
   let auth: string;
   const clave = "una-clave-de-prueba-larga";
@@ -18,11 +22,11 @@ describe("sesiones con vencimiento y rotación (HTTP, esquema aislado)", () => {
   const DIA = 86_400_000;
 
   beforeAll(async () => {
-    api = await levantarApiAislada("sesiones_venc");
+    api = await startHttpApp("sesiones_venc");
     db = api.db;
     auth = `${api.base}/auth`;
   }, 100000);
-  afterAll(() => api?.cerrar());
+  afterAll(() => api?.close());
 
   async function usuario(nombre: string) {
     return db.user.create({
