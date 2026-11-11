@@ -156,7 +156,7 @@ export function ReportFiltersBar({
       <button
         type="button"
         onClick={onReset}
-        className="inline-flex h-10 items-center justify-center gap-1.5 self-end rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm hover:border-teal-300 hover:bg-teal-50/40"
+        className="inline-flex h-10 items-center justify-center gap-1.5 self-end rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition-colors duration-150 hover:border-teal-300 hover:bg-teal-50/40"
       >
         <RotateCcw size={14} aria-hidden />
         Restablecer

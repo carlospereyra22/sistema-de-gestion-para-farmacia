@@ -6,9 +6,31 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { hash } from "@node-rs/argon2";
+import type { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { assertQuotaAvailable } from "../platform/subscription-quota";
+
+const SOLO_DUENO =
+  "Sólo un dueño puede dar o quitar el rol de dueño, o cambiar el acceso de otro dueño.";
+
+/** ¿El usuario es dueño activo de la farmacia? */
+async function esDueno(
+  db: Pick<Prisma.TransactionClient, "userOrganization">,
+  userId: string,
+  organizationId: string,
+) {
+  return (
+    (await db.userOrganization.count({
+      where: {
+        userId,
+        organizationId,
+        active: true,
+        roles: { some: { role: { code: "OWNER" } } },
+      },
+    })) > 0
+  );
+}
 
 @Injectable()
 export class UsersService {
@@ -176,8 +198,16 @@ export class UsersService {
       const wasOwner = membership.roles.some(
         ({ role }) => role.code === "OWNER",
       );
-      const retainsOwner =
-        input.active && roles.some((role) => role.code === "OWNER");
+      const getsOwner = roles.some((role) => role.code === "OWNER");
+      // Igual que la contraseña de un dueño: un administrador que no es dueño
+      // no puede crear dueños ni sacarle el acceso a uno (si no, podría dar
+      // el rol a otra cuenta suya y desplazar al dueño real).
+      if (
+        ((wasOwner && accessChanged) || (getsOwner && !wasOwner)) &&
+        !(await esDueno(tx, actorId, organizationId))
+      )
+        throw new ForbiddenException(SOLO_DUENO);
+      const retainsOwner = input.active && getsOwner;
       if (wasOwner && membership.active && !retainsOwner) {
         const owners = await tx.userOrganization.count({
           where: {
@@ -254,6 +284,11 @@ export class UsersService {
       throw new ForbiddenException(
         "Branch or role is outside the organization.",
       );
+    if (
+      roles.some((role) => role.code === "OWNER") &&
+      !(await esDueno(this.prisma, actorId, organizationId))
+    )
+      throw new ForbiddenException(SOLO_DUENO);
     const passwordHash = await hash(password);
     return this.prisma.$transaction(async (tx) => {
       await assertQuotaAvailable(tx, organizationId, "users");

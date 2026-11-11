@@ -307,11 +307,15 @@ export function CustomerAccounts({
   // cuando cambia la bandeja (apertura o cierre sin conexión).
   useEffect(() => {
     if (!active) return;
+    // Una respuesta que llega tarde (se cambió de sucursal mientras tanto) se
+    // descarta: si no, se ofrecían cajas de la sucursal anterior para cobrar.
+    let vigente = true;
     void Promise.all([
       getCash(token, organizationId, branchId),
       ventasDeLaPc().catch(() => []),
     ])
       .then(([cash, bandeja]) => {
+        if (!vigente) return;
         // Con lo pendiente de la PC: la caja abierta sin conexión también cuenta.
         const open = sesionesAbiertasConPendientes(
           cash.sessions,
@@ -333,9 +337,13 @@ export function CustomerAccounts({
         );
       })
       .catch(() => {
+        if (!vigente) return;
         setSessions([]);
         setSessionId("");
       });
+    return () => {
+      vigente = false;
+    };
   }, [token, organizationId, branchId, active, versionBandeja]);
   // Lo hecho sin conexión ya llegó al servidor: se vuelve a pedir la cuenta,
   // que ahora lo trae (SISTEMA-70).

@@ -1,15 +1,11 @@
-import {
-  useEffect,
-  useState,
-  type CSSProperties,
-  type ReactElement,
-  type ReactNode,
-} from "react";
-import { DURACION_ENTRADA, easeOutCubic } from "./lib/animacion-reportes";
+import { type CSSProperties, type ReactElement, type ReactNode } from "react";
+import { MOVIMIENTO } from "./lib/animacion-reportes";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { ReportKpi } from "@gestion/contracts";
 import { formatKpiValue, kpiTrend, unavailableText } from "./lib/report-format";
 import { ReportHelp, reportCardClass } from "./report-states";
+import { useEntrada } from "./lib/use-reportes-movimiento";
+import { NumeroAnimado } from "./reportes-movimiento";
 
 /**
  * Tarjeta de indicador. `help` explica la formula (tooltip); `higherIsBetter`
@@ -29,24 +25,17 @@ export function ReportKpiCard({
   kpi: ReportKpi;
   help: string;
   higherIsBetter?: boolean;
-  /** Entrada animada: el número sube desde 0 (SISTEMA-87). */
+  /**
+   * Entrada animada: la tarjeta aparece y el número cuenta desde 0 (SISTEMA-87,
+   * SISTEMA-90). Sin ella, un cambio de filtros igual va del valor anterior al
+   * nuevo con una transición corta.
+   */
   animar?: boolean;
   /** Orden de aparición de la tarjeta. */
   orden?: number;
 }): ReactElement {
   const trend = kpiTrend(kpi, higherIsBetter);
-  const avance = useAvance(animar && kpi.available && kpi.value !== null);
-  const mostrado =
-    avance < 1 && kpi.value !== null
-      ? {
-          ...kpi,
-          value: String(
-            kpi.unit === "percent"
-              ? Number(kpi.value) * avance
-              : Math.round(Number(kpi.value) * avance),
-          ),
-        }
-      : kpi;
+  const [ref, entrada] = useEntrada<HTMLElement>(animar);
   const TrendIcon =
     trend.direction === "up"
       ? ArrowUpRight
@@ -55,6 +44,8 @@ export function ReportKpiCard({
         : Minus;
   return (
     <article
+      ref={ref}
+      data-entrada={entrada}
       className={`${reportCardClass} reportes-entrada flex gap-3 px-4 py-3.5`}
       style={{ "--orden": orden } as CSSProperties}
     >
@@ -74,7 +65,20 @@ export function ReportKpiCard({
               : unavailableText[kpi.unavailableReason ?? "NO_DATA"]
           }
         >
-          {formatKpiValue(mostrado)}
+          {kpi.available && kpi.value !== null ? (
+            <NumeroAnimado
+              valor={kpi.value}
+              formato={(value) => formatKpiValue({ ...kpi, value })}
+              decimales={kpi.unit === "percent"}
+              entrada={animar}
+              listo={entrada !== "pendiente"}
+              retraso={
+                MOVIMIENTO.contadorRetraso + orden * MOVIMIENTO.contadorDesfase
+              }
+            />
+          ) : (
+            formatKpiValue(kpi)
+          )}
           {kpi.estimated && kpi.available ? (
             <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-600">
               estimado
@@ -105,25 +109,4 @@ export function ReportKpiCard({
       </div>
     </article>
   );
-}
-
-/**
- * Avance de 0 a 1 de los números que suben, con una curva suave. Sin
- * animación es 1 desde el principio (y en el servidor, para los tests).
- */
-function useAvance(animar: boolean) {
-  const [avance, setAvance] = useState(animar ? 0 : 1);
-  useEffect(() => {
-    if (!animar) return;
-    let cuadro = 0;
-    const inicio = performance.now();
-    const paso = (ahora: number) => {
-      const t = Math.min(1, (ahora - inicio) / DURACION_ENTRADA);
-      setAvance(easeOutCubic(t));
-      if (t < 1) cuadro = requestAnimationFrame(paso);
-    };
-    cuadro = requestAnimationFrame(paso);
-    return () => cancelAnimationFrame(cuadro);
-  }, [animar]);
-  return avance;
 }

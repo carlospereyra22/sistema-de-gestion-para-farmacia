@@ -85,6 +85,9 @@ export function ReportsWorkspace({
   const view = readReportView(search, today);
   const [options, setOptions] = useState<ReportFilterOptions>();
   const [error, setError] = useState<string>();
+  // Sólo al cambiar de pestaña el contenido entra con un fundido corto; la
+  // primera carga ya tiene su propia entrada (SISTEMA-90).
+  const [cambioPestana, setCambioPestana] = useState(false);
 
   const loadOptions = useCallback(() => {
     let current = true;
@@ -135,8 +138,11 @@ export function ReportsWorkspace({
               role="tab"
               aria-selected={active}
               title={allowed ? undefined : restricted[tab.id]?.text}
-              onClick={() => setView({ ...view, tab: tab.id })}
-              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors ${
+              onClick={() => {
+                if (!active) setCambioPestana(true);
+                setView({ ...view, tab: tab.id });
+              }}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-[background-color,color,box-shadow] duration-200 ease-out ${
                 active
                   ? "bg-[#e8faf5] text-[#087f70] ring-1 ring-inset ring-[#cce8de]"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -167,17 +173,22 @@ export function ReportsWorkspace({
               setView({ ...defaultReportView(today), tab: view.tab })
             }
           />
-          <ReportTabContent
-            active={active}
-            tab={view.tab}
-            options={options}
-            token={token}
-            organizationId={organizationId}
-            view={{ ...view, branchId }}
-            onOpenInventory={() =>
-              onSearchChange(workspaceLocation(search, "Inventario"))
-            }
-          />
+          <div
+            key={view.tab}
+            className={cambioPestana ? "reportes-pestana" : undefined}
+          >
+            <ReportTabContent
+              active={active}
+              tab={view.tab}
+              options={options}
+              token={token}
+              organizationId={organizationId}
+              view={{ ...view, branchId }}
+              onOpenInventory={() =>
+                onSearchChange(workspaceLocation(search, "Inventario"))
+              }
+            />
+          </div>
         </>
       )}
     </div>

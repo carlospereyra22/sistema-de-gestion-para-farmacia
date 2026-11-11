@@ -36,6 +36,7 @@ export function trendOption(
 ) {
   const series: Record<string, unknown>[] = [
     {
+      id: "actual",
       name: "Período actual",
       type: "line",
       smooth: true,
@@ -46,6 +47,7 @@ export function trendOption(
   ];
   if (comparisonLabel)
     series.push({
+      id: "anterior",
       name: comparisonLabel,
       type: "line",
       smooth: true,
@@ -70,7 +72,9 @@ export function trendOption(
 
 /**
  * Ranking horizontal (medios de pago, categorias, productos); el primero arriba.
- * Con `share` la etiqueta suma el porcentaje del total.
+ * Con `share` la etiqueta suma el porcentaje del total. Cada barra lleva su
+ * nombre: al cambiar los filtros ECharts la reconoce por el nombre y la anima
+ * desde su largo anterior, sin mezclar un producto con la cantidad de otro.
  */
 export function rankingOption(
   items: readonly { name: string; value: number; share?: number | null }[],
@@ -100,9 +104,12 @@ export function rankingOption(
     },
     series: [
       {
+        id: "ranking",
         type: "bar",
         barMaxWidth: 18,
         itemStyle: { borderRadius: [0, 4, 4, 0], color: reportPalette[1] },
+        // Al pasar el mouse la barra se oscurece apenas, sin cambiar de tamaño.
+        emphasis: { itemStyle: { color: reportPalette[0] } },
         label: {
           show: true,
           position: "right",
@@ -122,7 +129,11 @@ export function rankingOption(
               ? ""
               : ` · ${data.share.toLocaleString("es-AR")} %`),
         },
-        data: rows.map((row) => ({ value: row.value, share: row.share })),
+        data: rows.map((row) => ({
+          name: row.name,
+          value: row.value,
+          share: row.share,
+        })),
       },
     ],
   };

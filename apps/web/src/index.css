@@ -1869,14 +1869,59 @@ textarea:focus {
   }
 }
 
-/* Reportes (SISTEMA-87): entrada animada la primera vez de la sesión. Las
-   tarjetas y los paneles aparecen de a uno (clase reportes-animado en el
-   Resumen); los números y los gráficos los anima React y ECharts. Nunca con
+/* Reportes (SISTEMA-87, SISTEMA-90): entrada animada la primera vez de la
+   sesión. Cada tarjeta o panel lleva data-entrada (reportes-movimiento.tsx):
+   "pendiente" mientras no se vio, "entrando" al entrar en pantalla y "lista"
+   cuando terminó; sólo en "entrando" se anima, así un cambio de filtros o de
+   página no repite nada. Los números y los gráficos los animan React y
+   ECharts. "backwards" y no "both": al terminar no queda ninguna
+   transformación que tape los tooltips de la tarjeta de arriba. Nunca con
    "reducir movimiento". */
 @media (prefers-reduced-motion: no-preference) {
-  .reportes-animado .reportes-entrada {
-    animation: reportes-entrada 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    animation-delay: calc(var(--orden, 0) * 90ms);
+  .reportes-entrada[data-entrada="pendiente"] {
+    opacity: 0;
+  }
+  .reportes-entrada[data-entrada="entrando"] {
+    animation: reportes-aparicion 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--orden, 0) * 65ms);
+  }
+  .reportes-panel[data-entrada="entrando"] {
+    animation-delay: calc(120ms + var(--orden, 0) * 70ms);
+  }
+  /* Filas de tablas: casi imperceptible y compacto (tope de 180 ms). */
+  [data-entrada="entrando"] .reportes-fila {
+    animation: reportes-fila 200ms ease-out backwards;
+    animation-delay: calc(120ms + min(var(--fila, 0) * 35ms, 180ms));
+  }
+  [data-entrada="entrando"] .reportes-alerta {
+    animation: reportes-alerta 260ms ease-out backwards;
+    animation-delay: calc(160ms + var(--fila, 0) * 50ms);
+  }
+  /* Cambio de pestaña. */
+  .reportes-pestana {
+    animation: reportes-alerta 220ms ease-out backwards;
+  }
+  /* "Actualizando…" aparece sólo si la respuesta tarda: sin destellos. */
+  .reportes-actualizando {
+    animation: reportes-fila 160ms ease-out 150ms backwards;
+  }
+}
+@keyframes reportes-aparicion {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes reportes-fila {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+@keyframes reportes-alerta {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
   }
 }
 @keyframes reportes-entrada {

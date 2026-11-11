@@ -1,7 +1,9 @@
 import {
+  createContext,
   lazy,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -19,6 +21,7 @@ import {
   Info,
   Package,
   ReceiptText,
+  RefreshCw,
   Store,
   Tags,
   TrendingUp,
@@ -31,13 +34,13 @@ import { paymentLabels, rankingOption, trendOption } from "./lib/report-charts";
 import { formatMoneyMinor } from "./lib/report-format";
 import { getReportOverview } from "./lib/reports-api";
 import {
-  conAnimacion,
-  DURACION_ENTRADA,
   tocaAnimarReportes,
+  type TipoAnimacionGrafico,
 } from "./lib/animacion-reportes";
 import { comparisonOptions, type ReportView } from "./lib/report-view";
 import { ReportCashClosuresPanel } from "./report-cash-closures";
 import { ReportKpiCard } from "./report-kpi";
+import { useEntrada, type EstadoEntrada } from "./lib/use-reportes-movimiento";
 import {
   ReportEmptyState,
   ReportErrorState,
@@ -47,23 +50,41 @@ import {
 
 const ReportChart = lazy(() => import("./report-chart"));
 
+/**
+ * Entrada del panel que contiene a un gráfico: el gráfico se monta (y se dibuja)
+ * recién cuando el panel entra en pantalla.
+ */
+const EntradaPanel = createContext<{ animar: boolean; estado: EstadoEntrada }>({
+  animar: false,
+  estado: "lista",
+});
+
+/**
+ * Tarjeta de un widget. Con la entrada animada aparece la primera vez que
+ * entra en pantalla, no todas juntas al cargar (SISTEMA-87, SISTEMA-90).
+ */
 function Panel({
   title,
   icon,
   hint,
-  orden = 4,
+  orden = 0,
+  animar = false,
   children,
 }: {
   title: string;
   icon: ReactNode;
   hint?: string;
-  /** Orden de aparición: cada panel entra un poco después (SISTEMA-87). */
+  /** Orden de aparición dentro de su fila. */
   orden?: number;
+  animar?: boolean;
   children: ReactNode;
 }): ReactElement {
+  const [ref, estado] = useEntrada<HTMLElement>(animar);
   return (
     <section
-      className={`${reportCardClass} reportes-entrada min-w-0 p-4`}
+      ref={ref}
+      data-entrada={estado}
+      className={`${reportCardClass} reportes-entrada reportes-panel min-w-0 p-4`}
       style={{ "--orden": orden } as CSSProperties}
     >
       <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -73,7 +94,11 @@ function Panel({
       {hint ? (
         <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p>
       ) : null}
-      <div className="mt-3">{children}</div>
+      <div className="mt-3">
+        <EntradaPanel.Provider value={{ animar, estado }}>
+          {children}
+        </EntradaPanel.Provider>
+      </div>
     </section>
   );
 }
@@ -81,15 +106,27 @@ function Panel({
 function Chart({
   option,
   label,
-  height,
+  height = 260,
+  tipo,
 }: {
   option: EChartsCoreOption;
   label: string;
   height?: number;
+  tipo: TipoAnimacionGrafico;
 }): ReactElement {
+  const { animar, estado } = useContext(EntradaPanel);
+  // Mismo alto mientras espera: nada salta cuando el gráfico aparece.
+  const lugar = <div style={{ height }} />;
+  if (estado === "pendiente") return lugar;
   return (
-    <Suspense fallback={<div style={{ height: height ?? 260 }} />}>
-      <ReportChart option={option} label={label} height={height} />
+    <Suspense fallback={lugar}>
+      <ReportChart
+        option={option}
+        label={label}
+        height={height}
+        animacion={tipo}
+        animarEntrada={animar}
+      />
     </Suspense>
   );
 }
@@ -130,15 +167,23 @@ export function ReportOverviewTab({
   active?: boolean;
 }): ReactElement {
   const { from, to, branchId, comparison } = view;
-  // El resultado se guarda con sus filtros: al volver a Reportes con los mismos
-  // filtros se revalida sin vaciar; con filtros distintos se muestra el esqueleto.
+  // El resultado se guarda con sus filtros. Al cambiar un filtro se sigue viendo
+  // lo anterior (apenas atenuado y con "Actualizando…") hasta que llega lo
+  // nuevo, y entonces números y gráficos van de lo anterior a lo nuevo
+  // (SISTEMA-90). De otra organización o con error nunca se muestra lo viejo.
   const key = JSON.stringify([organizationId, from, to, branchId, comparison]);
   const [result, setResult] = useState<{
     key: string;
+    organizationId: string;
     data: ReportOverview & { guardadaEl?: number };
   }>();
   const [error, setError] = useState<string>();
-  const data = result?.key === key ? result.data : undefined;
+  const fresh = result?.key === key;
+  const data =
+    fresh || (!error && result?.organizationId === organizationId)
+      ? result?.data
+      : undefined;
+  const actualizando = Boolean(data) && !fresh;
   const load = useCallback(() => {
     let current = true;
     setError(undefined);
@@ -149,7 +194,7 @@ export function ReportOverviewTab({
       comparison,
     })
       .then((next) => {
-        if (current) setResult({ key, data: next });
+        if (current) setResult({ key, organizationId, data: next });
       })
       .catch((cause: unknown) => {
         if (current)
@@ -177,15 +222,8 @@ export function ReportOverviewTab({
     decision.current ??= tocaAnimarReportes() && !data.guardadaEl;
     setAnimar(decision.current);
   }, [active, data]);
-  // Terminada la entrada, un cambio de filtros ya no la repite.
-  useEffect(() => {
-    if (!animar) return;
-    const fin = window.setTimeout(() => {
-      decision.current = false;
-      setAnimar(false);
-    }, DURACION_ENTRADA + 1500);
-    return () => window.clearTimeout(fin);
-  }, [animar]);
+  // Cada bloque recuerda si ya hizo su entrada: un cambio de filtros no la
+  // repite, y los de más abajo la hacen cuando se ven por primera vez.
 
   if (!data || animar === undefined)
     return error ? (
@@ -194,17 +232,34 @@ export function ReportOverviewTab({
       <ReportSkeleton />
     );
   return (
-    <>
-      {data.guardadaEl ? (
-        <ReportCopiaGuardada guardadaEl={data.guardadaEl} />
+    <div className="relative" aria-busy={actualizando}>
+      {actualizando ? (
+        <p
+          role="status"
+          className="reportes-actualizando pointer-events-none absolute -top-2.5 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-[#cce8de] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#087f70] shadow-sm"
+        >
+          <RefreshCw
+            size={11}
+            className="motion-safe:animate-spin"
+            aria-hidden
+          />
+          Actualizando…
+        </p>
       ) : null}
-      <ReportOverviewContent
-        data={data}
-        comparison={comparison}
-        onOpenInventory={onOpenInventory}
-        animar={animar}
-      />
-    </>
+      <div
+        className={`transition-opacity duration-200 ${actualizando ? "opacity-70 delay-150" : ""}`}
+      >
+        {data.guardadaEl ? (
+          <ReportCopiaGuardada guardadaEl={data.guardadaEl} />
+        ) : null}
+        <ReportOverviewContent
+          data={data}
+          comparison={comparison}
+          onOpenInventory={onOpenInventory}
+          animar={animar}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -250,8 +305,8 @@ export function ReportOverviewContent({
       ? null
       : (comparisonOptions.find((option) => option.id === comparison)?.label ??
         null);
-  const options = useMemo(() => {
-    const opciones = {
+  const options = useMemo(
+    () => ({
       trend: trendOption(
         data.charts.salesTrend,
         data.charts.trendGranularity,
@@ -278,14 +333,9 @@ export function ReportOverviewContent({
         })),
         "units",
       ),
-    };
-    return Object.fromEntries(
-      Object.entries(opciones).map(([clave, opcion]) => [
-        clave,
-        conAnimacion(opcion, animar),
-      ]),
-    ) as typeof opciones;
-  }, [data, comparisonLabel, animar]);
+    }),
+    [data, comparisonLabel],
+  );
   const { kpis, charts, tables, meta } = data;
   const showProfit = kpis.grossProfit.unavailableReason !== "FORBIDDEN";
   const empty = kpis.unitsSold.value === "0" && kpis.netSales.value === "0";
@@ -294,16 +344,7 @@ export function ReportOverviewContent({
   const showBranches = tables.branches.length > 1;
 
   return (
-    <div className={`space-y-4 ${animar ? "reportes-animado" : ""}`}>
-      {meta.dataQuality.warnings.map((warning) => (
-        <p
-          key={warning}
-          className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
-        >
-          <Info size={14} className="mt-0.5 shrink-0" aria-hidden />
-          {warning}
-        </p>
-      ))}
+    <div className="space-y-4">
       <div
         className={`grid gap-3 sm:grid-cols-2 ${showProfit ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
       >
@@ -342,6 +383,28 @@ export function ReportOverviewContent({
           help="Unidades de venta de productos (caja, blíster o unidad según el producto), menos las devueltas."
         />
       </div>
+      {/* Aclaraciones sobre los datos (por ejemplo, ventas sin costo de lote):
+          una nota sobria debajo de las tarjetas que explica, no una alarma. */}
+      {meta.dataQuality.warnings.length ? (
+        <ul className="space-y-1.5" aria-label="Aclaraciones sobre los datos">
+          {meta.dataQuality.warnings.map((warning) => (
+            <li
+              key={warning}
+              className="flex items-start gap-2.5 rounded-xl border border-[#dce7ef] bg-[#f6faf9] px-3.5 py-2.5 text-xs leading-5 text-slate-600"
+            >
+              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[#e8faf5] text-[#087f70]">
+                <Info size={12} aria-hidden />
+              </span>
+              <span>
+                <strong className="font-semibold text-slate-800">
+                  Para tener en cuenta:
+                </strong>{" "}
+                {warning}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {empty ? (
         <div className={reportCardClass}>
@@ -354,15 +417,21 @@ export function ReportOverviewContent({
         <>
           <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
             <Panel
-              orden={4}
+              animar={animar}
+              orden={0}
               title="Evolución de ventas"
               icon={<TrendingUp size={16} aria-hidden />}
               hint={`Ventas netas por ${charts.trendGranularity === "day" ? "día" : "mes"}`}
             >
-              <Chart option={options.trend} label="Evolución de ventas netas" />
+              <Chart
+                tipo="linea"
+                option={options.trend}
+                label="Evolución de ventas netas"
+              />
             </Panel>
             <Panel
-              orden={5}
+              animar={animar}
+              orden={1}
               title="Medios de pago"
               icon={<CreditCard size={16} aria-hidden />}
               hint="Sobre lo facturado; el vuelto se descuenta del efectivo."
@@ -370,6 +439,7 @@ export function ReportOverviewContent({
               {charts.paymentMethods.length ? (
                 <>
                   <Chart
+                    tipo="barras"
                     option={options.payments}
                     label="Ventas por medio de pago"
                     height={Math.max(150, charts.paymentMethods.length * 44)}
@@ -392,12 +462,14 @@ export function ReportOverviewContent({
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
             <Panel
-              orden={6}
+              animar={animar}
+              orden={0}
               title="Ventas por categoría"
               icon={<Tags size={16} aria-hidden />}
               hint="Ventas netas según la categoría asignada al producto."
             >
               <Chart
+                tipo="barras"
                 option={options.categories}
                 label="Ventas por categoría"
                 height={Math.max(
@@ -407,13 +479,15 @@ export function ReportOverviewContent({
               />
             </Panel>
             <Panel
-              orden={7}
+              animar={animar}
+              orden={1}
               title="Productos más vendidos"
               icon={<Trophy size={16} aria-hidden />}
               hint="Unidades netas de devoluciones."
             >
               {charts.topProducts.length ? (
                 <Chart
+                  tipo="barras"
                   option={options.products}
                   label="Productos más vendidos"
                   height={Math.max(160, charts.topProducts.length * 30)}
@@ -431,7 +505,8 @@ export function ReportOverviewContent({
       >
         {showBranches ? (
           <Panel
-            orden={8}
+            animar={animar}
+            orden={0}
             title="Resumen por sucursal"
             icon={<Store size={16} aria-hidden />}
           >
@@ -458,8 +533,12 @@ export function ReportOverviewContent({
                   </tr>
                 </thead>
                 <tbody>
-                  {tables.branches.map((row) => (
-                    <tr key={row.id} className="border-t border-slate-100">
+                  {tables.branches.map((row, index) => (
+                    <tr
+                      key={row.id}
+                      className="reportes-fila border-t border-slate-100 transition-colors duration-150 hover:bg-[#f8fbfa]"
+                      style={{ "--fila": index } as CSSProperties}
+                    >
                       <td className="px-3 py-2 text-slate-800">{row.name}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {formatMoneyMinor(row.netSalesMinor)}
@@ -485,7 +564,12 @@ export function ReportOverviewContent({
                 </tbody>
                 {tables.branches.length > 1 ? (
                   <tfoot>
-                    <tr className="border-t border-[#cce8de] bg-[#f2fbf8] font-semibold">
+                    <tr
+                      className="reportes-fila border-t border-[#cce8de] bg-[#f2fbf8] font-semibold"
+                      style={
+                        { "--fila": tables.branches.length } as CSSProperties
+                      }
+                    >
                       <td className="px-3 py-2">Total</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {kpis.netSales.value
@@ -517,7 +601,8 @@ export function ReportOverviewContent({
           </Panel>
         ) : null}
         <Panel
-          orden={9}
+          animar={animar}
+          orden={1}
           title="Alertas de inventario"
           icon={<AlertTriangle size={16} aria-hidden />}
           hint="Estado actual, no depende del período."
@@ -528,14 +613,18 @@ export function ReportOverviewContent({
                 showBranches ? "space-y-2" : "grid gap-2 md:grid-cols-3"
               }
             >
-              {activeAlerts.map((alert) => {
+              {activeAlerts.map((alert, index) => {
                 const text = alertText[alert.kind](alert);
                 return (
-                  <li key={alert.kind}>
+                  <li
+                    key={alert.kind}
+                    className="reportes-alerta"
+                    style={{ "--fila": index } as CSSProperties}
+                  >
                     <button
                       type="button"
                       onClick={onOpenInventory}
-                      className="flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-2.5 text-left hover:border-[#cce8de] hover:bg-[#f2fbf8]"
+                      className="group flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:border-[#cce8de] hover:bg-[#f2fbf8] hover:shadow-[0_3px_10px_rgb(25_56_74_/_6%)] focus-visible:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 motion-reduce:transform-none"
                     >
                       <span
                         className={`grid size-8 shrink-0 place-items-center rounded-full ${alert.kind === "expired" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}`}
@@ -556,7 +645,7 @@ export function ReportOverviewContent({
                       </span>
                       <ChevronRight
                         size={16}
-                        className="text-slate-400"
+                        className="text-slate-400 transition-transform duration-150 ease-out group-hover:translate-x-0.5 group-hover:text-[#087f70] group-focus-visible:translate-x-0.5 motion-reduce:transform-none"
                         aria-hidden
                       />
                     </button>
@@ -570,7 +659,7 @@ export function ReportOverviewContent({
         </Panel>
       </div>
 
-      <ReportCashClosuresPanel closures={tables.cashClosures} />
+      <ReportCashClosuresPanel closures={tables.cashClosures} animar={animar} />
     </div>
   );
 }

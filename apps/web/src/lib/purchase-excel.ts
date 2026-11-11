@@ -354,3 +354,23 @@ export function purchaseExcelLines(
   }
   return [...lines.values()];
 }
+
+/**
+ * Aviso después de importar productos a una compra: dice de dónde vinieron
+ * (Excel o factura) y si alguno ya estaba en la compra y no se sumó.
+ */
+export function importNotice(
+  agregados: number,
+  source: "excel" | "pdf",
+  yaEnCompra = 0,
+) {
+  const origen = source === "pdf" ? "la factura" : "el Excel";
+  const productos = (n: number) => `${n} ${n === 1 ? "producto" : "productos"}`;
+  const texto = agregados
+    ? `Se ${agregados === 1 ? "agregó" : "agregaron"} ${productos(agregados)} desde ${origen}.`
+    : `No se agregaron productos nuevos desde ${origen}.`;
+  const repetidos = yaEnCompra
+    ? ` ${productos(yaEnCompra)} ya ${yaEnCompra === 1 ? "estaba" : "estaban"} en la compra: revisá su cantidad a mano.`
+    : "";
+  return `${texto}${repetidos} Revisá cantidades y costos antes de guardar.`;
+}

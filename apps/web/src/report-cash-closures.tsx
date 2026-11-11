@@ -1,12 +1,15 @@
-import { useState, type ReactElement } from "react";
+import { useState, type CSSProperties, type ReactElement } from "react";
 import { Wallet } from "lucide-react";
 import type {
   ReportCashClosureGroup,
   ReportCashClosures,
 } from "@gestion/contracts";
+import { MOVIMIENTO } from "./lib/animacion-reportes";
 import { formatMoneyMinor } from "./lib/report-format";
 import { Pagination } from "./pagination";
 import { reportCardClass } from "./report-states";
+import { useEntrada } from "./lib/use-reportes-movimiento";
+import { NumeroAnimado } from "./reportes-movimiento";
 
 /** Tabla paginada, del periodo mas reciente al mas viejo. */
 function ClosureTable({
@@ -41,8 +44,12 @@ function ClosureTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((group) => (
-              <tr key={group.period} className="border-t border-slate-100">
+            {rows.map((group, index) => (
+              <tr
+                key={group.period}
+                className="border-t border-slate-100 reportes-fila"
+                style={{ "--fila": index } as CSSProperties}
+              >
                 <td className="px-4 py-2">
                   {monthly
                     ? new Date(
@@ -96,14 +103,25 @@ function ClosureTable({
   );
 }
 
-/** Totales de cierres de caja del periodo para las sucursales elegidas. */
+/**
+ * Totales de cierres de caja del periodo para las sucursales elegidas. Con la
+ * entrada animada (SISTEMA-90) el bloque aparece al verse por primera vez y los
+ * tres totales cuentan hasta el dato del sistema; las tablas no cuentan cifras.
+ */
 export function ReportCashClosuresPanel({
   closures,
+  animar = false,
 }: {
   closures: ReportCashClosures;
+  animar?: boolean;
 }): ReactElement {
+  const [ref, estado] = useEntrada<HTMLElement>(animar);
   return (
-    <section className={`${reportCardClass} p-4`}>
+    <section
+      ref={ref}
+      data-entrada={estado}
+      className={`${reportCardClass} reportes-entrada reportes-panel p-4`}
+    >
       <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
         <Wallet size={16} className="text-[#087f70]" aria-hidden />
         Cierres de caja ({closures.count})
@@ -115,11 +133,21 @@ export function ReportCashClosuresPanel({
             ["Efectivo contado", closures.countedMinor],
             ["Diferencia acumulada", closures.differenceMinor],
           ] as const
-        ).map(([label, amount]) => (
+        ).map(([label, amount], index) => (
           <div key={label} className="rounded-lg bg-[#f6faf9] px-3 py-2">
             <p className="text-[11px] font-semibold text-slate-500">{label}</p>
             <p className="text-base font-bold tabular-nums">
-              {formatMoneyMinor(amount)}
+              <NumeroAnimado
+                valor={amount}
+                formato={formatMoneyMinor}
+                entrada={animar}
+                listo={estado !== "pendiente"}
+                retraso={
+                  MOVIMIENTO.contadorRetraso +
+                  index * MOVIMIENTO.contadorDesfase
+                }
+                duracionEntrada={MOVIMIENTO.contadorCaja}
+              />
             </p>
           </div>
         ))}

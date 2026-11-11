@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CatalogProduct } from "./api";
 import {
   detectExcelHeader,
+  importNotice,
   parseExcelCost,
   parseExcelQuantity,
   previewPurchaseExcel,
@@ -397,5 +398,25 @@ describe("sameCodeRowNumbers", () => {
 
   it("sin código solo devuelve ese renglón", () => {
     expect(sameCodeRowNumbers([fila(1, ""), fila(2, "")], 1)).toEqual([1]);
+  });
+});
+
+describe("aviso de importación a una compra", () => {
+  it("dice si vino de una factura o de un Excel", () => {
+    expect(importNotice(9, "pdf")).toBe(
+      "Se agregaron 9 productos desde la factura. Revisá cantidades y costos antes de guardar.",
+    );
+    expect(importNotice(1, "excel")).toContain(
+      "Se agregó 1 producto desde el Excel.",
+    );
+  });
+
+  it("avisa los productos que ya estaban en la compra en vez de omitirlos callado", () => {
+    expect(importNotice(3, "pdf", 2)).toContain(
+      "2 productos ya estaban en la compra: revisá su cantidad a mano.",
+    );
+    expect(importNotice(0, "excel", 1)).toContain(
+      "No se agregaron productos nuevos desde el Excel. 1 producto ya estaba en la compra",
+    );
   });
 });
