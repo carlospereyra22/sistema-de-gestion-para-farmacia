@@ -8,15 +8,16 @@ import {
 import { FiscalSettingsPanel } from "./fiscal-settings";
 
 describe("fiscal onboarding", () => {
-  it.each([0, 1, 2, 3] as const)(
+  it.each([0, 1, 2, 3, 4] as const)(
     "marks just step %s as current, not authorized",
     (step) => {
       const html = renderToStaticMarkup(
         <FiscalWizardSteps step={step} onChange={() => {}} disabled={false} />,
       );
       expect(html.match(/aria-current="step"/g)).toHaveLength(1);
-      expect(html.match(/<button/g)).toHaveLength(4);
-      expect(html).toContain("Conexión ARCA");
+      expect(html.match(/<button/g)).toHaveLength(5);
+      expect(html).toContain("Conexión con ARCA");
+      expect(html).toContain("Facturación real");
       expect(html).not.toContain("Completado");
     },
   );
@@ -24,7 +25,7 @@ describe("fiscal onboarding", () => {
     const html = renderToStaticMarkup(
       <FiscalWizardSteps step={0} onChange={() => {}} disabled />,
     );
-    expect(html.match(/disabled=""/g)).toHaveLength(4);
+    expect(html.match(/disabled=""/g)).toHaveLength(5);
   });
   it("provides official guidance without collecting secrets or faking connection", () => {
     const html = renderToStaticMarkup(
@@ -52,7 +53,9 @@ describe("fiscal onboarding", () => {
     );
     expect(html).toContain("Tus datos básicos ya están cargados");
     expect(html).toContain("Probá tu certificado con ARCA");
-    expect(html).toContain("factura ficticia a homologación");
+    expect(html).toContain("pedilo con la guía de abajo");
+    for (const jerga of ["WSAA", "WSFE", "conector", "homologación"])
+      expect(html).not.toContain(jerga);
     expect(html).not.toContain("<input");
   });
   it("shows missing fields without confusing them with authorization", () => {
@@ -70,15 +73,21 @@ describe("fiscal onboarding", () => {
     );
     expect(html).toContain("Falta completar: CUIT.");
     expect(html).not.toContain("Tus datos básicos ya están cargados");
-    expect(html).toContain("facturación real en Ventas");
+    expect(html).toContain("no tienen validez fiscal");
   });
   it("starts with a preparation entry point and no ready-to-invoice claim", () => {
     const html = renderToStaticMarkup(
       <FiscalSettingsPanel token="test" organizationId="org" />,
     );
-    expect(html).toContain("Configurar facturación");
-    expect(html).toContain("Modo homologación");
-    expect(html).toContain("La activación real se gestiona por separado");
+    // Entrada nueva (SISTEMA-95): estado y etiqueta corta del modo prueba,
+    // sin la producción arriba de todo.
+    expect(html).toContain("Revisando el estado de la facturación");
+    expect(html).toContain(
+      "Modo prueba: las facturas no tienen validez fiscal",
+    );
+    expect(html).toContain("¿Qué significa?");
+    expect(html).not.toContain("Modo homologación");
+    expect(html).not.toContain("Preparar producción");
     expect(html).toContain("Cargando configuración");
     expect(html).not.toContain("Facturación habilitada");
   });

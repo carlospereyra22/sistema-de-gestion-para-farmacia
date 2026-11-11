@@ -23,7 +23,7 @@ export function FiscalWizardSteps({
   return (
     <nav
       aria-label="Pasos para configurar facturación"
-      className="my-5 grid gap-2 sm:grid-cols-4"
+      className="my-5 grid gap-2 sm:grid-cols-5"
     >
       {fiscalSteps.map((label, index) => (
         <button
@@ -99,11 +99,12 @@ export function FiscalArcaGuide({
       aria-busy={loading}
     >
       <h3 ref={heading} tabIndex={-1} className="font-semibold outline-none">
-        Vamos a preparar la conexión
+        Conexión con ARCA
       </h3>
       <p className="mt-2 text-sm text-slate-600">
-        Revisamos los datos guardados de tu farmacia. No hace falta que ingreses
-        números de punto de venta ni claves fiscales.
+        Para facturar, ARCA tiene que reconocer a este sistema con un
+        certificado. Cargalo abajo y probá la conexión. Nunca te pedimos la
+        clave fiscal.
       </p>
       <div role="status" aria-live="polite" className="mt-5">
         {loading ? (
@@ -144,26 +145,27 @@ export function FiscalArcaGuide({
           {error ? "Reintentar" : "Volver a comprobar"}
         </button>
       </div>
-      <FiscalTesting
-        token={token}
-        organizationId={organizationId}
-        onConnected={() => setRevision((value) => value + 1)}
-      />
       <FiscalCertificateSetup
         key={organizationId}
         token={token}
         organizationId={organizationId}
+      />
+      <FiscalTesting
+        token={token}
+        organizationId={organizationId}
+        modo="conexion"
+        onConnected={() => setRevision((value) => value + 1)}
       />
       <details className="mt-5 border-t pt-4 text-sm">
         <summary className="cursor-pointer text-slate-600">
           Información para tu contador o soporte técnico
         </summary>
         <p className="mt-3 leading-6 text-slate-600">
-          Probar conexión consulta WSAA y WSFE en homologación. Las pruebas
-          utilizan artículos ficticios y no afectan ventas, stock ni caja.
-          Generar una solicitud o validar archivos no autoriza el servicio.
-          Producción continúa bloqueada; sus certificados y puntos son
-          independientes.
+          Probar conexión consulta los servicios de autenticación (WSAA) y de
+          factura electrónica (WSFE) de ARCA en homologación (modo prueba).
+          Generar el pedido de certificado (CSR) o validar archivos no autoriza
+          el servicio. La facturación real usa otro certificado y otros puntos
+          de venta.
         </p>
         <a
           href="https://www.arca.gob.ar/ws/documentacion/certificados.asp"
@@ -210,14 +212,12 @@ export function FiscalConnectionStatus({
       <div className="rounded-xl bg-amber-50 p-4 text-amber-950">
         <p className="text-sm font-semibold">Probá tu certificado con ARCA</p>
         <p className="mt-2 text-sm leading-6">
-          Si ya cargaste el certificado, usá «Probar conexión con ARCA» abajo.
-          El sistema consulta los puntos habilitados y permite enviar una
-          factura ficticia a homologación. Si todavía no tenés certificado,
-          preparalo al final de esta pantalla.
+          Si todavía no tenés certificado, pedilo con la guía de abajo. Si ya lo
+          cargaste, tocá «Probar conexión con ARCA».
         </p>
         <p className="mt-2 text-xs">
-          Las pruebas no tienen validez fiscal. La facturación real en Ventas
-          sigue bloqueada; el ticket interno continúa disponible.
+          Mientras estés en modo prueba, las facturas no tienen validez fiscal.
+          El ticket interno sigue disponible en Ventas.
         </p>
       </div>
     </div>

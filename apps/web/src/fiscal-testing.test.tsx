@@ -42,7 +42,7 @@ describe("fiscal testing", () => {
       <FiscalTesting token="test" organizationId="org" />,
     );
     expect(html).toContain("Probar conexión con ARCA");
-    expect(html).toContain("sin ventas, stock ni caja");
+    expect(html).toContain("no toca ventas, stock ni caja");
     expect(html).not.toContain("Emitir factura de prueba");
   });
   it("prints the saved sale items and recipient instead of the demo article", () => {

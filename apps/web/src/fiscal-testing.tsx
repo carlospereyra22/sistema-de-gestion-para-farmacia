@@ -16,11 +16,21 @@ export function FiscalTesting({
   token,
   organizationId,
   onConnected,
+  onTrial,
+  modo,
 }: {
   token: string;
   organizationId: string;
   onConnected?: () => void;
+  /** Cambió el estado de una factura de prueba: se vuelve a leer el estado. */
+  onTrial?: () => void;
+  /**
+   * Paso del asistente (SISTEMA-95): "conexion" sólo prueba la conexión;
+   * "prueba" hace la factura de prueba y muestra el historial.
+   */
+  modo?: "conexion" | "prueba";
 }) {
+  const conPrueba = modo !== "conexion";
   const [connection, setConnection] = useState<FiscalConnection>();
   const [trials, setTrials] = useState<FiscalTrial[]>([]);
   const [point, setPoint] = useState("");
@@ -74,11 +84,16 @@ export function FiscalTesting({
   return (
     <section className="mt-5 rounded-xl border-2 border-teal-600 bg-teal-50/40 p-5">
       <h3 className="font-semibold text-teal-900">
-        Probar facturación con ARCA
+        {modo === "conexion"
+          ? "Probar la conexión con ARCA"
+          : modo === "prueba"
+            ? "Factura de prueba"
+            : "Probar facturación con ARCA"}
       </h3>
       <p className="mt-2 text-sm">
-        Sólo homologación: sin validez fiscal, sin ventas, stock ni caja. Tu
-        certificado guardado se usa desde el servidor.
+        {modo === "conexion"
+          ? "Comprobamos que ARCA reconozca tu certificado. No se emite nada."
+          : "Una factura de $100 a consumidor final en modo prueba: no tiene validez fiscal y no toca ventas, stock ni caja."}
       </p>
       <button
         type="button"
@@ -105,9 +120,15 @@ export function FiscalTesting({
           })
         }
       >
-        {busy ? "Procesando…" : "1. Probar conexión con ARCA"}
+        {busy
+          ? "Procesando…"
+          : modo === "prueba"
+            ? "1. Buscar mis puntos de venta en ARCA"
+            : modo === "conexion"
+              ? "Probar conexión con ARCA"
+              : "1. Probar conexión con ARCA"}
       </button>
-      {connection && (
+      {conPrueba && connection && (
         <div className="mt-4 rounded-xl border bg-white p-4">
           {connection.points.length > 0 ? (
             <div className="text-sm">
@@ -169,7 +190,7 @@ export function FiscalTesting({
               checked={confirmed}
               onChange={(e) => setConfirmed(e.target.checked)}
             />
-            Confirmo enviar esta operación ficticia a ARCA homologación.
+            Confirmo enviar esta factura de prueba a ARCA (sin validez fiscal).
           </label>
           <button
             type="button"
@@ -193,6 +214,7 @@ export function FiscalTesting({
                 ]);
                 setMessage(trial.detail || "Solicitud registrada.");
                 setConfirmed(false);
+                onTrial?.();
                 if (trial.status === "AUTHORIZED") setPreview(trial);
                 if (
                   trial.status === "AUTHORIZED" ||
@@ -207,7 +229,7 @@ export function FiscalTesting({
           </button>
         </div>
       )}
-      {unresolved && (
+      {conPrueba && unresolved && (
         <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm">
           Hay una solicitud pendiente. Consultá su resultado abajo; no vuelvas a
           emitirla.
@@ -221,71 +243,76 @@ export function FiscalTesting({
           {message}
         </p>
       )}
-      <div className="mt-5 flex items-center justify-between gap-3">
-        <h4 className="font-semibold">Pruebas realizadas</h4>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run(refresh)}
-          className="text-sm text-teal-700 underline"
-        >
-          Actualizar historial
-        </button>
-      </div>
-      {trials.map((trial) => (
-        <article
-          key={trial.id}
-          className="mt-3 rounded-lg border bg-white p-3 text-sm"
-        >
-          <p className="font-semibold">
-            Factura {trial.voucherType === 11 ? "C" : "B"} · Punto {trial.point}{" "}
-            · {trial.number ?? "Sin número"} · {money(trial.totalMinor)}
-          </p>
-          <p>
-            {
+      {conPrueba && (
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <h4 className="font-semibold">Pruebas realizadas</h4>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run(refresh)}
+            className="text-sm text-teal-700 underline"
+          >
+            Actualizar historial
+          </button>
+        </div>
+      )}
+      {conPrueba &&
+        trials.map((trial) => (
+          <article
+            key={trial.id}
+            className="mt-3 rounded-lg border bg-white p-3 text-sm"
+          >
+            <p className="font-semibold">
+              Factura {trial.voucherType === 11 ? "C" : "B"} · Punto{" "}
+              {trial.point} · {trial.number ?? "Sin número"} ·{" "}
+              {money(trial.totalMinor)}
+            </p>
+            <p>
               {
-                AUTHORIZED: "Autorizada en homologación",
-                HELD: "En espera de caja",
-                QUEUED: "Pendiente de envío",
-                REJECTED: "Rechazada",
-                PENDING: "En proceso",
-                UNCERTAIN: "Resultado pendiente de confirmar",
-              }[trial.status]
-            }
-          </p>
-          <p className="mt-1 text-slate-600">{trial.detail}</p>
-          {trial.status === "AUTHORIZED" ? (
-            <button
-              type="button"
-              onClick={() => setPreview(trial)}
-              className="mt-2 text-teal-700 underline"
-            >
-              Ver / imprimir prueba
-            </button>
-          ) : (
-            (trial.status === "PENDING" || trial.status === "UNCERTAIN") && (
+                {
+                  AUTHORIZED: "Autorizada en homologación",
+                  HELD: "En espera de caja",
+                  QUEUED: "Pendiente de envío",
+                  REJECTED: "Rechazada",
+                  PENDING: "En proceso",
+                  UNCERTAIN: "Resultado pendiente de confirmar",
+                }[trial.status]
+              }
+            </p>
+            <p className="mt-1 text-slate-600">{trial.detail}</p>
+            {trial.status === "AUTHORIZED" ? (
               <button
                 type="button"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await fiscalTesting(
-                      token,
-                      organizationId,
-                      `trials/${trial.id}/reconcile`,
-                      {},
-                    );
-                    await refresh();
-                  })
-                }
+                onClick={() => setPreview(trial)}
                 className="mt-2 text-teal-700 underline"
               >
-                Consultar resultado en ARCA (no reenvía)
+                Ver / imprimir prueba
               </button>
-            )
-          )}
-        </article>
-      ))}
+            ) : (
+              (trial.status === "PENDING" || trial.status === "UNCERTAIN") && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await fiscalTesting(
+                        token,
+                        organizationId,
+                        `trials/${trial.id}/reconcile`,
+                        {},
+                      );
+                      await refresh();
+                      onTrial?.();
+                    })
+                  }
+                  className="mt-2 text-teal-700 underline"
+                >
+                  Consultar resultado en ARCA (no reenvía)
+                </button>
+              )
+            )}
+          </article>
+        ))}
       {preview && (
         <div className="mt-5 rounded-xl border bg-white p-4">
           <div className="mb-3 flex flex-wrap gap-4">

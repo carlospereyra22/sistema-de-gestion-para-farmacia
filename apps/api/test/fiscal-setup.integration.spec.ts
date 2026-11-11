@@ -102,6 +102,34 @@ describe("fiscal setup (rollback-only local fixtures)", () => {
           let setup = await service.fiscalSetup(user.id, org.id);
           expect(setup.points).toHaveLength(1);
           expect(setup.issuanceEnabled).toBe(false);
+          // Estado de la factura de prueba y de la facturación real (SISTEMA-95).
+          expect(setup.trial).toBeNull();
+          expect(setup.production.branches).toEqual([]);
+          expect(setup.checks.find((c) => c.code === "TRIAL")?.ready).toBe(
+            false,
+          );
+          await tx.fiscalTrial.create({
+            data: {
+              organizationId: org.id,
+              requestId: randomUUID(),
+              point: 1,
+              voucherType: 11,
+              number: 3,
+              date: "20261111",
+              totalMinor: 10000,
+              issuer: {},
+              status: "AUTHORIZED",
+              cae: "12345678901234",
+            },
+          });
+          setup = await service.fiscalSetup(user.id, org.id);
+          expect(setup.trial).toMatchObject({
+            status: "AUTHORIZED",
+            number: 3,
+          });
+          expect(setup.checks.find((c) => c.code === "TRIAL")?.ready).toBe(
+            true,
+          );
           expect(setup.checks.find((c) => c.code === "POINT")?.ready).toBe(
             true,
           );

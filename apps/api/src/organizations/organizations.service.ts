@@ -55,42 +55,92 @@ export class OrganizationsService {
     const active = points.filter(
       (p) => p.active && branches.some((b) => b.id === p.branchId),
     );
-    const credential = await this.prisma.fiscalCredential.findUnique({
-      where: {
-        organizationId_environment: {
-          organizationId,
-          environment: "HOMOLOGATION",
+    const [credential, trials, production] = await Promise.all([
+      this.prisma.fiscalCredential.findUnique({
+        where: {
+          organizationId_environment: {
+            organizationId,
+            environment: "HOMOLOGATION",
+          },
         },
+        select: { verifiedAt: true, representedCuit: true, expiresAt: true },
+      }),
+      // Facturas de prueba (homologación): la última y si alguna se autorizó.
+      this.prisma.fiscalTrial.findMany({
+        where: { organizationId, environment: "HOMOLOGATION" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          status: true,
+          point: true,
+          number: true,
+          cae: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.fiscalProductionConfiguration.findMany({
+        where: { organizationId, enabled: true },
+        select: { branchId: true, point: true, activatedAt: true },
+      }),
+    ]);
+    const authorizedTrial = await this.prisma.fiscalTrial.findFirst({
+      where: {
+        organizationId,
+        environment: "HOMOLOGATION",
+        status: "AUTHORIZED",
       },
-      select: {
-        verifiedAt: true,
-        representedCuit: true,
-        expiresAt: true,
-        ticketExpiresAt: true,
-      },
+      select: { id: true },
     });
-    const readiness = fiscalReadiness(
-      organization.fiscalProfile,
-      active.length,
-    );
-    const auth = readiness.checks.find((check) => check.code === "AUTH");
-    if (
-      auth &&
+    // La conexión vale mientras el certificado esté vigente y sea del CUIT
+    // emisor. El acceso de ARCA (unas 12 h) se renueva solo al usar: antes
+    // vencía y el paso aparecía pendiente al día siguiente (SISTEMA-95).
+    const connectedAt =
       credential?.verifiedAt &&
       credential.representedCuit ===
         readFiscalProfile(organization.fiscalProfile).cuit &&
       credential.expiresAt &&
-      credential.expiresAt.getTime() > Date.now() &&
-      credential.ticketExpiresAt &&
-      credential.ticketExpiresAt.getTime() > Date.now()
-    ) {
-      auth.ready = true;
-      auth.detail = `Conexión de homologación comprobada el ${credential.verifiedAt.toISOString()}. Cada prueba revalida el acceso; producción no está habilitada.`;
-    }
+      credential.expiresAt.getTime() > Date.now()
+        ? credential.verifiedAt
+        : null;
+    const last = trials[0] ?? null;
+    const readiness = fiscalReadiness(
+      organization.fiscalProfile,
+      active.length,
+      {
+        connectedAt,
+        trial: {
+          authorized: !!authorizedTrial,
+          last: last
+            ? { status: last.status, point: last.point, number: last.number }
+            : null,
+        },
+        productionBranches: production.length,
+      },
+    );
     return {
       points,
       branches,
       ...readiness,
+      trial: last
+        ? {
+            status: last.status,
+            point: last.point,
+            number: last.number,
+            cae: last.cae,
+            createdAt: last.createdAt.toISOString(),
+          }
+        : null,
+      production: {
+        // Lo habilita el administrador del sistema (flags del servidor).
+        available:
+          process.env.FISCAL_PRODUCTION_ISSUANCE === "enabled" &&
+          process.env.FISCAL_RECOVERY_VERIFIED === "yes",
+        branches: production.map((item) => ({
+          branchId: item.branchId,
+          point: item.point,
+          activatedAt: item.activatedAt?.toISOString() ?? null,
+        })),
+      },
     };
   }
 

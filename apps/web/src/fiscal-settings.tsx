@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, FileCheck2, Save, ShieldAlert } from "lucide-react";
+import { ArrowRight, FileCheck2, Lock, ShieldAlert } from "lucide-react";
 import {
   fiscalSettings,
   getTicketHeader,
@@ -7,31 +7,17 @@ import {
   type FiscalSetup,
 } from "./lib/api";
 import { logoPreview } from "./lib/ticket-logo";
-import { FiscalChecklist, FiscalSetupPanel } from "./fiscal-setup";
+import { FiscalSetupPanel } from "./fiscal-setup";
 import { FiscalArcaGuide, FiscalWizardSteps } from "./fiscal-wizard-guide";
-import { resumeFiscalStep, type FiscalStep } from "./lib/fiscal-wizard";
+import { fiscalSteps, type FiscalStep } from "./lib/fiscal-wizard";
+import { estadoDeFacturacion } from "./lib/estado-facturacion";
+import { EstadoFacturacion, ModoPrueba } from "./fiscal-estado";
+import { FiscalTesting } from "./fiscal-testing";
 import { FiscalProductionSetup } from "./fiscal-production-setup";
-import { ProductFilterSelect } from "./product-filter-select";
-import { avisoCuit, digitosCuit, formatearCuit } from "./lib/cuit";
-
-const field =
-  "mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm";
-const fields = [
-  ["legalName", "Razón social", 160],
-  ["cuit", "CUIT", 13],
-  ["address", "Domicilio fiscal", 200],
-  ["city", "Localidad", 100],
-  ["province", "Provincia", 100],
-  ["postalCode", "Código postal", 20],
-  ["grossIncomeId", "Ingresos brutos / inscripción", 60],
-  ["activityStart", "Inicio de actividades", 10],
-] as const;
-const vatConditions = [
-  { value: "", label: "Sin definir" },
-  { value: "REGISTERED", label: "Responsable inscripto" },
-  { value: "MONOTAX", label: "Monotributista" },
-  { value: "EXEMPT", label: "Exento" },
-];
+import { formatearCuit } from "./lib/cuit";
+import { BUSQUEDA_ARCA } from "./lib/funciones-ocultas";
+import { DatosDeLaFarmacia } from "./fiscal-datos-farmacia";
+import { StatusToast } from "./status-toast";
 
 export function FiscalSettingsPanel(props: {
   token: string;
@@ -51,6 +37,8 @@ function FiscalSettingsContent({
   const [logo, setLogo] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  /** Aviso emergente al guardar. */
+  const [aviso, setAviso] = useState("");
   const dirty = useRef(false);
   const pending = useRef(false);
   const [revision, setRevision] = useState(0);
@@ -62,6 +50,9 @@ function FiscalSettingsContent({
     (value: FiscalSetup) => setSetup(value),
     [],
   );
+  const estado = setup
+    ? estadoDeFacturacion(setup, profile?.vatCondition)
+    : undefined;
   function navigate(next: FiscalStep) {
     if (dirty.current && next !== 0) {
       setMessage(
@@ -104,80 +95,63 @@ function FiscalSettingsContent({
   }, []);
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5">
+      {aviso && (
+        <StatusToast key={aviso} message={aviso} onClose={() => setAviso("")} />
+      )}
       <h2 className="flex items-center gap-2 font-semibold">
         <FileCheck2 size={20} className="text-teal-700" />
         Facturación electrónica
       </h2>
       <p className="mt-1 text-sm text-slate-500">
-        Un asistente para preparar cada farmacia, sin volver a cargar los datos
-        guardados.
+        Dejá lista tu farmacia para facturar en ARCA, paso a paso.
       </p>
-      <FiscalProductionSetup token={token} organizationId={organizationId} />
-      <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-        <ShieldAlert size={19} className="shrink-0" />
-        <p>
-          <strong>Modo homologación.</strong> Podés probar facturas C desde
-          Ventas con stock y cobros de esta instalación, o emitir ejemplos sin
-          movimientos desde Conexión ARCA. Ninguno tiene validez fiscal. La
-          activación real se gestiona por separado en Facturación real ·
-          Producción.
-        </p>
-      </div>
+      {!started ||
+      !estado?.pasos[4] ||
+      estado.pasos[4].estado !== "completo" ? (
+        <ModoPrueba />
+      ) : null}
       {!started && (
-        <div className="mt-5 rounded-xl border border-teal-100 bg-teal-50/50 p-5">
-          <h3 className="font-semibold text-teal-900">
-            Prepará la facturación paso a paso
-          </h3>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Te vamos a pedir los datos fiscales de esta organización y las
-            sucursales. Después podés comprobar el certificado y emitir una
-            prueba sin afectar stock ni caja. No necesitás compartir tu clave
-            fiscal.
-          </p>
-          <button
-            type="button"
-            disabled={!profile}
-            onClick={() => {
-              setStep(
-                dirty.current ? 0 : resumeFiscalStep(setup?.checks ?? []),
-              );
+        <>
+          <EstadoFacturacion
+            setup={setup}
+            vatCondition={profile?.vatCondition}
+            onAbrir={(paso) => {
+              // Con datos sin guardar se vuelve al primer paso.
+              setStep(dirty.current ? 0 : paso);
               setStarted(true);
             }}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm text-white disabled:opacity-50"
-          >
-            Configurar facturación <ArrowRight size={16} />
-          </button>
-          <p className="mt-3 text-xs text-slate-500">
-            Sólo se conservan los datos que guardes. Producción permanece
-            deshabilitada.
-          </p>
+          />
           {dirty.current && (
             <p className="mt-3 text-sm text-amber-800">
               Tenés datos sin guardar. Al continuar volverás al primer paso.
             </p>
           )}
-          {setup && <FiscalChecklist checks={setup.checks} />}
-        </div>
+        </>
       )}
       {started && (
         <FiscalWizardSteps step={step} onChange={navigate} disabled={busy} />
       )}
       <div hidden={!started || step !== 0}>
-        <h3 className="mt-5 font-semibold">Datos fiscales de tu farmacia</h3>
+        <h3 className="mt-5 font-semibold">Datos de la farmacia</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Usá la razón social y domicilio fiscal del emisor. No se fija un
-          régimen por defecto para otras farmacias.
+          Copialos de la constancia de inscripción de ARCA: razón social,
+          domicilio fiscal y condición frente al IVA.
         </p>
         {profile && (
           <div className="mt-5 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
+            <DatosDeLaFarmacia
+              token={token}
+              organizationId={organizationId}
+              profile={profile}
+              busy={busy}
+              buscarEnArca={BUSQUEDA_ARCA}
+              onChange={(next) => {
+                dirty.current = true;
+                setProfile(next);
+                setMessage("");
+              }}
+              onGuardar={(continuar) => {
                 if (pending.current) return;
-                const continueAfterSave =
-                  (event.nativeEvent as SubmitEvent).submitter?.getAttribute(
-                    "value",
-                  ) === "continue";
                 pending.current = true;
                 setBusy(true);
                 setMessage("");
@@ -186,10 +160,8 @@ function FiscalSettingsContent({
                     setProfile(result.profile);
                     dirty.current = false;
                     setRevision((value) => value + 1);
-                    setMessage(
-                      "Borrador fiscal guardado. La emisión sigue deshabilitada.",
-                    );
-                    if (continueAfterSave) setStep(1);
+                    setAviso("Guardaste los datos de la farmacia.");
+                    if (continuar) setStep(1);
                   })
                   .catch((error: unknown) =>
                     setMessage(
@@ -203,85 +175,7 @@ function FiscalSettingsContent({
                     setBusy(false);
                   });
               }}
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                {fields.map(([key, label, max]) => (
-                  <label
-                    key={key}
-                    className="text-xs font-medium text-slate-600"
-                  >
-                    {label}
-                    <input
-                      disabled={busy}
-                      className={field}
-                      maxLength={max}
-                      type={key === "activityStart" ? "date" : "text"}
-                      inputMode={key === "cuit" ? "numeric" : undefined}
-                      placeholder={key === "cuit" ? "20-12345678-9" : undefined}
-                      value={
-                        key === "cuit"
-                          ? formatearCuit(profile.cuit)
-                          : profile[key]
-                      }
-                      onChange={(event) => {
-                        dirty.current = true;
-                        setProfile({
-                          ...profile,
-                          [key]:
-                            key === "cuit"
-                              ? digitosCuit(event.target.value)
-                              : event.target.value,
-                        });
-                        setMessage("");
-                      }}
-                    />
-                    {key === "cuit" && avisoCuit(profile.cuit) && (
-                      <span className="mt-1 block font-normal text-amber-700">
-                        {avisoCuit(profile.cuit)}
-                      </span>
-                    )}
-                  </label>
-                ))}
-                <div className="text-xs text-slate-600">
-                  <p className="font-medium">Condición frente al IVA</p>
-                  <div className="mt-1.5">
-                    <ProductFilterSelect
-                      compact
-                      label="Condición frente al IVA"
-                      icon={null}
-                      disabled={busy}
-                      value={profile.vatCondition}
-                      options={vatConditions}
-                      onChange={(value) => {
-                        dirty.current = true;
-                        setProfile({ ...profile, vatCondition: value });
-                        setMessage("");
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-              <p className="mt-4 text-xs text-slate-500">
-                Podés guardar un borrador incompleto. Los datos y el régimen
-                aplicable deben validarse antes de emitir.
-              </p>
-              <button
-                type="submit"
-                disabled={busy}
-                className="mt-5 inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm text-white disabled:opacity-50"
-              >
-                <Save size={16} />
-                {busy ? "Guardando…" : "Guardar datos fiscales"}
-              </button>
-              <button
-                type="submit"
-                value="continue"
-                disabled={busy}
-                className="mt-5 ml-3 inline-flex items-center gap-2 rounded-lg border border-teal-200 px-4 py-2.5 text-sm text-teal-800 disabled:opacity-50"
-              >
-                Guardar y continuar <ArrowRight size={16} />
-              </button>
-            </form>
+            />
             <InvoiceDesignPreview profile={profile} logo={logo} />
           </div>
         )}
@@ -324,24 +218,24 @@ function FiscalSettingsContent({
         />
       )}
       {started && step === 3 && (
-        <section className="rounded-xl border border-slate-200 p-5">
-          <h3 className="font-semibold">Revisión de la preparación</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Este estado corresponde a lo guardado en el sistema, no a una
-            autorización de ARCA.
-          </p>
-          {setup ? (
-            <FiscalChecklist checks={setup.checks} />
-          ) : (
-            <p className="mt-3 text-sm">Cargando estado guardado…</p>
-          )}
-          <p className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-            Para probar el circuito completo, elegí Factura · prueba en Ventas.
-            Descuenta stock y registra cobros. Los ejemplos sin movimientos
-            siguen en Conexión ARCA. La producción se activa por separado para
-            cada sucursal.
-          </p>
-        </section>
+        <FiscalTesting
+          token={token}
+          organizationId={organizationId}
+          modo="prueba"
+          onTrial={() => setRevision((value) => value + 1)}
+        />
+      )}
+      {started && step === 4 && (
+        <PasoFacturacionReal
+          token={token}
+          organizationId={organizationId}
+          bloqueo={
+            estado?.pasos[4]?.estado === "bloqueado"
+              ? estado.pasos[4].detalle
+              : undefined
+          }
+          disponible={setup?.production.available ?? false}
+        />
       )}
       {started && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
@@ -366,20 +260,62 @@ function FiscalSettingsContent({
                 Anterior
               </button>
             )}
-            {(step === 1 || step === 2) && (
+            {step > 0 && step < 4 && (
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => navigate((step + 1) as FiscalStep)}
                 className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm text-white"
               >
-                {step === 1 ? "Continuar a sucursales" : "Revisar preparación"}
+                Continuar: {fiscalSteps[step + 1]}
                 <ArrowRight size={16} />
               </button>
             )}
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/**
+ * Último paso (SISTEMA-95): bloqueado hasta terminar los anteriores. Lo
+ * técnico de la activación sigue en FiscalProductionSetup.
+ */
+export function PasoFacturacionReal({
+  token,
+  organizationId,
+  bloqueo,
+  disponible,
+}: {
+  token: string;
+  organizationId: string;
+  /** Qué falta, si todavía está bloqueado. */
+  bloqueo?: string;
+  /** El servidor permite la facturación real. */
+  disponible: boolean;
+}) {
+  if (bloqueo)
+    return (
+      <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+        <h3 className="flex items-center gap-2 font-semibold text-slate-700">
+          <Lock size={18} aria-hidden="true" />
+          Facturación real
+        </h3>
+        <p className="mt-2 text-sm text-slate-600">{bloqueo}</p>
+      </section>
+    );
+  return (
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="font-semibold">Facturación real</h3>
+      {!disponible && (
+        <p className="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          <ShieldAlert size={18} className="shrink-0" aria-hidden="true" />
+          Lo habilita el administrador del sistema. Podés preparar el
+          certificado real mientras tanto.
+        </p>
+      )}
+      <FiscalProductionSetup token={token} organizationId={organizationId} />
     </section>
   );
 }
