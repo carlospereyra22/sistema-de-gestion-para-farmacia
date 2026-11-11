@@ -1,3 +1,4 @@
+import { ConflictException, UnauthorizedException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import type { JwtService } from "@nestjs/jwt";
 import type { PrismaService } from "../prisma/prisma.service";
@@ -42,6 +43,39 @@ describe("persistent sessions", () => {
       expect.objectContaining({ sessionId: "session" }),
       { expiresIn: "15m" },
     );
+  });
+  describe("pestaña que espera un usuario (SISTEMA-92)", () => {
+    const sesion = {
+      id: "session",
+      tokenHash: "hash",
+      user: { id: "user", email: "duena@example.com", active: true },
+    };
+    it("con el mismo usuario renueva como siempre", async () => {
+      const { service } = setup(sesion);
+      expect(await service.refresh(token, "user")).toEqual({
+        accessToken: "access",
+        refreshToken: token,
+      });
+    });
+    it("con otro usuario responde 409 sin token y sin tocar la sesión", async () => {
+      const { service, sessions, signAsync } = setup(sesion);
+      const error = await service
+        .refresh(token, "cajero")
+        .catch((cause: unknown) => cause);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        error: "SESION_DE_OTRO_USUARIO",
+        details: { email: "duena@example.com" },
+      });
+      expect(signAsync).not.toHaveBeenCalled();
+      expect(sessions.update).not.toHaveBeenCalled();
+    });
+    it("una cookie inválida sigue siendo 401 aunque espere un usuario", async () => {
+      const { service } = setup(null);
+      await expect(service.refresh(token, "user")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
   });
   it("still rejects missing or revoked sessions", async () => {
     const { service, sessions } = setup(null);

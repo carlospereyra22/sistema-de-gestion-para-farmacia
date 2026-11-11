@@ -346,6 +346,8 @@
 
 - Mensajes de error en castellano (11/11/2026, SISTEMA-91): los mensajes de la API que llegan a la pantalla (ventas, devoluciones, stock, transferencias, catálogo, usuarios, sesión) pasan del inglés al castellano rioplatense. Los internos que nunca ve el usuario (transporte con ARCA, bóveda de credenciales, configuración) quedan como estaban. La web no compara textos de error, así que no cambia nada más. Quedan como estaban, por decisión del usuario, el login sin límite de intentos y el costo del lote que vuelve a entrar por Compras (conserva el primero, `PURCHASES_V2.md`).
 
+- Sesión de otro usuario en otra pestaña (11/11/2026, SISTEMA-92): la sesión sigue en una sola cookie httpOnly por navegador, pero una pestaña nunca cambia de usuario sola. Al renovar manda el usuario con el que empezó; si la cookie es de otro, la API responde 409 `SESION_DE_OTRO_USUARIO` (con el email del otro en `details`), sin token nuevo y sin revocar la otra sesión. Sin el campo responde como antes. La pestaña se pausa sin desmontar la pantalla, para no perder la venta a medio cargar, y deja de mandar pedidos. Desde la pausa se vuelve a entrar con la contraseña propia en el lugar, en vez de ir a la pantalla de ingreso, por el mismo motivo. Las pestañas se avisan al entrar y salir con `BroadcastChannel`. Ver `OFFLINE.md`.
+
 ## OPEN
 
 - Credential recovery policy for production.

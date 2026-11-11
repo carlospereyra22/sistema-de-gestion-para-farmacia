@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -11,6 +12,12 @@ import { EnvironmentService } from "../config/environment.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { AccessTokenPayload } from "./auth.types";
 import { clavePublicaValida } from "../sales/firma-venta";
+
+/**
+ * La cookie del navegador es de otro usuario que la pestaña (SISTEMA-92). La
+ * web pausa la pestaña: nunca cambia de usuario sola.
+ */
+export const SESION_DE_OTRO_USUARIO = "SESION_DE_OTRO_USUARIO";
 
 @Injectable()
 export class AuthService {
@@ -76,7 +83,7 @@ export class AuthService {
     });
   }
 
-  async refresh(refreshToken: string | undefined) {
+  async refresh(refreshToken: string | undefined, usuarioEsperado?: string) {
     if (!refreshToken)
       throw new UnauthorizedException(
         "Tu sesión venció. Volvé a iniciar sesión.",
@@ -100,6 +107,15 @@ export class AuthService {
       );
     if (!session.user.active)
       throw new UnauthorizedException("El usuario está desactivado.");
+    // Otra pestaña inició sesión con otro usuario: no se entrega su token ni
+    // se toca su sesión, que sigue siendo válida para esa pestaña.
+    if (usuarioEsperado && session.user.id !== usuarioEsperado)
+      throw new ConflictException({
+        message:
+          "En este navegador se inició sesión con otro usuario. Esta pestaña se pausó.",
+        error: SESION_DE_OTRO_USUARIO,
+        details: { email: session.user.email },
+      });
     await this.prisma.authSession.update({
       where: { id: session.id },
       data: { expiresAt: null },

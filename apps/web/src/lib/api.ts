@@ -173,14 +173,45 @@ export async function login(
 }
 
 export class SessionExpiredError extends Error {}
-export async function refreshSession(): Promise<{ accessToken: string }> {
+/** La cookie del navegador es de otro usuario (SISTEMA-92): la pestaña se pausa. */
+export class SesionDeOtroUsuarioError extends Error {
+  constructor(readonly email?: string) {
+    super("En este navegador se inició sesión con otro usuario.");
+  }
+}
+
+/**
+ * Renueva el access token con la cookie del navegador. Con `usuarioEsperado`
+ * la API no entrega el token si la cookie ya es de otro usuario.
+ */
+export async function refreshSession(
+  usuarioEsperado?: string,
+): Promise<{ accessToken: string }> {
   const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
     method: "POST",
     credentials: "include",
     signal: AbortSignal.timeout(10000),
+    ...(usuarioEsperado
+      ? {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ usuarioEsperado }),
+        }
+      : {}),
   });
   if (response.status === 401)
     throw new SessionExpiredError("La sesión ya no es válida.");
+  if (response.status === 409) {
+    const result = (await response.json().catch(() => ({}))) as {
+      code?: string;
+      details?: { email?: unknown };
+    };
+    if (result.code === "SESION_DE_OTRO_USUARIO")
+      throw new SesionDeOtroUsuarioError(
+        typeof result.details?.email === "string"
+          ? result.details.email
+          : undefined,
+      );
+  }
   if (!response.ok)
     throw new Error("No se pudo renovar la conexión. Se reintentará.");
   return (await response.json()) as { accessToken: string };

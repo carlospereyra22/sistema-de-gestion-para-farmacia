@@ -170,6 +170,28 @@ conexión). Puntos técnicos:
 - **Ventas igual que con internet**: cobrar sin conexión abre la misma confirmación de venta, con el comprobante provisorio para ver e imprimir. El historial muestra lo que había hasta el corte más lo vendido en la PC sin enviar ("Por enviar"), que se puede reimprimir. Las ventas con Factura se emiten solas en ARCA al volver la conexión (cola fiscal).
 - **Copia local**: desde SISTEMA-66 se guardan todas las consultas de datos de la farmacia (`/organizations/...`), no una lista fija. Cualquier pantalla abierta alguna vez con conexión se puede consultar sin ella; las de sesión y plataforma nunca se guardan.
 
+## Sesión de otro usuario en otra pestaña (SISTEMA-92)
+
+Cada pestaña recuerda con qué usuario empezó y lo manda al renovar la sesión
+(`POST /auth/refresh` con `usuarioEsperado`). Si en otra pestaña del mismo
+navegador entró otra persona, la API responde 409 `SESION_DE_OTRO_USUARIO` sin
+entregar su token ni cerrar su sesión, y la pestaña se pausa: no manda más
+pedidos (los frena `apiFetch`, salvo el ingreso) y muestra "Esta pestaña se
+pausó" con "Seguir como <otro>" (recarga) o la contraseña del usuario propio
+para volver a entrar ahí mismo. Lo que había en pantalla queda debajo, sin
+desmontarse: la venta a medio cargar no se pierde. Al entrar o cerrar sesión
+se avisa a las demás pestañas con `BroadcastChannel` ("gestion-sesion", con
+respaldo en el evento `storage`) y cada una comprueba en el momento. Al cerrar
+sesión en otra pestaña del mismo usuario, la pestaña pasa al ingreso con "Se
+cerró la sesión en otra pestaña".
+
+Sin conexión no cambia nada: no hay token que renovar y, al volver la conexión,
+`restore` ya exigía que la sesión fuera de quien trabajaba sin conexión. Las
+ventas, cobros y compras que quedaron por enviar no se pierden con la pausa:
+un pedido frenado queda para reintentar (no se marca rechazado) y lo manda
+después su dueño. Los borradores de compras, distribución y pagos se guardan por
+usuario, así que nunca se envían con otro.
+
 ## Caja sin conexión (SISTEMA-67)
 
 - **Abrir, mover y cerrar sin internet**: la operación queda en la bandeja de la PC (`operacion: "CAJA"`), firmada por quien la hizo, y se manda sola al volver, en orden con las ventas (`POST cash/offline`, o `cash/offline/firmada` si la hizo otro usuario de la PC). Si el envío se corta en el momento, también queda en la PC.
