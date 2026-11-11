@@ -14,6 +14,15 @@ en /etc/gestion-api/environment, directorio 700 y archivo 600 propiedad de root.
 systemd carga el entorno antes de ejecutar Node como ubuntu. Nunca compartir ese
 archivo ni ejecutar el instalador con trazado. No guarda la clave del administrador.
 
+Vencimiento de sesiones (SISTEMA-93): opcionalmente
+`SESSION_INACTIVITY_DAYS` en /etc/gestion-api/environment (preprod: el archivo
+de su servicio). Sin la variable vale 7 días; la API no arranca con menos de 3
+(72 h). Las sesiones abiertas al publicar no se cortan: la migracion les pone
+el ultimo uso en el momento de aplicarla. La cookie sale `Secure` porque el
+servicio corre con NODE_ENV=production (activate.sh y
+provision-preproduction.sh). La API confia en nginx de la misma maquina
+(`trust proxy` loopback) para la IP que muestra "Sesiones abiertas".
+
 El script conserva un environment existente y rechaza sobreescribir servicios o
 sitios Nginx existentes. Si falla a mitad, inspeccionar el estado antes de repetir:
 no hay rollback automatico. No ejecuta migraciones, seed ni cambios comerciales.

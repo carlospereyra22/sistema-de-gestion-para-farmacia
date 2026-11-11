@@ -26,4 +26,9 @@ export class EnvironmentService {
   get jwtAccessSecret(): string | undefined {
     return this.config.get("JWT_ACCESS_SECRET", { infer: true });
   }
+
+  /** Días sin uso hasta que vence la sesión (mínimo 3, SISTEMA-93). */
+  get sessionInactivityDays(): number {
+    return this.config.get("SESSION_INACTIVITY_DAYS", { infer: true });
+  }
 }

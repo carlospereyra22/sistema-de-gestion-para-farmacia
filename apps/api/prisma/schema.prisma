@@ -767,9 +767,23 @@ model AuthSession {
   revokedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Último uso (renovación). Vence por inactividad (SISTEMA-93).
+  lastUsedAt DateTime @default(now()) @db.Timestamptz(6)
+  /// Clave anterior a la última rotación: vale un rato corto (varias pestañas).
+  previousTokenHash String?
+  previousTokenValidUntil DateTime? @db.Timestamptz(6)
+  /// Claves ya retiradas (las últimas): si vuelven, la cookie fue copiada.
+  retiredTokenHashes String[] @default([])
+  /// Navegador y sistema resumidos, IP e id de la PC, para reconocer la sesión.
+  userAgent String? @db.VarChar(160)
+  ip        String? @db.VarChar(64)
+  deviceId  String? @db.Uuid
+  /// Sesión de soporte del superadmin (SISTEMA-89): no se lista a la farmacia.
+  soporte   Boolean   @default(false)
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, expiresAt])
+  @@index([userId, revokedAt])
 }
 
 enum PurchaseStatus {

@@ -4,12 +4,19 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { hash } from "@node-rs/argon2";
 import type { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { assertQuotaAvailable } from "../platform/subscription-quota";
+import { EnvironmentService } from "../config/environment.service";
+import { inactividadMs } from "../auth/sesion-vigencia";
+import {
+  filtroDeAbiertas,
+  sesionesAbiertasDe,
+} from "../auth/sesiones-abiertas";
 
 const SOLO_DUENO =
   "Sólo un dueño puede dar o quitar el rol de dueño, o cambiar el acceso de otro dueño.";
@@ -34,7 +41,103 @@ async function esDueno(
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly environment?: EnvironmentService,
+  ) {}
+
+  private get inactividadMs() {
+    return inactividadMs(this.environment?.sessionInactivityDays);
+  }
+
+  /**
+   * Sesiones abiertas de un usuario de la farmacia (SISTEMA-93): para cortarle
+   * el acceso a alguien que dejó de trabajar, por ejemplo.
+   */
+  async listarSesiones(
+    actorId: string,
+    organizationId: string,
+    userId: string,
+  ) {
+    await this.assertPermission(actorId, organizationId, "USER_READ");
+    const membership = await this.prisma.userOrganization.findUnique({
+      where: { userId_organizationId: { userId, organizationId } },
+      select: { id: true },
+    });
+    if (!membership)
+      throw new NotFoundException("Ese usuario no es de esta farmacia.");
+    return sesionesAbiertasDe(
+      this.prisma,
+      userId,
+      new Date(),
+      this.inactividadMs,
+    );
+  }
+
+  /**
+   * Cierra una sesión de un usuario de la farmacia, o todas si `sesion` no
+   * viene. Mismas reglas que restablecer la contraseña: no las propias (van
+   * por el menú de la cuenta), las de un dueño sólo otro dueño, y no a quien
+   * también entra a otra farmacia. Lo hecho sin conexión en esa PC no se
+   * pierde: se sincroniza con su dueño cuando vuelve a entrar.
+   */
+  async cerrarSesiones(
+    actorId: string,
+    organizationId: string,
+    userId: string,
+    sesion?: string,
+  ) {
+    await this.assertPermission(actorId, organizationId, "USER_MANAGE");
+    if (actorId === userId)
+      throw new ForbiddenException(
+        "Tus sesiones las cerrás desde el menú de tu cuenta.",
+      );
+    const ahora = new Date();
+    return this.prisma.$transaction(async (tx) => {
+      const target = await tx.userOrganization.findUnique({
+        where: { userId_organizationId: { userId, organizationId } },
+        include: { roles: { include: { role: true } } },
+      });
+      if (!target)
+        throw new NotFoundException("Ese usuario no es de esta farmacia.");
+      if (
+        target.roles.some(({ role }) => role.code === "OWNER") &&
+        !(await esDueno(tx, actorId, organizationId))
+      )
+        throw new ForbiddenException(
+          "Las sesiones de un dueño sólo las cierra otro dueño.",
+        );
+      if ((await tx.userOrganization.count({ where: { userId } })) > 1)
+        throw new ForbiddenException(
+          "Este usuario también ingresa a otra farmacia. Pedí el cambio a soporte.",
+        );
+      const abiertas = await tx.authSession.findMany({
+        where: {
+          ...filtroDeAbiertas(userId, ahora, this.inactividadMs),
+          ...(sesion ? { id: sesion } : {}),
+        },
+        select: { id: true },
+      });
+      if (sesion && !abiertas.length)
+        throw new NotFoundException("Esa sesión ya no está abierta.");
+      const ids = abiertas.map(({ id }) => id);
+      const { count } = await tx.authSession.updateMany({
+        where: { id: { in: ids } },
+        data: { revokedAt: ahora },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          actorId,
+          entityType: "USER",
+          entityId: userId,
+          action: "SESSION_REVOKED_BY_ADMIN",
+          after: { sessionIds: ids },
+        },
+      });
+      return { cerradas: count };
+    });
+  }
 
   async list(actorId: string, organizationId: string) {
     const membership = await this.prisma.userOrganization.findUnique({
@@ -244,6 +347,24 @@ export class UsersService {
           })),
         });
       }
+      // Desactivado y sin otra farmacia activa: se le cortan las sesiones al
+      // momento, no sólo los permisos (SISTEMA-93).
+      let revokedSessions = 0;
+      if (
+        membership.active &&
+        !input.active &&
+        !(await tx.userOrganization.count({
+          where: {
+            userId,
+            active: true,
+            organizationId: { not: organizationId },
+          },
+        }))
+      )
+        ({ count: revokedSessions } = await tx.authSession.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        }));
       await tx.auditLog.create({
         data: {
           organizationId,
@@ -252,7 +373,7 @@ export class UsersService {
           entityId: userId,
           action: "USER_UPDATED",
           before,
-          after,
+          after: revokedSessions ? { ...after, revokedSessions } : after,
         },
       });
       return { id: userId, ...after };

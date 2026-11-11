@@ -15,6 +15,9 @@ async function bootstrap(): Promise<void> {
   const environment = app.get(EnvironmentService);
 
   app.setGlobalPrefix("api/v1");
+  // nginx en la misma máquina pasa la IP real (X-Forwarded-For): la usan
+  // "Sesiones abiertas" y la auditoría (SISTEMA-93).
+  app.getHttpAdapter().getInstance().set("trust proxy", "loopback");
   app.use(helmet());
   // Date se expone para que la web tome la hora del servidor (ventas sin
   // conexión, SISTEMA-64) también cuando la API está en otro origen.

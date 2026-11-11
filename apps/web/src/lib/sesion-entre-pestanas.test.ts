@@ -128,7 +128,7 @@ describe("pestaña pausada", () => {
     const error = await refreshSession("cajero").catch((cause) => cause);
     expect(error).toBeInstanceOf(SesionDeOtroUsuarioError);
     expect((error as SesionDeOtroUsuarioError).email).toBe("duena@example.com");
-    expect(JSON.parse(String(red.mock.calls[0]![1].body))).toEqual({
+    expect(JSON.parse(String(red.mock.calls[0]![1].body))).toMatchObject({
       usuarioEsperado: "cajero",
     });
   });

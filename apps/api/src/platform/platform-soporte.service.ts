@@ -58,6 +58,8 @@ export class PlatformSoporteService {
           // Sin clave de renovación: el secreto no se entrega a nadie.
           tokenHash: await hash(randomBytes(48).toString("base64url")),
           expiresAt,
+          // No se lista en "Sesiones abiertas" de la farmacia (SISTEMA-93).
+          soporte: true,
         },
         select: { id: true },
       });
