@@ -476,13 +476,15 @@ describe("cargos y pagos por HTTP (esquema aislado)", () => {
   it("el listado suma lo cobrado en el mes, sin los anulados", async () => {
     type Overview = {
       collectedThisMonthMinor: string;
+      monthly: { month: string; amountMinor: string }[];
       payments: { organizationId: string; organizationName: string }[];
     };
     const overview = async () =>
       (await (
         await http.request("/platform/payments", admin)
       ).json()) as Overview;
-    const before = BigInt((await overview()).collectedThisMonthMinor);
+    const inicio = await overview();
+    const before = BigInt(inicio.collectedThisMonthMinor);
     const id = await pharmacy();
     await billing.generateDueCharges(new Date());
     await pay(id, "3000");
@@ -497,6 +499,15 @@ describe("cargos y pagos por HTTP (esquema aislado)", () => {
     const after = await overview();
 
     expect(BigInt(after.collectedThisMonthMinor) - before).toBe(3000n);
+    // El gráfico: 12 meses y el último es el mes en curso, igual al total del mes.
+    expect(after.monthly).toHaveLength(12);
+    expect(after.monthly.at(-1)!.amountMinor).toBe(
+      after.collectedThisMonthMinor,
+    );
+    expect(
+      BigInt(after.monthly.at(-1)!.amountMinor) -
+        BigInt(inicio.monthly.at(-1)!.amountMinor),
+    ).toBe(3000n);
     expect(after.payments[0]).toMatchObject({
       organizationId: id,
       organizationName: "Farmacia",

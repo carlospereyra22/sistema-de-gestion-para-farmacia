@@ -177,7 +177,7 @@ export function ProductFilterSelect({
             role="listbox"
             aria-label={label}
             style={{ maxHeight }}
-            className="product-filter-options relative max-h-56 overflow-y-auto overscroll-contain"
+            className="product-filter-options relative max-h-64 overflow-y-auto overscroll-contain"
           >
             {options.map((option, index) => (
               <li

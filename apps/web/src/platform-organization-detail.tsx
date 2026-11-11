@@ -1,5 +1,22 @@
+import { BotonEntrarComo } from "./platform-soporte";
+import { iniciales } from "./lib/soporte-panel";
 import { useCallback, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, KeyRound, Plus, ShieldCheck, UserPlus } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarCheck,
+  KeyRound,
+  Plus,
+  Store,
+  UserPlus,
+  Users,
+  Wallet,
+  ClipboardList,
+  Phone,
+  Check,
+  PauseCircle,
+  PlayCircle,
+  Ban,
+} from "lucide-react";
 import {
   DataTable,
   DataTableCell,
@@ -14,6 +31,8 @@ import {
   addPlatformUser,
   getPlatformOrganization,
   resetPlatformUserPassword,
+  changePlatformOrganizationStatus,
+  type PlatformStatusAction,
   updatePlatformSubscription,
   type PlatformOrganizationDetail as Detail,
   type PlatformTemporaryAccess,
@@ -31,9 +50,16 @@ import { OperationConfirmDialog } from "./operation-confirm-dialog";
 import { PlatformBillingSection } from "./platform-billing";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
-import { ProductFilterSelect } from "./product-filter-select";
+import {
+  PlatformError,
+  PlatformKpi,
+  PlatformKpis,
+  PlatformLoading,
+  PlatformHero,
+  PlatformPanel,
+} from "./platform-ui";
 import { StatusToast } from "./status-toast";
-import { ars } from "./supplier-payables/api";
+import { ars, dateLabel } from "./supplier-payables/api";
 import {
   PayableDialog,
   field,
@@ -105,7 +131,7 @@ function AddUserDialog({
               className={`${field} mt-1`}
             />
           </label>
-          <label className="block text-sm">
+          <label className="block text-sm sm:col-span-2">
             Nombre
             <input
               maxLength={120}
@@ -115,19 +141,35 @@ function AddUserDialog({
               className={`${field} mt-1`}
             />
           </label>
-          <div className="text-sm">
-            <p className="mb-1">Rol</p>
-            <ProductFilterSelect
-              compact
-              label="Rol"
-              value={roleCode}
-              options={roles.map(({ code, name }) => ({
-                value: code,
-                label: name,
-              }))}
-              icon={<ShieldCheck size={16} />}
-              onChange={setRoleCode}
-            />
+          <div className="text-sm sm:col-span-2">
+            <p id="rol-del-usuario" className="mb-1">
+              Rol
+            </p>
+            {/* Botones en vez de una lista desplegable: dentro del diálogo la
+                lista se abría hacia arriba y tapaba el correo. */}
+            <div
+              role="radiogroup"
+              aria-labelledby="rol-del-usuario"
+              className="flex flex-wrap gap-2"
+            >
+              {roles.map(({ code, name }) => {
+                const elegido = roleCode === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    role="radio"
+                    aria-checked={elegido}
+                    disabled={busy}
+                    onClick={() => setRoleCode(code)}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "border-[#9fd9c8] bg-[#eefaf6] text-[#087f70]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800"}`}
+                  >
+                    {elegido && <Check size={14} aria-hidden="true" />}
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         {error && (
@@ -301,85 +343,90 @@ function SubscriptionForm({
   };
   const agreedValue = agreedMinor;
   return (
-    <form
-      onSubmit={review}
-      className="rounded-xl border border-slate-200 bg-white p-5"
-    >
-      <h2 className="font-semibold">Plan contratado</h2>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm">
-          Usuarios adicionales
-          <input
-            required
-            type="number"
-            min={0}
-            max={1000}
-            value={extraUsers}
-            onChange={(event) => setExtraUsers(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-        <label className="block text-sm">
-          Sucursales adicionales
-          <input
-            required
-            type="number"
-            min={0}
-            max={1000}
-            value={extraBranches}
-            onChange={(event) => setExtraBranches(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-      </div>
-      <MoneyInput
-        label="Precio acordado"
-        value={agreed}
-        required={false}
-        onChange={setAgreed}
-      />
-      <p className="mt-1 text-xs text-slate-500">
-        Si lo dejás vacío, se usa la fórmula del plan.
-      </p>
-      <h2 className="mt-5 font-semibold">Contacto</h2>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm">
-          Nombre
-          <input
-            maxLength={120}
-            value={contactName}
-            onChange={(event) => setContactName(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-        <label className="block text-sm">
-          Teléfono
-          <input
-            maxLength={60}
-            value={contactPhone}
-            onChange={(event) => setContactPhone(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          Correo
-          <input
-            type="email"
-            maxLength={200}
-            value={contactEmail}
-            onChange={(event) => setContactEmail(event.target.value)}
-            className={`${field} mt-1`}
-          />
-        </label>
-      </div>
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {error}
+    <form onSubmit={review}>
+      <PlatformPanel
+        icon={<ClipboardList size={16} />}
+        title="Plan contratado"
+        description="Cupos extra, precio acordado y contacto de cobro."
+        bodyClassName="p-5"
+      >
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm">
+            Usuarios adicionales
+            <input
+              required
+              type="number"
+              min={0}
+              max={1000}
+              value={extraUsers}
+              onChange={(event) => setExtraUsers(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+          <label className="block text-sm">
+            Sucursales adicionales
+            <input
+              required
+              type="number"
+              min={0}
+              max={1000}
+              value={extraBranches}
+              onChange={(event) => setExtraBranches(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+        </div>
+        <MoneyInput
+          label="Precio acordado"
+          value={agreed}
+          required={false}
+          onChange={setAgreed}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Si lo dejás vacío, se usa la fórmula del plan.
         </p>
-      )}
-      <div className="mt-5 flex justify-end">
-        <button className={primary}>Guardar cambios</button>
-      </div>
+        <h3 className="mt-6 border-t border-[#e6eef3] pt-4 text-sm font-semibold text-slate-800">
+          Contacto
+        </h3>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm">
+            Nombre
+            <input
+              maxLength={120}
+              value={contactName}
+              onChange={(event) => setContactName(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+          <label className="block text-sm">
+            Teléfono
+            <input
+              maxLength={60}
+              value={contactPhone}
+              onChange={(event) => setContactPhone(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+          <label className="block text-sm sm:col-span-2">
+            Correo
+            <input
+              type="email"
+              maxLength={200}
+              value={contactEmail}
+              onChange={(event) => setContactEmail(event.target.value)}
+              className={`${field} mt-1`}
+            />
+          </label>
+        </div>
+        {error && (
+          <p role="alert" className="mt-4 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        <div className="mt-5 flex justify-end">
+          <button className={primary}>Guardar cambios</button>
+        </div>
+      </PlatformPanel>
       {confirming && (
         <PayableDialog
           title="Guardar cambios"
@@ -414,6 +461,33 @@ function SubscriptionForm({
   );
 }
 
+const textoDeEstado: Record<
+  PlatformStatusAction,
+  { titulo: string; descripcion: string; ejemplo: string; aviso: string }
+> = {
+  SUSPEND: {
+    titulo: "Suspender",
+    descripcion:
+      "La farmacia queda bloqueada al instante: nadie puede usar el sistema hasta que la reactives. No se borra nada.",
+    ejemplo: "Por ejemplo: lo pidió el dueño por vacaciones",
+    aviso: "Farmacia suspendida.",
+  },
+  CANCEL: {
+    titulo: "Dar de baja",
+    descripcion:
+      "La farmacia queda bloqueada. Sus datos se conservan y se puede reactivar más adelante.",
+    ejemplo: "Por ejemplo: dejó de usar el sistema",
+    aviso: "Farmacia dada de baja.",
+  },
+  REACTIVATE: {
+    titulo: "Reactivar",
+    descripcion:
+      "La farmacia vuelve a usar el sistema según lo que tenga pago. Pueden generarse los meses que pasó cortada: condonalos desde la cuenta si corresponde.",
+    ejemplo: "Por ejemplo: volvió a pagar",
+    aviso: "Farmacia reactivada.",
+  },
+};
+
 export function PlatformOrganizationDetail({
   token,
   organizationId,
@@ -436,10 +510,15 @@ export function PlatformOrganizationDetail({
   const [addingBranch, setAddingBranch] = useState(false);
   const [resetting, setResetting] = useState<Detail["users"][number]>();
   const [access, setAccess] = useState<PlatformTemporaryAccess>();
+  const [cambioDeEstado, setCambioDeEstado] = useState<PlatformStatusAction>();
   const [notice, setNotice] = useState("");
 
   const back = (
-    <button type="button" className={secondary} onClick={onBack}>
+    <button
+      type="button"
+      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-white hover:text-[#087f70]"
+      onClick={onBack}
+    >
       <ArrowLeft size={16} />
       {backLabel}
     </button>
@@ -448,18 +527,18 @@ export function PlatformOrganizationDetail({
     return (
       <>
         {back}
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {error}
-        </p>
+        <div className="mt-4">
+          <PlatformError>{error}</PlatformError>
+        </div>
       </>
     );
   if (!data)
     return (
       <>
         {back}
-        <p role="status" className="mt-4 text-sm text-slate-500">
-          Cargando farmacia…
-        </p>
+        <div className="mt-4">
+          <PlatformLoading>Cargando farmacia…</PlatformLoading>
+        </div>
       </>
     );
   const subscription = data.subscription;
@@ -472,51 +551,119 @@ export function PlatformOrganizationDetail({
     !!subscription &&
     quotaFull(activeBranches, subscription.quota.branches, subscription.exempt);
   return (
-    <>
+    <div className="space-y-5">
       {back}
-      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{data.name}</h1>
-        {subscription && (
-          <StatusLabel large tone={stageTone(subscription.stage)}>
-            {stageLabel(subscription.stage)}
-            {subscription.daysOverdue > 0 &&
-              ` · ${subscription.daysOverdue} días de atraso`}
-          </StatusLabel>
-        )}
-      </div>
-      {subscription && (
-        <dl className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {[
-            ["Abono mensual", ars(subscription.feeMinor)],
-            ["Cubierta hasta", coveredUntilLabel(subscription)],
-            [
-              "Usuarios",
-              usageLabel(
-                activeUsers,
-                subscription.quota.users,
-                subscription.exempt,
-                " de ",
-              ),
-            ],
-            [
-              "Sucursales",
-              usageLabel(
-                activeBranches,
-                subscription.quota.branches,
-                subscription.exempt,
-                " de ",
-              ),
-            ],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+      <PlatformHero
+        monogram={iniciales(data.name)}
+        title={data.name}
+        status={
+          subscription && (
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 shadow-sm">
+              <StatusLabel tone={stageTone(subscription.stage)}>
+                {stageLabel(subscription.stage)}
+                {subscription.daysOverdue > 0 &&
+                  ` · ${subscription.daysOverdue} días de atraso`}
+              </StatusLabel>
+            </span>
+          )
+        }
+        actions={
+          subscription &&
+          !subscription.exempt &&
+          (subscription.stage === "SUSPENDED" ||
+          subscription.stage === "CANCELLED" ? (
+            <button
+              type="button"
+              className={primary}
+              onClick={() => setCambioDeEstado("REACTIVATE")}
             >
-              <dt className="text-sm text-slate-500">{label}</dt>
-              <dd className="mt-0.5 text-xl font-semibold">{value}</dd>
-            </div>
-          ))}
-        </dl>
+              <PlayCircle size={16} aria-hidden="true" />
+              Reactivar
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={secondary}
+                onClick={() => setCambioDeEstado("SUSPEND")}
+              >
+                <PauseCircle size={16} aria-hidden="true" />
+                Suspender
+              </button>
+              <button
+                type="button"
+                className={`${secondary} border-rose-200 text-rose-700 hover:bg-rose-50`}
+                onClick={() => setCambioDeEstado("CANCEL")}
+              >
+                <Ban size={16} aria-hidden="true" />
+                Dar de baja
+              </button>
+            </>
+          ))
+        }
+        chips={[
+          {
+            icon: <CalendarCheck size={14} />,
+            text: `Cliente desde el ${dateLabel(data.createdAt.slice(0, 10))}`,
+          },
+          {
+            icon: <Store size={14} />,
+            text: `${activeBranches} ${activeBranches === 1 ? "sucursal activa" : "sucursales activas"}`,
+          },
+          {
+            icon: <Users size={14} />,
+            text: `${activeUsers} ${activeUsers === 1 ? "usuario activo" : "usuarios activos"}`,
+          },
+          ...(subscription?.contactPhone || subscription?.contactName
+            ? [
+                {
+                  icon: <Phone size={14} />,
+                  text: [subscription.contactName, subscription.contactPhone]
+                    .filter(Boolean)
+                    .join(" · "),
+                },
+              ]
+            : []),
+        ]}
+      />
+      {subscription && (
+        <PlatformKpis>
+          <PlatformKpi
+            icon={<Wallet size={18} />}
+            label="Abono mensual"
+            value={ars(subscription.feeMinor)}
+          />
+          <PlatformKpi
+            icon={<CalendarCheck size={18} />}
+            tone="sky"
+            label="Cubierta hasta"
+            value={coveredUntilLabel(subscription)}
+          />
+          <PlatformKpi
+            icon={<Users size={18} />}
+            tone={usersFull ? "amber" : "teal"}
+            label="Usuarios"
+            value={usageLabel(
+              activeUsers,
+              subscription.quota.users,
+              subscription.exempt,
+              " de ",
+            )}
+            hint={usersFull ? "Cupo completo" : undefined}
+          />
+          <PlatformKpi
+            icon={<Store size={18} />}
+            tone={branchesFull ? "amber" : "teal"}
+            label="Sucursales"
+            value={usageLabel(
+              activeBranches,
+              subscription.quota.branches,
+              subscription.exempt,
+              " de ",
+            )}
+            hint={branchesFull ? "Cupo completo" : undefined}
+          />
+        </PlatformKpis>
       )}
       {subscription && !subscription.exempt && (
         <PlatformBillingSection
@@ -528,110 +675,138 @@ export function PlatformOrganizationDetail({
           }}
         />
       )}
-      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="min-w-0">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="font-semibold">Usuarios</h2>
-            <button
-              type="button"
-              disabled={usersFull}
-              className={secondary}
-              onClick={() => setAdding(true)}
-            >
-              <UserPlus size={16} />
-              Nuevo usuario
-            </button>
-          </div>
-          {usersFull && (
-            <p className="mb-3 text-sm text-amber-700">
-              Cupo completo: sumá usuarios adicionales en el plan contratado.
-            </p>
-          )}
-          <DataTable
-            label="Usuarios de la farmacia"
-            minWidthClass="min-w-160"
-            columns={[
-              { label: "Correo" },
-              { label: "Rol" },
-              { label: "Estado" },
-              { label: "", align: "right" },
-            ]}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="min-w-0 space-y-5">
+          <PlatformPanel
+            icon={<Users size={16} />}
+            title="Usuarios"
+            description={
+              usersFull
+                ? "Cupo completo: sumá usuarios adicionales en el plan contratado."
+                : "Podés entrar como cualquiera de los activos."
+            }
+            bodyClassName="p-3"
+            actions={
+              <button
+                type="button"
+                disabled={usersFull}
+                className={secondary}
+                onClick={() => setAdding(true)}
+              >
+                <UserPlus size={16} />
+                Nuevo usuario
+              </button>
+            }
           >
-            {data.users.length === 0 ? (
-              <DataTableEmpty colSpan={4}>
-                Esta farmacia no tiene usuarios.
-              </DataTableEmpty>
-            ) : (
-              data.users.map((user) => (
-                <DataTableRow key={user.id}>
-                  <DataTableCell className="font-medium text-slate-900">
-                    {user.email}
-                    {user.displayName && (
-                      <span className="block text-xs font-normal text-slate-500">
-                        {user.displayName}
+            <DataTable
+              label="Usuarios de la farmacia"
+              minWidthClass="min-w-160"
+              columns={[
+                { label: "Correo" },
+                { label: "Rol" },
+                { label: "Estado" },
+                { label: "", align: "right" },
+              ]}
+            >
+              {data.users.length === 0 ? (
+                <DataTableEmpty colSpan={4}>
+                  Esta farmacia no tiene usuarios.
+                </DataTableEmpty>
+              ) : (
+                data.users.map((user) => (
+                  <DataTableRow key={user.id}>
+                    <DataTableCell>
+                      <span className="flex items-center gap-3">
+                        <span
+                          aria-hidden="true"
+                          className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${user.active ? "bg-[#e4f6f0] text-[#087f70]" : "bg-slate-100 text-slate-500"}`}
+                        >
+                          {iniciales(user.displayName || user.email)}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-slate-900">
+                            {user.email}
+                          </span>
+                          {user.displayName && (
+                            <span className="block truncate text-xs text-slate-500">
+                              {user.displayName}
+                            </span>
+                          )}
+                        </span>
                       </span>
-                    )}
-                  </DataTableCell>
+                    </DataTableCell>
+                    <DataTableCell>
+                      {user.roles.map(({ name }) => name).join(", ") ||
+                        "Sin rol"}
+                    </DataTableCell>
+                    <DataTableCell>
+                      <StatusLabel tone={user.active ? "ok" : "muted"}>
+                        {!user.active
+                          ? "Inactivo"
+                          : user.mustChangePassword
+                            ? "Debe cambiar la clave"
+                            : "Activo"}
+                      </StatusLabel>
+                    </DataTableCell>
+                    <DataTableCell align="right">
+                      <BotonEntrarComo
+                        organizationId={data.id}
+                        organizationName={data.name}
+                        usuario={user}
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Resetear la clave de ${user.email}`}
+                        title="Resetear clave"
+                        className="rounded-lg p-2 text-slate-500 hover:bg-teal-50 hover:text-teal-800"
+                        onClick={() => setResetting(user)}
+                      >
+                        <KeyRound size={16} />
+                      </button>
+                    </DataTableCell>
+                  </DataTableRow>
+                ))
+              )}
+            </DataTable>
+          </PlatformPanel>
+          <PlatformPanel
+            icon={<Store size={16} />}
+            title="Sucursales"
+            description={
+              branchesFull
+                ? "Cupo completo: sumá sucursales adicionales en el plan contratado."
+                : undefined
+            }
+            bodyClassName="p-3"
+            actions={
+              <button
+                type="button"
+                disabled={branchesFull}
+                className={secondary}
+                onClick={() => setAddingBranch(true)}
+              >
+                <Plus size={16} />
+                Nueva sucursal
+              </button>
+            }
+          >
+            <DataTable
+              label="Sucursales de la farmacia"
+              columns={[{ label: "Nombre" }, { label: "Estado" }]}
+            >
+              {data.branches.map((branch) => (
+                <DataTableRow key={branch.id}>
+                  <DataTableCell>{branch.name}</DataTableCell>
                   <DataTableCell>
-                    {user.roles.map(({ name }) => name).join(", ") || "Sin rol"}
-                  </DataTableCell>
-                  <DataTableCell>
-                    <StatusLabel tone={user.active ? "ok" : "muted"}>
-                      {!user.active
-                        ? "Inactivo"
-                        : user.mustChangePassword
-                          ? "Debe cambiar la clave"
-                          : "Activo"}
+                    <StatusLabel tone={branch.active ? "ok" : "muted"}>
+                      {branch.active ? "Activa" : "Inactiva"}
                     </StatusLabel>
                   </DataTableCell>
-                  <DataTableCell align="right">
-                    <button
-                      type="button"
-                      aria-label={`Resetear la clave de ${user.email}`}
-                      title="Resetear clave"
-                      className="rounded-lg p-2 text-slate-500 hover:bg-teal-50 hover:text-teal-800"
-                      onClick={() => setResetting(user)}
-                    >
-                      <KeyRound size={16} />
-                    </button>
-                  </DataTableCell>
                 </DataTableRow>
-              ))
-            )}
-          </DataTable>
-          <div className="mb-3 mt-5 flex items-center justify-between gap-3">
-            <h2 className="font-semibold">Sucursales</h2>
-            <button
-              type="button"
-              disabled={branchesFull}
-              className={secondary}
-              onClick={() => setAddingBranch(true)}
-            >
-              <Plus size={16} />
-              Nueva sucursal
-            </button>
-          </div>
-          {branchesFull && (
-            <p className="mb-3 text-sm text-amber-700">
-              Cupo completo: sumá sucursales adicionales en el plan contratado.
-            </p>
-          )}
-          <DataTable
-            label="Sucursales de la farmacia"
-            columns={[{ label: "Nombre" }, { label: "Estado" }]}
-          >
-            {data.branches.map((branch) => (
-              <DataTableRow key={branch.id}>
-                <DataTableCell>{branch.name}</DataTableCell>
-                <DataTableCell>
-                  <StatusLabel tone={branch.active ? "ok" : "muted"}>
-                    {branch.active ? "Activa" : "Inactiva"}
-                  </StatusLabel>
-                </DataTableCell>
-              </DataTableRow>
-            ))}
-          </DataTable>
-        </section>
+              ))}
+            </DataTable>
+          </PlatformPanel>
+        </div>
         {subscription && (
           <SubscriptionForm
             key={subscription.feeMinor + subscription.contactName}
@@ -693,7 +868,24 @@ export function PlatformOrganizationDetail({
           onClose={() => setAccess(undefined)}
         />
       )}
+      {cambioDeEstado && (
+        <OperationConfirmDialog
+          requireReason
+          title={textoDeEstado[cambioDeEstado].titulo}
+          description={textoDeEstado[cambioDeEstado].descripcion}
+          reasonPlaceholder={textoDeEstado[cambioDeEstado].ejemplo}
+          onClose={() => setCambioDeEstado(undefined)}
+          onConfirm={async (reason) => {
+            await changePlatformOrganizationStatus(token, data.id, {
+              action: cambioDeEstado,
+              reason,
+            });
+            setNotice(textoDeEstado[cambioDeEstado].aviso);
+            reload();
+          }}
+        />
+      )}
       {notice && <StatusToast message={notice} onClose={() => setNotice("")} />}
-    </>
+    </div>
   );
 }

@@ -39,8 +39,57 @@ y qué tiene cada una, y cortar a quien no paga, con posibilidad de postergar.
 - Código de un solo uso (TOTP) obligatorio. El bloqueo por intentos va en el paso del código,
   no en la clave: si no, cualquiera con el correo podría sacarnos del panel.
 - Auditoría propia, porque `AuditLog.organizationId` es obligatorio.
-- El panel muestra solo datos comerciales: sin ventas, clientes ni stock, y sin entrar como
-  una farmacia. La landing promete "Cada farmacia ve solo sus datos".
+- El panel muestra solo datos comerciales: sin ventas, clientes ni stock. Para ver lo de una
+  farmacia hay que entrar como uno de sus usuarios (Soporte, abajo). La decisión del 06/11 de
+  no entrar como una farmacia queda reemplazada (decisión del usuario, 11/11/2026).
+
+### Soporte: entrar como un usuario (SISTEMA-89)
+
+Decisión del usuario (11/11/2026): desde el panel se entra como cualquier usuario de una
+farmacia, para reproducir y arreglar un problema; se puede hacer todo lo que hace ese usuario.
+Sin motivo ni avisos: la farmacia no lo ve. La landing no cambia.
+
+- Sección **Soporte** del panel: un buscador elige la farmacia y otro, opcional, la sucursal
+  (muestra solo a quienes tienen acceso a ella); cada usuario activo tiene "Entrar como". También
+  está en cada usuario del detalle de una farmacia. La app se ve exactamente como la ve ese
+  usuario; un botón chico y oscuro abajo a la izquierda (que ve solo el superadmin) vuelve al
+  panel, a la misma sección y con la misma farmacia elegida.
+- `POST platform/organizations/:id/users/:userId/soporte` crea una sesión del usuario sin clave
+  de renovación, que dura hasta volver al panel (tope técnico de 7 días; si se cierra la
+  pestaña estando adentro, el panel la corta la próxima vez que se abre), y entrega un token con
+  la marca `soporte` (firmada por el servidor). `POST platform/soporte/:sessionId/salir` la corta. Usuarios inactivos y otras
+  cuentas de plataforma no se pueden usar.
+- La sesión del superadmin sigue viva y se renueva aparte. En la PC del superadmin no queda copia
+  local de la farmacia (no hay "alcance" de usuario) ni se puede vender sin conexión.
+- Como soporte no se emiten ni reprocesan comprobantes en ARCA producción (venta con factura
+  productiva, notas de crédito, reprocesar, reencolar, emitir un interno, configuración productiva):
+  `403 SOPORTE_SIN_ARCA_PRODUCCION`. Homologación sí.
+- Una clave pendiente de cambio no frena al soporte (no se cambia la clave de nadie).
+- Registro interno: `PlatformAuditLog` con `SOPORTE_ENTRO` y `SOPORTE_SALIO` (quién, a qué
+  usuario y farmacia, la sesión). La auditoría de la farmacia no registra nada; lo que se hace
+  adentro queda a nombre del usuario, y la hora de entrada y salida permite separarlo.
+  La sección Auditoría del panel muestra la farmacia y el usuario de cada registro, y filtra por
+  tipo (soporte, cobros y planes, farmacias y usuarios, accesos, ARCA).
+
+### Diseño del panel
+
+El panel usa el mismo lenguaje visual que el sistema de gestión: barra lateral plegable
+(`NavigationRail`, grupos Clientes y Herramientas), encabezado con la sección actual, tarjetas
+de indicadores con ícono y paneles con título (`platform-ui.tsx`). La sección elegida se recuerda
+en la pestaña (`sessionStorage`).
+
+- Farmacias: barra con el estado de las farmacias (al día o en prueba, con aviso, cortadas,
+  exentas o de baja) y, en la tabla, el cupo usado de usuarios y sucursales con una barrita.
+- Detalle de una farmacia: cabecera con iniciales, estado, fecha de alta y contacto.
+- Pagos: gráfico de lo cobrado en los últimos 12 meses (`GET platform/payments` devuelve
+  `monthly`, pagos vigentes por mes).
+- Planes: tarjeta del plan con los precios vigentes y cuántas farmacias pagan el precio de lista;
+  edición de cada precio con aviso de cambios sin guardar; calculadora con sucursales y usuarios
+  elegibles y la diferencia contra los precios de hoy (vista previa; el abono real lo calcula la
+  API).
+- Ficha de farmacia: se recuerda la ficha abierta, así al volver de soporte se cae en ella.
+- En los diálogos, el medio de pago y el rol se eligen con botones en vez de una lista
+  desplegable, que dentro del diálogo quedaba tapada o cortada.
 
 ### Comandos
 
@@ -212,8 +261,15 @@ dispara un evento). Si no contesta, deja usar el sistema.
 
 En el panel, la solapa Pagos muestra el próximo corte de cada farmacia que debe.
 
-Falta: suspender o dar de baja a mano desde el panel, avisos por mail y un resumen de lo que
-vence en el panel.
+**Suspender, dar de baja y reactivar (SISTEMA-89):** desde la ficha de la farmacia en el panel,
+con motivo obligatorio. `POST platform/organizations/:id/status` con `action` `SUSPEND`, `CANCEL`
+o `REACTIVATE`. Deja `suspendedAt` o `cancelledAt` en la suscripción (reactivar los limpia) y el
+motivo en la auditoría de la plataforma (`PLATFORM_ORGANIZATION_SUSPENDED`, `_CANCELLED`,
+`_REACTIVATED`). No borra nada. Bloquea al instante, como cualquier corte. Una exenta no se
+suspende ni se da de baja (409), y repetir el mismo estado también da 409. Al reactivar pueden
+generarse los meses que pasó cortada: se condonan a mano.
+
+Falta: avisos por mail.
 
 ## Alta de una farmacia
 
@@ -279,5 +335,5 @@ Producción solo tiene Farmacia Juncos y no se le puede afectar nada:
 ## Fuera de alcance
 
 Facturar el abono desde el sistema, mail, recuperación autónoma de clave, pago en autoservicio,
-entrar como una farmacia, segundo factor para usuarios de farmacia, selector de varias
+segundo factor para usuarios de farmacia, selector de varias
 farmacias, demos gratis y asistente de primer uso.

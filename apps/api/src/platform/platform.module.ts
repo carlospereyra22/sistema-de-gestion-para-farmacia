@@ -11,6 +11,8 @@ import { PlatformPadronService } from "./platform-padron.service";
 import { PlatformIdentityService } from "./platform-identity.service";
 import { PlatformOrganizationsController } from "./platform-organizations.controller";
 import { PlatformOrganizationsService } from "./platform-organizations.service";
+import { PlatformSoporteController } from "./platform-soporte.controller";
+import { PlatformSoporteService } from "./platform-soporte.service";
 import { SubscriptionAccessInterceptor } from "./subscription-access.interceptor";
 import {
   SubscriptionStatusController,
@@ -23,6 +25,7 @@ import {
     PlatformController,
     PlatformPadronController,
     PlatformOrganizationsController,
+    PlatformSoporteController,
     SubscriptionStatusController,
   ],
   providers: [
@@ -30,6 +33,7 @@ import {
     PlatformBillingService,
     PlatformIdentityService,
     PlatformOrganizationsService,
+    PlatformSoporteService,
     PlatformPadronService,
     SubscriptionStatusService,
     CredentialVault,

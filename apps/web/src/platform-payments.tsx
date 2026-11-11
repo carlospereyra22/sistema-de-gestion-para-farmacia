@@ -1,5 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  Building2,
+  HandCoins,
+  PhoneCall,
+  ReceiptText,
+  Wallet,
+} from "lucide-react";
+import {
   DataTable,
   DataTableCell,
   DataTableEmpty,
@@ -22,8 +30,16 @@ import {
 import { usePage } from "./lib/use-page";
 import { usePlatformData } from "./lib/use-platform-data";
 import { Pagination } from "./pagination";
+import { CobrosPorMes } from "./platform-graficos";
 import { PlatformOrganizationDetail } from "./platform-organization-detail";
-import { Metric } from "./platform-organizations";
+import {
+  PlatformError,
+  PlatformKpi,
+  PlatformKpis,
+  PlatformLoading,
+  PlatformPageHeader,
+  PlatformPanel,
+} from "./platform-ui";
 import { ars, dateLabel, paymentMethods } from "./supplier-payables/api";
 
 const PAGE_SIZE = 10;
@@ -207,35 +223,62 @@ export function PlatformPayments({
       />
     );
   return (
-    <>
-      <h1 className="text-2xl font-semibold">Pagos</h1>
-      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-3">
-        <Metric label="Deuda total" value={ars(totalDebtMinor(owing))} />
-        <Metric label="Farmacias con deuda" value={String(owing.length)} />
-        <Metric
+    <div className="space-y-5">
+      <PlatformPageHeader
+        icon={<Wallet size={22} />}
+        title="Pagos"
+        description="Quién debe y qué se cobró. Tocá una fila para registrar un pago o dar una prórroga."
+      />
+      <PlatformKpis columns={3}>
+        <PlatformKpi
+          icon={<AlertTriangle size={18} />}
+          tone={owing.length > 0 ? "amber" : "slate"}
+          label="Deuda total"
+          value={ars(totalDebtMinor(owing))}
+          hint="Saldo vencido de todas las farmacias"
+        />
+        <PlatformKpi
+          icon={<Building2 size={18} />}
+          tone={owing.length > 0 ? "rose" : "slate"}
+          label="Farmacias con deuda"
+          value={String(owing.length)}
+          hint="Para llamar o avisar"
+        />
+        <PlatformKpi
+          icon={<HandCoins size={18} />}
           label="Cobrado este mes"
           value={ars(data?.[1].collectedThisMonthMinor ?? "0")}
+          hint="Pagos vigentes del mes"
         />
-      </div>
+      </PlatformKpis>
       {error ? (
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {error}
-        </p>
+        <PlatformError>{error}</PlatformError>
       ) : data ? (
         <>
-          <h2 className="mb-3 mt-5 font-semibold">Quién debe</h2>
-          <PlatformDebtorsTable rows={owing} onOpen={setOpened} />
-          <h2 className="mb-3 mt-5 font-semibold">Últimos pagos</h2>
-          <PlatformRecentPaymentsTable
-            rows={data[1].payments}
-            onOpen={setOpened}
-          />
+          <CobrosPorMes mensual={data[1].monthly ?? []} />
+          <PlatformPanel
+            icon={<PhoneCall size={16} />}
+            title="Quién debe"
+            description="Con el contacto para llamar."
+            bodyClassName="p-3"
+          >
+            <PlatformDebtorsTable rows={owing} onOpen={setOpened} />
+          </PlatformPanel>
+          <PlatformPanel
+            icon={<ReceiptText size={16} />}
+            title="Últimos pagos"
+            description="Los anulados quedan a la vista."
+            bodyClassName="p-3"
+          >
+            <PlatformRecentPaymentsTable
+              rows={data[1].payments}
+              onOpen={setOpened}
+            />
+          </PlatformPanel>
         </>
       ) : (
-        <p role="status" className="mt-4 text-sm text-slate-500">
-          Cargando pagos…
-        </p>
+        <PlatformLoading>Cargando pagos…</PlatformLoading>
       )}
-    </>
+    </div>
   );
 }

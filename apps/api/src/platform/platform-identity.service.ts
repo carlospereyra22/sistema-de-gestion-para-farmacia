@@ -85,9 +85,20 @@ export class PlatformIdentityService {
       select: { id: true, email: true },
     });
     const emails = new Map(actors.map(({ id, email }) => [id, email]));
+    // El nombre de la farmacia, para leer la auditoría sin abrir cada una.
+    const organizations = await this.prisma.organization.findMany({
+      where: {
+        id: { in: rows.flatMap(({ organizationId }) => organizationId ?? []) },
+      },
+      select: { id: true, name: true },
+    });
+    const names = new Map(organizations.map(({ id, name }) => [id, name]));
     return rows.map((row) => ({
       ...row,
       actorEmail: row.actorId ? (emails.get(row.actorId) ?? null) : null,
+      organizationName: row.organizationId
+        ? (names.get(row.organizationId) ?? null)
+        : null,
     }));
   }
 

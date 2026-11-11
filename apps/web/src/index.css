@@ -1889,3 +1889,26 @@ textarea:focus {
     transform: none;
   }
 }
+
+/* Panel de plataforma (SISTEMA-89): cada sección entra con las tarjetas de a
+   una, como Reportes. Nunca con "reducir movimiento". */
+@media (prefers-reduced-motion: no-preference) {
+  /* "backwards": al terminar no queda ninguna transformación aplicada. Con
+     "both" cada tarjeta quedaba en su propia capa y la de abajo tapaba los
+     desplegables de la de arriba (filtro de Auditoría). */
+  .panel-animado > * > * {
+    animation: reportes-entrada 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .panel-animado > * > :nth-child(2) {
+    animation-delay: 70ms;
+  }
+  .panel-animado > * > :nth-child(3) {
+    animation-delay: 140ms;
+  }
+  .panel-animado > * > :nth-child(4) {
+    animation-delay: 210ms;
+  }
+  .panel-animado > * > :nth-child(n + 5) {
+    animation-delay: 280ms;
+  }
+}

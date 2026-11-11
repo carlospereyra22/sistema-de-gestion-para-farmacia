@@ -1,5 +1,7 @@
 const actionLabels: Record<string, string> = {
   PLATFORM_ADMIN_GRANTED: "Cuenta de plataforma creada",
+  SOPORTE_ENTRO: "Entró como usuario (soporte)",
+  SOPORTE_SALIO: "Volvió al panel (soporte)",
   PLATFORM_ADMIN_REVOKED: "Cuenta de plataforma revocada",
   PLATFORM_TOTP_ENROLLED: "Código configurado",
   PLATFORM_TOTP_VERIFIED: "Ingreso con código",
@@ -17,6 +19,9 @@ const actionLabels: Record<string, string> = {
   PLATFORM_CHARGE_WAIVED: "Cargo condonado",
   PLATFORM_EXTENSION_GRANTED: "Prórroga otorgada",
   PLATFORM_EXTENSION_REMOVED: "Prórroga quitada",
+  PLATFORM_ORGANIZATION_SUSPENDED: "Farmacia suspendida",
+  PLATFORM_ORGANIZATION_CANCELLED: "Farmacia dada de baja",
+  PLATFORM_ORGANIZATION_REACTIVATED: "Farmacia reactivada",
   PADRON_CERTIFICADO_SOLICITUD: "Solicitud de certificado del padrón de ARCA",
   PADRON_CERTIFICADO_CARGADO: "Certificado del padrón de ARCA cargado",
 };
@@ -42,4 +47,49 @@ const dateFormat = new Intl.DateTimeFormat("es-AR", {
 
 export function platformDateLabel(value: string): string {
   return dateFormat.format(new Date(value));
+}
+
+/** Tipos de registro, para filtrar la auditoría. */
+export type PlatformAuditGroup =
+  "soporte" | "cobros" | "farmacias" | "accesos" | "arca";
+
+export const platformAuditGroups: { value: string; label: string }[] = [
+  { value: "ALL", label: "Todos los registros" },
+  { value: "soporte", label: "Soporte" },
+  { value: "cobros", label: "Cobros y planes" },
+  { value: "farmacias", label: "Farmacias y usuarios" },
+  { value: "accesos", label: "Accesos al panel" },
+  { value: "arca", label: "ARCA" },
+];
+
+export function platformAuditGroup(action: string): PlatformAuditGroup {
+  if (action.startsWith("SOPORTE_")) return "soporte";
+  if (action.startsWith("PADRON_")) return "arca";
+  if (/PAYMENT|CHARGE|EXTENSION|PLAN_UPDATED|SUBSCRIPTION/.test(action))
+    return "cobros";
+  if (/TOTP|PLATFORM_ADMIN/.test(action)) return "accesos";
+  return "farmacias";
+}
+
+/** En soporte, a qué usuario se entró; en una suspensión o baja, el motivo. */
+export function platformAuditDetail(entry: {
+  action: string;
+  after?: unknown;
+}): string | undefined {
+  const after = entry.after;
+  if (
+    entry.action.startsWith("PLATFORM_ORGANIZATION_") &&
+    after &&
+    typeof after === "object" &&
+    "reason" in after
+  ) {
+    const reason = (after as { reason: unknown }).reason;
+    return typeof reason === "string" ? `Motivo: ${reason}` : undefined;
+  }
+  if (!entry.action.startsWith("SOPORTE_")) return undefined;
+  if (after && typeof after === "object" && "email" in after) {
+    const email = (after as { email: unknown }).email;
+    if (typeof email === "string") return `Como ${email}`;
+  }
+  return undefined;
 }

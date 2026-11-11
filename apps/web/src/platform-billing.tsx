@@ -1,5 +1,12 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Ban, CalendarClock, HandCoins, WalletCards } from "lucide-react";
+import {
+  Ban,
+  CalendarClock,
+  HandCoins,
+  ReceiptText,
+  WalletCards,
+} from "lucide-react";
+import { PlatformPanel } from "./platform-ui";
 import {
   DataTable,
   DataTableCell,
@@ -32,7 +39,6 @@ import { MoneyInput } from "./money-input";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
 import { Pagination } from "./pagination";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
-import { ProductFilterSelect } from "./product-filter-select";
 import { ars, dateLabel, paymentMethods } from "./supplier-payables/api";
 import {
   PayableDialog,
@@ -213,19 +219,36 @@ function PaymentDialog({
               className={`${field} mt-1`}
             />
           </label>
-          <div className="text-sm">
-            <p className="mb-1">Medio de pago</p>
-            <ProductFilterSelect
-              compact
-              label="Medio de pago"
-              value={method}
-              options={methodOptions}
-              icon={<WalletCards size={16} />}
-              disabled={busy || Boolean(locked)}
-              onChange={setMethod}
-            />
+          <div className="text-sm sm:col-span-2">
+            <p id="medio-de-pago" className="mb-1">
+              Medio de pago
+            </p>
+            {/* Cuatro opciones: botones de un toque en vez de una lista
+                desplegable, que dentro del diálogo quedaba tapada o cortada. */}
+            <div
+              role="radiogroup"
+              aria-labelledby="medio-de-pago"
+              className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:grid-cols-4"
+            >
+              {methodOptions.map(({ value, label }) => {
+                const elegido = method === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={elegido}
+                    disabled={busy || Boolean(locked)}
+                    onClick={() => setMethod(value)}
+                    className={`h-9 rounded-lg px-2 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "bg-white text-[#087f70] shadow-sm ring-1 ring-[#cce8de]" : "text-slate-600 hover:bg-white/70 hover:text-slate-800"}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <label className="block text-sm">
+          <label className="block text-sm sm:col-span-2">
             Referencia (opcional)
             <input
               maxLength={160}
@@ -568,15 +591,13 @@ export function PlatformBillingSection({
   const [waiving, setWaiving] = useState<PlatformCharge>();
   const extended = subscription.stage === "EXTENDED";
   return (
-    <section className="mt-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-3">
-          <h2 className="font-semibold">Pagos</h2>
-          <p className="text-sm font-medium text-slate-600">
-            {balanceLabel(billing)}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <PlatformPanel
+      icon={<ReceiptText size={16} />}
+      title="Cuenta de la farmacia"
+      description={balanceLabel(billing)}
+      bodyClassName="space-y-3 p-3"
+      actions={
+        <>
           <button
             type="button"
             className={secondary}
@@ -593,10 +614,11 @@ export function PlatformBillingSection({
             <WalletCards size={16} />
             Registrar pago
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
       {extended && subscription.extendedUntil && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
           <p className="min-w-0">
             Con prórroga hasta {dateLabel(subscription.extendedUntil)}
             {subscription.extendedReason && `: ${subscription.extendedReason}`}
@@ -610,7 +632,7 @@ export function PlatformBillingSection({
           </button>
         </div>
       )}
-      <div className="mt-3 grid items-start gap-4 xl:grid-cols-2">
+      <div className="grid items-start gap-3 xl:grid-cols-2">
         <ChargesTable charges={billing.charges} onWaive={setWaiving} />
         <PaymentsTable payments={billing.payments} onVoid={setVoiding} />
       </div>
@@ -688,6 +710,6 @@ export function PlatformBillingSection({
           }}
         />
       )}
-    </section>
+    </PlatformPanel>
   );
 }

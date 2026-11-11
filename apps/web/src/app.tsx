@@ -1,4 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ProductImageSession } from "./product-image-session";
 import { SessionStartup } from "./session-startup";
 import { ForcedPasswordChange } from "./forced-password-change";
@@ -43,6 +50,14 @@ import { WorkspaceShell } from "./workspace-shell";
 const PlatformShell = lazy(() => import("./platform-shell"));
 import { LoginScreen } from "./login-screen";
 import { SubscriptionGate } from "./subscription-gate";
+import { SoporteSesion } from "./soporte-sesion";
+import {
+  olvidarSesionDeSoporte,
+  recordarSesionDeSoporte,
+  sesionDeSoporteSinCerrar,
+} from "./lib/soporte";
+import type { SesionSoporte } from "./lib/platform-api";
+import type { EntrarComo } from "./lib/soporte-panel";
 import { useNavigate } from "react-router-dom";
 import {
   TOKEN_SIN_CONEXION,
@@ -164,6 +179,12 @@ export function App(): ReactElement {
   const [showLegacyWorkspace, setShowLegacyWorkspace] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  // Soporte (SISTEMA-89): el superadmin adentro de una farmacia como uno de sus
+  // usuarios. Su propia sesión sigue viva y se renueva aparte.
+  const [soporte, setSoporte] = useState<{
+    sesion: SesionSoporte;
+    etiqueta: string;
+  }>();
   const [permissionCodes, setPermissionCodes] = useState<string[]>([]);
   const navigate = useNavigate();
   // Sesiones sin internet (SISTEMA-66). Quien entró sin conexión con su
@@ -569,6 +590,47 @@ export function App(): ReactElement {
     }
   };
 
+  // La API del panel se carga aparte: una farmacia nunca la descarga.
+  const entrarComo: EntrarComo = async (
+    organizationId,
+    organizationName,
+    usuario,
+  ) => {
+    if (!accessToken) return;
+    const { entrarComoUsuario } = await import("./lib/platform-api");
+    const sesion = await entrarComoUsuario(
+      accessToken,
+      organizationId,
+      usuario.id,
+    );
+    recordarSesionDeSoporte(sesion.sessionId);
+    setSoporte({
+      sesion,
+      etiqueta: `${usuario.displayName || usuario.email} · ${organizationName}`,
+    });
+  };
+  const sesionDeSoporte = soporte?.sesion.sessionId;
+  const volverDeSoporte = useCallback(() => {
+    if (sesionDeSoporte && accessToken)
+      void import("./lib/platform-api")
+        .then(({ salirDeSoporte }) =>
+          salirDeSoporte(accessToken, sesionDeSoporte),
+        )
+        .then(olvidarSesionDeSoporte)
+        .catch(() => {});
+    setSoporte(undefined);
+  }, [accessToken, sesionDeSoporte]);
+  // Una sesión de soporte que quedó abierta (se cerró la pestaña estando
+  // adentro) se corta al volver a abrir el panel.
+  const enSoporte = !!soporte;
+  useEffect(() => {
+    const pendiente = sesionDeSoporteSinCerrar();
+    if (!isPlatformAdmin || !accessToken || enSoporte || !pendiente) return;
+    void import("./lib/platform-api")
+      .then(({ salirDeSoporte }) => salirDeSoporte(accessToken, pendiente))
+      .then(olvidarSesionDeSoporte)
+      .catch(() => {});
+  }, [isPlatformAdmin, accessToken, enSoporte]);
   const endSession = () => {
     // La app deja de abrirse sola, pero la copia queda: sirve para volver a
     // entrar con la contraseña aun sin internet (cambio de turno, SISTEMA-66).
@@ -594,10 +656,24 @@ export function App(): ReactElement {
         onLogout={endSession}
       />
     );
+  if (user && accessToken && isPlatformAdmin && soporte)
+    return (
+      <SoporteSesion
+        key={soporte.sesion.sessionId}
+        sesion={soporte.sesion}
+        etiqueta={soporte.etiqueta}
+        onVolver={volverDeSoporte}
+      />
+    );
   if (user && accessToken && isPlatformAdmin)
     return (
       <Suspense fallback={<SessionStartup failed={false} />}>
-        <PlatformShell token={accessToken} email={user} onLogout={endSession} />
+        <PlatformShell
+          token={accessToken}
+          email={user}
+          onLogout={endSession}
+          onEntrarComo={entrarComo}
+        />
       </Suspense>
     );
   if (user && accessToken && !organizationId)

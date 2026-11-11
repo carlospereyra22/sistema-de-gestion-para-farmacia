@@ -19,6 +19,10 @@ export type PlatformAuditEntry = {
   action: string;
   actorEmail: string | null;
   createdAt: string;
+  /** Farmacia del registro, si es de una (SISTEMA-89). */
+  organizationName?: string | null;
+  /** Datos del cambio; en soporte, el correo del usuario. */
+  after?: unknown;
 };
 export type PlatformSubscription = {
   stage: SubscriptionStage;
@@ -50,6 +54,8 @@ export type PlatformOrganization = {
   balanceMinor: string;
   activeBranches: number;
   activeUsers: number;
+  /** Sucursales activas, para el selector de Soporte. */
+  branches?: { id: string; name: string }[];
   subscription: PlatformSubscription | null;
 };
 export type PlatformCharge = {
@@ -91,6 +97,8 @@ export type PlatformRecentPayment = PlatformPayment & {
 };
 export type PlatformPaymentsOverview = {
   collectedThisMonthMinor: string;
+  /** Lo cobrado en cada uno de los últimos 12 meses ("2026-11"). */
+  monthly?: { month: string; amountMinor: string }[];
   payments: PlatformRecentPayment[];
 };
 export type PlatformOrganizationDetail = {
@@ -106,6 +114,8 @@ export type PlatformOrganizationDetail = {
     email: string;
     active: boolean;
     displayName: string | null;
+    /** Sucursales de la farmacia a las que tiene acceso. */
+    branchIds?: string[];
     mustChangePassword: boolean;
     roles: { code: string; name: string }[];
   }[];
@@ -297,6 +307,19 @@ export const extendPlatformSubscription = (
     input,
   );
 
+/** Suspender, dar de baja o reactivar una farmacia, con motivo (SISTEMA-89). */
+export type PlatformStatusAction = "SUSPEND" | "CANCEL" | "REACTIVATE";
+export const changePlatformOrganizationStatus = (
+  token: string,
+  organizationId: string,
+  input: { action: PlatformStatusAction; reason: string },
+) =>
+  platformRequest<{ action: PlatformStatusAction }>(
+    token,
+    `/organizations/${organizationId}/status`,
+    input,
+  );
+
 export const getPlatformPlans = (token: string) =>
   platformRequest<PlatformPlan[]>(token, "/plans");
 
@@ -366,3 +389,34 @@ export const uploadPlatformPadron = (
     "/padron-certificado/certificado",
     input,
   );
+
+/** Sesión de soporte: el superadmin entra como un usuario de una farmacia (SISTEMA-89). */
+export type SesionSoporte = {
+  accessToken: string;
+  sessionId: string;
+  expiresAt: string;
+};
+
+export const entrarComoUsuario = (
+  token: string,
+  organizationId: string,
+  userId: string,
+) =>
+  platformRequest<SesionSoporte>(
+    token,
+    `/organizations/${organizationId}/users/${userId}/soporte`,
+    {},
+  );
+
+/** Volver al panel: la sesión de soporte deja de servir en el servidor. */
+export async function salirDeSoporte(token: string, sessionId: string) {
+  const response = await fetch(
+    `${apiBaseUrl}/platform/soporte/${sessionId}/salir`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok && response.status !== 404)
+    throw new Error("No se pudo cerrar la sesión de soporte.");
+}

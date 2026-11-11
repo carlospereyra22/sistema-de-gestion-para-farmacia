@@ -98,6 +98,12 @@ export class PlatformOrganizationsService {
         name: true,
         createdAt: true,
         subscription: { include: subscriptionInclude },
+        // Para el selector de Soporte: farmacia o sucursal (SISTEMA-89).
+        branches: {
+          where: { active: true, deletedAt: null },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        },
         _count: {
           select: {
             branches: { where: { active: true, deletedAt: null } },
@@ -134,7 +140,12 @@ export class PlatformOrganizationsService {
             active: true,
             displayName: true,
             user: {
-              select: { id: true, email: true, mustChangePassword: true },
+              select: {
+                id: true,
+                email: true,
+                mustChangePassword: true,
+                branches: { select: { branchId: true } },
+              },
             },
             roles: { select: { role: { select: { code: true, name: true } } } },
           },
@@ -158,6 +169,10 @@ export class PlatformOrganizationsService {
         id: user.id,
         email: user.email,
         mustChangePassword: user.mustChangePassword,
+        // Sucursales de esta farmacia a las que tiene acceso.
+        branchIds: user.branches
+          .map(({ branchId }) => branchId)
+          .filter((id) => rest.branches.some((branch) => branch.id === id)),
         roles: roles.map(({ role }) => role),
       })),
     };

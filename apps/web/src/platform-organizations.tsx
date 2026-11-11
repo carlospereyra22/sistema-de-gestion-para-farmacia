@@ -1,5 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
-import { Building2, Filter, Plus, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  Filter,
+  FlaskConical,
+  Plus,
+  Search,
+  Wallet,
+} from "lucide-react";
 import {
   DataTable,
   DataTableCell,
@@ -19,28 +27,28 @@ import {
   stageLabel,
   stageTone,
   summarizeOrganizations,
-  usageLabel,
 } from "./lib/platform-subscription";
+import { fichaGuardada, guardarFicha } from "./lib/platform-navegacion";
 import { usePage } from "./lib/use-page";
 import { usePlatformData } from "./lib/use-platform-data";
 import { Pagination } from "./pagination";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
+import { EstadoDeFarmacias } from "./platform-graficos";
 import { PlatformOrganizationDetail } from "./platform-organization-detail";
 import { PlatformOrganizationDialog } from "./platform-organization-dialog";
+import {
+  PlatformError,
+  PlatformKpi,
+  PlatformKpis,
+  PlatformLoading,
+  PlatformPageHeader,
+  PlatformUsage,
+} from "./platform-ui";
 import { ProductFilterSelect } from "./product-filter-select";
-import { ars } from "./supplier-payables/api";
+import { ars, dateLabel } from "./supplier-payables/api";
 import { primary } from "./supplier-payables/dialog";
 
 const PAGE_SIZE = 10;
-
-export function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-0.5 text-xl font-semibold text-slate-900">{value}</p>
-    </div>
-  );
-}
 
 export function PlatformOrganizationsTable({
   rows,
@@ -84,8 +92,23 @@ export function PlatformOrganizationsTable({
       ) : (
         visible.map((row) => (
           <DataTableRow key={row.id} onToggle={() => onOpen(row.id)}>
-            <DataTableCell className="font-medium text-slate-900">
-              {row.name}
+            <DataTableCell>
+              <span className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#eef6f4] text-[#087f70]"
+                >
+                  <Building2 size={16} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold text-slate-900">
+                    {row.name}
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    Desde el {dateLabel(row.createdAt.slice(0, 10))}
+                  </span>
+                </span>
+              </span>
             </DataTableCell>
             <DataTableCell>
               {row.subscription ? (
@@ -100,22 +123,26 @@ export function PlatformOrganizationsTable({
               {row.subscription ? coveredUntilLabel(row.subscription) : "—"}
             </DataTableCell>
             <DataTableCell align="right" numeric>
-              {row.subscription
-                ? usageLabel(
-                    row.activeUsers,
-                    row.subscription.quota.users,
-                    row.subscription.exempt,
-                  )
-                : row.activeUsers}
+              {row.subscription ? (
+                <PlatformUsage
+                  used={row.activeUsers}
+                  quota={row.subscription.quota.users}
+                  exempt={row.subscription.exempt}
+                />
+              ) : (
+                row.activeUsers
+              )}
             </DataTableCell>
             <DataTableCell align="right" numeric>
-              {row.subscription
-                ? usageLabel(
-                    row.activeBranches,
-                    row.subscription.quota.branches,
-                    row.subscription.exempt,
-                  )
-                : row.activeBranches}
+              {row.subscription ? (
+                <PlatformUsage
+                  used={row.activeBranches}
+                  quota={row.subscription.quota.branches}
+                  exempt={row.subscription.exempt}
+                />
+              ) : (
+                row.activeBranches
+              )}
             </DataTableCell>
             <DataTableCell align="right" numeric>
               {row.subscription ? ars(row.subscription.feeMinor) : "—"}
@@ -141,7 +168,11 @@ export function PlatformOrganizations({
   const { data, error, reload } = usePlatformData(load, onVerificationExpired);
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("ALL");
-  const [opened, setOpened] = useState<string>();
+  const [opened, setOpenedState] = useState(fichaGuardada);
+  const setOpened = (id: string | undefined) => {
+    setOpenedState(id);
+    guardarFicha(id);
+  };
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<PlatformOrganizationCreated>();
   const rows = useMemo(
@@ -164,25 +195,52 @@ export function PlatformOrganizations({
       />
     );
   return (
-    <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Farmacias</h1>
-        <button
-          type="button"
-          className={primary}
-          onClick={() => setCreating(true)}
-        >
-          <Plus size={16} />
-          Nueva farmacia
-        </button>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Metric label="Farmacias" value={String(summary.total)} />
-        <Metric label="En prueba" value={String(summary.trial)} />
-        <Metric label="Con atraso" value={String(summary.late)} />
-        <Metric label="Abono mensual" value={ars(summary.monthlyMinor)} />
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
+    <div className="space-y-5">
+      <PlatformPageHeader
+        icon={<Building2 size={22} />}
+        title="Farmacias"
+        description="Clientes de la plataforma: estado del abono, cupos y saldo. Tocá una farmacia para ver su detalle."
+        actions={
+          <button
+            type="button"
+            className={primary}
+            onClick={() => setCreating(true)}
+          >
+            <Plus size={16} />
+            Nueva farmacia
+          </button>
+        }
+      />
+      <PlatformKpis>
+        <PlatformKpi
+          icon={<Building2 size={18} />}
+          label="Farmacias"
+          value={String(summary.total)}
+          hint="Todas las cuentas"
+        />
+        <PlatformKpi
+          icon={<FlaskConical size={18} />}
+          tone="sky"
+          label="En prueba"
+          value={String(summary.trial)}
+          hint="Período de prueba vigente"
+        />
+        <PlatformKpi
+          icon={<AlertTriangle size={18} />}
+          tone={summary.late > 0 ? "amber" : "slate"}
+          label="Con atraso"
+          value={String(summary.late)}
+          hint="En gracia, solo lectura o bloqueadas"
+        />
+        <PlatformKpi
+          icon={<Wallet size={18} />}
+          label="Abono mensual"
+          value={ars(summary.monthlyMinor)}
+          hint="Suma de abonos vigentes"
+        />
+      </PlatformKpis>
+      {data && data.length > 0 && <EstadoDeFarmacias farmacias={data} />}
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
         <label className="relative block">
           <Search
             size={16}
@@ -195,7 +253,7 @@ export function PlatformOrganizations({
             placeholder="Buscar farmacia"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-teal-500"
+            className="h-11 w-full rounded-xl border border-[#dce7ef] bg-white pl-9 pr-3 text-sm shadow-[0_3px_12px_rgb(25_56_74_/_3%)] outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-50"
           />
         </label>
         <ProductFilterSelect
@@ -206,23 +264,13 @@ export function PlatformOrganizations({
           onChange={setStage}
         />
       </div>
-      <div className="mt-4">
-        {error ? (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        ) : data ? (
-          <PlatformOrganizationsTable rows={rows} onOpen={setOpened} />
-        ) : (
-          <p
-            role="status"
-            className="flex items-center gap-2 text-sm text-slate-500"
-          >
-            <Building2 size={16} aria-hidden="true" />
-            Cargando farmacias…
-          </p>
-        )}
-      </div>
+      {error ? (
+        <PlatformError>{error}</PlatformError>
+      ) : data ? (
+        <PlatformOrganizationsTable rows={rows} onOpen={setOpened} />
+      ) : (
+        <PlatformLoading>Cargando farmacias…</PlatformLoading>
+      )}
       {creating && (
         <PlatformOrganizationDialog
           token={token}
@@ -242,6 +290,6 @@ export function PlatformOrganizations({
           onClose={() => setCreated(undefined)}
         />
       )}
-    </>
+    </div>
   );
 }

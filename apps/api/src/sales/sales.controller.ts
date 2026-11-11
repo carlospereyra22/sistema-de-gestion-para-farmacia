@@ -30,6 +30,7 @@ import {
 import { PaymentMethod } from "@prisma/client";
 
 import type { AuthenticatedRequest } from "../auth/auth.types";
+import { assertNoEsSoporte } from "../auth/soporte";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { SalesService } from "./sales.service";
@@ -166,6 +167,7 @@ export class SalesController {
     @Param("saleId", ParseUUIDPipe) saleId: string,
     @Body() input: CreditDto,
   ) {
+    assertNoEsSoporte(req);
     return this.credits.create(req.auth!.sub, org, branch, saleId, input);
   }
   @AllowWhenReadOnly()
@@ -177,6 +179,7 @@ export class SalesController {
     @Param("saleId", ParseUUIDPipe) saleId: string,
     @Param("documentId", ParseUUIDPipe) documentId: string,
   ) {
+    assertNoEsSoporte(req);
     return this.production.process(
       req.auth!.sub,
       org,
@@ -212,6 +215,7 @@ export class SalesController {
     @Param("documentId", ParseUUIDPipe) documentId: string,
     @Body() input: SettleCreditDto,
   ) {
+    assertNoEsSoporte(req);
     return this.credits.settle(
       req.auth!.sub,
       org,
@@ -246,6 +250,7 @@ export class SalesController {
     @Param("branchId") branch: string,
     @Param("saleId", ParseUUIDPipe) id: string,
   ) {
+    assertNoEsSoporte(req);
     return this.sales.invoice(req.auth!.sub, org, branch, id, true);
   }
   @AllowWhenReadOnly()
@@ -256,6 +261,7 @@ export class SalesController {
     @Param("branchId") branch: string,
     @Param("saleId", ParseUUIDPipe) id: string,
   ) {
+    assertNoEsSoporte(req);
     return this.sales.requeueInvoice(req.auth!.sub, org, branch, id);
   }
   /** Comprobante interno → factura C, a mano y hasta 30 días después. */
@@ -267,6 +273,7 @@ export class SalesController {
     @Param("saleId", ParseUUIDPipe) id: string,
     @Body() body: InvoiceInternalDto,
   ) {
+    assertNoEsSoporte(req);
     return this.sales.invoiceInternal(req.auth!.sub, org, branch, id, body);
   }
   @AllowOwnerWhenBlocked()
@@ -299,6 +306,7 @@ export class SalesController {
     @Param("branchId") branchId: string,
     @Body() body: CompleteSaleDto,
   ) {
+    if (body.fiscalEnvironment === "PRODUCTION") assertNoEsSoporte(request);
     return this.sales.complete(
       request.auth!.sub,
       organizationId,

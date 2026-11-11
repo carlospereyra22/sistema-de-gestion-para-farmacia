@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { Download, FileCheck2, KeyRound, Upload } from "lucide-react";
+import { Download, FileCheck2, KeyRound, Landmark, Upload } from "lucide-react";
+import { PlatformPageHeader } from "./platform-ui";
 import {
   getPlatformPadron,
   getPlatformPadronRequest,
@@ -85,47 +86,41 @@ export function PlatformPadron({
 
   const homologacion = ambiente === "HOMOLOGATION";
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">
-            Certificado del padrón de ARCA
-          </h2>
-          <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            Con este certificado de Farmatec, el botón “Buscar en ARCA” de
-            Clientes trae nombre, condición frente al IVA y domicilio de un CUIT
-            en todas las farmacias, sin que cada una configure nada. Las
-            facturas siguen saliendo con el certificado de cada farmacia.
-          </p>
-        </div>
-        <div
-          role="tablist"
-          aria-label="Ambiente de ARCA"
-          className="inline-flex rounded-lg border border-slate-200 bg-white p-1"
-        >
-          {(
-            [
-              ["HOMOLOGATION", "Homologación"],
-              ["PRODUCTION", "Producción"],
-            ] as const
-          ).map(([valor, texto]) => (
-            <button
-              key={valor}
-              type="button"
-              role="tab"
-              aria-selected={ambiente === valor}
-              onClick={() => {
-                setAmbiente(valor);
-                setAviso(undefined);
-                setCertificado("");
-              }}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${ambiente === valor ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-50"}`}
-            >
-              {texto}
-            </button>
-          ))}
-        </div>
-      </header>
+    <section className="space-y-5">
+      <PlatformPageHeader
+        icon={<Landmark size={22} />}
+        title="Certificado del padrón de ARCA"
+        description="Con este certificado de Farmatec, el botón “Buscar en ARCA” de Clientes trae nombre, condición frente al IVA y domicilio de un CUIT en todas las farmacias, sin que cada una configure nada. Las facturas siguen saliendo con el certificado de cada farmacia."
+        actions={
+          <div
+            role="tablist"
+            aria-label="Ambiente de ARCA"
+            className="inline-flex rounded-lg border border-slate-200 bg-white p-1"
+          >
+            {(
+              [
+                ["HOMOLOGATION", "Homologación"],
+                ["PRODUCTION", "Producción"],
+              ] as const
+            ).map(([valor, texto]) => (
+              <button
+                key={valor}
+                type="button"
+                role="tab"
+                aria-selected={ambiente === valor}
+                onClick={() => {
+                  setAmbiente(valor);
+                  setAviso(undefined);
+                  setCertificado("");
+                }}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${ambiente === valor ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+              >
+                {texto}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {error && (
         <p
@@ -146,7 +141,7 @@ export function PlatformPadron({
 
       {data && (
         <div className="grid gap-4 lg:grid-cols-3">
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <article className="rounded-xl border border-[#dce7ef] bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
             <h3 className="flex items-center gap-2 font-semibold text-slate-800">
               <KeyRound size={17} className="text-teal-700" />
               1. Generar la solicitud
@@ -198,7 +193,7 @@ export function PlatformPadron({
             )}
           </article>
 
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <article className="rounded-xl border border-[#dce7ef] bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
             <h3 className="flex items-center gap-2 font-semibold text-slate-800">
               <Upload size={17} className="text-teal-700" />
               2. Subirla a ARCA
@@ -230,7 +225,7 @@ export function PlatformPadron({
             )}
           </article>
 
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <article className="rounded-xl border border-[#dce7ef] bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
             <h3 className="flex items-center gap-2 font-semibold text-slate-800">
               <FileCheck2 size={17} className="text-teal-700" />
               3. Cargar el certificado
