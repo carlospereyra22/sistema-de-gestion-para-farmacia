@@ -29,6 +29,18 @@ const RUN_EVERY_MS = 6 * 60 * 60 * 1000;
 const CHARGE_LEAD_DAYS = 5;
 const MAX_CHARGES_PER_RUN = 24;
 const RECENT_PAYMENTS = 200;
+const MONTHS_CHARTED = 12;
+
+/** Los últimos `count` meses ("2026-11"), del más viejo al actual. */
+export function lastMonths(today: string, count: number): string[] {
+  const [year, month] = today.split("-").map(Number) as [number, number];
+  return Array.from({ length: count }, (_, index) => {
+    const offset = year * 12 + (month - 1) - (count - 1 - index);
+    const y = Math.floor(offset / 12);
+    const m = (offset % 12) + 1;
+    return `${y}-${String(m).padStart(2, "0")}`;
+  });
+}
 const BLOCKED_PERIOD_REASON = "Sin servicio: la farmacia estaba bloqueada.";
 
 export type PaymentInput = {
@@ -280,10 +292,15 @@ export class PlatformBillingService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** Lo último cobrado a todas las farmacias y lo que entró en el mes en curso. */
+  /**
+   * Lo último cobrado a todas las farmacias, lo que entró en el mes en curso y
+   * lo cobrado en cada uno de los últimos 12 meses (gráfico del panel).
+   */
   async recentPayments() {
-    const monthStart = `${commercialToday(new Date()).slice(0, 7)}-01`;
-    const [payments, collected] = await Promise.all([
+    const today = commercialToday(new Date());
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const months = lastMonths(today, MONTHS_CHARTED);
+    const [payments, collected, lastYear] = await Promise.all([
       this.prisma.subscriptionPayment.findMany({
         orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
         take: RECENT_PAYMENTS,
@@ -293,9 +310,22 @@ export class PlatformBillingService implements OnModuleInit, OnModuleDestroy {
         where: { voidedAt: null, paidOn: { gte: asDate(monthStart) } },
         _sum: { amountMinor: true },
       }),
+      this.prisma.subscriptionPayment.findMany({
+        where: { voidedAt: null, paidOn: { gte: asDate(`${months[0]}-01`) } },
+        select: { paidOn: true, amountMinor: true },
+      }),
     ]);
+    const byMonth = new Map(months.map((month) => [month, 0n]));
+    for (const { paidOn, amountMinor } of lastYear) {
+      const month = civilDate(paidOn).slice(0, 7);
+      byMonth.set(month, (byMonth.get(month) ?? 0n) + amountMinor);
+    }
     return {
       collectedThisMonthMinor: (collected._sum.amountMinor ?? 0n).toString(),
+      monthly: months.map((month) => ({
+        month,
+        amountMinor: (byMonth.get(month) ?? 0n).toString(),
+      })),
       payments: payments.map((payment) => ({
         id: payment.id,
         organizationId: payment.organizationId,

@@ -97,6 +97,8 @@ export type PlatformRecentPayment = PlatformPayment & {
 };
 export type PlatformPaymentsOverview = {
   collectedThisMonthMinor: string;
+  /** Lo cobrado en cada uno de los últimos 12 meses ("2026-11"). */
+  monthly?: { month: string; amountMinor: string }[];
   payments: PlatformRecentPayment[];
 };
 export type PlatformOrganizationDetail = {

@@ -108,17 +108,24 @@ export function PlatformAuditTable({
   );
 }
 
+/** Ícono del tipo de registro. */
+function AuditIcon({ action }: { action: string }) {
+  const [Icon, tone] = groupStyle[platformAuditGroup(action)];
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid size-7 shrink-0 place-items-center rounded-lg ${tone}`}
+    >
+      <Icon size={14} />
+    </span>
+  );
+}
+
 function AuditAction({ row }: { row: PlatformAuditEntry }) {
-  const [Icon, tone] = groupStyle[platformAuditGroup(row.action)];
   const detail = platformAuditDetail(row);
   return (
     <span className="flex items-center gap-2.5">
-      <span
-        aria-hidden="true"
-        className={`grid size-7 shrink-0 place-items-center rounded-lg ${tone}`}
-      >
-        <Icon size={14} />
-      </span>
+      <AuditIcon action={row.action} />
       <span className="min-w-0">
         <span className="block font-medium text-slate-800">
           {platformActionLabel(row.action)}

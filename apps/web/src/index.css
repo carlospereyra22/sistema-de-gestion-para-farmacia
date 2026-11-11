@@ -1889,3 +1889,23 @@ textarea:focus {
     transform: none;
   }
 }
+
+/* Panel de plataforma (SISTEMA-89): cada sección entra con las tarjetas de a
+   una, como Reportes. Nunca con "reducir movimiento". */
+@media (prefers-reduced-motion: no-preference) {
+  .panel-animado > * > * {
+    animation: reportes-entrada 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .panel-animado > * > :nth-child(2) {
+    animation-delay: 70ms;
+  }
+  .panel-animado > * > :nth-child(3) {
+    animation-delay: 140ms;
+  }
+  .panel-animado > * > :nth-child(4) {
+    animation-delay: 210ms;
+  }
+  .panel-animado > * > :nth-child(n + 5) {
+    animation-delay: 280ms;
+  }
+}

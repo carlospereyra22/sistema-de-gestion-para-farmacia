@@ -1,8 +1,8 @@
 import { BotonEntrarComo } from "./platform-soporte";
+import { iniciales } from "./lib/soporte-panel";
 import { useCallback, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
-  Building2,
   CalendarCheck,
   KeyRound,
   Plus,
@@ -11,6 +11,7 @@ import {
   Users,
   Wallet,
   ClipboardList,
+  Phone,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -50,11 +51,11 @@ import {
   PlatformKpi,
   PlatformKpis,
   PlatformLoading,
-  PlatformPageHeader,
+  PlatformHero,
   PlatformPanel,
 } from "./platform-ui";
 import { StatusToast } from "./status-toast";
-import { ars } from "./supplier-payables/api";
+import { ars, dateLabel } from "./supplier-payables/api";
 import {
   PayableDialog,
   field,
@@ -504,19 +505,44 @@ export function PlatformOrganizationDetail({
   return (
     <div className="space-y-5">
       {back}
-      <PlatformPageHeader
-        icon={<Building2 size={22} />}
+      <PlatformHero
+        monogram={iniciales(data.name)}
         title={data.name}
-        description={`${activeBranches} ${activeBranches === 1 ? "sucursal activa" : "sucursales activas"} · ${activeUsers} ${activeUsers === 1 ? "usuario activo" : "usuarios activos"}`}
-        actions={
+        status={
           subscription && (
-            <StatusLabel large tone={stageTone(subscription.stage)}>
-              {stageLabel(subscription.stage)}
-              {subscription.daysOverdue > 0 &&
-                ` · ${subscription.daysOverdue} días de atraso`}
-            </StatusLabel>
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 shadow-sm">
+              <StatusLabel tone={stageTone(subscription.stage)}>
+                {stageLabel(subscription.stage)}
+                {subscription.daysOverdue > 0 &&
+                  ` · ${subscription.daysOverdue} días de atraso`}
+              </StatusLabel>
+            </span>
           )
         }
+        chips={[
+          {
+            icon: <CalendarCheck size={14} />,
+            text: `Cliente desde el ${dateLabel(data.createdAt.slice(0, 10))}`,
+          },
+          {
+            icon: <Store size={14} />,
+            text: `${activeBranches} ${activeBranches === 1 ? "sucursal activa" : "sucursales activas"}`,
+          },
+          {
+            icon: <Users size={14} />,
+            text: `${activeUsers} ${activeUsers === 1 ? "usuario activo" : "usuarios activos"}`,
+          },
+          ...(subscription?.contactPhone || subscription?.contactName
+            ? [
+                {
+                  icon: <Phone size={14} />,
+                  text: [subscription.contactName, subscription.contactPhone]
+                    .filter(Boolean)
+                    .join(" · "),
+                },
+              ]
+            : []),
+        ]}
       />
       {subscription && (
         <PlatformKpis>
@@ -607,13 +633,25 @@ export function PlatformOrganizationDetail({
               ) : (
                 data.users.map((user) => (
                   <DataTableRow key={user.id}>
-                    <DataTableCell className="font-medium text-slate-900">
-                      {user.email}
-                      {user.displayName && (
-                        <span className="block text-xs font-normal text-slate-500">
-                          {user.displayName}
+                    <DataTableCell>
+                      <span className="flex items-center gap-3">
+                        <span
+                          aria-hidden="true"
+                          className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${user.active ? "bg-[#e4f6f0] text-[#087f70]" : "bg-slate-100 text-slate-500"}`}
+                        >
+                          {iniciales(user.displayName || user.email)}
                         </span>
-                      )}
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-slate-900">
+                            {user.email}
+                          </span>
+                          {user.displayName && (
+                            <span className="block truncate text-xs text-slate-500">
+                              {user.displayName}
+                            </span>
+                          )}
+                        </span>
+                      </span>
                     </DataTableCell>
                     <DataTableCell>
                       {user.roles.map(({ name }) => name).join(", ") ||

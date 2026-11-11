@@ -46,8 +46,8 @@ describe("PlatformOrganizationsTable", () => {
     expect(html).toContain("Farmacia 1");
     expect(html).toContain("En prueba");
     expect(html).toContain("21/11/2026");
-    expect(html).toContain("2 / 2");
-    expect(html).toContain("1 / 1");
+    expect(html).toContain('title="2 de 2"');
+    expect(html).toContain('title="1 de 1"');
     expect(html).toContain("65.000,00");
   });
 

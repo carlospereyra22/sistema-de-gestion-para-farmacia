@@ -76,9 +76,15 @@ Sin motivo ni avisos: la farmacia no lo ve. La landing no cambia.
 El panel usa el mismo lenguaje visual que el sistema de gestión: barra lateral plegable
 (`NavigationRail`, grupos Clientes y Herramientas), encabezado con la sección actual, tarjetas
 de indicadores con ícono y paneles con título (`platform-ui.tsx`). La sección elegida se recuerda
-en la pestaña (`sessionStorage`). En Planes, un ejemplo calcula el abono de una farmacia de 2
-sucursales y 4 usuarios con los precios que se están escribiendo (vista previa; el abono real lo
-calcula la API).
+en la pestaña (`sessionStorage`).
+
+- Farmacias: barra con el estado de las farmacias (al día o en prueba, con aviso, cortadas,
+  exentas o de baja) y, en la tabla, el cupo usado de usuarios y sucursales con una barrita.
+- Detalle de una farmacia: cabecera con iniciales, estado, fecha de alta y contacto.
+- Pagos: gráfico de lo cobrado en los últimos 12 meses (`GET platform/payments` devuelve
+  `monthly`, pagos vigentes por mes).
+- Planes: un ejemplo calcula el abono de una farmacia de 2 sucursales y 4 usuarios con los
+  precios que se están escribiendo (vista previa; el abono real lo calcula la API).
 
 ### Comandos
 

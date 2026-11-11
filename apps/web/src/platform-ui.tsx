@@ -216,3 +216,99 @@ export function PlatformEmpty({
     </div>
   );
 }
+
+/** Cabecera grande de una ficha (detalle de una farmacia). */
+export function PlatformHero({
+  monogram,
+  title,
+  chips,
+  status,
+  actions,
+}: {
+  monogram: string;
+  title: string;
+  chips: { icon: ReactNode; text: string }[];
+  status?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <section
+      className={`${reportCardClass} relative overflow-hidden px-5 py-5 sm:px-6`}
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[#e3f7f0] via-[#f1fbf8] to-transparent"
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-[#d6f3ea]/60 blur-2xl"
+      />
+      <div className="relative flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <span
+            aria-hidden="true"
+            className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#0a8a79] to-[#0b5a52] text-xl font-bold tracking-wide text-white shadow-[0_10px_24px_-12px_rgb(8_100_90_/_70%)] ring-4 ring-white"
+          >
+            {monogram}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="truncate text-[24px] font-bold leading-8 tracking-tight text-slate-900">
+                {title}
+              </h1>
+              {status}
+            </div>
+            <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+              {chips.map(({ icon, text }) => (
+                <li key={text} className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="text-[#087f70]">
+                    {icon}
+                  </span>
+                  {text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        {actions && (
+          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Cupo usado con una barrita: verde, ámbar al llegar al tope. */
+export function PlatformUsage({
+  used,
+  quota,
+  exempt,
+}: {
+  used: number;
+  quota: number;
+  exempt: boolean;
+}) {
+  if (exempt || quota <= 0)
+    return <span className="tabular-nums text-slate-700">{used}</span>;
+  const lleno = used >= quota;
+  return (
+    <span
+      className="inline-flex flex-col items-end gap-1"
+      title={`${used} de ${quota}`}
+    >
+      <span className="tabular-nums text-slate-700">
+        {used}
+        <span className="text-slate-400"> / {quota}</span>
+      </span>
+      <span
+        aria-hidden="true"
+        className="block h-1.5 w-16 overflow-hidden rounded-full bg-slate-100"
+      >
+        <span
+          className={`block h-full rounded-full ${lleno ? "bg-amber-500" : "bg-[#3fa392]"}`}
+          style={{ width: `${Math.min(100, (used / quota) * 100)}%` }}
+        />
+      </span>
+    </span>
+  );
+}

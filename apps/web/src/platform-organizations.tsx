@@ -27,12 +27,12 @@ import {
   stageLabel,
   stageTone,
   summarizeOrganizations,
-  usageLabel,
 } from "./lib/platform-subscription";
 import { usePage } from "./lib/use-page";
 import { usePlatformData } from "./lib/use-platform-data";
 import { Pagination } from "./pagination";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
+import { EstadoDeFarmacias } from "./platform-graficos";
 import { PlatformOrganizationDetail } from "./platform-organization-detail";
 import { PlatformOrganizationDialog } from "./platform-organization-dialog";
 import {
@@ -41,6 +41,7 @@ import {
   PlatformKpis,
   PlatformLoading,
   PlatformPageHeader,
+  PlatformUsage,
 } from "./platform-ui";
 import { ProductFilterSelect } from "./product-filter-select";
 import { ars, dateLabel } from "./supplier-payables/api";
@@ -121,22 +122,26 @@ export function PlatformOrganizationsTable({
               {row.subscription ? coveredUntilLabel(row.subscription) : "—"}
             </DataTableCell>
             <DataTableCell align="right" numeric>
-              {row.subscription
-                ? usageLabel(
-                    row.activeUsers,
-                    row.subscription.quota.users,
-                    row.subscription.exempt,
-                  )
-                : row.activeUsers}
+              {row.subscription ? (
+                <PlatformUsage
+                  used={row.activeUsers}
+                  quota={row.subscription.quota.users}
+                  exempt={row.subscription.exempt}
+                />
+              ) : (
+                row.activeUsers
+              )}
             </DataTableCell>
             <DataTableCell align="right" numeric>
-              {row.subscription
-                ? usageLabel(
-                    row.activeBranches,
-                    row.subscription.quota.branches,
-                    row.subscription.exempt,
-                  )
-                : row.activeBranches}
+              {row.subscription ? (
+                <PlatformUsage
+                  used={row.activeBranches}
+                  quota={row.subscription.quota.branches}
+                  exempt={row.subscription.exempt}
+                />
+              ) : (
+                row.activeBranches
+              )}
             </DataTableCell>
             <DataTableCell align="right" numeric>
               {row.subscription ? ars(row.subscription.feeMinor) : "—"}
@@ -229,6 +234,7 @@ export function PlatformOrganizations({
           hint="Suma de abonos vigentes"
         />
       </PlatformKpis>
+      {data && data.length > 0 && <EstadoDeFarmacias farmacias={data} />}
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
         <label className="relative block">
           <Search

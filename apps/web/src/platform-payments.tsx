@@ -30,6 +30,7 @@ import {
 import { usePage } from "./lib/use-page";
 import { usePlatformData } from "./lib/use-platform-data";
 import { Pagination } from "./pagination";
+import { CobrosPorMes } from "./platform-graficos";
 import { PlatformOrganizationDetail } from "./platform-organization-detail";
 import {
   PlatformError,
@@ -254,6 +255,7 @@ export function PlatformPayments({
         <PlatformError>{error}</PlatformError>
       ) : data ? (
         <>
+          <CobrosPorMes mensual={data[1].monthly ?? []} />
           <PlatformPanel
             icon={<PhoneCall size={16} />}
             title="Quién debe"

@@ -286,7 +286,10 @@ function PanelVerificado({
         </NavigationRail>
         <SoporteContext.Provider value={onEntrarComo}>
           <section className="workspace-content min-w-0 bg-[#f4f8fa] p-4 lg:px-7 lg:py-5">
-            <div className="mx-auto w-full max-w-[1400px] pt-3">
+            <div
+              key={section}
+              className="panel-animado mx-auto w-full max-w-[1400px] pt-3"
+            >
               {section === "farmacias" && (
                 <PlatformOrganizations
                   token={token}
