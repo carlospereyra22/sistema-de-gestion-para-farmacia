@@ -8,8 +8,11 @@ import {
 
 import { CredentialVault } from "../fiscal/credential-vault";
 import { PrismaService } from "../prisma/prisma.service";
-import { isPlatformSessionVerified } from "./platform-admin.guard";
 import { recordPlatformAudit } from "./platform-audit";
+import {
+  PlatformTokenService,
+  type DatosDelPedido,
+} from "./platform-token.service";
 import { generateTotpSecret, matchTotpStep, totpStep, totpUri } from "./totp";
 
 const MAX_ATTEMPTS = 5;
@@ -22,26 +25,24 @@ export class PlatformIdentityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly vault: CredentialVault,
+    private readonly tokens: PlatformTokenService,
   ) {}
 
-  async session(userId: string, sessionId: string) {
-    const [admin, session] = await Promise.all([
+  /** ¿Esta pestaña ya tiene un token de plataforma vigente? */
+  async session(
+    userId: string,
+    sessionId: string,
+    encabezado: string | string[] | undefined,
+    datos: DatosDelPedido,
+  ) {
+    const [admin, tokenId] = await Promise.all([
       this.prisma.platformAdmin.findUniqueOrThrow({
         where: { userId },
         select: { totpConfirmedAt: true },
       }),
-      this.prisma.authSession.findUnique({
-        where: { id: sessionId },
-        select: { platformVerifiedAt: true },
-      }),
+      this.tokens.validar(encabezado, { userId, sessionId }, datos),
     ]);
-    return {
-      enrolled: !!admin.totpConfirmedAt,
-      verified: isPlatformSessionVerified(
-        session?.platformVerifiedAt,
-        new Date(),
-      ),
-    };
+    return { enrolled: !!admin.totpConfirmedAt, verified: !!tokenId };
   }
 
   /** El secreto se muestra una sola vez y queda cifrado hasta confirmarlo con un código. */
@@ -67,12 +68,22 @@ export class PlatformIdentityService {
     return { secret, uri: totpUri(email, secret) };
   }
 
-  async confirm(userId: string, sessionId: string, code: string) {
-    return this.verifyCode(userId, sessionId, code, true);
+  async confirm(
+    userId: string,
+    sessionId: string,
+    code: string,
+    datos: DatosDelPedido,
+  ) {
+    return this.verifyCode(userId, sessionId, code, true, datos);
   }
 
-  async verify(userId: string, sessionId: string, code: string) {
-    return this.verifyCode(userId, sessionId, code, false);
+  async verify(
+    userId: string,
+    sessionId: string,
+    code: string,
+    datos: DatosDelPedido,
+  ) {
+    return this.verifyCode(userId, sessionId, code, false, datos);
   }
 
   async audit() {
@@ -107,6 +118,7 @@ export class PlatformIdentityService {
     sessionId: string,
     code: string,
     confirming: boolean,
+    datos: DatosDelPedido,
   ) {
     const now = new Date();
     const admin = await this.prisma.platformAdmin.findUniqueOrThrow({
@@ -150,16 +162,14 @@ export class PlatformIdentityService {
       await this.registerFailure(admin.id, userId, now);
       throw new BadRequestException("El código no es correcto.");
     }
-    await this.prisma.$transaction(async (tx) => {
+    // El acceso queda en un token para esta pestaña, no en la sesión del
+    // navegador (SISTEMA-94): otra pestaña con la misma cookie no lo tiene.
+    const token = await this.prisma.$transaction(async (tx) => {
       if (confirming)
         await tx.platformAdmin.update({
           where: { id: admin.id },
           data: { totpConfirmedAt: now },
         });
-      await tx.authSession.update({
-        where: { id: sessionId },
-        data: { platformVerifiedAt: now },
-      });
       await recordPlatformAudit(tx, {
         actorId: userId,
         action: confirming
@@ -169,8 +179,9 @@ export class PlatformIdentityService {
         entityId: admin.id,
         after: { step: totpStep(now) },
       });
+      return this.tokens.emitir(tx, userId, sessionId, datos);
     });
-    return { verified: true };
+    return { verified: true, token };
   }
 
   private async registerFailure(adminId: string, userId: string, now: Date) {

@@ -110,8 +110,40 @@ sudo bash deploy/oracle/platform-admin.sh <preprod|prod> listar
 - El secreto del código se cifra con `credential-vault.ts`. En producción necesita la clave de
   la bóveda: sin ella el panel queda inaccesible.
 
-La verificación con el código vale 12 horas por sesión. Tras 5 intentos fallidos el código se
-bloquea 15 minutos. Un código no se puede usar dos veces.
+Tras 5 intentos fallidos el código se bloquea 15 minutos. Un código no se puede usar dos veces.
+
+### Acceso atado a la pestaña (SISTEMA-94)
+
+Antes la verificación quedaba 12 horas en la sesión del navegador
+(`AuthSession.platformVerifiedAt`). Como todas las pestañas comparten la cookie, si un
+superadmin entraba en la PC de una farmacia, cualquiera ahí podía abrir el panel sin el código.
+Ahora:
+
+- Al ingresar bien el código, la API entrega un **token de plataforma** propio (tabla
+  `PlatformToken`, se guarda sólo el sha256 del secreto). La web lo tiene **sólo en la memoria
+  de la pestaña** y lo manda en el encabezado `X-Plataforma`. Nunca va a cookies,
+  localStorage, sessionStorage ni logs.
+- `PlatformAdminGuard` exige ese token en cada ruta del panel: vigente, no revocado y del
+  mismo usuario y sesión del access token. `platformVerifiedAt` dejó de alcanzar y queda sin
+  uso, para limpiarla más adelante. Quien no es superadmin sigue recibiendo 404.
+- **Otra pestaña** con la misma cookie no tiene el token: ve la pantalla del código. Recargar o
+  cerrar la pestaña lo pierde y se pide el código otra vez. Es a propósito.
+- **Vencimiento:** 30 minutos sin pedidos (se renueva con el uso, se registra cada 5 minutos) y
+  un máximo absoluto de 8 horas.
+- **Entrar como** un usuario (soporte) exige el token. Al volver del soporte no se pide el código
+  si el token sigue vigente. Si se pasaron 30 minutos adentro de la farmacia, se pide.
+- **Salir del panel** (botón visible arriba) revoca el token y cierra la sesión del navegador.
+  "Sesiones del panel" lista las pestañas con el código ingresado y cierra las demás.
+- **Auditoría:** se registran la entrega del token (`PLATFORM_TOKEN_ISSUED`), las renovaciones
+  (`PLATFORM_TOKEN_RENEWED`) y las revocaciones (`PLATFORM_TOKEN_REVOKED`,
+  `PLATFORM_TOKEN_REVOKED_ALL`), con IP y navegador y nunca con el token.
+- Cambiar la contraseña, resetear el código o revocar la cuenta (comandos) revocan todos los
+  tokens.
+- **Sesión del superadmin:** la cookie no es persistente (se borra al cerrar el navegador) y la
+  sesión vence a las 12 horas aunque se use, o a la hora sin uso. Para los usuarios de farmacia
+  no cambia nada.
+- Si una pestaña de farmacia queda con la cookie del superadmin, se pausa (SISTEMA-92) y no
+  muestra datos de plataforma: sin el token, el panel no responde.
 
 ## Ciclo de cobro y corte
 

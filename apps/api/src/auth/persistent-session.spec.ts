@@ -92,7 +92,7 @@ describe("sesión persistente con rotación y vencimiento por inactividad", () =
   it("con la anterior dentro del margen renueva sin rotar ni cambiar la cookie", async () => {
     const { service, authSession } = setup(sesion());
     const result = await service.refresh(clave("anterior"));
-    expect(result).toEqual({ accessToken: "access" });
+    expect(result).toEqual({ accessToken: "access", persistente: true });
     const { data } = authSession.update.mock.calls[0]![0] as {
       data: Record<string, unknown>;
     };

@@ -13,4 +13,6 @@ export interface AccessTokenPayload {
 
 export interface AuthenticatedRequest extends Request {
   auth?: AccessTokenPayload;
+  /** Token de plataforma vigente de esta pestaña (SISTEMA-94). */
+  plataforma?: { tokenId: string };
 }

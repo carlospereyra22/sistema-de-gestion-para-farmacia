@@ -543,6 +543,28 @@ model SubscriptionPayment {
   @@index([organizationId, paidOn])
 }
 
+/// Acceso al panel de plataforma atado a una pestaña (SISTEMA-94). Se entrega al
+/// ingresar el código; la web lo guarda sólo en memoria y lo manda en el
+/// encabezado X-Plataforma. Se guarda sólo el hash del secreto.
+model PlatformToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  sessionId  String    @db.Uuid
+  tokenHash  String    @db.VarChar(64)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  lastUsedAt DateTime  @default(now()) @db.Timestamptz(6)
+  /// Máximo absoluto, aunque se use todo el tiempo.
+  expiresAt  DateTime  @db.Timestamptz(6)
+  revokedAt  DateTime? @db.Timestamptz(6)
+  userAgent  String?   @db.VarChar(160)
+  ip         String?   @db.VarChar(64)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  session    AuthSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@index([userId, revokedAt])
+  @@index([sessionId])
+}
+
 model PlatformAdmin {
   id              String    @id @default(uuid()) @db.Uuid
   userId          String    @unique @db.Uuid
@@ -673,6 +695,7 @@ model User {
   branches      UserBranch[]
   sessions      AuthSession[]
   platformAdmin PlatformAdmin?
+  platformTokens PlatformToken[]
   offlineDeviceKeys OfflineDeviceKey[]
 }
 
@@ -780,6 +803,7 @@ model AuthSession {
   deviceId  String? @db.Uuid
   /// Sesión de soporte del superadmin (SISTEMA-89): no se lista a la farmacia.
   soporte   Boolean   @default(false)
+  platformTokens PlatformToken[]
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, expiresAt])

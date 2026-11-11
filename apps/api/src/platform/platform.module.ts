@@ -13,6 +13,7 @@ import { PlatformOrganizationsController } from "./platform-organizations.contro
 import { PlatformOrganizationsService } from "./platform-organizations.service";
 import { PlatformSoporteController } from "./platform-soporte.controller";
 import { PlatformSoporteService } from "./platform-soporte.service";
+import { PlatformTokenService } from "./platform-token.service";
 import { SubscriptionAccessInterceptor } from "./subscription-access.interceptor";
 import {
   SubscriptionStatusController,
@@ -34,6 +35,7 @@ import {
     PlatformIdentityService,
     PlatformOrganizationsService,
     PlatformSoporteService,
+    PlatformTokenService,
     PlatformPadronService,
     SubscriptionStatusService,
     CredentialVault,

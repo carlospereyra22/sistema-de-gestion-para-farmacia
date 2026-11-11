@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { hash } from "@node-rs/argon2";
 import type { PrismaService } from "../src/prisma/prisma.service";
-import { cookieDe, levantarApiAislada } from "./api-http-aislada";
+import { startHttpApp, type HttpApp } from "./support/http-app";
+
+/** La cookie de sesión de una respuesta ("gestion_refresh=..."), si vino. */
+const cookieDe = (response: Response) =>
+  response.headers.get("set-cookie")?.split(";")[0];
 
 /**
  * Sesión de otro usuario en otra pestaña (SISTEMA-92), por HTTP como el
@@ -9,17 +13,17 @@ import { cookieDe, levantarApiAislada } from "./api-http-aislada";
  * pide renovar diciendo que espera al cajero.
  */
 describe("renovación con usuario esperado (HTTP, esquema aislado)", () => {
-  let api: Awaited<ReturnType<typeof levantarApiAislada>>;
+  let api: HttpApp;
   let db: PrismaService;
   let base: string;
   const clave = "una-clave-de-prueba-larga";
 
   beforeAll(async () => {
-    api = await levantarApiAislada("sesion_otro");
+    api = await startHttpApp("sesion_otro");
     db = api.db;
     base = `${api.base}/auth`;
   }, 100000);
-  afterAll(() => api?.cerrar());
+  afterAll(() => api?.close());
 
   async function entrar(email: string) {
     const response = await fetch(`${base}/login`, {

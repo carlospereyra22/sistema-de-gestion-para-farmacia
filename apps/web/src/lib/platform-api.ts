@@ -1,4 +1,30 @@
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, type SesionAbierta } from "./api";
+
+/*
+ * Token de plataforma de esta pestaña (SISTEMA-94). Lo entrega el servidor al
+ * ingresar el código y vive SÓLO en la memoria de la pestaña: nunca en
+ * cookies, localStorage ni sessionStorage. Otra pestaña con la misma sesión
+ * no lo tiene; recargar o cerrar la pestaña lo pierde y se pide el código.
+ */
+let tokenDePlataforma: string | undefined;
+
+/** Encabezado con el token de plataforma, si esta pestaña lo tiene. */
+export function encabezadoDePlataforma(): Record<string, string> {
+  return tokenDePlataforma ? { "X-Plataforma": tokenDePlataforma } : {};
+}
+
+export function tieneTokenDePlataforma(): boolean {
+  return !!tokenDePlataforma;
+}
+
+export function olvidarTokenDePlataforma(): void {
+  tokenDePlataforma = undefined;
+}
+
+/** Sólo para tests y para guardar el que entrega el servidor. */
+export function usarTokenDePlataforma(token: string | undefined): void {
+  tokenDePlataforma = token;
+}
 import type { SubscriptionStage } from "./platform-subscription";
 
 export class PlatformApiError extends Error {
@@ -150,16 +176,23 @@ async function platformRequest<T>(
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      ...encabezadoDePlataforma(),
     },
     body: body ? JSON.stringify(body) : undefined,
   }).catch(() => {
     throw new Error("No hubo respuesta del servidor. Revisá la conexión.");
   });
-  if (response.ok) return (await response.json()) as T;
+  if (response.ok)
+    return response.status === 204
+      ? (undefined as T)
+      : ((await response.json()) as T);
   const result = (await response.json().catch(() => ({}))) as {
     message?: string | string[];
     code?: string;
   };
+  // Venció o se revocó: el token ya no sirve, se pide el código otra vez.
+  if (result.code === "PLATFORM_VERIFICATION_REQUIRED")
+    olvidarTokenDePlataforma();
   // La API responde 404 a quien no tiene acceso: su texto no le sirve al usuario.
   const message =
     response.status === 404
@@ -178,11 +211,50 @@ export const getPlatformSession = (token: string) =>
 export const enrollPlatformCode = (token: string) =>
   platformRequest<PlatformEnrollment>(token, "/totp/enroll", {});
 
+/** Con el código bien ingresado, el servidor entrega el token de la pestaña. */
+async function conCodigo(token: string, ruta: string, code: string) {
+  const result = await platformRequest<{ verified: boolean; token?: string }>(
+    token,
+    ruta,
+    { code },
+  );
+  usarTokenDePlataforma(result.token);
+  return { verified: result.verified };
+}
+
 export const confirmPlatformCode = (token: string, code: string) =>
-  platformRequest<{ verified: boolean }>(token, "/totp/confirm", { code });
+  conCodigo(token, "/totp/confirm", code);
 
 export const verifyPlatformCode = (token: string, code: string) =>
-  platformRequest<{ verified: boolean }>(token, "/totp/verify", { code });
+  conCodigo(token, "/totp/verify", code);
+
+/**
+ * "Salir del panel": revoca el token de esta pestaña en el servidor y lo
+ * borra de la memoria. Después se cierra la sesión del navegador.
+ */
+export async function salirDelPanel(token: string): Promise<void> {
+  try {
+    if (tokenDePlataforma)
+      await platformRequest<void>(token, "/token/salir", {});
+  } finally {
+    olvidarTokenDePlataforma();
+  }
+}
+
+/** Sesiones del panel abiertas (pestañas con el código ingresado). */
+export const listarSesionesDelPanel = (token: string) =>
+  platformRequest<SesionAbierta[]>(token, "/tokens");
+
+export const cerrarSesionDelPanel = (token: string, id: string) =>
+  platformRequest<{ cerradas: number }>(
+    token,
+    `/tokens/${id}`,
+    undefined,
+    "DELETE",
+  );
+
+export const cerrarOtrasSesionesDelPanel = (token: string) =>
+  platformRequest<{ cerradas: number }>(token, "/tokens/close-others", {});
 
 export const getPlatformAudit = (token: string) =>
   platformRequest<PlatformAuditEntry[]>(token, "/audit");
@@ -414,7 +486,10 @@ export async function salirDeSoporte(token: string, sessionId: string) {
     `${apiBaseUrl}/platform/soporte/${sessionId}/salir`,
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...encabezadoDePlataforma(),
+      },
     },
   );
   if (!response.ok && response.status !== 404)
