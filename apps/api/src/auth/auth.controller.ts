@@ -19,12 +19,24 @@ import { AllowPendingPasswordChange } from "./allow-pending-password-change.deco
 import {
   ChangePasswordDto,
   LoginDto,
+  LogoutDto,
   OfflineKeyDto,
   RefreshDto,
 } from "./auth.dto";
 import { AuthService, type DatosDeSesion } from "./auth.service";
 import { JwtAccessGuard } from "./jwt-access.guard";
 import type { AuthenticatedRequest } from "./auth.types";
+
+/** Cookie de la sesión de farmacia. */
+export const COOKIE_FARMACIA = "gestion_refresh";
+/**
+ * Cookie propia del superadmin (SISTEMA-100): iniciar sesión en el panel no
+ * reemplaza la sesión de la farmacia de ese navegador. No es persistente.
+ */
+export const COOKIE_PLATAFORMA = "gestion_plataforma";
+
+const cookieDe = (sesion?: "plataforma") =>
+  sesion === "plataforma" ? COOKIE_PLATAFORMA : COOKIE_FARMACIA;
 
 @Controller("auth")
 export class AuthController {
@@ -38,8 +50,9 @@ export class AuthController {
     response: Response,
     refreshToken: string,
     persistente: boolean,
+    nombre: string = COOKIE_FARMACIA,
   ): void {
-    response.cookie("gestion_refresh", refreshToken, {
+    response.cookie(nombre, refreshToken, {
       httpOnly: true,
       sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
@@ -79,7 +92,13 @@ export class AuthController {
       body.password,
       this.datosDeSesion(request, body.deviceId),
     );
-    this.setRefreshCookie(response, result.refreshToken, result.persistente);
+    // El superadmin va en su propia cookie: la de la farmacia no se toca.
+    this.setRefreshCookie(
+      response,
+      result.refreshToken,
+      result.persistente,
+      result.persistente ? COOKIE_FARMACIA : COOKIE_PLATAFORMA,
+    );
     return { accessToken: result.accessToken };
   }
 
@@ -90,15 +109,21 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Body() body: RefreshDto = {},
   ) {
+    const cookie = cookieDe(body?.sesion);
     const result = await this.auth.refresh(
-      request.cookies?.gestion_refresh as string | undefined,
+      request.cookies?.[cookie] as string | undefined,
       body?.usuarioEsperado,
       this.datosDeSesion(request, body?.deviceId),
     );
     // Sólo cuando la clave rotó: si se usó la anterior dentro del margen, la
     // cookie nueva ya la guardó otra pestaña.
     if (result.refreshToken)
-      this.setRefreshCookie(response, result.refreshToken, result.persistente);
+      this.setRefreshCookie(
+        response,
+        result.refreshToken,
+        result.persistente,
+        cookie,
+      );
     return { accessToken: result.accessToken };
   }
 
@@ -107,11 +132,11 @@ export class AuthController {
   async logout(
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: Response,
+    @Body() body: LogoutDto = {},
   ) {
-    await this.auth.logout(
-      request.cookies?.gestion_refresh as string | undefined,
-    );
-    response.clearCookie("gestion_refresh", { path: "/api/v1/auth" });
+    const cookie = cookieDe(body?.sesion);
+    await this.auth.logout(request.cookies?.[cookie] as string | undefined);
+    response.clearCookie(cookie, { path: "/api/v1/auth" });
   }
 
   @Get("me")

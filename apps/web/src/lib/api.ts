@@ -188,6 +188,8 @@ export class SesionDeOtroUsuarioError extends Error {
  */
 export async function refreshSession(
   usuarioEsperado?: string,
+  /** Cookie a renovar: la del superadmin o la de la farmacia (SISTEMA-100). */
+  sesion: TipoDeSesion = "farmacia",
 ): Promise<{ accessToken: string }> {
   const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
     method: "POST",
@@ -196,6 +198,7 @@ export async function refreshSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       ...(usuarioEsperado ? { usuarioEsperado } : {}),
+      ...(sesion === "plataforma" ? { sesion } : {}),
       deviceId: idDeEstaPc(),
     }),
   });
@@ -298,10 +301,29 @@ export async function cerrarSesionDeUsuario(
   return (await response.json()) as { cerradas: number };
 }
 
-export async function logout(): Promise<void> {
+/**
+ * Cada sesión tiene su cookie (SISTEMA-100): el superadmin no reemplaza la de
+ * la farmacia del navegador.
+ */
+export type TipoDeSesion = "farmacia" | "plataforma";
+
+/** En qué orden probar las sesiones al abrir una pestaña, según la dirección. */
+export function sesionesAProbar(ruta: string): TipoDeSesion[] {
+  return ruta.startsWith("/plataforma")
+    ? ["plataforma", "farmacia"]
+    : ["farmacia", "plataforma"];
+}
+
+export async function logout(sesion: TipoDeSesion = "farmacia"): Promise<void> {
   await fetch(`${apiBaseUrl}/auth/logout`, {
     method: "POST",
     credentials: "include",
+    ...(sesion === "plataforma"
+      ? {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sesion }),
+        }
+      : {}),
   });
 }
 
