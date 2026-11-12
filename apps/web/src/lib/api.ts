@@ -3164,6 +3164,8 @@ export type Sale = {
     quantity: number;
     unitPriceMinor?: string;
     discountMinor?: string;
+    /** Parte del descuento que viene de ofertas (SISTEMA-103). */
+    offerDiscountMinor?: string;
   }[];
   payments: {
     method: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
@@ -3508,11 +3510,24 @@ export async function createSale(
       discountMinor?: number;
       expectedUnitPriceMinor?: string;
       requestedUnitPriceMinor?: number;
+      /** Ahorro por ofertas que vio la cajera (SISTEMA-103). */
+      expectedOfferDiscountMinor?: string;
     }[];
     payments: {
       method: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
       amountMinor: number;
       cashSessionId?: string;
+    }[];
+    /** Sin conexión: ofertas que aplicó la PC (SISTEMA-103). */
+    appliedOffers?: {
+      offerId: string;
+      version: number;
+      items: {
+        productId: string;
+        units: number;
+        grossMinor: string;
+        discountMinor: string;
+      }[];
     }[];
   },
 ): Promise<Sale> {
@@ -3520,10 +3535,30 @@ export async function createSale(
     `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales`,
     { method: "POST", headers: authJson(token), body: JSON.stringify(input) },
   );
+  if (response.status === 409) {
+    const result = (await response
+      .clone()
+      .json()
+      .catch(() => ({}))) as {
+      code?: string;
+      message?: string;
+    };
+    if (result.code === "OFERTAS_CAMBIARON")
+      throw new OfertasCambiaronError(
+        result.message ??
+          "Las ofertas de la venta cambiaron. Revisá el carrito y volvé a confirmar.",
+      );
+  }
   if (!response.ok)
     throw await responseError(response, "No se pudo completar la venta.");
   return (await response.json()) as Sale;
 }
+
+/**
+ * La API recalculó las ofertas al confirmar y no coinciden con las del
+ * carrito (una empezó, venció o cambió): hay que actualizarlas y reconfirmar.
+ */
+export class OfertasCambiaronError extends Error {}
 
 export async function getSaleFiscalCapabilities(
   token: string,

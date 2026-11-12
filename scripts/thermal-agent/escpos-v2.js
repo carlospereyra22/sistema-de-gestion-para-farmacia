@@ -373,8 +373,17 @@ function buildTicketV2(input, options = {}) {
   if (s.subtotalMinor != null)
     printMoneyLine(b, "SUBTOTAL", moneyText(s.subtotalMinor));
 
-  if (BigInt(s.discountMinor || "0") > 0n) {
-    printMoneyLine(b, "DESCUENTO", `- ${moneyText(s.discountMinor)}`);
+  // Ofertas (SISTEMA-103): un renglón por oferta y el resto como descuento.
+  const offerDiscount = BigInt(s.offerDiscountMinor || "0");
+  for (const offer of s.offers || [])
+    printMoneyLine(
+      b,
+      `OFERTA ${offer.label} ${offer.name}`.toUpperCase(),
+      `- ${moneyText(offer.amountMinor)}`,
+    );
+  const otherDiscount = BigInt(s.discountMinor || "0") - offerDiscount;
+  if (otherDiscount > 0n) {
+    printMoneyLine(b, "DESCUENTO", `- ${moneyText(otherDiscount.toString())}`);
   }
 
   b.line("-".repeat(WIDTH));
@@ -410,6 +419,12 @@ function buildTicketV2(input, options = {}) {
     printMoneyLine(b, "RECIBIDO EFECTIVO", moneyText(s.receivedMinor));
   if (s.changeMinor != null)
     printMoneyLine(b, "VUELTO", moneyText(s.changeMinor));
+  if (BigInt(s.savingsMinor || "0") > 0n) {
+    b.line();
+    b.bold(true);
+    printMoneyLine(b, "USTED AHORRO", moneyText(s.savingsMinor));
+    b.bold(false);
+  }
   if (s.balanceAfterMinor != null)
     printMoneyLine(
       b,

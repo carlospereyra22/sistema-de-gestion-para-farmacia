@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  BadgePercent,
   Boxes,
   Building2,
   ChartNoAxesCombined,
@@ -68,6 +69,19 @@ const permissionModules: readonly PermissionModule[] = [
     permissions: [
       { code: "CATALOG_MANAGE", label: "Administrar listas de precios" },
     ],
+  },
+  {
+    title: "Ofertas",
+    icon: BadgePercent,
+    permissions: [
+      { code: "OFFER_READ", label: "Ver ofertas y sus ventas" },
+      {
+        code: "OFFER_MANAGE",
+        label: "Crear, editar, pausar y finalizar ofertas",
+      },
+    ],
+    description:
+      "Aplicar una oferta al vender no necesita permiso: se aplica sola.",
   },
   {
     title: "Inventario",

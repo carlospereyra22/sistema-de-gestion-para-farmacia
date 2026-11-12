@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import type { CatalogProduct } from "./lib/api";
+import { useAvisoFlotante } from "./aviso-flotante";
+import { ContenidoAviso } from "./contenido-aviso";
 import { saleCatalogRowId, saleProductDetail } from "./lib/sale-catalog";
 import { stockLevel } from "./lib/stock-level";
 import { ProductThumbnail } from "./product-image";
@@ -18,6 +20,10 @@ export type SaleCatalogRow = {
   product: CatalogProduct;
   available: number;
   expired: number;
+  /** Etiqueta de la oferta vigente (SISTEMA-103), ej. "2x1". */
+  offer?: string;
+  /** La oferta y sus productos, para el aviso al pasar el mouse. */
+  offerInfo?: { nombre: string; lineas: string[] };
 };
 
 // La seleccion se maneja desde el buscador (aria-activedescendant): el foco
@@ -70,7 +76,7 @@ export function SaleCatalogTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {rows.map(({ product, available, expired }) => {
+          {rows.map(({ product, available, expired, offer, offerInfo }) => {
             const level = stockLevel(available);
             const price = product.prices[0]?.amountMinor;
             const selected = product.id === selectedId;
@@ -103,6 +109,9 @@ export function SaleCatalogTable({
                         className="block truncate text-[15px] font-medium text-slate-900"
                         title={product.name}
                       >
+                        {offer && (
+                          <EtiquetaOferta label={offer} info={offerInfo} />
+                        )}
                         {product.name}
                       </span>
                       {level === "out" && expired > 0 ? (
@@ -179,5 +188,36 @@ export function SaleCatalogTable({
         </p>
       )}
     </div>
+  );
+}
+
+/** Etiqueta de la oferta con el aviso del sistema: nombre y productos. */
+function EtiquetaOferta({
+  label,
+  info,
+}: {
+  label: string;
+  info?: { nombre: string; lineas: string[] };
+}) {
+  const { disparadores, aviso } = useAvisoFlotante();
+  return (
+    <>
+      <span
+        {...(info ? disparadores : {})}
+        className="mr-1.5 rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-700"
+      >
+        {label}
+      </span>
+      {info &&
+        aviso(
+          <ContenidoAviso titulo={info.nombre}>
+            <ul className="space-y-0.5">
+              {info.lineas.map((linea) => (
+                <li key={linea}>{linea}</li>
+              ))}
+            </ul>
+          </ContenidoAviso>,
+        )}
+    </>
   );
 }

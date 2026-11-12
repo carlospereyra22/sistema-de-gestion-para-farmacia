@@ -144,3 +144,19 @@ describe("A4 document", () => {
     );
   });
 });
+
+describe("ofertas en el A4 (SISTEMA-103)", () => {
+  it("lista las ofertas y el ahorro sin cambiar el total", () => {
+    const html = a4DocumentHtml(
+      {
+        ...ticket,
+        offerDiscountMinor: "100",
+        offers: [{ label: "-10%", name: "Martes", amountMinor: "100" }],
+        savingsMinor: "100",
+      },
+      template,
+    );
+    expect(html).toContain("Oferta -10% · Martes");
+    expect(html).toContain("Usted ahorró");
+  });
+});

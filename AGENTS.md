@@ -14,7 +14,7 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
 
 - `apps/api`: NestJS 11 REST bajo `/api/v1`, Prisma 6 + PostgreSQL 18, Jest.
   Un modulo por dominio en `src/` (accounts, auth, audit, cash, catalog, fiscal,
-  inventory, organizations, parties, printing, purchases, reports, roles, sales,
+  inventory, offers, organizations, parties, printing, purchases, reports, roles, sales,
   supplier-payables, transfers, users). Esquema en `prisma/schema.prisma`,
   migraciones en `prisma/migrations/`, integracion en `test/`.
   OpenAPI en `/api/docs`.
@@ -47,6 +47,7 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
 - Fiscal: `FISCAL_BILLING.md`, `PRODUCTION_FISCAL_CHECKLIST.md`, `FISCAL_*.md`.
 - Impresion: `THERMAL_TICKETS.md`, `LOCAL_PRINT_AGENT.md`, `PRODUCTION_PRINTING.md`.
 - Reportes: `REPORTS_PLAN.md`, `REPORTS_INTERACTIVE_SPEC.md`.
+- Ofertas y promociones: `OFFERS.md`.
 - Landing comercial: `LANDING.md`.
 - Plataforma y cobro a farmacias: `PLATFORM.md`.
 - Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`.

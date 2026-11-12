@@ -27,6 +27,8 @@ describe("permisos por módulo", () => {
         "INVENTORY_READ",
         "INVENTORY_MANAGE",
         "COST_READ",
+        "OFFER_READ",
+        "OFFER_MANAGE",
         "SALE_READ",
         "SALE_MANAGE",
         "CASH_READ",

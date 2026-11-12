@@ -201,6 +201,7 @@ model Category {
   parentId       String?      @db.Uuid
   parent         Category?    @relation("CategoryTree", fields: [parentId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: NoAction)
   children       Category[]   @relation("CategoryTree")
+  offerTargets   OfferTarget[]
 
   @@unique([id, organizationId])
   @@index([organizationId, parentId])
@@ -217,8 +218,10 @@ model Laboratory {
   updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   products       Product[]
+  offerTargets   OfferTarget[]
 
   @@unique([organizationId, name])
+  @@unique([id, organizationId])
 }
 
 model Product {
@@ -265,6 +268,7 @@ model Product {
   branchStates   ProductBranchState[]
   splitTarget    Product?        @relation("ProductSplit", fields: [splitTargetProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
   splitSources   Product[]       @relation("ProductSplit")
+  offerTargets   OfferTarget[]
 
   @@unique([id, organizationId])
   @@index([organizationId, name])
@@ -626,10 +630,12 @@ model PriceList {
   fallbackPriceListId String? @db.Uuid
   fallbackPriceList PriceList? @relation("PriceListFallback", fields: [fallbackPriceListId], references: [id], onDelete: Restrict)
   fallbackFor PriceList[] @relation("PriceListFallback")
+  offerPriceLists OfferPriceList[]
 
   @@index([fallbackPriceListId])
 
   @@unique([organizationId, name])
+  @@unique([id, organizationId])
 }
 
 model ProductPrice {
@@ -645,6 +651,7 @@ model ProductPrice {
 }
 
 model Branch {
+  offerBranches OfferBranch[]
   offlineOperations OfflineOperation[]
   offlineSyncIssues OfflineSyncIssue[]
   supplierPayableInvoices SupplierPayableInvoice[]
@@ -1304,6 +1311,7 @@ model CashMovement {
 }
 
 model Sale {
+  offers SaleOffer[]
   offlineSyncIssues OfflineSyncIssue[]
   fiscalDocuments FiscalDocument[]
   documentType String @default("INTERNAL") @db.VarChar(20)
@@ -1442,6 +1450,8 @@ model SaleItem {
   quantity Int
   unitPriceMinor BigInt
   discountMinor BigInt @default(0)
+  /// Parte de discountMinor que viene de ofertas (SISTEMA-103). discountMinor sigue siendo el total.
+  offerDiscountMinor BigInt @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   sale Sale @relation(fields: [saleId], references: [id], onDelete: Restrict)
   customerReturnItems CustomerReturnItem[]
@@ -1521,4 +1531,177 @@ model PlatformPadronCredential {
   version             Int       @default(1)
   createdAt           DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+}
+
+// Ofertas (SISTEMA-103): promociones de la organización que la venta aplica
+// sola. El estado vigente (programada, activa, vencida) se calcula con la
+// fecha y la hora: no se guarda. Los parámetros van en columnas tipadas, con un
+// CHECK por tipo; un tipo nuevo es una columna más, sin JSON.
+enum OfferType {
+  PERCENT
+  AMOUNT_OFF
+  FIXED_PRICE
+  BUY_X_PAY_Y
+  NTH_UNIT_PERCENT
+  TIERED
+  BUNDLE
+}
+
+enum OfferStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  FINISHED
+  ARCHIVED
+}
+
+enum OfferProductKind {
+  ALL
+  MEDICATION
+  NON_MEDICATION
+}
+
+enum OfferTargetKind {
+  PRODUCT
+  CATEGORY
+  LABORATORY
+}
+
+model Offer {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String @db.VarChar(120)
+  type OfferType
+  status OfferStatus @default(DRAFT)
+  priority Int @default(0)
+  combinable Boolean @default(false)
+  startsAt DateTime @db.Timestamptz(6)
+  endsAt DateTime? @db.Timestamptz(6)
+  /// Días de la semana en Argentina: bit 0 = domingo ... bit 6 = sábado. Nulo = todos.
+  weekdays Int?
+  /// Franja horaria en minutos desde las 00:00 de Argentina. Ambos o ninguno.
+  dayStartMinute Int?
+  dayEndMinute Int?
+  allBranches Boolean @default(true)
+  allPriceLists Boolean @default(true)
+  productKind OfferProductKind @default(ALL)
+  maxUnitsPerSale Int?
+  maxUnitsTotal Int?
+  percentBps Int?
+  amountMinor BigInt?
+  fixedPriceMinor BigInt?
+  buyQuantity Int?
+  payQuantity Int?
+  nthUnit Int?
+  bundlePriceMinor BigInt?
+  version Int @default(1)
+  createdById String @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  pausedAt DateTime? @db.Timestamptz(6)
+  finishedAt DateTime? @db.Timestamptz(6)
+  archivedAt DateTime? @db.Timestamptz(6)
+  targets OfferTarget[]
+  tiers OfferTier[]
+  branches OfferBranch[]
+  priceLists OfferPriceList[]
+  sales SaleOffer[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+}
+
+model OfferTier {
+  id String @id @default(uuid()) @db.Uuid
+  offerId String @db.Uuid
+  organizationId String @db.Uuid
+  minQuantity Int
+  percentBps Int?
+  amountMinor BigInt?
+  offer Offer @relation(fields: [offerId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([offerId, minQuantity])
+}
+
+model OfferTarget {
+  id String @id @default(uuid()) @db.Uuid
+  offerId String @db.Uuid
+  organizationId String @db.Uuid
+  kind OfferTargetKind
+  productId String? @db.Uuid
+  categoryId String? @db.Uuid
+  laboratoryId String? @db.Uuid
+  /// Exclusión: no entra aunque esté en la categoría o el laboratorio.
+  exclude Boolean @default(false)
+  /// Unidades del producto en el combo (sólo BUNDLE).
+  quantity Int?
+  offer Offer @relation(fields: [offerId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  product Product? @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  category Category? @relation(fields: [categoryId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  laboratory Laboratory? @relation(fields: [laboratoryId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@index([offerId])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([laboratoryId])
+}
+
+model OfferBranch {
+  offerId String @db.Uuid
+  branchId String @db.Uuid
+  organizationId String @db.Uuid
+  offer Offer @relation(fields: [offerId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@id([offerId, branchId])
+  @@index([branchId])
+}
+
+model OfferPriceList {
+  offerId String @db.Uuid
+  priceListId String @db.Uuid
+  organizationId String @db.Uuid
+  offer Offer @relation(fields: [offerId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  priceList PriceList @relation(fields: [priceListId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@id([offerId, priceListId])
+  @@index([priceListId])
+}
+
+/// Instantánea de una oferta aplicada en una venta: nombre, tipo, parámetros y
+/// descuento. Un cambio posterior de la oferta no la altera.
+model SaleOffer {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  saleId String @db.Uuid
+  offerId String @db.Uuid
+  offerVersion Int
+  name String @db.VarChar(120)
+  label String @db.VarChar(60)
+  type OfferType
+  /// Parámetros de la oferta al vender, escritos por el servidor desde las columnas tipadas.
+  parameters Json
+  units Int
+  discountMinor BigInt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  sale Sale @relation(fields: [saleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  offer Offer @relation(fields: [offerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  items SaleOfferItem[]
+
+  @@index([organizationId, offerId, createdAt])
+  @@index([saleId])
+}
+
+model SaleOfferItem {
+  id String @id @default(uuid()) @db.Uuid
+  saleOfferId String @db.Uuid
+  productId String @db.Uuid
+  units Int
+  /// Importe de lista de esas unidades, antes de la oferta.
+  grossMinor BigInt
+  discountMinor BigInt
+  saleOffer SaleOffer @relation(fields: [saleOfferId], references: [id], onDelete: Restrict)
+
+  @@index([saleOfferId])
+  @@index([productId])
 }

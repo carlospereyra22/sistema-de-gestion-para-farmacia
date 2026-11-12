@@ -270,3 +270,9 @@ rol en Configuracion → Roles y permisos.
     documentacion y `cerrar-tarea`.
 
 Opcional posterior: "Mis tableros".
+
+Ofertas (SISTEMA-103, pendiente de sumar al reporte interactivo): los datos ya
+están en `SaleOffer`/`SaleOfferItem` (ventas no anuladas) y en
+`SaleItem.offerDiscountMinor`. `GET organizations/:id/offers/reporte` devuelve
+por oferta ventas, unidades, descuento otorgado y facturación, con filtros de
+fecha y sucursal. Ver `OFFERS.md`.

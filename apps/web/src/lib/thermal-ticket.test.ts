@@ -91,3 +91,22 @@ describe("browser ticket based on V24", () => {
     expect(html).not.toContain("<img onerror");
   });
 });
+
+describe("ofertas en el ticket (SISTEMA-103)", () => {
+  it("muestra cada oferta, el resto como descuento y el ahorro", () => {
+    const html = thermalTicketHtml(
+      {
+        ...ticket,
+        discountMinor: "6000",
+        offerDiscountMinor: "5000",
+        offers: [{ label: "2x1", name: "Shampoo", amountMinor: "5000" }],
+        savingsMinor: "6000",
+        totalMinor: "14000",
+      },
+      "https://gestion.test",
+    );
+    expect(html).toContain("Oferta 2x1 Shampoo");
+    expect(html).toContain("DESCUENTO");
+    expect(html).toContain("USTED AHORRÓ");
+  });
+});

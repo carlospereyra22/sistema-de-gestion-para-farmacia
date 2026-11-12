@@ -15,3 +15,5 @@
 | FASE 10 | Production hardening, backups, observability, security, performance        |
 
 Post MVP: ARCA, recipes/prescriptions, healthcare and supplier integrations, e-commerce, WhatsApp and advanced analytics.
+
+Ofertas (SISTEMA-103): primera versión hecha (7 tipos, vigencia por día y franja, topes, combinables, sin conexión, fiscal y tickets). Próximo: condición por medio de pago y por cliente, reporte interactivo de ofertas en Reportes.

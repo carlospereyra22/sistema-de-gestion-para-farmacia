@@ -415,3 +415,10 @@ cortar: cerrar la API, o DevTools → Network → Offline. Recargar: la app abre
 con los datos guardados y el aviso. Volver a levantar la API: en hasta 15
 segundos dice "Reconectando…" y vuelve a la normalidad. La copia y el service
 worker se ven en DevTools → Application.
+
+## Ofertas sin conexión (SISTEMA-103)
+
+- Las ofertas activas y programadas (`GET offers/vigentes`) quedan en la copia local; la precarga de Ventas las baja con conexión.
+- La venta sin conexión las aplica con el mismo motor de la API y manda el ahorro cobrado por renglón (`expectedOfferDiscountMinor`) y las ofertas aplicadas (`appliedOffers`). El ticket provisorio muestra cada oferta y el ahorro.
+- Al sincronizar se respeta lo cobrado. Si la oferta ya no correspondía a la hora de la venta (por ejemplo, se finalizó antes), queda el aviso `OFERTA_DISTINTA`; si se pasó el stock de oferta, `TOPE_OFERTA_SUPERADO`. Ver OFFERS.md.
+- Crear y editar ofertas necesita conexión.

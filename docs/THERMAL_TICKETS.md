@@ -61,3 +61,7 @@ La hoja (`lib/a4-document.ts`) usa los mismos datos que el ticket (`ThermalTicke
 En Venta confirmada el botón principal es el formato de la sucursal (Enter imprime, Enter siguiente abre una venta nueva) y debajo se ofrece el otro. Pendiente: Imprimir A4 en la ventana de factura y en Historial.
 
 API: `GET/PATCH organizations/:id/document-template` (`?branchId=` devuelve el formato efectivo), `PATCH/DELETE document-logo`, `PATCH branches/:branchId/print-format`. Lectura con ORGANIZATION_READ o SALE_READ; cambios con ORGANIZATION_MANAGE y auditoría.
+
+## Ofertas en el ticket (SISTEMA-103, 12/11/2026)
+
+El contrato `ThermalTicket` suma `offerDiscountMinor`, `offers` (etiqueta, nombre e importe) y `savingsMinor`. ESC/POS, el ticket del navegador y el A4 imprimen un renglón por oferta ("OFERTA 2X1 SHAMPOO − $X"), el resto como DESCUENTO y "USTED AHORRÓ $X" al pie. `discountMinor` sigue siendo el descuento total: un agente anterior ignora los campos nuevos e imprime SUBTOTAL − DESCUENTO = TOTAL. El agrupado de renglones no cambia. El componente de impresión debe reiniciarse para tomar el nuevo renglón.

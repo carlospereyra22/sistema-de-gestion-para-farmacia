@@ -18,7 +18,9 @@ export type OfflineIssueKind =
   | "LISTA_INACTIVA"
   | "LIMITE_CREDITO"
   | "CAJA_CERRADA"
-  | "FACTURA_NO_PREPARADA";
+  | "FACTURA_NO_PREPARADA"
+  | "OFERTA_DISTINTA"
+  | "TOPE_OFERTA_SUPERADO";
 
 export type OfflineIssue = {
   kind: OfflineIssueKind;

@@ -10,6 +10,8 @@ export function SaleCurrentPanel({
   lineCount,
   unitCount,
   totalMinor,
+  offerSavingsMinor = 0,
+  offerNotice,
   checkoutDisabled,
   submitting,
   headerActions,
@@ -22,6 +24,10 @@ export function SaleCurrentPanel({
   lineCount: number;
   unitCount: number;
   totalMinor: number;
+  /** Ahorro por ofertas (SISTEMA-103), aparte del descuento general. */
+  offerSavingsMinor?: number;
+  /** "Agregá 1 más y llevás 3x2" y avisos de ofertas que cambiaron. */
+  offerNotice?: ReactNode;
   checkoutDisabled: boolean;
   submitting: boolean;
   headerActions?: ReactNode;
@@ -68,9 +74,18 @@ export function SaleCurrentPanel({
         {context}
       </div>
       {lines}
+      {offerNotice}
       {/* Pie en una sola fila: deja el alto disponible para las líneas. */}
       <footer className="sale-current-footer flex shrink-0 flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
         {discount}
+        {offerSavingsMinor > 0 && (
+          <p className="text-xs font-semibold text-rose-700">
+            Ahorro por ofertas
+            <span className="block text-base tabular-nums">
+              −{money(offerSavingsMinor)}
+            </span>
+          </p>
+        )}
         <div className="ml-auto text-right">
           <p className="text-xs font-semibold text-slate-600">
             Total a cobrar ({unitCount} unidad{unitCount === 1 ? "" : "es"})
