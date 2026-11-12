@@ -335,14 +335,36 @@ describe("ofertas en el carrito de Ventas", () => {
         ]}
       />,
     );
+    // Pasador de alto fijo: se ve una por vez, con flechas y contador.
+    expect(html).toContain("h-[60px]");
     expect(html).toContain("Agregá Acondicionador");
     expect(html).toContain("y ahorrás $2.000 (18%) con «Combo pelo»");
-    expect(html).toContain("line-clamp-2");
-    expect(html).not.toContain("truncate text-[13px]");
+    expect(html).not.toContain("y te llevás 1 gratis (3x2)");
+    expect(html).toContain("1/2");
+    expect(html).toContain('aria-label="Oferta siguiente"');
     expect(html).toContain("Completar");
-    expect(html).toContain("y te llevás 1 gratis (3x2)");
     expect(html).toContain('aria-label="Descartar Combo pelo"');
     expect(html).not.toContain(">Ofertas<");
+  });
+
+  it("con una sola oferta no muestra el pasador", () => {
+    const html = renderToStaticMarkup(
+      <SaleCartOffers
+        onCerrarAviso={() => {}}
+        onDescartar={() => {}}
+        sugerencias={[
+          {
+            id: "o2",
+            label: "3x2",
+            nombre: "3x2 jabón",
+            agregar: "Agregá 1 más",
+            gana: "y te llevás 1 gratis (3x2)",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("y te llevás 1 gratis (3x2)");
+    expect(html).not.toContain("Oferta siguiente");
   });
 
   it("sin ofertas ni avisos no ocupa lugar", () => {

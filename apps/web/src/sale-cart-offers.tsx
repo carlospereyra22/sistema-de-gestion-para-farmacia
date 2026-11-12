@@ -1,4 +1,13 @@
-import { BadgePercent, Info, Package, Plus, X } from "lucide-react";
+import { useState } from "react";
+import {
+  BadgePercent,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Package,
+  Plus,
+  X,
+} from "lucide-react";
 
 export type SugerenciaCarrito = {
   id: string;
@@ -14,9 +23,9 @@ export type SugerenciaCarrito = {
 };
 
 /**
- * Ofertas del carrito de Ventas (SISTEMA-103), compactas en el panel de la
- * derecha: una línea por oferta que falta completar (con el botón para
- * hacerlo y la ✕ para descartarla) y el aviso cuando una oferta cambió.
+ * Ofertas del carrito de Ventas (SISTEMA-103) en un pasador de alto fijo: se
+ * ve una por vez (el aviso de cambios o una oferta para completar) y las
+ * flechas pasan a las demás. Ocupa siempre lo mismo, haya una o muchas.
  */
 export function SaleCartOffers({
   aviso,
@@ -29,36 +38,44 @@ export function SaleCartOffers({
   sugerencias: SugerenciaCarrito[];
   onDescartar: (id: string) => void;
 }) {
-  if (!aviso && !sugerencias.length) return null;
+  const [indice, setIndice] = useState(0);
+  const total = (aviso ? 1 : 0) + sugerencias.length;
+  if (!total) return null;
+  const actual = Math.min(indice, total - 1);
+  const esAviso = Boolean(aviso) && actual === 0;
+  const sugerencia = esAviso
+    ? undefined
+    : sugerencias[actual - (aviso ? 1 : 0)];
   return (
     <section
       aria-label="Ofertas de la venta"
-      className="sale-cart-offers max-h-32 shrink-0 space-y-1 overflow-y-auto border-t border-slate-200 bg-white px-5 py-2"
+      aria-roledescription="pasador"
+      className="sale-cart-offers flex h-[60px] shrink-0 items-center gap-2 border-t border-slate-200 bg-white px-5"
     >
-      {aviso && (
-        <p
-          role="status"
-          className="flex h-8 items-center gap-2 rounded-lg bg-amber-50 px-2.5 text-xs font-medium text-amber-900"
-        >
-          <Info size={14} className="shrink-0" />
-          <span className="min-w-0 flex-1 truncate">{aviso}</span>
-          <button
-            type="button"
-            aria-label="Cerrar aviso de ofertas"
-            onClick={onCerrarAviso}
-            className="rounded p-0.5 hover:bg-amber-100"
-          >
-            <X size={13} />
-          </button>
-        </p>
-      )}
-      {sugerencias.map((sugerencia) => {
-        return (
-          <div
-            key={sugerencia.id}
-            className="flex items-start gap-2 rounded-lg bg-rose-50/60 px-2.5 py-1.5"
-          >
-            <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">
+      <div
+        className={`flex h-12 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 ${esAviso ? "bg-amber-50" : "bg-rose-50/60"}`}
+      >
+        {esAviso ? (
+          <>
+            <Info size={15} className="shrink-0 text-amber-700" />
+            <p
+              role="status"
+              className="line-clamp-2 min-w-0 flex-1 text-[13px] font-medium leading-[18px] text-amber-900"
+            >
+              {aviso}
+            </p>
+            <button
+              type="button"
+              aria-label="Cerrar aviso de ofertas"
+              onClick={onCerrarAviso}
+              className="shrink-0 rounded p-1 text-amber-700 hover:bg-amber-100"
+            >
+              <X size={14} />
+            </button>
+          </>
+        ) : sugerencia ? (
+          <>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">
               {sugerencia.combo ? (
                 <Package size={11} />
               ) : (
@@ -92,9 +109,34 @@ export function SaleCartOffers({
             >
               <X size={14} />
             </button>
-          </div>
-        );
-      })}
+          </>
+        ) : null}
+      </div>
+      {total > 1 && (
+        <div className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-slate-500">
+          <button
+            type="button"
+            aria-label="Oferta anterior"
+            disabled={actual <= 0}
+            onClick={() => setIndice(actual - 1)}
+            className="grid size-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30"
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span className="w-9 text-center">
+            {actual + 1}/{total}
+          </span>
+          <button
+            type="button"
+            aria-label="Oferta siguiente"
+            disabled={actual >= total - 1}
+            onClick={() => setIndice(actual + 1)}
+            className="grid size-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30"
+          >
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      )}
     </section>
   );
 }
