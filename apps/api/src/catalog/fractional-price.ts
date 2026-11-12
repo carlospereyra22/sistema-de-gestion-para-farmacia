@@ -24,3 +24,22 @@ export function fractionalPrice(
     );
   return result;
 }
+
+// Precio de venta que corresponde a una referencia, o null si la unidad de
+// venta no admite precio automático (blíster/unidad sin divisor configurado).
+export function expectedSalePrice(
+  amount: bigint,
+  product: {
+    saleUnit: string;
+    priceDivisor: number | null;
+    priceMarkupBps: number;
+  },
+): bigint | null {
+  if (product.priceDivisor != null)
+    return fractionalPrice(
+      amount,
+      product.priceDivisor,
+      product.priceMarkupBps,
+    );
+  return product.saleUnit === "BOX" ? amount : null;
+}

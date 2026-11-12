@@ -19,6 +19,10 @@ function take(entries: LotEntry[], quantity: number) {
 // dicen de quién son, y supplierId null no alcanzaría para distinguirlos.
 export const SUPPLIER_ADJUSTMENT = "ADJUSTMENT_SUPPLIER";
 
+// Apertura de cajas (SISTEMA-103): las unidades que entran al producto chico
+// conservan el proveedor de la caja que se abrió.
+export const STOCK_SPLIT = "STOCK_SPLIT";
+
 // De quién son las unidades que le quedan al lote. Ventas y demás salidas no
 // dicen de qué proveedor salen: se gasta primero lo más viejo. Las devoluciones
 // y los ajustes con proveedor sí lo dicen. Lo que sobre sin carga conocida queda sin proveedor,
@@ -85,6 +89,7 @@ export async function loadLotHistories(
               type: { in: ["ADJUSTMENT_IN", "ADJUSTMENT_OUT"] },
               referenceType: SUPPLIER_ADJUSTMENT,
             },
+            { type: "ADJUSTMENT_IN", referenceType: STOCK_SPLIT },
           ],
         },
         orderBy: [{ occurredAt: "asc" }, { id: "asc" }],

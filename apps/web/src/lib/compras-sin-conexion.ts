@@ -104,7 +104,40 @@ type LineaDeLote = {
   quantity: number;
   lotNumber?: string;
   expiresAt?: string | null;
+  /** Abrir cajas al recibir (SISTEMA-103). */
+  openBoxes?: number;
 };
+
+/** En qué producto se abre una caja y cuántas trae (vínculo del producto). */
+export type AperturaDeProducto = (
+  productId: string,
+) => { targetProductId: string; factor: number } | null;
+
+/**
+ * Abrir cajas al recibir sin conexión (SISTEMA-103): en la PC, lo abierto
+ * sale de la caja y entra al otro producto con el mismo lote, igual que lo
+ * hará el servidor al llegar.
+ */
+function conAperturas(
+  ingresos: Ingreso[],
+  lineas: readonly LineaDeLote[],
+  apertura?: AperturaDeProducto,
+): Ingreso[] {
+  if (!apertura) return ingresos;
+  return ingresos.flatMap((ingreso, i) => {
+    const cajas = Math.min(lineas[i]?.openBoxes ?? 0, ingreso.cantidad);
+    const destino = cajas > 0 ? apertura(ingreso.productId) : null;
+    if (!destino) return [ingreso];
+    return [
+      { ...ingreso, cantidad: ingreso.cantidad - cajas },
+      {
+        ...ingreso,
+        productId: destino.targetProductId,
+        cantidad: cajas * destino.factor,
+      },
+    ].filter((item) => item.cantidad > 0);
+  });
+}
 const conLote = (linea: LineaDeLote) =>
   linea.lotNumber?.trim()
     ? { lote: linea.lotNumber.trim(), vence: linea.expiresAt || null }
@@ -114,24 +147,38 @@ const conLote = (linea: LineaDeLote) =>
 export function ingresosDeCompra(
   solicitud: { path: string; body: unknown },
   renglones: readonly { id: string; productId: string }[],
+  apertura?: AperturaDeProducto,
 ): Ingreso[] {
   const cuerpo = solicitud.body as {
     receipts?: (LineaDeLote & { productId: string })[];
     items?: (LineaDeLote & { itemId?: string })[];
   };
-  if (solicitud.path === "/direct")
-    return (cuerpo.receipts ?? []).map((lote) => ({
-      productId: lote.productId,
+  if (solicitud.path === "/direct") {
+    const lineas = cuerpo.receipts ?? [];
+    return conAperturas(
+      lineas.map((lote) => ({
+        productId: lote.productId,
+        cantidad: lote.quantity,
+        ...conLote(lote),
+      })),
+      lineas,
+      apertura,
+    );
+  }
+  if (!pedidoDeRecepcion(solicitud.path)) return [];
+  const lineas = (cuerpo.items ?? []).flatMap((lote) => {
+    const productId = renglones.find((r) => r.id === lote.itemId)?.productId;
+    return productId ? [{ lote, productId }] : [];
+  });
+  return conAperturas(
+    lineas.map(({ lote, productId }) => ({
+      productId,
       cantidad: lote.quantity,
       ...conLote(lote),
-    }));
-  if (!pedidoDeRecepcion(solicitud.path)) return [];
-  return (cuerpo.items ?? []).flatMap((lote) => {
-    const productId = renglones.find((r) => r.id === lote.itemId)?.productId;
-    return productId
-      ? [{ productId, cantidad: lote.quantity, ...conLote(lote) }]
-      : [];
-  });
+    })),
+    lineas.map(({ lote }) => lote),
+    apertura,
+  );
 }
 
 /**

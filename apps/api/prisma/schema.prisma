@@ -242,6 +242,13 @@ model Product {
   priceDivisor Int?
   priceMarkupBps Int @default(0)
   priceBaseMinor BigInt?
+  // Abrir cajas (SISTEMA-103): esta caja se abre en `splitFactor` unidades del
+  // producto `splitTargetProductId` (ej. x100 -> 10 blísteres x10).
+  splitTargetProductId String? @db.Uuid
+  splitFactor Int?
+  // Precio editado a mano en un medicamento vinculado (SISTEMA-103): la
+  // actualización automática ya no cambia su precio de venta.
+  priceManual Boolean @default(false)
   externalReferenceUpdatedAt DateTime? @db.Timestamptz(6)
   externalReferenceCheckedAt DateTime? @db.Timestamptz(6)
   saleUnit       SaleUnit        @default(BOX)
@@ -256,6 +263,8 @@ model Product {
   prices         ProductPrice[]
   image          ProductImage?
   branchStates   ProductBranchState[]
+  splitTarget    Product?        @relation("ProductSplit", fields: [splitTargetProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  splitSources   Product[]       @relation("ProductSplit")
 
   @@unique([id, organizationId])
   @@index([organizationId, name])
@@ -1132,6 +1141,29 @@ model InventoryMovement {
   supplier Supplier? @relation(fields: [supplierId, organizationId], references: [id, organizationId], onDelete: Restrict)
   @@index([organizationId, branchId, productId, occurredAt])
   @@index([lotId, occurredAt])
+}
+
+// Apertura de cajas (SISTEMA-103): N cajas de un lote pasan a N x factor
+// unidades del producto vinculado, mismo número de lote y vencimiento.
+model StockSplit {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  branchId String @db.Uuid
+  requestId String @db.Uuid
+  payloadHash String @db.VarChar(64)
+  sourceProductId String @db.Uuid
+  targetProductId String @db.Uuid
+  sourceLotId String @db.Uuid
+  targetLotId String @db.Uuid
+  boxes Int
+  factor Int
+  actorId String @db.Uuid
+  purchaseReceiptId String? @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([organizationId, requestId])
+  @@index([organizationId, branchId, createdAt])
+  @@index([sourceLotId])
+  @@index([targetLotId])
 }
 
 model DistributionDispatch {

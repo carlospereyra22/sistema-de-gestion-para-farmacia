@@ -18,6 +18,9 @@ export type AltaDeProducto = {
   brand?: string;
   isMedication?: boolean;
   priceDivisor?: number | null;
+  splitTargetProductId?: string | null;
+  splitFactor?: number | null;
+  priceManual?: boolean;
   priceMarkupBps?: number;
   priceBaseMinor?: number | null;
   imageDataUrl?: string;
@@ -48,6 +51,9 @@ export type EdicionDeProducto = {
   brand?: string | null;
   isMedication?: boolean;
   priceDivisor?: number | null;
+  splitTargetProductId?: string | null;
+  splitFactor?: number | null;
+  priceManual?: boolean;
   priceMarkupBps?: number;
   priceBaseMinor?: number | null;
   imageDataUrl?: string | null;
@@ -235,6 +241,9 @@ export function camposCambiadosDelProducto(
         ? null
         : Number(antes.externalReferencePriceMinor),
     priceDivisor: antes.priceDivisor ?? null,
+    splitTargetProductId: antes.splitTargetProductId ?? null,
+    splitFactor: antes.splitFactor ?? null,
+    priceManual: antes.priceManual ?? false,
     priceMarkupBps: antes.priceMarkupBps ?? 0,
     priceBaseMinor:
       antes.priceBaseMinor == null ? null : Number(antes.priceBaseMinor),
@@ -525,6 +534,9 @@ export function productosConPendientes(
           active: true,
           branchStatus: "ACTIVE",
           priceDivisor: c.priceDivisor ?? null,
+          splitTargetProductId: c.splitTargetProductId ?? null,
+          splitFactor: c.splitFactor ?? null,
+          priceManual: c.priceManual ?? false,
           priceMarkupBps: c.priceMarkupBps ?? 0,
           priceBaseMinor:
             c.priceBaseMinor == null ? null : String(c.priceBaseMinor),
@@ -598,6 +610,10 @@ export function productosConPendientes(
               ? null
               : String(c.externalReferencePriceMinor);
         if (c.priceDivisor !== undefined) p.priceDivisor = c.priceDivisor;
+        if (c.splitTargetProductId !== undefined)
+          p.splitTargetProductId = c.splitTargetProductId;
+        if (c.splitFactor !== undefined) p.splitFactor = c.splitFactor;
+        if (c.priceManual !== undefined) p.priceManual = c.priceManual;
         if (c.priceMarkupBps !== undefined) p.priceMarkupBps = c.priceMarkupBps;
         if (c.priceBaseMinor !== undefined)
           p.priceBaseMinor =

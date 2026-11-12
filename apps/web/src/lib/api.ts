@@ -667,6 +667,10 @@ export type CatalogProduct = {
   priceDivisor?: number | null;
   priceMarkupBps?: number;
   priceBaseMinor?: string | null;
+  /** Abrir cajas (SISTEMA-103): en qué producto se abre y cuántas unidades trae. */
+  splitTargetProductId?: string | null;
+  splitFactor?: number | null;
+  priceManual?: boolean;
   image?: { updatedAt: string } | null;
   id: string;
   name: string;
@@ -1133,6 +1137,9 @@ async function createCatalogProductEnLinea(
     priceDivisor?: number | null;
     priceMarkupBps?: number;
     priceBaseMinor?: number | null;
+    splitTargetProductId?: string | null;
+    splitFactor?: number | null;
+    priceManual?: boolean;
     imageDataUrl?: string;
     name: string;
     barcode?: string;
@@ -1255,6 +1262,9 @@ async function updateCatalogProductEnLinea(
     priceDivisor?: number | null;
     priceMarkupBps?: number;
     priceBaseMinor?: number | null;
+    splitTargetProductId?: string | null;
+    splitFactor?: number | null;
+    priceManual?: boolean;
     imageDataUrl?: string | null;
     name: string;
     barcode: string;
@@ -2351,6 +2361,36 @@ async function adjustStockEnLinea(
   );
   if (!response.ok)
     throw await responseError(response, "No se pudo ajustar el stock.");
+}
+
+/**
+ * Abrir cajas (SISTEMA-103): N cajas de un lote pasan al producto vinculado con
+ * el mismo lote y vencimiento. El mismo `requestId` no repite la apertura.
+ */
+async function splitBoxesEnLinea(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  input: {
+    requestId: string;
+    lotId: string;
+    boxes: number;
+    /** Otra presentación que la del vínculo (ej. x100 en x20). */
+    targetProductId?: string;
+    factor?: number;
+  },
+): Promise<{ id: string; boxes: number; units: number }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/splits`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(input) },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron abrir las cajas.");
+  return response.json() as Promise<{
+    id: string;
+    boxes: number;
+    units: number;
+  }>;
 }
 
 async function createSupplierReturnEnLinea(
@@ -5160,8 +5200,10 @@ export async function getStock(
   // Nombre de un producto que todavía no tiene lotes en la sucursal.
   const sinLotes = pendientes.some(
     (op) =>
-      op.tipo === "INGRESO" &&
-      !stock.some((lote) => lote.productId === op.cuerpo.productId),
+      (op.tipo === "INGRESO" &&
+        !stock.some((lote) => lote.productId === op.cuerpo.productId)) ||
+      (op.tipo === "APERTURA" &&
+        !stock.some((lote) => lote.productId === op.cuerpo.targetProductId)),
   );
   const catalogo = sinLotes
     ? await getCatalogProducts(token, organizationId, branchId).catch(
@@ -5511,6 +5553,51 @@ export async function adjustStock(
         tipo: "AJUSTE",
         cuerpo: { ...cuerpo, lote: loteDeLaOperacion(lotId) },
       });
+    },
+  );
+}
+
+/**
+ * Abrir cajas (SISTEMA-103). Sin conexión queda en la PC: el stock local ya
+ * muestra la caja abierta y se manda sola al volver.
+ */
+export async function splitBoxes(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  input: {
+    requestId: string;
+    lotId: string;
+    boxes: number;
+    targetProductId: string;
+    factor: number;
+  },
+): Promise<{ boxes: number; units: number; enLaPc: boolean }> {
+  return conRespaldoEnLaPc<{ boxes: number; units: number; enLaPc: boolean }>(
+    token,
+    organizationId,
+    await inventarioEnEspera(organizationId, branchId, input.lotId, undefined),
+    async () => {
+      const hecho = await splitBoxesEnLinea(
+        token,
+        organizationId,
+        branchId,
+        input,
+      );
+      return { boxes: hecho.boxes, units: hecho.units, enLaPc: false };
+    },
+    async () => {
+      const { lotId, boxes, targetProductId, factor } = input;
+      await guardarOperacionInventario(organizationId, branchId, {
+        tipo: "APERTURA",
+        cuerpo: {
+          lote: loteDeLaOperacion(lotId),
+          boxes,
+          targetProductId,
+          factor,
+        },
+      });
+      return { boxes, units: boxes * factor, enLaPc: true };
     },
   );
 }

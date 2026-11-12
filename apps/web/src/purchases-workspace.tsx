@@ -648,7 +648,16 @@ export function PurchasesWorkspace({
           branchId,
           solicitud.path,
           solicitud.body as Record<string, unknown>,
-          ingresosDeCompra(solicitud, currentItems),
+          ingresosDeCompra(solicitud, currentItems, (id) => {
+            // Abrir cajas al recibir (SISTEMA-103): el vínculo del producto.
+            const p = products.find((item) => item.id === id);
+            return p?.splitTargetProductId && p.splitFactor
+              ? {
+                  targetProductId: p.splitTargetProductId,
+                  factor: p.splitFactor,
+                }
+              : null;
+          }),
         );
       setDraft(undefined);
       sessionStorage.removeItem(storageKey);

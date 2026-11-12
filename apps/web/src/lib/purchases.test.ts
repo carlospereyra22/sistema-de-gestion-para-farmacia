@@ -164,3 +164,20 @@ describe("importe estimado de la compra", () => {
     expect(purchaseLineMinor({ quantity: "1.5", cost: "10" })).toBe(0);
   });
 });
+
+// Abrir cajas al recibir (SISTEMA-103).
+describe("cajas que se abren al recibir", () => {
+  it("manda las cajas a abrir sólo si hay y valida el rango", () => {
+    const [sin] = prepareReceiptLines([row("3")], [item]);
+    expect(sin).not.toHaveProperty("openBoxes");
+    const [con] = prepareReceiptLines(
+      [{ ...row("3"), openBoxes: "2" }],
+      [item],
+    );
+    expect(con).toMatchObject({ quantity: 3, openBoxes: 2 });
+    for (const openBoxes of ["4", "-1", "1.5"])
+      expect(() =>
+        prepareReceiptLines([{ ...row("3"), openBoxes }], [item]),
+      ).toThrow("cajas a abrir");
+  });
+});

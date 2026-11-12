@@ -80,7 +80,12 @@ import {
 import { ResumeSaleDialog } from "./resume-sale-dialog";
 import { PriceListsWorkspace } from "./price-lists-workspace";
 import { sortSaleLines } from "./lib/sort-sale-lines";
-import { FractionalPriceFields } from "./fractional-price-fields";
+import {
+  FractionalPriceOptions,
+  FractionalPriceToggle,
+} from "./fractional-price-fields";
+import { SplitLinkOptions, SplitLinkToggle } from "./split-link-fields";
+import { ProductSplitDialog } from "./split-boxes-dialog";
 import { fractionalPricePreview } from "./lib/fractional-price-preview";
 import { toggleFractionalPrice } from "./lib/toggle-fractional-price";
 import { parsePrice } from "./lib/price-lists-api";
@@ -311,6 +316,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowLeftRight,
+  PackageOpen,
   Pencil,
   X,
   ReceiptText,
@@ -2045,9 +2051,17 @@ function Products({
   >("auto");
   const [description, setDescription] = useState("");
   const [editingProduct, setEditingProduct] = useState<CatalogProduct>();
+  // Abrir cajas (SISTEMA-103) desde la fila del producto.
+  const [splittingProduct, setSplittingProduct] = useState<CatalogProduct>();
   const [generateInternalBarcode, setGenerateInternalBarcode] = useState(false);
   const [fractionEnabled, setFractionEnabled] = useState(false);
   const [fractionDivisor, setFractionDivisor] = useState("2");
+  // Abrir cajas (SISTEMA-103): en qué producto se abre esta caja.
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitTargetId, setSplitTargetId] = useState("");
+  const [splitFactor, setSplitFactor] = useState("");
+  // Precio editado a mano en un medicamento vinculado (SISTEMA-103).
+  const [priceManual, setPriceManual] = useState(false);
   const [fractionMarkup, setFractionMarkup] = useState("0");
   const [fractionBase, setFractionBase] = useState("");
   const [productImage, setProductImage] = useState<string | null | undefined>();
@@ -2203,7 +2217,9 @@ function Products({
   const [retailLinkSearchRevision, setRetailLinkSearchRevision] = useState(0);
   const [retailLinkHint, setRetailLinkHint] = useState("");
   const scannedMedicine = useRef<MedicineReference | null>(null);
-  const priceLocked =
+  // Precio que sigue al padrón. Se puede editar igual: queda manual y la
+  // actualización automática ya no lo cambia (SISTEMA-103).
+  const priceSynced =
     isMedication &&
     (saleUnit === "BOX" || fractionEnabled) &&
     Boolean(
@@ -2212,6 +2228,11 @@ function Products({
         editingProduct.externalReferenceName &&
         editingProduct.externalReferencePriceMinor != null),
     );
+  const priceLocked = priceSynced && !priceManual;
+  const referencePriceMinor =
+    selectedReference?.priceMinor ??
+    editingProduct?.externalReferencePriceMinor ??
+    null;
   const fractionLinked =
     isMedication &&
     Boolean(
@@ -2319,6 +2340,25 @@ function Products({
         throw new Error(
           "Revisá el precio base, el divisor (entero mayor a cero) y el recargo del fraccionamiento.",
         );
+      const splitUnits = Number(splitFactor);
+      if (
+        !initialProduct &&
+        splitEnabled &&
+        (!splitTargetId ||
+          !Number.isInteger(splitUnits) ||
+          splitUnits < 2 ||
+          splitUnits > 1000)
+      )
+        throw new Error(
+          "Para abrir cajas elegí el producto y cuántas unidades trae cada caja (de 2 a 1000).",
+        );
+      const splitInput = initialProduct
+        ? {}
+        : splitEnabled
+          ? { splitTargetProductId: splitTargetId, splitFactor: splitUnits }
+          : editingProduct?.splitTargetProductId
+            ? { splitTargetProductId: null, splitFactor: null }
+            : {};
       const fractionInput = initialProduct
         ? {}
         : {
@@ -2350,6 +2390,10 @@ function Products({
             brand,
             isMedication,
             ...fractionInput,
+            ...splitInput,
+            ...(priceManual !== (editingProduct.priceManual ?? false)
+              ? { priceManual }
+              : {}),
             imageDataUrl: productImage,
             name,
             priceMinor:
@@ -2390,6 +2434,8 @@ function Products({
             brand: brand || undefined,
             isMedication,
             ...fractionInput,
+            ...splitInput,
+            ...(priceManual ? { priceManual: true } : {}),
             imageDataUrl: productImage ?? undefined,
             name,
             priceMinor: fractionEnabled
@@ -2591,6 +2637,10 @@ function Products({
     if (optionCreateLock.current) return;
     setFractionEnabled(false);
     setFractionDivisor("2");
+    setSplitEnabled(false);
+    setSplitTargetId("");
+    setSplitFactor("");
+    setPriceManual(false);
     setFractionMarkup("0");
     setFractionBase("");
     if (!keepOpen) onEditorClose?.();
@@ -2907,6 +2957,10 @@ function Products({
     );
     setFractionEnabled(product.priceDivisor != null);
     setFractionDivisor(String(product.priceDivisor ?? 2));
+    setSplitEnabled(product.splitTargetProductId != null);
+    setSplitTargetId(product.splitTargetProductId ?? "");
+    setSplitFactor(product.splitFactor ? String(product.splitFactor) : "");
+    setPriceManual(product.priceManual ?? false);
     setFractionMarkup(String((product.priceMarkupBps ?? 0) / 100));
     setFractionBase(
       String(
@@ -3200,7 +3254,7 @@ function Products({
                 },
                 { label: "Lote", className: "w-px" },
                 {
-                  label: "Stock vendible total",
+                  label: "Vendibles",
                   className: "w-px",
                   hint: {
                     title: "Qué incluye",
@@ -3210,7 +3264,7 @@ function Products({
                 { label: "Próx. venc." },
                 { label: "Estado" },
                 ...(canManage
-                  ? [{ label: "Acciones", align: "right" as const }]
+                  ? [{ label: "Acciones", align: "center" as const }]
                   : []),
               ]}
               footer={
@@ -3430,8 +3484,23 @@ function Products({
                         ) : null}
                       </DataTableCell>
                       {canManage && (
-                        <DataTableCell align="right">
+                        <DataTableCell align="center">
                           <span className="inline-flex gap-1.5">
+                            {product.splitTargetProductId &&
+                            stock.some(
+                              (lot) =>
+                                lot.productId === product.id &&
+                                lot.sellableQuantity > 0,
+                            ) ? (
+                              <RowIconAction
+                                tone="neutral"
+                                label={`Abrir cajas de ${product.name}`}
+                                title="Abrir cajas"
+                                onClick={() => setSplittingProduct(product)}
+                              >
+                                <PackageOpen size={16} />
+                              </RowIconAction>
+                            ) : null}
                             <RowIconAction
                               tone="edit"
                               label={`Editar ${product.name}`}
@@ -3503,6 +3572,21 @@ function Products({
           <ProductSaveErrorDialog
             message={productSaveError}
             onClose={() => setProductSaveError("")}
+          />
+        )}
+        {splittingProduct && (
+          <ProductSplitDialog
+            token={token}
+            organizationId={organizationId}
+            branchId={branchId}
+            product={splittingProduct}
+            products={knownProducts}
+            stock={stock}
+            onClose={() => setSplittingProduct(undefined)}
+            onDone={() => {
+              setSplittingProduct(undefined);
+              done();
+            }}
           />
         )}
         {formOpen ? (
@@ -4267,58 +4351,117 @@ function Products({
                     />
                     Precio y venta
                   </h3>
-                  <FractionalPriceFields
-                    enabled={fractionEnabled}
-                    linked={fractionLinked}
-                    base={
-                      fractionLinked
+                  {(() => {
+                    const fractionProps = {
+                      enabled: fractionEnabled,
+                      linked: fractionLinked,
+                      base: fractionLinked
                         ? fractionReferenceMinor === null
                           ? ""
                           : String(Number(fractionReferenceMinor) / 100)
-                        : fractionBase
-                    }
-                    divisor={fractionDivisor}
-                    markup={fractionMarkup}
-                    result={fractionResult}
-                    disabled={!!initialProduct}
-                    onEnabled={(enabled) => {
-                      const draft = toggleFractionalPrice({
-                        enabled,
-                        linked: fractionLinked,
-                        box: saleUnit === "BOX",
-                        referenceMinor: fractionReferenceMinor,
-                        price,
-                        base: fractionBase,
-                      });
-                      setFractionBase(draft.base);
-                      setPrice(draft.price);
-                      setFractionEnabled(enabled);
-                    }}
-                    onBase={setFractionBase}
-                    onDivisor={setFractionDivisor}
-                    onMarkup={setFractionMarkup}
-                  />
+                        : fractionBase,
+                      divisor: fractionDivisor,
+                      markup: fractionMarkup,
+                      result: fractionResult,
+                      disabled: !!initialProduct,
+                      onEnabled: (enabled: boolean) => {
+                        const draft = toggleFractionalPrice({
+                          enabled,
+                          linked: fractionLinked,
+                          box: saleUnit === "BOX",
+                          referenceMinor: fractionReferenceMinor,
+                          price,
+                          base: fractionBase,
+                        });
+                        setFractionBase(draft.base);
+                        setPrice(draft.price);
+                        setFractionEnabled(enabled);
+                      },
+                      onBase: setFractionBase,
+                      onDivisor: setFractionDivisor,
+                      onMarkup: setFractionMarkup,
+                    };
+                    const splitProps = {
+                      enabled: splitEnabled,
+                      product: {
+                        id: editingProduct?.id ?? "",
+                        name,
+                        presentation,
+                        laboratory: laboratoryId
+                          ? { id: laboratoryId, name: "" }
+                          : null,
+                        active: true,
+                      },
+                      products: knownProducts,
+                      targetId: splitTargetId,
+                      factor: splitFactor,
+                      disabled: !!initialProduct,
+                      onEnabled: setSplitEnabled,
+                      onTarget: setSplitTargetId,
+                      onFactor: setSplitFactor,
+                    };
+                    // Las dos opciones lado a lado; sus campos, debajo.
+                    return (
+                      <div className="mt-3 space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <FractionalPriceToggle {...fractionProps} />
+                          <SplitLinkToggle {...splitProps} />
+                        </div>
+                        <FractionalPriceOptions {...fractionProps} />
+                        <SplitLinkOptions {...splitProps} />
+                      </div>
+                    );
+                  })()}
                   <div
                     className={`mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2 ${isMedication ? "lg:grid-cols-3" : ""}`}
                   >
-                    <Input
-                      label="Precio de venta"
-                      disabled={
-                        priceLocked || fractionEnabled || !!initialProduct
-                      }
-                      type="number"
-                      value={
-                        fractionEnabled
-                          ? fractionResult === null
-                            ? ""
-                            : (Number(fractionResult) / 100).toFixed(2)
-                          : price
-                      }
-                      onChange={setPrice}
-                      placeholder="Ej. 9900"
-                      labelClassName="mt-0 text-xs font-semibold text-slate-600"
-                      className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
-                    />
+                    <div>
+                      <Input
+                        label="Precio de venta"
+                        prefix="$"
+                        disabled={fractionEnabled || !!initialProduct}
+                        type="number"
+                        value={
+                          fractionEnabled
+                            ? fractionResult === null
+                              ? ""
+                              : (Number(fractionResult) / 100).toFixed(2)
+                            : price
+                        }
+                        onChange={(value) => {
+                          setPrice(value);
+                          // Cambiarlo en un vinculado lo deja fijo a mano.
+                          if (priceLocked) setPriceManual(true);
+                        }}
+                        placeholder="Ej. 9900"
+                        labelClassName="mt-0 text-xs font-semibold text-slate-600"
+                        className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
+                      />
+                      {priceSynced && !fractionEnabled && !initialProduct && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {priceManual ? (
+                            <>
+                              Precio manual: no se actualiza solo.{" "}
+                              <button
+                                type="button"
+                                className="font-medium text-teal-700 underline-offset-2 hover:underline"
+                                onClick={() => {
+                                  setPriceManual(false);
+                                  if (referencePriceMinor != null)
+                                    setPrice(
+                                      String(Number(referencePriceMinor) / 100),
+                                    );
+                                }}
+                              >
+                                Volver al automático
+                              </button>
+                            </>
+                          ) : (
+                            "Se actualiza solo con el padrón. Si lo cambiás, queda fijo."
+                          )}
+                        </p>
+                      )}
+                    </div>
                     <div className="mt-0 block text-xs font-semibold text-slate-600">
                       <span className="mb-1 block">Se vende por</span>
                       <ProductFilterSelect
@@ -4443,24 +4586,9 @@ function Products({
                       />
                     </div>
                   </section>
-                  <ProductFormSection
-                    title={
-                      description.trim()
-                        ? "Observaciones · Con notas"
-                        : "Observaciones"
-                    }
-                  >
-                    <label className="mt-3 block text-sm font-medium text-slate-700">
-                      Observaciones internas
-                      <textarea
-                        value={description}
-                        onChange={(event) => setDescription(event.target.value)}
-                        placeholder="Notas internas sobre el producto..."
-                        rows={3}
-                        className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-normal"
-                      />
-                    </label>
-                  </ProductFormSection>
+                  {/* Observaciones (SISTEMA-103): se guardan en la base (marca,
+                      categoría y fuente de la referencia) pero no se muestran
+                      en el editor; el formulario las conserva sin cambios. */}
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:px-7">
@@ -4604,6 +4732,7 @@ function Products({
         />
         <Input
           label="Precio de venta"
+          prefix="$"
           disabled={priceLocked}
           type="number"
           value={price}
@@ -4670,6 +4799,11 @@ function Inventory({
   const [inventoryMode, setInventoryMode] = useState<
     "receive" | "adjust" | "return"
   >("receive");
+  // Abrir cajas (SISTEMA-103).
+  const [splitLot, setSplitLot] = useState<StockLot | null>(null);
+  const splitProduct = splitLot
+    ? products.find((product) => product.id === splitLot.productId)
+    : undefined;
   const [scannedCode, setScannedCode] = useState("");
   const [scanStatus, setScanStatus] = useState("");
   const [scanError, setScanError] = useState(false);
@@ -4981,6 +5115,24 @@ function Inventory({
   return (
     <div className="workspace-split grid gap-6">
       <div className="min-w-0 self-start space-y-3">
+        {splitLot && splitProduct && (
+          <ProductSplitDialog
+            token={token}
+            organizationId={organizationId}
+            branchId={branchId}
+            product={splitProduct}
+            products={products}
+            stock={stock}
+            initialLotId={splitLot.id}
+            onClose={() => setSplitLot(null)}
+            onDone={(message) => {
+              setSplitLot(null);
+              setScanStatus(message);
+              setScanError(false);
+              done();
+            }}
+          />
+        )}
         {adjustmentError && (
           <ProductSaveErrorDialog
             title="No pudimos registrar el ajuste"
@@ -5005,6 +5157,13 @@ function Inventory({
             onAdjust={adjustLot}
             onReceive={receiveLot}
             onReturn={returnLot}
+            onSplit={setSplitLot}
+            canSplit={(lot) =>
+              Boolean(
+                products.find((product) => product.id === lot.productId)
+                  ?.splitTargetProductId,
+              )
+            }
             footer={
               <Pagination
                 integrated
@@ -8221,8 +8380,11 @@ function Input({
   className,
   labelClassName,
   inputRef,
+  prefix,
 }: {
   label: string;
+  /** Signo delante del valor, ej. "$" en importes (SISTEMA-103). */
+  prefix?: string;
   disabled?: boolean;
   value: string;
   onChange: (value: string) => void;
@@ -8243,18 +8405,28 @@ function Input({
       }
     >
       {label}
-      <input
-        ref={inputRef}
-        disabled={disabled}
-        required={required}
-        type={type}
-        min={type === "number" && !allowNegative ? 0 : undefined}
-        step={type === "number" ? "any" : undefined}
-        placeholder={placeholder}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`mt-1 h-10 w-full border px-3 ${className ?? ""}`}
-      />
+      <span className="relative block">
+        {prefix && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 mt-0.5 -translate-y-1/2 text-sm font-medium text-slate-500"
+          >
+            {prefix}
+          </span>
+        )}
+        <input
+          ref={inputRef}
+          disabled={disabled}
+          required={required}
+          type={type}
+          min={type === "number" && !allowNegative ? 0 : undefined}
+          step={type === "number" ? "any" : undefined}
+          placeholder={placeholder}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={`mt-1 h-10 w-full border px-3 ${prefix ? "!pl-7" : ""} ${className ?? ""}`}
+        />
+      </span>
     </label>
   );
 }

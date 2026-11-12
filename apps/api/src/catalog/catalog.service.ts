@@ -14,7 +14,8 @@ import {
   classifyCategoryEvidence,
   type CategoryEvidence,
 } from "./category-classification";
-import { fractionalPrice } from "./fractional-price";
+import { expectedSalePrice, fractionalPrice } from "./fractional-price";
+import { assertSplitLink } from "./split-link";
 import { withProductBarcode } from "./product-barcode";
 import { cambiosDelProducto } from "./producto-sin-conexion";
 import { internalBarcode } from "./internal-barcode";
@@ -61,6 +62,9 @@ const CATALOG_PRODUCT_FIELDS = {
   priceDivisor: true,
   priceMarkupBps: true,
   priceBaseMinor: true,
+  splitTargetProductId: true,
+  splitFactor: true,
+  priceManual: true,
   externalReferenceUpdatedAt: true,
   externalReferenceCheckedAt: true,
   saleUnit: true,
@@ -822,6 +826,9 @@ export class CatalogService {
       saleUnit?: "BOX" | "BLISTER" | "UNIT";
       description?: string;
       prescriptionRequired?: boolean;
+      priceManual?: boolean;
+      splitTargetProductId?: string | null;
+      splitFactor?: number | null;
     },
   ) {
     await this.assert(actorId, organizationId, "CATALOG_MANAGE");
@@ -849,6 +856,59 @@ export class CatalogService {
         ),
     );
     return { id: productId };
+  }
+
+  /**
+   * Abrir cajas (SISTEMA-103): guarda en qué producto se abre esta caja y
+   * cuántas unidades trae. No toca el stock. El destino tiene que ser de la
+   * organización, estar activo y no abrirse a su vez en esta caja.
+   */
+  private async vincularApertura(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    productId: string,
+    link: { splitTargetProductId: string | null; splitFactor: number | null },
+  ) {
+    assertSplitLink(productId, link);
+    const before = await tx.product.findFirstOrThrow({
+      where: { id: productId, organizationId },
+      select: { splitTargetProductId: true, splitFactor: true },
+    });
+    if (
+      before.splitTargetProductId === link.splitTargetProductId &&
+      before.splitFactor === link.splitFactor
+    )
+      return;
+    if (link.splitTargetProductId) {
+      const target = await tx.product.findFirst({
+        where: { id: link.splitTargetProductId, organizationId, active: true },
+        select: { splitTargetProductId: true },
+      });
+      if (!target)
+        throw new NotFoundException(
+          "El producto en el que se abre la caja no está disponible.",
+        );
+      if (target.splitTargetProductId === productId)
+        throw new BadRequestException(
+          "Ese producto ya se abre en esta caja. Elegí la presentación más chica.",
+        );
+    }
+    await tx.product.update({
+      where: { id: productId },
+      data: link,
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        entityType: "PRODUCT",
+        entityId: productId,
+        action: "PRODUCT_SPLIT_LINK_UPDATED",
+        before,
+        after: link,
+      },
+    });
   }
 
   /** Validaciones de la edición, antes de la transacción (SISTEMA-79). */
@@ -882,6 +942,9 @@ export class CatalogService {
       saleUnit?: "BOX" | "BLISTER" | "UNIT";
       description?: string;
       prescriptionRequired?: boolean;
+      priceManual?: boolean;
+      splitTargetProductId?: string | null;
+      splitFactor?: number | null;
     },
   ) {
     const product = await db.product.findFirst({
@@ -947,6 +1010,9 @@ export class CatalogService {
       saleUnit?: "BOX" | "BLISTER" | "UNIT";
       description?: string;
       prescriptionRequired?: boolean;
+      priceManual?: boolean;
+      splitTargetProductId?: string | null;
+      splitFactor?: number | null;
     },
     imageContent: Awaited<ReturnType<CatalogService["prepararEdicion"]>>,
     /** Hora real y PC de una edición sin conexión, para la auditoría. */
@@ -1079,6 +1145,9 @@ export class CatalogService {
             }
           : {}),
         ...(input.saleUnit !== undefined ? { saleUnit: input.saleUnit } : {}),
+        ...(input.priceManual !== undefined
+          ? { priceManual: input.priceManual }
+          : {}),
         ...(input.description !== undefined
           ? { description: input.description.trim() || null }
           : {}),
@@ -1087,6 +1156,20 @@ export class CatalogService {
           : {}),
       },
     });
+    if (
+      input.splitTargetProductId !== undefined ||
+      input.splitFactor !== undefined
+    )
+      await this.vincularApertura(tx, actorId, organizationId, productId, {
+        splitTargetProductId:
+          input.splitTargetProductId === undefined
+            ? beforeProduct.splitTargetProductId
+            : input.splitTargetProductId,
+        splitFactor:
+          input.splitFactor === undefined
+            ? beforeProduct.splitFactor
+            : input.splitFactor,
+      });
     if (input.barcode !== undefined) {
       const primaryBarcode = await tx.productBarcode.findFirst({
         where: { productId, primary: true },
@@ -1154,7 +1237,20 @@ export class CatalogService {
             updatedProduct.priceMarkupBps,
           )
         : undefined;
+    // Precio manual de un vinculado (SISTEMA-103): manda lo cargado. Al
+    // volver al automático, el precio sale de la referencia.
+    const backToAutomatic =
+      input.priceManual === false && beforeProduct.priceManual && linked;
     const salePrice =
+      (updatedProduct.priceManual && input.priceMinor !== undefined
+        ? BigInt(input.priceMinor)
+        : undefined) ??
+      (backToAutomatic && updatedProduct.externalReferencePriceMinor != null
+        ? (expectedSalePrice(
+            updatedProduct.externalReferencePriceMinor,
+            updatedProduct,
+          ) ?? undefined)
+        : undefined) ??
       calculatedPrice ??
       (input.priceDivisor === null &&
       linked &&
@@ -1179,7 +1275,13 @@ export class CatalogService {
         (input.externalReferenceName === undefined
           ? beforeProduct.externalReferenceName
           : input.externalReferenceName);
-      if (synchronized && !divided && input.priceDivisor !== null) {
+      if (
+        synchronized &&
+        !divided &&
+        !updatedProduct.priceManual &&
+        !backToAutomatic &&
+        input.priceDivisor !== null
+      ) {
         const existingPrice = await tx.productPrice.findUnique({
           where: {
             productId_priceListId: {
@@ -1343,6 +1445,11 @@ export class CatalogService {
     });
     await tx.productBranchState.deleteMany({
       where: { productId, organizationId },
+    });
+    // Las cajas que se abrían en este producto quedan sin vínculo.
+    await tx.product.updateMany({
+      where: { organizationId, splitTargetProductId: productId },
+      data: { splitTargetProductId: null, splitFactor: null },
     });
     await tx.product.delete({ where: { id: productId } });
     return { id: productId, deleted: true };
@@ -1716,6 +1823,9 @@ export class CatalogService {
       saleUnit?: "BOX" | "BLISTER" | "UNIT";
       description?: string;
       prescriptionRequired?: boolean;
+      priceManual?: boolean;
+      splitTargetProductId?: string | null;
+      splitFactor?: number | null;
       equivalentBarcodes?: string[];
     },
   ) {
@@ -1767,6 +1877,9 @@ export class CatalogService {
       saleUnit?: "BOX" | "BLISTER" | "UNIT";
       description?: string;
       prescriptionRequired?: boolean;
+      priceManual?: boolean;
+      splitTargetProductId?: string | null;
+      splitFactor?: number | null;
       equivalentBarcodes?: string[];
     },
   ) {
@@ -1839,6 +1952,9 @@ export class CatalogService {
       saleUnit?: "BOX" | "BLISTER" | "UNIT";
       description?: string;
       prescriptionRequired?: boolean;
+      priceManual?: boolean;
+      splitTargetProductId?: string | null;
+      splitFactor?: number | null;
       equivalentBarcodes?: string[];
     },
     {
@@ -1906,10 +2022,16 @@ export class CatalogService {
           ? new Date()
           : undefined,
         saleUnit: input.saleUnit,
+        priceManual: input.priceManual ?? false,
         description: input.description?.trim(),
         prescriptionRequired: input.prescriptionRequired,
       },
     });
+    if (input.splitTargetProductId || input.splitFactor)
+      await this.vincularApertura(tx, actorId, organizationId, product.id, {
+        splitTargetProductId: input.splitTargetProductId ?? null,
+        splitFactor: input.splitFactor ?? null,
+      });
     if (input.barcode)
       await tx.productBarcode.create({
         data: {

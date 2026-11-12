@@ -4,7 +4,8 @@ import { guardarEnLaPc } from "./guardar-en-la-pc";
 import { withStockAvailability } from "./stock-availability";
 
 // Inventario sin conexión (SISTEMA-79). Sin internet se puede ingresar stock,
-// ajustar un lote, devolverle al proveedor y corregir un lote. Se guarda en la
+// ajustar un lote, devolverle al proveedor, corregir un lote y abrir cajas
+// (SISTEMA-103). Se guarda en la
 // PC, firmado por quien lo hizo, y se manda solo al volver, en orden con lo
 // demás. Al llegar, una salida que supera lo que queda se registra hasta lo
 // que hay, con aviso (decisión del usuario).
@@ -58,6 +59,16 @@ export type OperacionInventario = Base &
           expiresAt?: string | null;
           unitCostMinor?: string;
           reason: string;
+        };
+      }
+    | {
+        /** Abrir cajas (SISTEMA-103): N cajas del lote pasan a otro producto. */
+        tipo: "APERTURA";
+        cuerpo: {
+          lote: LoteDeLaOperacion;
+          boxes: number;
+          targetProductId: string;
+          factor: number;
         };
       }
   );
@@ -189,6 +200,43 @@ export function stockConPendientes(
     const lote = buscar(op.cuerpo.lote);
     if (!lote) continue;
     lote.porEnviar = true;
+    if (op.tipo === "APERTURA") {
+      // Abrir cajas: sale de la caja y entra al otro producto, mismo lote y
+      // vencimiento (SISTEMA-103). Como en el servidor, hasta lo que hay.
+      const c = op.cuerpo;
+      const cajas = Math.min(c.boxes, lote.quantity);
+      lote.quantity -= cajas;
+      if (!cajas) continue;
+      const destino = buscar({
+        productId: c.targetProductId,
+        number: lote.number,
+      });
+      if (destino) {
+        destino.quantity += cajas * c.factor;
+        destino.porEnviar = true;
+      } else
+        lotes.push({
+          id: idDeLoteDeLaPc(c.targetProductId, lote.number),
+          productId: c.targetProductId,
+          productName: nombreDe(c.targetProductId) ?? "Producto",
+          number: lote.number,
+          quantity: cajas * c.factor,
+          expiresAt: lote.expiresAt,
+          ...(lote.unitCostMinor !== undefined
+            ? {
+                unitCostMinor: String(
+                  Math.round(Number(lote.unitCostMinor) / c.factor),
+                ),
+              }
+            : {}),
+          metadataVersion: 0,
+          sellableQuantity: 0,
+          expiredQuantity: 0,
+          expiryStatus: "AVAILABLE",
+          porEnviar: true,
+        });
+      continue;
+    }
     if (op.tipo === "AJUSTE")
       lote.quantity = Math.max(0, lote.quantity + op.cuerpo.quantity);
     else if (op.tipo === "DEVOLUCION")
@@ -228,5 +276,7 @@ export function operacionInventarioTexto(item: VentaPendiente) {
       return `Devolución al proveedor · ${op.cuerpo.quantity} un.`;
     case "EDICION_LOTE":
       return "Corrección de lote";
+    case "APERTURA":
+      return `Apertura de ${op.cuerpo.boxes === 1 ? "1 caja" : `${op.cuerpo.boxes} cajas`} (+${op.cuerpo.boxes * op.cuerpo.factor} un.)`;
   }
 }

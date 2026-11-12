@@ -18,6 +18,7 @@ import {
   type ReceiptDraft,
 } from "./lib/purchases";
 import { ProductThumbnail } from "./product-image";
+import { splitTarget } from "./lib/split-boxes";
 
 const inputClass =
   "h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-800 outline-none focus:border-teal-500";
@@ -160,6 +161,9 @@ export function PurchaseReceiptTable({
           {visible.map((item) => {
             const product = productoPorId(products, item.productId);
             const name = product?.name ?? "Producto histórico";
+            // Abrir cajas al recibir (SISTEMA-103); sin conexión también: la
+            // PC lo muestra ya abierto y el servidor lo aplica al llegar.
+            const split = product ? splitTarget(product, products) : null;
             const detail = productDetail(product);
             const itemLots = lots.filter((lot) => lot.itemId === item.id);
             const pending = purchasePending(item);
@@ -323,6 +327,25 @@ export function PurchaseReceiptTable({
                             </button>
                           )}
                         </div>
+                        {split && Number(lot.quantity) > 0 && (
+                          <ReceiptOpenBoxes
+                            name={name}
+                            index={index}
+                            value={lot.openBoxes ?? ""}
+                            maximum={Number(lot.quantity)}
+                            factor={split.factor}
+                            targetName={split.target.name}
+                            onChange={(openBoxes) =>
+                              onLotsChange(
+                                lots.map((row) =>
+                                  row.key === lot.key
+                                    ? { ...row, openBoxes }
+                                    : row,
+                                ),
+                              )
+                            }
+                          />
+                        )}
                       </td>
                       <td className="px-2 py-2">{index === 0 && progress}</td>
                       <td className="px-1 py-2 text-center">
@@ -387,6 +410,56 @@ export function PurchaseReceiptTable({
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Abrir cajas al recibir (SISTEMA-103): cuántas pasan ya al producto chico. */
+export function ReceiptOpenBoxes({
+  name,
+  index,
+  value,
+  maximum,
+  factor,
+  targetName,
+  onChange,
+}: {
+  name: string;
+  index: number;
+  value: string;
+  maximum: number;
+  factor: number;
+  targetName: string;
+  onChange: (value: string) => void;
+}) {
+  const open = Number(value) || 0;
+  return (
+    <div className="mt-1.5 w-[148px] rounded-md bg-teal-50 px-2 py-1.5 text-[11px] text-teal-800">
+      <div className="flex items-center gap-1">
+        <span>Abrir ya</span>
+        <input
+          aria-label={`Cajas de ${name} que abro al recibir, lote ${index + 1}`}
+          className="h-6 w-11 rounded border border-teal-200 bg-white px-1 text-center text-xs tabular-nums"
+          inputMode="numeric"
+          placeholder="0"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          type="button"
+          className="font-medium underline-offset-2 hover:underline"
+          onClick={() => onChange(String(maximum))}
+        >
+          todas
+        </button>
+      </div>
+      <span className="mt-0.5 block leading-tight">
+        {open > 0 && open <= maximum
+          ? `+${open * factor} ${targetName}`
+          : open > maximum
+            ? `Hasta ${maximum}`
+            : `Cada caja = ${factor} de ${targetName}`}
+      </span>
     </div>
   );
 }
