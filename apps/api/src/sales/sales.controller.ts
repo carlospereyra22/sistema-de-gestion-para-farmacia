@@ -57,6 +57,8 @@ class SaleLineDto {
   @IsString()
   @Matches(/^\d{1,15}$/)
   expectedOfferDiscountMinor?: string;
+  // La cajera eligió no aplicar ofertas a este producto (SISTEMA-103).
+  @IsOptional() @IsBoolean() skipOffers?: boolean;
   @IsOptional() @IsUUID() productId?: string;
   @IsOptional() @IsString() @MinLength(3) @MaxLength(160) description?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) unitPriceMinor?: number;
@@ -116,6 +118,12 @@ class CompleteSaleDto {
   @ValidateNested({ each: true })
   @Type(() => AppliedOfferDto)
   appliedOffers?: AppliedOfferDto[];
+  // Ofertas que la cajera quitó de esta venta (SISTEMA-103).
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID("all", { each: true })
+  skippedOfferIds?: string[];
 }
 /** Mandar a ARCA una venta hecha con comprobante interno (SISTEMA-65). */
 class InvoiceInternalDto {

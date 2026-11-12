@@ -141,11 +141,13 @@ describe("apartado Ofertas", () => {
     expect(html).toContain("#ABCD1234");
     expect(html).toContain("Historial de cambios");
     expect(html).toContain("Edición");
-    expect(html).toContain("(name)");
+    expect(html).toContain("cambió nombre");
+    expect(html).not.toContain("(name)");
     expect(html).toContain("Stock de oferta: 6 de 100");
     expect(html).toContain("Pausar");
     expect(accionesDe({ status: "PAUSED" })).toContain("reanudar");
-    expect(accionesDe({ status: "ARCHIVED" })).toEqual(["duplicar"]);
+    expect(accionesDe({ status: "ARCHIVED" })).toEqual([]);
+    expect(accionesDe({ status: "PUBLISHED" })).not.toContain("duplicar");
     expect(
       renderToStaticMarkup(<EstadoOfertaBadge estado="PROGRAMADA" />),
     ).toContain("Programada");

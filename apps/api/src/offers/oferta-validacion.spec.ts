@@ -30,6 +30,61 @@ describe("validarOferta", () => {
     );
   });
 
+  it("por medio de pago: porcentaje, al menos un medio y sin topes", () => {
+    const medio = { ...base, type: "PAYMENT_METHOD" as const };
+    expect(
+      validarOferta({ ...medio, paymentMethods: ["CASH", "CASH"] }).datos,
+    ).toMatchObject({ percentBps: 1000, paymentMethods: ["CASH"] });
+    expect(() => validarOferta(medio)).toThrow("al menos un medio de pago");
+    expect(() =>
+      validarOferta({ ...medio, paymentMethods: ["CASH"], maxUnitsTotal: 10 }),
+    ).toThrow("no llevan tope");
+    // Los demás tipos no guardan medios de pago.
+    expect(
+      validarOferta({ ...base, paymentMethods: ["CASH"] }).datos.paymentMethods,
+    ).toEqual([]);
+  });
+
+  it("todos los productos: sin elegir nada, lo elegido sólo excluye", () => {
+    expect(
+      validarOferta({ ...base, allProducts: true, targets: [] }).datos
+        .allProducts,
+    ).toBe(true);
+    expect(() => validarOferta({ ...base, allProducts: true })).toThrow(
+      "queda excluido",
+    );
+    expect(() =>
+      validarOferta({
+        ...base,
+        type: "BUNDLE",
+        percentBps: null,
+        bundlePriceMinor: "1000",
+        allProducts: true,
+        targets: [],
+      }),
+    ).toThrow("no con todos");
+  });
+
+  it("por monto de compra: mínimo y un % o un monto, no los dos", () => {
+    const monto = {
+      ...base,
+      type: "SPEND_THRESHOLD" as const,
+      minPurchaseMinor: "10000000",
+    };
+    expect(validarOferta(monto).datos).toMatchObject({
+      minPurchaseMinor: 10000000n,
+      percentBps: 1000,
+      amountMinor: null,
+    });
+    expect(() => validarOferta({ ...monto, amountMinor: "500" })).toThrow(
+      "no los dos",
+    );
+    expect(() => validarOferta({ ...monto, minPurchaseMinor: null })).toThrow(
+      "desde qué monto",
+    );
+    expect(validarOferta(base).datos.minPurchaseMinor).toBeNull();
+  });
+
   it("NxM: paga menos de lo que lleva", () => {
     expect(() =>
       validarOferta({

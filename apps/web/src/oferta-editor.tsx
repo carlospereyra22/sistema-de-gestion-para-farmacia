@@ -24,6 +24,8 @@ import {
   Store,
   Tag,
   Trash2,
+  Wallet,
+  ShoppingBag,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +45,7 @@ import {
 import {
   armarEntrada,
   DIAS_SEMANA,
+  MEDIOS_OFERTA,
   pesosAMinor,
   erroresPaso,
   formularioDesdeOferta,
@@ -53,7 +56,7 @@ import {
   type DestinoFormulario,
   type FormularioOferta,
 } from "./lib/oferta-formulario";
-import { pesos, type TipoOferta } from "./lib/ofertas-motor";
+import { pesos, textoMedios, type TipoOferta } from "./lib/ofertas-motor";
 import { PreciosOferta } from "./oferta-precios";
 import { ProductFilterSelect } from "./product-filter-select";
 import { SearchableSaleSelect } from "./searchable-sale-select";
@@ -97,6 +100,8 @@ const ICONOS: Record<TipoOferta, LucideIcon> = {
   NTH_UNIT_PERCENT: Layers,
   TIERED: ListOrdered,
   BUNDLE: Package,
+  PAYMENT_METHOD: Wallet,
+  SPEND_THRESHOLD: ShoppingBag,
 };
 
 const etiquetaCampo = "mb-1.5 block text-sm font-medium text-slate-700";
@@ -192,7 +197,12 @@ export function OfertaEditor({
     cambiar({
       destinos: [
         ...formulario.destinos,
-        { ...destino, quantity: formulario.type === "BUNDLE" ? "1" : "" },
+        {
+          ...destino,
+          // Con «Todos los productos», lo que se elige queda excluido.
+          exclude: destino.exclude || (formulario.todos && !combo),
+          quantity: formulario.type === "BUNDLE" ? "1" : "",
+        },
       ],
     });
   };
@@ -460,6 +470,42 @@ export function OfertaEditor({
               )}
               {paso === "productos" && (
                 <>
+                  {!combo && (
+                    <Tarjeta>
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          className="peer sr-only"
+                          checked={formulario.todos}
+                          onChange={(event) =>
+                            cambiar({
+                              todos: event.target.checked,
+                              // Lo ya elegido pasa a ser exclusión.
+                              destinos: event.target.checked
+                                ? formulario.destinos.map((destino) => ({
+                                    ...destino,
+                                    exclude: true,
+                                  }))
+                                : formulario.destinos,
+                            })
+                          }
+                        />
+                        <span
+                          aria-hidden
+                          className="relative mt-0.5 h-6 w-11 shrink-0 rounded-full bg-slate-300 transition after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:bg-teal-600 peer-checked:after:translate-x-5"
+                        />
+                        <span className="text-sm text-slate-700">
+                          <span className="block font-semibold text-slate-900">
+                            Todos los productos
+                          </span>
+                          La oferta vale para todo lo que vendés. Abajo podés
+                          elegir productos, categorías o laboratorios para
+                          dejarlos afuera.
+                        </span>
+                      </label>
+                    </Tarjeta>
+                  )}
                   <Tarjeta>
                     <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
                       <div>
@@ -556,7 +602,9 @@ export function OfertaEditor({
                         : "Todo lo elegido cuenta junto: por ejemplo, un 2x1 en cualquier protector de una marca."}
                     </p>
                   </Tarjeta>
-                  <Tarjeta titulo={`Elegidos (${formulario.destinos.length})`}>
+                  <Tarjeta
+                    titulo={`${formulario.todos && !combo ? "Excluidos" : "Elegidos"} (${formulario.destinos.length})`}
+                  >
                     {formulario.destinos.length ? (
                       <ul className="-mx-1 divide-y divide-slate-100">
                         {formulario.destinos.map((destino, posicion) => {
@@ -721,6 +769,7 @@ export function OfertaEditor({
                       {textoDescuento(formulario)}
                     </Fila>
                     <Fila icono={Package} titulo="Se aplica a">
+                      {formulario.todos && !combo && <p>Todos los productos</p>}
                       <ul className="space-y-0.5">
                         {formulario.destinos
                           .filter((destino) => !destino.exclude)
@@ -960,6 +1009,10 @@ function textoDescuento(formulario: FormularioOferta): string {
       return formulario.comboModo === "PRECIO"
         ? `Combo a ${plata(formulario.precio)} en total`
         : `Combo con ${pct(formulario.porcentaje)} menos`;
+    case "SPEND_THRESHOLD":
+      return `Comprando ${plata(formulario.minimo)} o más: ${formulario.montoModo === "PORCENTAJE" ? pct(formulario.porcentaje) : plata(formulario.monto)} menos, una vez por venta`;
+    case "PAYMENT_METHOD":
+      return `${pct(formulario.porcentaje)} menos pagando con ${textoMedios(formulario.medios) || "—"} (si pagan una parte con otro medio, sólo sobre esa parte)`;
   }
 }
 
@@ -1058,6 +1111,52 @@ function ParametrosOferta({
   cambiar: (parcial: Partial<FormularioOferta>) => void;
 }) {
   switch (formulario.type) {
+    case "PAYMENT_METHOD":
+      return (
+        <Tarjeta>
+          <Campo
+            etiqueta="Porcentaje de descuento"
+            ayuda="Sobre el precio de los productos de la oferta (después de otras ofertas combinables)."
+          >
+            <Numero
+              grande
+              etiqueta="Porcentaje de descuento"
+              valor={formulario.porcentaje}
+              sufijo="%"
+              alCambiar={(porcentaje) => cambiar({ porcentaje })}
+            />
+          </Campo>
+          <Rapidos
+            actual={formulario.porcentaje}
+            alElegir={(porcentaje) => cambiar({ porcentaje })}
+            valores={["5", "10", "15", "20"].map((valor) => ({
+              valor,
+              texto: `${valor}%`,
+            }))}
+          />
+          <div className="mt-4">
+            <Campo
+              etiqueta="Pagando con"
+              ayuda="Si pagan una parte con otro medio, el descuento es sólo sobre la parte pagada con estos."
+            >
+              <Chips
+                items={MEDIOS_OFERTA.map((medio) => ({
+                  id: medio.value,
+                  name: medio.label,
+                }))}
+                elegidos={formulario.medios}
+                alCambiar={(elegidos) =>
+                  cambiar({
+                    medios: MEDIOS_OFERTA.map((medio) => medio.value).filter(
+                      (medio) => elegidos.includes(medio),
+                    ),
+                  })
+                }
+              />
+            </Campo>
+          </div>
+        </Tarjeta>
+      );
     case "PERCENT":
       return (
         <Tarjeta>
@@ -1081,6 +1180,77 @@ function ParametrosOferta({
               texto: `${valor}%`,
             }))}
           />
+        </Tarjeta>
+      );
+    case "SPEND_THRESHOLD":
+      return (
+        <Tarjeta>
+          <Campo
+            etiqueta="Desde un monto de compra de"
+            ayuda="Se suma lo que entra en la oferta (ya con otras ofertas)."
+          >
+            <Numero
+              grande
+              etiqueta="Monto mínimo de compra"
+              valor={formulario.minimo}
+              prefijo="$"
+              ancho="w-60"
+              alCambiar={(minimo) => cambiar({ minimo })}
+            />
+          </Campo>
+          <div
+            role="radiogroup"
+            aria-label="El descuento es"
+            className="mt-4 inline-flex rounded-xl bg-slate-100 p-1"
+          >
+            {(
+              [
+                ["PORCENTAJE", "Un % de descuento"],
+                ["MONTO", "Pesos de descuento"],
+              ] as const
+            ).map(([valor, texto]) => (
+              <button
+                key={valor}
+                type="button"
+                role="radio"
+                aria-checked={formulario.montoModo === valor}
+                onClick={() => cambiar({ montoModo: valor })}
+                className={`h-9 rounded-lg px-4 text-sm ${formulario.montoModo === valor ? "bg-white font-semibold text-teal-800 shadow-sm" : "text-slate-600"}`}
+              >
+                {texto}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4">
+            {formulario.montoModo === "PORCENTAJE" ? (
+              <Campo
+                etiqueta="Porcentaje de descuento"
+                ayuda="Sobre todo lo que entra en la oferta."
+              >
+                <Numero
+                  grande
+                  etiqueta="Porcentaje de descuento"
+                  valor={formulario.porcentaje}
+                  sufijo="%"
+                  alCambiar={(porcentaje) => cambiar({ porcentaje })}
+                />
+              </Campo>
+            ) : (
+              <Campo
+                etiqueta="Pesos de descuento"
+                ayuda="Una vez por venta, repartido entre los productos."
+              >
+                <Numero
+                  grande
+                  etiqueta="Pesos de descuento"
+                  valor={formulario.monto}
+                  prefijo="$"
+                  ancho="w-60"
+                  alCambiar={(monto) => cambiar({ monto })}
+                />
+              </Campo>
+            )}
+          </div>
         </Tarjeta>
       );
     case "AMOUNT_OFF":
@@ -1508,27 +1678,35 @@ function VigenciaOferta({
       )}
       <Tarjeta titulo="Límites">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Campo etiqueta="Tope por venta" ayuda="Unidades con descuento.">
-            <Numero
-              etiqueta="Tope por venta"
-              valor={formulario.topeVenta}
-              sufijo="u."
-              ancho="w-full"
-              alCambiar={(topeVenta) => cambiar({ topeVenta })}
-            />
-          </Campo>
-          <Campo
-            etiqueta="Stock de oferta"
-            ayuda="Total entre todas las ventas."
-          >
-            <Numero
-              etiqueta="Stock de oferta"
-              valor={formulario.topeTotal}
-              sufijo="u."
-              ancho="w-full"
-              alCambiar={(topeTotal) => cambiar({ topeTotal })}
-            />
-          </Campo>
+          {formulario.type !== "PAYMENT_METHOD" &&
+            formulario.type !== "SPEND_THRESHOLD" && (
+              <>
+                <Campo
+                  etiqueta="Tope por venta"
+                  ayuda="Unidades con descuento."
+                >
+                  <Numero
+                    etiqueta="Tope por venta"
+                    valor={formulario.topeVenta}
+                    sufijo="u."
+                    ancho="w-full"
+                    alCambiar={(topeVenta) => cambiar({ topeVenta })}
+                  />
+                </Campo>
+                <Campo
+                  etiqueta="Stock de oferta"
+                  ayuda="Total entre todas las ventas."
+                >
+                  <Numero
+                    etiqueta="Stock de oferta"
+                    valor={formulario.topeTotal}
+                    sufijo="u."
+                    ancho="w-full"
+                    alCambiar={(topeTotal) => cambiar({ topeTotal })}
+                  />
+                </Campo>
+              </>
+            )}
           <Campo
             etiqueta="Prioridad"
             ayuda="Desempata ofertas con igual ahorro."

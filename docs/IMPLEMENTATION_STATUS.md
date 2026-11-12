@@ -41,4 +41,6 @@ Siguen pendientes balances materializados, reportes detallados por período y la
 - API: módulo `offers` (alta, edición con versión y control de concurrencia, publicar, pausar, reanudar, finalizar, duplicar, archivar, detalle con historial y ventas, `vigentes` para el motor, reporte por oferta) y motor puro con tests por tipo.
 - Venta: ofertas calculadas al confirmar, 409 `OFERTAS_CAMBIARON`, instantánea `SaleOffer`, reparto entre lotes, tope total con bloqueo, venta sin conexión con avisos, ticket y A4 con ofertas y "Usted ahorró".
 - Web: apartado Ofertas, ofertas en el carrito, cobro y venta confirmada, marca en el catálogo de Ventas y en Productos, filtro "Con oferta vigente", "Crear oferta para este producto", permisos en roles y precarga sin conexión.
-- Pendiente: condición por medio de pago y por cliente, reporte interactivo en Reportes.
+- Ofertas por medio de pago (proporcional con pago mixto, recalculadas en el cobro) y opción «Todos los productos» (12/11/2026).
+- Ofertas por monto de compra (% o pesos desde un mínimo, con sugerencia en el carrito) (12/11/2026).
+- Pendiente: condición por cliente, reporte interactivo en Reportes.

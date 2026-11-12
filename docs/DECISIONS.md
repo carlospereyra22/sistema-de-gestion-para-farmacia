@@ -383,4 +383,9 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
 - `SaleItem.discountMinor` sigue siendo el descuento total y `offerDiscountMinor` la parte de ofertas: factura C, notas de crédito, cuenta corriente y tickets no cambian su lógica. El ticket suma `offers`/`savingsMinor` sin cambiar el significado de `discountMinor`, para que un agente de impresión anterior imprima cuentas correctas.
 - Estados guardados mínimos (borrador, publicada, pausada, finalizada, archivada); programada, activa y vencida se calculan con la hora, sin cron.
 - Permisos nuevos `OFFER_READ` y `OFFER_MANAGE` (nombre alineado con los `*_READ`/`*_MANAGE` existentes).
-- Fuera de esta versión: condiciones por medio de pago y por cliente puntual, y crear o editar ofertas sin conexión.
+- Fuera de esta versión: condiciones por cliente puntual, y crear o editar ofertas sin conexión.
+- Por medio de pago (12/11/2026, decisión del usuario): es un tipo de oferta (`PAYMENT_METHOD`), no una condición sobre los otros tipos. Con pago mixto el descuento es proporcional a la parte pagada con esos medios; se puede elegir cuenta corriente. Va después de las demás ofertas y respeta «combinable». Dos ofertas por medio de pago no se suman: se aplica la de mayor ahorro (lo habitual es una sola). En el carrito sólo se sugiere; se aplica en el cobro y la API recalcula con los pagos. Ver OFFERS.md.
+- «Todos los productos» (12/11/2026): `Offer.allProducts` con exclusiones, para cualquier tipo salvo combos.
+- No combinables (12/11/2026, decisión del usuario «según combinable, pero gana la mejor»): si una oferta de toda la venta queda bloqueada por otra no combinable, el motor compara con el cálculo sin la que la bloquea y se queda con el de mayor ahorro total.
+- Por monto de compra (12/11/2026, pedido del usuario): tipo `SPEND_THRESHOLD`, mínimo medido sobre lo que entra en la oferta ya con las demás ofertas, % o pesos una vez por venta, después de las ofertas por producto y antes de las por medio de pago; va la de mayor ahorro y respeta «combinable».
+- La web no ofrece «Duplicar» (12/11/2026, pedido del usuario); el endpoint sigue.

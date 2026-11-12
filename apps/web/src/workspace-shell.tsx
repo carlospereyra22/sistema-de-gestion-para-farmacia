@@ -90,7 +90,13 @@ import {
   ofertasParaEnviar,
 } from "./lib/ofertas-carrito";
 import { SaleCartOffers, type SugerenciaCarrito } from "./sale-cart-offers";
-import type { OfertaMotor } from "./lib/ofertas-motor";
+import { SaleOffersControl } from "./sale-offers-control";
+import {
+  etiquetaOferta,
+  textoMedios,
+  type OfertaMotor,
+} from "./lib/ofertas-motor";
+import { pagosDelCobro, type PagoCobro } from "./lib/ofertas-cobro";
 import { sortSaleLines } from "./lib/sort-sale-lines";
 import {
   FractionalPriceOptions,
@@ -5685,6 +5691,8 @@ function Sales({
       discountMinor: number;
       // Unidades de la línea vendidas como exhibidor cerrado.
       packQuantity?: number;
+      // La cajera eligió no aplicar ofertas a este producto.
+      skipOffers?: boolean;
     }[]
   >([]);
   const [resumeNeeded, setResumeNeeded] = useState(false);
@@ -5851,6 +5859,8 @@ function Sales({
   const [avisoOfertas, setAvisoOfertas] = useState("");
   // Sugerencias que la cajera descartó en esta venta.
   const [ofertasDescartadas, setOfertasDescartadas] = useState<string[]>([]);
+  // Ofertas que la cajera quitó de toda la venta (la API también las saltea).
+  const [ofertasQuitadas, setOfertasQuitadas] = useState<string[]>([]);
   useEffect(() => {
     if (!active) return;
     let current = true;
@@ -5885,22 +5895,92 @@ function Sales({
   }, [active]);
   const listPriceOf = (productId: string) =>
     Number(productoPorId(products, productId)?.prices[0]?.amountMinor ?? 0);
-  const ofertasCarrito = ofertasDelCarrito(
-    lines.map((line) => ({
-      productId: line.productId,
-      description: line.description,
-      quantity: line.quantity,
-      listPriceMinor: listPriceOf(line.productId),
-      requestedUnitPriceMinor: line.requestedUnitPriceMinor,
-    })),
-    catalogProducts,
-    ofertasVigentes,
-    {
-      ahora: ahoraOfertas,
-      branchId,
-      priceListId: activeSaleListId || null,
-    },
+  const subtotal = lines.reduce(
+    (sum, line) =>
+      sum +
+      Number(
+        line.requestedUnitPriceMinor ??
+          line.unitPriceMinor ??
+          productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
+          0,
+      ) *
+        line.quantity,
+    0,
   );
+  const discountMinor = lines.reduce(
+    (sum, line) => sum + line.discountMinor,
+    0,
+  );
+  const renglonesOferta = lines.map((line) => ({
+    productId: line.productId,
+    description: line.description,
+    quantity: line.quantity,
+    listPriceMinor: listPriceOf(line.productId),
+    requestedUnitPriceMinor: line.requestedUnitPriceMinor,
+    skipOffers: line.skipOffers,
+  }));
+  const contextoOfertas = {
+    ahora: ahoraOfertas,
+    branchId,
+    priceListId: activeSaleListId || null,
+  };
+  const ofertasVenta = ofertasVigentes.filter(
+    (oferta) => !ofertasQuitadas.includes(oferta.id),
+  );
+  // Ofertas sin mirar el cobro: las del carrito.
+  const ofertasBase = ofertasDelCarrito(
+    renglonesOferta,
+    catalogProducts,
+    ofertasVenta,
+    contextoOfertas,
+  );
+  // Ofertas por medio de pago (SISTEMA-103): dependen de cómo se cobra. El
+  // total de la venta incluye lo que no pasa por el motor (conceptos, precios
+  // especiales, descuento general), igual que en la API.
+  const hayOfertaPorPago = ofertasVigentes.some(
+    (oferta) => oferta.type === "PAYMENT_METHOD",
+  );
+  const ofertasConPagos = (pagos: readonly PagoCobro[]) => {
+    if (!hayOfertaPorPago) return ofertasBase;
+    const enCatalogo = new Set(catalogProducts.map((producto) => producto.id));
+    const brutoMotorMinor = renglonesOferta
+      .filter(
+        (renglon) => !renglon.description && enCatalogo.has(renglon.productId),
+      )
+      .reduce(
+        (suma, renglon) => suma + renglon.listPriceMinor * renglon.quantity,
+        0,
+      );
+    return ofertasDelCarrito(renglonesOferta, catalogProducts, ofertasVenta, {
+      ...contextoOfertas,
+      cobro: {
+        pagos: pagos.map((pago) => ({
+          method: pago.method,
+          amountMinor: BigInt(pago.amountMinor),
+        })),
+        otrosMinor: BigInt(subtotal - discountMinor - brutoMotorMinor),
+      },
+    });
+  };
+  const totalConPagos = (pagos: readonly PagoCobro[]) =>
+    subtotal - ofertasConPagos(pagos).totalMinor - discountMinor;
+  // Con la ventana de cobro abierta, el total se calcula con los pagos
+  // cargados y el que se está cargando (sin importe escrito, el que salda).
+  const montoAutomatico = useRef("");
+  const ofertasCarrito =
+    checkoutOpen && hayOfertaPorPago
+      ? ofertasConPagos(
+          pagosDelCobro({
+            pagos: payments,
+            metodo: method,
+            montoEscrito:
+              paymentAmount.trim() && paymentAmount !== montoAutomatico.current
+                ? parseArgentineAmountMinor(paymentAmount)
+                : undefined,
+            totalCon: totalConPagos,
+          }),
+        )
+      : ofertasBase;
   // Nombre y precio efectivo de un producto, para explicar sus ofertas.
   const productoVenta = (id: string) => {
     const producto = productoPorId(products, id);
@@ -5921,11 +6001,33 @@ function Sales({
     lines.find((line) => !line.description && line.productId === productId)
       ?.quantity ?? 0;
   const sugerenciasCarrito: SugerenciaCarrito[] =
-    ofertasCarrito.sugerencias.flatMap((sugerencia): SugerenciaCarrito[] => {
+    ofertasBase.sugerencias.flatMap((sugerencia): SugerenciaCarrito[] => {
       const oferta = ofertasVigentes.find(
         (item) => item.id === sugerencia.offerId,
       );
       if (!oferta) return [];
+      // Por medio de pago: se aplica en el cobro, acá sólo se avisa.
+      if (sugerencia.medioDePago)
+        return [
+          {
+            id: oferta.id,
+            label: sugerencia.label,
+            nombre: oferta.name,
+            agregar: `Pagando con ${textoMedios(sugerencia.medioDePago.medios)}`,
+            gana: `ahorrás ${money(Number(sugerencia.medioDePago.ahorroMinor))} (se aplica al cobrar)`,
+          },
+        ];
+      // Por monto de compra: cuánto falta para llegar.
+      if (sugerencia.porMonto)
+        return [
+          {
+            id: oferta.id,
+            label: sugerencia.label,
+            nombre: oferta.name,
+            agregar: `Sumá ${money(Number(sugerencia.porMonto.faltaMinor))} más`,
+            gana: `y tenés ${oferta.percentBps ? `${String(oferta.percentBps / 100).replace(".", ",")}%` : money(Number(oferta.amountMinor ?? 0n))} menos con «${oferta.name}»`,
+          },
+        ];
       if (oferta.type === "BUNDLE") {
         const detalle = detalleOfertaVenta(oferta, productoVenta).combo;
         const componentes = detalle?.componentes ?? [];
@@ -6005,35 +6107,43 @@ function Sales({
   const ahorroOferta = (productId: string) =>
     ofertasCarrito.porProducto.get(productId)?.ahorroMinor ?? 0;
   const offerSavings = ofertasCarrito.totalMinor;
+  // El aviso de "cambió una oferta" mira el carrito sin el cobro: cambiar el
+  // medio de pago no es que cambió una oferta.
+  const ahorroBase = ofertasBase.totalMinor;
   // Si cambia el ahorro sin que cambie el carrito (venció, empezó o se
   // modificó una oferta, o se reanudó la venta), se avisa a la cajera.
   // Cliente y lista entran en la firma: cambiarlos no es "cambió una oferta".
   const firmaCarrito = JSON.stringify([
     activeSaleListId,
+    // Quitar una oferta a mano no es "cambió una oferta".
+    ofertasQuitadas,
     lines.map((line) => [
       line.productId,
       line.quantity,
       line.requestedUnitPriceMinor ?? null,
+      // Elegir "No aplicar" no es "cambió una oferta".
+      line.skipOffers ?? false,
     ]),
   ]);
   const ultimoAhorro = useRef<{ firma: string; ahorro: number }>(undefined);
   useEffect(() => {
     const previo = ultimoAhorro.current;
-    ultimoAhorro.current = { firma: firmaCarrito, ahorro: offerSavings };
+    ultimoAhorro.current = { firma: firmaCarrito, ahorro: ahorroBase };
     if (!lines.length) {
       setAvisoOfertas("");
       setOfertasDescartadas([]);
+      setOfertasQuitadas([]);
     } else if (
       previo &&
       previo.firma === firmaCarrito &&
-      previo.ahorro !== offerSavings
+      previo.ahorro !== ahorroBase
     )
       setAvisoOfertas(
-        offerSavings < previo.ahorro
+        ahorroBase < previo.ahorro
           ? "Una oferta del carrito venció o cambió. Revisá el total antes de cobrar."
           : "Se aplicó una oferta al carrito. Revisá el total antes de cobrar.",
       );
-  }, [firmaCarrito, offerSavings, lines.length]);
+  }, [firmaCarrito, ahorroBase, lines.length]);
   const [receipt, setReceipt] = useState<Receipt>();
   const [conceptOpen, setConceptOpen] = useState(false);
   const [creditAccounts, setCreditAccounts] = useState<CustomerAccount[]>([]);
@@ -6114,22 +6224,6 @@ function Sales({
   const productStock = (id: string) =>
     stockByProduct.get(id) ?? { available: 0, expired: 0 };
   const available = (id: string) => productStock(id).available;
-  const subtotal = lines.reduce(
-    (sum, line) =>
-      sum +
-      Number(
-        line.requestedUnitPriceMinor ??
-          line.unitPriceMinor ??
-          productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
-          0,
-      ) *
-        line.quantity,
-    0,
-  );
-  const discountMinor = lines.reduce(
-    (sum, line) => sum + line.discountMinor,
-    0,
-  );
   const total = subtotal - offerSavings - discountMinor;
   const searchTerm = productQuery.trim().toLocaleLowerCase();
   const exactBarcodeProduct = products.find(
@@ -6328,6 +6422,44 @@ function Sales({
     setPayments(nextPayments);
   };
   const paid = payments.reduce((sum, payment) => sum + payment.amountMinor, 0);
+  // Aplicar o no las ofertas de un producto. Cambia el total: los pagos ya
+  // cargados se descartan, como al cambiar la lista o el descuento.
+  // Quitar o volver a aplicar una oferta en toda la venta.
+  const cambiarOfertaQuitada = (offerId: string, quitada: boolean) => {
+    setOfertasQuitadas((actuales) =>
+      quitada
+        ? [...new Set([...actuales, offerId])]
+        : actuales.filter((id) => id !== offerId),
+    );
+    setPayments([]);
+  };
+  const cambiarSinOfertas = (productId: string, sinOfertas: boolean) => {
+    setLines((current) =>
+      current.map((item) =>
+        !item.description && item.productId === productId
+          ? { ...item, skipOffers: sinOfertas || undefined }
+          : item,
+      ),
+    );
+    setPayments([]);
+  };
+  // Importe precargado por el sistema (lo que falta). Con ofertas por medio
+  // de pago el total cambia según el medio: si la cajera no lo tocó, se
+  // actualiza solo.
+  const precargarMonto = (minor: number) => {
+    const texto = cashAmountDraft(minor);
+    montoAutomatico.current = texto;
+    setPaymentAmount(texto);
+  };
+  useEffect(() => {
+    if (!checkoutOpen || !hayOfertaPorPago || method === "ACCOUNT") return;
+    if (!paymentAmount.trim() || paymentAmount !== montoAutomatico.current)
+      return;
+    const deseado = cashAmountDraft(Math.max(total - paid, 0));
+    if (deseado === paymentAmount) return;
+    montoAutomatico.current = deseado;
+    setPaymentAmount(deseado);
+  }, [checkoutOpen, hayOfertaPorPago, method, paymentAmount, total, paid]);
   const paymentAmountMinor = parseArgentineAmountMinor(paymentAmount);
   // Con la ventana de cobro abierta, los errores se muestran dentro de ella.
   const reportPayment = (message: string): undefined => {
@@ -6384,7 +6516,7 @@ function Sales({
   const openCheckout = () => {
     if (!lines.length || !pricingReady || submitting) return;
     setCheckoutError("");
-    if (!payments.length) setPaymentAmount(cashAmountDraft(total));
+    if (!payments.length) precargarMonto(total);
     setCheckoutOpen(true);
   };
   const closeCheckout = () => {
@@ -6407,7 +6539,7 @@ function Sales({
         setPaymentAmount("");
       } catch (cause) {
         setPayments(next);
-        setPaymentAmount(cashAmountDraft(Math.max(total - nextPaid, 0)));
+        precargarMonto(Math.max(total - nextPaid, 0));
         return reportPayment(
           cause instanceof Error
             ? cause.message
@@ -6416,7 +6548,7 @@ function Sales({
       }
     } else {
       setPayments(next);
-      setPaymentAmount(cashAmountDraft(Math.max(total - nextPaid, 0)));
+      precargarMonto(Math.max(total - nextPaid, 0));
     }
     setMethod(nextMethod);
   };
@@ -6433,7 +6565,7 @@ function Sales({
     setPayments(next);
     // Pago parcial: queda registrado y se precarga lo que falta.
     if (nextPaid < total) {
-      setPaymentAmount(cashAmountDraft(total - nextPaid));
+      precargarMonto(total - nextPaid);
       return;
     }
     setPaymentAmount("");
@@ -6460,8 +6592,7 @@ function Sales({
         );
         return;
       }
-    } else if (!paymentAmount.trim())
-      setPaymentAmount(cashAmountDraft(Math.max(total - paid, 0)));
+    } else if (!paymentAmount.trim()) precargarMonto(Math.max(total - paid, 0));
     setMethod(value);
   };
   const loadHistory = async () => {
@@ -6625,6 +6756,7 @@ function Sales({
       metodos: finalPayments.map((payment) => payment.method),
     });
     if (motivo) return reportPayment(motivo);
+    const ofertasEnvio = ofertasConPagos(finalPayments);
     const nombre = (productId: string) =>
       productoPorId(products, productId)?.name ?? "Producto";
     const occurredAt = ahoraSegunServidor().toISOString();
@@ -6655,11 +6787,13 @@ function Sales({
         // Descuento general repartido más el ahorro por ofertas.
         descuentoMinor:
           (cuerpo.items[indice]?.discountMinor ?? 0) +
-          (line.description ? 0 : ahorroOferta(line.productId)),
+          (line.description
+            ? 0
+            : (ofertasEnvio.porProducto.get(line.productId)?.ahorroMinor ?? 0)),
       })),
       pagos: finalPayments,
       factura: documentType === "INVOICE",
-      ofertas: ofertasCarrito.aplicaciones.map((aplicacion) => ({
+      ofertas: ofertasEnvio.aplicaciones.map((aplicacion) => ({
         label: aplicacion.label,
         name: aplicacion.name,
         amountMinor: Number(aplicacion.discountMinor),
@@ -6760,10 +6894,16 @@ function Sales({
       return reportPayment(
         "Esperá a que se carguen los precios o actualizalos antes de cobrar.",
       );
+    // Ofertas con los pagos que se mandan (las por medio de pago dependen
+    // de ellos): es lo que la API recalcula.
+    const ofertasEnvio = ofertasConPagos(finalPayments);
+    const ahorroEnvio = (productId: string) =>
+      ofertasEnvio.porProducto.get(productId)?.ahorroMinor ?? 0;
+    const totalEnvio = subtotal - ofertasEnvio.totalMinor - discountMinor;
     try {
       if (
         finalPayments.reduce((sum, payment) => sum + payment.amountMinor, 0) <
-        total
+        totalEnvio
       )
         return reportPayment(
           "Agregá cobros hasta cubrir el total de la venta.",
@@ -6820,14 +6960,13 @@ function Sales({
                 expectedUnitPriceMinor: productoPorId(products, line.productId)!
                   .prices[0]!.amountMinor,
                 // Ahorro por ofertas que ve la cajera: la API lo revalida.
-                expectedOfferDiscountMinor: String(
-                  ahorroOferta(line.productId),
-                ),
+                expectedOfferDiscountMinor: String(ahorroEnvio(line.productId)),
               },
         ),
-        ...(ofertasCarrito.aplicaciones.length
-          ? { appliedOffers: ofertasParaEnviar(ofertasCarrito.aplicaciones) }
+        ...(ofertasEnvio.aplicaciones.length
+          ? { appliedOffers: ofertasParaEnviar(ofertasEnvio.aplicaciones) }
           : {}),
+        ...(ofertasQuitadas.length ? { skippedOfferIds: ofertasQuitadas } : {}),
         payments: finalPayments.map((payment) => ({
           ...payment,
           cashSessionId: payment.method !== "ACCOUNT" ? session?.id : undefined,
@@ -6885,6 +7024,7 @@ function Sales({
     sale: Sale,
     finalPayments: Receipt["payments"],
   ): Receipt {
+    const ofertasEnvio = ofertasConPagos(finalPayments);
     return {
       sale,
       customerName:
@@ -6904,10 +7044,12 @@ function Sales({
         ),
         discountMinor:
           line.discountMinor +
-          (line.description ? 0 : ahorroOferta(line.productId)),
+          (line.description
+            ? 0
+            : (ofertasEnvio.porProducto.get(line.productId)?.ahorroMinor ?? 0)),
       })),
       subtotalMinor: subtotal,
-      discountMinor: discountMinor + offerSavings,
+      discountMinor: discountMinor + ofertasEnvio.totalMinor,
       payments: finalPayments,
     };
   }
@@ -7295,6 +7437,27 @@ function Sales({
         unitCount={lines.reduce((sum, line) => sum + line.quantity, 0)}
         totalMinor={total}
         offerSavingsMinor={offerSavings}
+        offerControl={
+          ofertasCarrito.aplicaciones.length || ofertasQuitadas.length ? (
+            <SaleOffersControl
+              aplicadas={ofertasCarrito.aplicaciones.map((aplicacion) => ({
+                id: aplicacion.offerId,
+                label: aplicacion.label,
+                nombre: aplicacion.name,
+                ahorroMinor: Number(aplicacion.discountMinor),
+              }))}
+              quitadas={ofertasVigentes
+                .filter((oferta) => ofertasQuitadas.includes(oferta.id))
+                .map((oferta) => ({
+                  id: oferta.id,
+                  label: etiquetaOferta(oferta),
+                  nombre: oferta.name,
+                }))}
+              onQuitar={(id) => cambiarOfertaQuitada(id, true)}
+              onAplicar={(id) => cambiarOfertaQuitada(id, false)}
+            />
+          ) : undefined
+        }
         offerNotice={
           <SaleCartOffers
             aviso={avisoOfertas || undefined}
@@ -7443,7 +7606,7 @@ function Sales({
                   return (
                     <article
                       key={line.productId}
-                      className={`sales-cart-row grid items-center gap-2.5 px-5 py-2.5 ${line.productId === lastAddedId ? "bg-teal-50" : ""}`}
+                      className={`sales-cart-row group grid items-center gap-2.5 px-5 py-2.5 ${line.productId === lastAddedId ? "bg-teal-50" : ""}`}
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <div className="shrink-0">
@@ -7486,16 +7649,52 @@ function Sales({
                               <p className="flex flex-wrap gap-1">
                                 {ofertasCarrito.porProducto
                                   .get(line.productId)!
-                                  .labels.map((label) => (
+                                  .labels.map((label, posicion) => (
                                     <span
                                       key={label}
-                                      className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-700"
+                                      className="sale-offer-chip rounded-md bg-rose-50 text-[11px] font-bold text-rose-700"
                                     >
                                       {label}
+                                      {/* Discreto: la ✕ ocupa su lugar y se ve al pasar por la fila. */}
+                                      {posicion === 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            cambiarSinOfertas(
+                                              line.productId,
+                                              true,
+                                            )
+                                          }
+                                          aria-label="No aplicar la oferta en este producto"
+                                          title="No aplicar la oferta en este producto"
+                                          className="sale-offer-chip-skip"
+                                        >
+                                          <X size={11} aria-hidden />
+                                        </button>
+                                      )}
                                     </span>
                                   ))}
                               </p>
                             )}
+                          {!line.description && line.skipOffers && (
+                            <p className="flex flex-wrap gap-1">
+                              <span className="sale-offer-chip rounded-md bg-slate-100 text-[11px] font-bold text-slate-500">
+                                Sin oferta
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    cambiarSinOfertas(line.productId, false)
+                                  }
+                                  title="Volver a aplicar la oferta"
+                                  className="sale-offer-chip-restore"
+                                >
+                                  <span className="text-[11px] font-semibold">
+                                    Aplicar
+                                  </span>
+                                </button>
+                              </span>
+                            </p>
+                          )}
                           {/* El precio manual reemplaza la oferta: se avisa. */}
                           {!line.description &&
                             line.requestedUnitPriceMinor !== undefined &&

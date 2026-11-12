@@ -84,6 +84,24 @@ describe("ofertas en el carrito", () => {
     ]);
   });
 
+  it("«No aplicar» deja el producto sin oferta", () => {
+    const resultado = ofertasDelCarrito(
+      [
+        {
+          productId: "p1",
+          quantity: 3,
+          listPriceMinor: 1000,
+          skipOffers: true,
+        },
+      ],
+      productos,
+      [oferta({})],
+      contexto,
+    );
+    expect(resultado.totalMinor).toBe(0);
+    expect(resultado.aplicaciones).toEqual([]);
+  });
+
   it("el precio especial de la cajera reemplaza la oferta y los conceptos no participan", () => {
     expect(
       ofertasDelCarrito(

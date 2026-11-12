@@ -1007,6 +1007,49 @@
   gap: 10px;
   padding-inline: 20px;
 }
+/* Etiqueta de oferta en el carrito (SISTEMA-103): alto fijo para que la ✕
+   y "Aplicar" no cambien el tamaño de la fila. El tamaño de letra va acá
+   porque la regla global de button pisa las utilidades. */
+.sale-offer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+  padding: 0 6px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.sale-offer-chip-skip {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-right: -3px;
+  border-radius: 4px;
+  color: inherit;
+  visibility: hidden;
+}
+.sales-cart-row:hover .sale-offer-chip-skip,
+.sales-cart-row:focus-within .sale-offer-chip-skip {
+  visibility: visible;
+}
+.sale-offer-chip-skip:hover {
+  background: #fecdd3;
+}
+.sale-offer-chip-restore {
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  margin-left: 3px;
+  margin-right: -3px;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: #0f766e;
+  background: #fff;
+}
+.sale-offer-chip-restore:hover {
+  background: #ccfbf1;
+}
 .sales-cart-product-name {
   display: -webkit-box;
   -webkit-box-orient: vertical;

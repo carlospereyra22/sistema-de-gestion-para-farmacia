@@ -4,7 +4,9 @@ import {
   etiquetaOferta,
   pesos,
   productoEntra,
+  textoMedios,
   type AplicacionOferta,
+  type ContextoOfertas,
   type OfertaMotor,
   type SugerenciaOferta,
 } from "./ofertas-motor";
@@ -22,6 +24,8 @@ export type RenglonCarritoOferta = {
   listPriceMinor: number;
   /** Precio especial de la cajera: reemplaza la oferta. */
   requestedUnitPriceMinor?: number;
+  /** La cajera eligió no aplicarle ofertas. */
+  skipOffers?: boolean;
 };
 
 export type ProductoOferta = {
@@ -50,7 +54,7 @@ export function ofertasDelCarrito(
   renglones: readonly RenglonCarritoOferta[],
   productos: readonly ProductoOferta[],
   ofertas: readonly OfertaMotor[],
-  contexto: { ahora: Date; branchId: string; priceListId: string | null },
+  contexto: ContextoOfertas,
 ): OfertasDelCarrito {
   if (!ofertas.length) return VACIO;
   const porId = new Map(productos.map((producto) => [producto.id, producto]));
@@ -71,6 +75,7 @@ export function ofertasDelCarrito(
         manualPrice:
           renglon.requestedUnitPriceMinor !== undefined &&
           renglon.requestedUnitPriceMinor !== renglon.listPriceMinor,
+        sinOfertas: renglon.skipOffers === true,
       };
     }),
     ofertas,
@@ -120,6 +125,14 @@ export function ofertasDelProducto(
     const estado = estadoOferta(oferta, ahora);
     if (estado !== "ACTIVA" && estado !== "PROGRAMADA") return [];
     if (branchId && oferta.branchIds && !oferta.branchIds.includes(branchId))
+      return [];
+    // Por medio de pago o monto de compra sobre todo el catálogo: no cambia
+    // el precio del producto (depende del cobro o del total), así que no se
+    // marca cada producto; se sugiere en el carrito.
+    if (
+      oferta.allProducts &&
+      (oferta.type === "PAYMENT_METHOD" || oferta.type === "SPEND_THRESHOLD")
+    )
       return [];
     if (
       !productoEntra(oferta, {
@@ -229,6 +242,16 @@ export function detalleOfertaVenta(
         combo: { componentes, listaMinor: lista, comboMinor: combo },
       };
     }
+    case "PAYMENT_METHOD":
+      return {
+        ...base,
+        texto: `${porcentajeTexto(oferta.percentBps)} menos pagando con ${textoMedios(oferta.paymentMethods ?? [])}`,
+      };
+    case "SPEND_THRESHOLD":
+      return {
+        ...base,
+        texto: `Comprando ${pesos(oferta.minPurchaseMinor ?? 0n)} o más: ${oferta.percentBps ? porcentajeTexto(oferta.percentBps) : pesos(oferta.amountMinor ?? 0n)} menos`,
+      };
   }
 }
 

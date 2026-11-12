@@ -11,6 +11,7 @@ export function SaleCurrentPanel({
   unitCount,
   totalMinor,
   offerSavingsMinor = 0,
+  offerControl,
   offerNotice,
   checkoutDisabled,
   submitting,
@@ -26,6 +27,8 @@ export function SaleCurrentPanel({
   totalMinor: number;
   /** Ahorro por ofertas (SISTEMA-103), aparte del descuento general. */
   offerSavingsMinor?: number;
+  /** Ver y quitar las ofertas de la venta, junto al ahorro. */
+  offerControl?: ReactNode;
   /** "Agregá 1 más y llevás 3x2" y avisos de ofertas que cambiaron. */
   offerNotice?: ReactNode;
   checkoutDisabled: boolean;
@@ -78,13 +81,15 @@ export function SaleCurrentPanel({
       {/* Pie en una sola fila: deja el alto disponible para las líneas. */}
       <footer className="sale-current-footer flex shrink-0 flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
         {discount}
-        {offerSavingsMinor > 0 && (
-          <p className="text-xs font-semibold text-rose-700">
-            Ahorro por ofertas
-            <span className="block text-base tabular-nums">
-              −{money(offerSavingsMinor)}
-            </span>
-          </p>
+        {(offerSavingsMinor > 0 || offerControl) && (
+          <div className="text-xs font-semibold text-rose-700">
+            {offerControl ?? <span>Ahorro por ofertas</span>}
+            {offerSavingsMinor > 0 && (
+              <span className="block text-base tabular-nums">
+                −{money(offerSavingsMinor)}
+              </span>
+            )}
+          </div>
         )}
         <div className="ml-auto text-right">
           <p className="text-xs font-semibold text-slate-600">
@@ -98,13 +103,13 @@ export function SaleCurrentPanel({
           type="button"
           disabled={checkoutDisabled}
           onClick={onCheckout}
+          // El atajo funciona igual; se muestra como ayuda para no recargar el botón.
+          title="Cobrar (Ctrl + Enter)"
+          aria-keyshortcuts="Control+Enter"
           className="sale-checkout-button flex min-h-14 items-center justify-center gap-2.5 whitespace-nowrap rounded-xl bg-teal-700 px-6 text-lg font-semibold text-white shadow-sm hover:bg-teal-800 disabled:bg-slate-400"
         >
           <WalletCards size={20} />
           {submitting ? "Confirmando…" : "Cobrar"}
-          <kbd className="rounded border border-white/50 px-1.5 py-0.5 text-[11px] font-medium">
-            Ctrl + Enter
-          </kbd>
         </button>
       </footer>
     </section>

@@ -9,10 +9,10 @@ import {
 import {
   BadgePercent,
   Building2,
-  Copy,
   Eye,
   FilterX,
   Layers,
+  Package,
   Pause,
   Pencil,
   Play,
@@ -21,9 +21,13 @@ import {
   Archive,
   Square,
   Send,
+  WifiOff,
   X,
 } from "lucide-react";
 import type { CatalogProduct, StockLot } from "./lib/api";
+import { SinConexionError } from "./lib/api-fetch";
+import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
+import { useConectividad } from "./lib/conectividad";
 import {
   accionOferta,
   getOferta,
@@ -37,6 +41,11 @@ import {
   textoVigencia,
   type DestinoFormulario,
 } from "./lib/oferta-formulario";
+import {
+  agruparDestinosOferta,
+  describirCambiosOferta,
+  TIPO_DESTINO_OFERTA,
+} from "./lib/ofertas-detalle";
 import { pesos, type EstadoOferta, type TipoOferta } from "./lib/ofertas-motor";
 import { OfertaEditor } from "./oferta-editor";
 import { OfertaAccionDialog } from "./oferta-accion-dialog";
@@ -89,11 +98,6 @@ const ACCION: Record<
     icon: Square,
     ayuda: "Termina ahora; no se puede reanudar.",
   },
-  duplicar: {
-    label: "Duplicar",
-    icon: Copy,
-    ayuda: "Crea una copia en borrador para editarla.",
-  },
   archivar: {
     label: "Archivar",
     icon: Archive,
@@ -108,7 +112,7 @@ export function OfertasWorkspace({
   branches,
   products,
   stock,
-  canManage,
+  canManage: puedeGestionar,
   canSeeCosts,
   crearPara,
   onCrearParaUsado,
@@ -126,6 +130,11 @@ export function OfertasWorkspace({
   onCrearParaUsado?: () => void;
   onError: (mensaje: string) => void;
 }) {
+  // Sin internet se ven las ofertas guardadas en la PC (Ventas las sigue
+  // aplicando), pero crear, editar o cambiar el estado necesita el servidor.
+  const { enLinea } = useConectividad();
+  const sinConexion = !enLinea || token === TOKEN_SIN_CONEXION;
+  const canManage = puedeGestionar && !sinConexion;
   const [filtros, setFiltros] = useState<{
     q: string;
     estado: EstadoOferta | "";
@@ -138,7 +147,6 @@ export function OfertasWorkspace({
     { oferta?: Oferta; destinos?: DestinoFormulario[] } | undefined
   >();
   const [detalle, setDetalle] = useState<DetalleOferta>();
-  const [busy, setBusy] = useState(false);
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
@@ -150,11 +158,14 @@ export function OfertasWorkspace({
           : todas.filter((oferta) => oferta.estado !== "ARCHIVADA"),
       );
     } catch (cause) {
-      onError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudieron cargar las ofertas.",
-      );
+      // Sin conexión y sin copia de esta búsqueda: lo explica el aviso.
+      if (cause instanceof SinConexionError) setOfertas([]);
+      else
+        onError(
+          cause instanceof Error
+            ? cause.message
+            : "No se pudieron cargar las ofertas.",
+        );
     } finally {
       setCargando(false);
     }
@@ -162,7 +173,8 @@ export function OfertasWorkspace({
   useEffect(() => {
     const espera = window.setTimeout(() => void cargar(), filtros.q ? 250 : 0);
     return () => window.clearTimeout(espera);
-  }, [cargar, filtros.q]);
+    // Al volver la conexión se recarga para traer lo último.
+  }, [cargar, filtros.q, sinConexion]);
   // Desde Productos: el alta abre con el producto ya elegido.
   useEffect(() => {
     if (!crearPara || !canManage) return;
@@ -200,11 +212,13 @@ export function OfertasWorkspace({
     return new Map([...ultimos].map(([id, { costo }]) => [id, costo]));
   }, [stock, canSeeCosts]);
   // Las acciones que cambian el estado se confirman en un diálogo del
-  // sistema; duplicar no hace falta (la copia queda en borrador).
+  // sistema.
   const [confirmacion, setConfirmacion] = useState<{
     oferta: Oferta;
-    accion: Exclude<AccionOferta, "duplicar">;
+    accion: AccionOferta;
   }>();
+  // Mientras se confirma una acción, los botones quedan bloqueados.
+  const busy = Boolean(confirmacion);
   const realizar = async (oferta: Oferta, accion: AccionOferta) => {
     const resultado = await accionOferta(
       token,
@@ -212,28 +226,11 @@ export function OfertasWorkspace({
       oferta.id,
       accion,
     );
-    // La copia queda en borrador y se abre para editarla.
-    if (accion === "duplicar") {
-      setDetalle(undefined);
-      setEditor({ oferta: resultado });
-    } else if (detalle) setDetalle(resultado);
+    if (detalle) setDetalle(resultado);
     await cargar();
   };
-  const ejecutar = async (oferta: Oferta, accion: AccionOferta) => {
-    if (accion !== "duplicar") return setConfirmacion({ oferta, accion });
-    setBusy(true);
-    try {
-      await realizar(oferta, accion);
-    } catch (cause) {
-      onError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudo completar la acción.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const ejecutar = (oferta: Oferta, accion: AccionOferta) =>
+    setConfirmacion({ oferta, accion });
   const abrirDetalle = async (oferta: Oferta) => {
     try {
       setDetalle(await getOferta(token, organizationId, oferta.id));
@@ -246,6 +243,19 @@ export function OfertasWorkspace({
   const cantidadFiltros = Object.values(filtros).filter(Boolean).length;
   return (
     <div className="space-y-4">
+      {sinConexion && (
+        <p
+          role="status"
+          className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800"
+        >
+          <WifiOff size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            <strong className="font-semibold">Sin conexión.</strong> Ves las
+            ofertas guardadas en esta PC y Ventas las sigue aplicando. Para
+            crear, editar, pausar o finalizar ofertas hace falta internet.
+          </span>
+        </p>
+      )}
       <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-r from-white to-teal-50/30 p-4 shadow-[0_8px_20px_-18px_rgba(15,80,90,.3)]">
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto_auto]">
           <label className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 shadow-sm focus-within:ring-2 focus-within:ring-teal-500">
@@ -345,15 +355,17 @@ export function OfertasWorkspace({
                   >
                     {oferta.name}
                   </button>
-                  <span className="ml-2 rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-bold text-rose-700">
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className="inline-block whitespace-nowrap rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-bold text-rose-700">
                     {oferta.label}
                   </span>
-                </td>
-                <td className="px-3 py-2.5 text-slate-600">
-                  {
-                    TIPOS_OFERTA.find((tipo) => tipo.type === oferta.type)
-                      ?.titulo
-                  }
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    {
+                      TIPOS_OFERTA.find((tipo) => tipo.type === oferta.type)
+                        ?.titulo
+                    }
+                  </span>
                 </td>
                 <td
                   className="max-w-56 truncate px-3 py-2.5"
@@ -421,7 +433,7 @@ export function OfertasWorkspace({
                           }
                           icon={ACCION[accion].icon}
                           disabled={busy}
-                          onClick={() => void ejecutar(oferta, accion)}
+                          onClick={() => ejecutar(oferta, accion)}
                         />
                       ))}
                   </div>
@@ -478,7 +490,7 @@ export function OfertasWorkspace({
           busy={busy}
           onClose={() => setDetalle(undefined)}
           onEdit={() => setEditor({ oferta: detalle })}
-          onAction={(accion) => void ejecutar(detalle, accion)}
+          onAction={(accion) => ejecutar(detalle, accion)}
         />
       )}
     </div>
@@ -495,26 +507,6 @@ const ACCIONES_AUDITORIA: Record<string, string> = {
   OFFER_ARCHIVED: "Archivada",
   OFFER_DUPLICATED: "Duplicada",
 };
-
-/** Qué campos cambió una edición, para el historial. */
-function cambiosDe(antes: unknown, despues: unknown): string {
-  if (
-    !antes ||
-    !despues ||
-    typeof antes !== "object" ||
-    typeof despues !== "object"
-  )
-    return "";
-  const a = antes as Record<string, unknown>;
-  const b = despues as Record<string, unknown>;
-  return Object.keys(b)
-    .filter(
-      (clave) =>
-        clave !== "version" &&
-        JSON.stringify(a[clave]) !== JSON.stringify(b[clave]),
-    )
-    .join(", ");
-}
 
 export function OfertaDetalle({
   oferta,
@@ -535,6 +527,7 @@ export function OfertaDetalle({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const destinos = agruparDestinosOferta(oferta.targets);
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
@@ -601,23 +594,50 @@ export function OfertaDetalle({
             ))}
           </dl>
           <section className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h3 className="mb-2 font-semibold text-slate-900">Se aplica a</h3>
-            <p className="text-sm text-slate-700">
-              {oferta.targets
-                .filter((target) => !target.exclude)
-                .map((target) =>
-                  target.quantity
-                    ? `${target.quantity} × ${target.name}`
-                    : target.name,
-                )
-                .join(", ")}
-              {oferta.targets.some((target) => target.exclude) &&
-                ` · Excepto: ${oferta.targets
-                  .filter((target) => target.exclude)
-                  .map((target) => target.name)
-                  .join(", ")}`}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
+            <h3 className="mb-3 font-semibold text-slate-900">Se aplica a</h3>
+            {oferta.allProducts && (
+              <p className="mb-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 font-medium text-teal-900">
+                Todos los productos
+              </p>
+            )}
+            <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 empty:hidden">
+              {destinos.incluidos.map((destino) => (
+                <li
+                  key={`${destino.kind}:${destino.id}`}
+                  className="flex items-center gap-3 px-3 py-2.5"
+                >
+                  {destino.quantity ? (
+                    <span className="grid h-8 min-w-10 shrink-0 place-items-center rounded-lg bg-teal-50 px-2 text-sm font-bold tabular-nums text-teal-800">
+                      {destino.quantity} ×
+                    </span>
+                  ) : (
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500">
+                      <Package size={16} aria-hidden />
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 font-medium text-slate-900">
+                    {destino.name}
+                  </span>
+                  {destino.kind !== "PRODUCT" && (
+                    <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      {TIPO_DESTINO_OFERTA[destino.kind]}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {destinos.excluidos.length > 0 && (
+              <p className="mt-2 text-sm text-slate-600">
+                <span className="font-medium">Excepto:</span>{" "}
+                {destinos.excluidos
+                  .map(
+                    (destino) =>
+                      `${destino.name}${destino.kind === "PRODUCT" ? "" : ` (${TIPO_DESTINO_OFERTA[destino.kind].toLowerCase()})`}`,
+                  )
+                  .join(", ")}
+              </p>
+            )}
+            <p className="mt-3 text-sm text-slate-500">
               Sucursales:{" "}
               {oferta.allBranches
                 ? "todas"
@@ -705,10 +725,9 @@ export function OfertaDetalle({
                   )}
                   {item.action === "OFFER_UPDATED" && (
                     <span className="text-slate-500">
-                      (
-                      {cambiosDe(item.before, item.after) ||
+                      ·{" "}
+                      {describirCambiosOferta(item.before, item.after) ||
                         "sin cambios de datos"}
-                      )
                     </span>
                   )}
                 </li>
