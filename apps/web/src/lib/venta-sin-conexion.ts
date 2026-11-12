@@ -96,6 +96,8 @@ export function ticketProvisorio(datos: {
   }[];
   pagos: { method: string; amountMinor: number }[];
   factura: boolean;
+  /** Ofertas aplicadas (SISTEMA-103); su ahorro ya está en `descuentoMinor`. */
+  ofertas?: { label: string; name: string; amountMinor: number }[];
 }): ThermalTicket {
   const subtotal = datos.lineas.reduce(
     (suma, linea) => suma + linea.unitarioMinor * linea.cantidad,
@@ -106,6 +108,11 @@ export function ticketProvisorio(datos: {
     0,
   );
   const total = subtotal - descuento;
+  const ofertas = datos.ofertas ?? [];
+  const ahorroOfertas = ofertas.reduce(
+    (suma, oferta) => suma + oferta.amountMinor,
+    0,
+  );
   const pagado = datos.pagos.reduce((suma, pago) => suma + pago.amountMinor, 0);
   const efectivo = datos.pagos
     .filter((pago) => pago.method === "CASH")
@@ -127,6 +134,17 @@ export function ticketProvisorio(datos: {
     })),
     subtotalMinor: String(subtotal),
     discountMinor: String(descuento),
+    ...(ahorroOfertas > 0
+      ? {
+          offerDiscountMinor: String(ahorroOfertas),
+          offers: ofertas.map((oferta) => ({
+            label: oferta.label,
+            name: oferta.name,
+            amountMinor: String(oferta.amountMinor),
+          })),
+        }
+      : {}),
+    ...(descuento > 0 ? { savingsMinor: String(descuento) } : {}),
     totalMinor: String(total),
     payments: datos.pagos.map((pago) => ({
       method: pago.method,

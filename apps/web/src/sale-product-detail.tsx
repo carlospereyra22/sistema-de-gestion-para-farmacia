@@ -20,7 +20,10 @@ export function SaleProductDetail({
   onClear,
   onFinished,
   onInvalid,
+  offers = [],
 }: {
+  /** Ofertas vigentes del producto (SISTEMA-103), ej. ["2x1"]. */
+  offers?: string[];
   token: string;
   organizationId: string;
   product?: CatalogProduct;
@@ -65,6 +68,14 @@ export function SaleProductDetail({
           title={product.name}
         >
           {product.name}
+          {offers.map((offer) => (
+            <span
+              key={offer}
+              className="ml-2 rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-bold text-rose-700"
+            >
+              {offer}
+            </span>
+          ))}
         </p>
         <p className="truncate text-xs text-slate-500">
           {[

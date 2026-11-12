@@ -373,3 +373,14 @@ El encabezado común de tickets se configura en Administración → Organizació
 La impresión de ventas y cobros se unifica en V21, con agente local Windows RAW ESC/POS en 127.0.0.1:17890 y vista previa compartida. El contrato transporta centavos y consume importes persistidos, sin recalcular precios ni modificar operaciones. Cada envío usa requestId y reserva persistente para impedir repeticiones accidentales. Ver [THERMAL_TICKETS.md](THERMAL_TICKETS.md).
 
 Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar y desde Historial. Los nuevos recibos guardan una instantánea inmutable en la auditoría transaccional existente, sin migración; reimprimir no modifica deuda ni caja. Incluyen importes efectivamente aplicados por artículo, no el total original de la venta. Para recibos anteriores sin instantánea no se inventa saldo histórico.
+
+# Ofertas (12/11/2026, SISTEMA-103)
+
+- Combinación: un renglón recibe como máximo una oferta, la de mayor ahorro para el cliente; sólo se suman si todas las que lo tocan son combinables, en orden de prioridad y sobre el precio ya ofertado. Se elige de a una oferta (mayor ahorro total; a igual ahorro, mayor prioridad y después la más antigua): es determinista aunque con grupos mixtos no siempre sea el óptimo global.
+- El precio especial de la cajera reemplaza la oferta (se avisa en el carrito). El descuento general va después, sobre el subtotal ya ofertado.
+- Los medicamentos con receta pueden tener oferta (decisión del usuario del 11/11/2026). Una oferta sobre una categoría incluye sus subcategorías.
+- El motor es un archivo puro idéntico en la API y en la web (un test lo compara), en lugar de un paquete compartido con lógica: `packages/contracts` sigue siendo sólo tipos. La API es la autoridad; la web lo usa para la vista previa y la venta sin conexión.
+- `SaleItem.discountMinor` sigue siendo el descuento total y `offerDiscountMinor` la parte de ofertas: factura C, notas de crédito, cuenta corriente y tickets no cambian su lógica. El ticket suma `offers`/`savingsMinor` sin cambiar el significado de `discountMinor`, para que un agente de impresión anterior imprima cuentas correctas.
+- Estados guardados mínimos (borrador, publicada, pausada, finalizada, archivada); programada, activa y vencida se calculan con la hora, sin cron.
+- Permisos nuevos `OFFER_READ` y `OFFER_MANAGE` (nombre alineado con los `*_READ`/`*_MANAGE` existentes).
+- Fuera de esta versión: condiciones por medio de pago y por cliente puntual, y crear o editar ofertas sin conexión.

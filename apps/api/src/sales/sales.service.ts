@@ -37,6 +37,14 @@ import type { ThermalTicket } from "@gestion/contracts";
 import { groupTicketItems } from "./group-ticket-items";
 import { manualConcept } from "./manual-concept";
 import { saleUnitPrice } from "./sale-unit-price";
+import { cargarOfertasMotor } from "../offers/ofertas-carga";
+import { calcularOfertas } from "../offers/ofertas-motor";
+import {
+  aplicacionesSinConexion,
+  conOferta,
+  guardarOfertasVenta,
+  type OfertaAplicadaEnPc,
+} from "./sale-offers";
 import type {
   SaleFiscalOptions,
   SaleFiscalCapabilities,
@@ -70,6 +78,8 @@ type SaleInput = {
     discountMinor?: number;
     expectedUnitPriceMinor?: string;
     requestedUnitPriceMinor?: number;
+    /** Ahorro por ofertas que vio la cajera (SISTEMA-103), en centavos. */
+    expectedOfferDiscountMinor?: string;
     packQuantity?: number;
     /** Sin conexión: nombre visto en la PC, por si el producto ya no se vende. */
     productName?: string;
@@ -79,6 +89,8 @@ type SaleInput = {
     amountMinor: number;
     cashSessionId?: string;
   }[];
+  /** Sin conexión: ofertas que aplicó la PC, para la instantánea. */
+  appliedOffers?: OfertaAplicadaEnPc[];
 };
 
 export type OfflineSaleInput = SaleInput & {
@@ -584,6 +596,31 @@ export class SalesService {
       (sum, item) => sum + item.discountMinor,
       0n,
     );
+    // Ofertas (SISTEMA-103): el detalle sale de la instantánea de la venta.
+    const offerDiscount = sale.items.reduce(
+      (sum, item) => sum + item.offerDiscountMinor,
+      0n,
+    );
+    const saleOffers = offerDiscount
+      ? await this.prisma.saleOffer.findMany({
+          where: { saleId: sale.id, organizationId },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+    const offerLines = saleOffers.map((offer) => ({
+      label: offer.label,
+      name: offer.name,
+      amountMinor: offer.discountMinor.toString(),
+    }));
+    const unexplained =
+      offerDiscount -
+      saleOffers.reduce((sum, offer) => sum + offer.discountMinor, 0n);
+    if (unexplained > 0n)
+      offerLines.push({
+        label: "",
+        name: "Ofertas",
+        amountMinor: unexplained.toString(),
+      });
     const paid = sale.payments.reduce(
       (sum, payment) => sum + payment.amountMinor,
       0n,
@@ -646,6 +683,10 @@ export class SalesService {
           })),
       subtotalMinor: subtotal.toString(),
       discountMinor: discount.toString(),
+      ...(offerDiscount > 0n
+        ? { offerDiscountMinor: offerDiscount.toString(), offers: offerLines }
+        : {}),
+      ...(discount > 0n ? { savingsMinor: discount.toString() } : {}),
       totalMinor: sale.totalMinor.toString(),
       payments: sale.payments.map((payment) => ({
         method: payment.method,
@@ -1053,6 +1094,7 @@ export class SalesService {
             quantity: number;
             unitPriceMinor: bigint;
             discountMinor: bigint;
+            offerDiscountMinor?: bigint;
           }[] = [];
           const priceOverrides: {
             productId: string;
@@ -1060,6 +1102,20 @@ export class SalesService {
             unitPriceMinor: string;
             quantity: number;
             reason: string;
+          }[] = [];
+          // Renglones de productos con su precio: las ofertas se calculan
+          // con todo el carrito antes de repartir por lotes.
+          const pendientes: {
+            line: SaleInput["items"][number];
+            product: {
+              id: string;
+              name: string;
+              categoryId: string | null;
+              laboratoryId: string | null;
+              isMedication: boolean;
+            };
+            unitPriceMinor: bigint;
+            basePriceMinor: bigint;
           }[] = [];
           for (const line of input.items) {
             if (line.requestedUnitPriceMinor !== undefined && !line.productId)
@@ -1194,14 +1250,112 @@ export class SalesService {
                 quantity: line.quantity,
                 reason: "Descuento especial por producto",
               });
-            const lineDiscountMinor = BigInt(line.discountMinor ?? 0);
+            pendientes.push({ line, product, unitPriceMinor, basePriceMinor });
+          }
+          // Ofertas (SISTEMA-103): se calculan con todo el carrito, sobre el
+          // precio de lista efectivo, antes de repartir por lotes. El precio
+          // manual de la cajera reemplaza la oferta. Sin conexión vale la hora
+          // en que se hizo la venta.
+          const ofertasVenta = pendientes.length
+            ? await cargarOfertasMotor(tx, organizationId, {
+                desde: offline?.occurredAt ?? new Date(),
+                bloquear: true,
+              })
+            : [];
+          const resultadoOfertas = calcularOfertas(
+            pendientes.map(
+              ({ line, product, unitPriceMinor, basePriceMinor }) => ({
+                productId: product.id,
+                quantity: line.quantity,
+                unitPriceMinor,
+                categoryId: product.categoryId,
+                laboratoryId: product.laboratoryId,
+                isMedication: product.isMedication,
+                manualPrice: unitPriceMinor !== basePriceMinor,
+              }),
+            ),
+            ofertasVenta,
+            {
+              ahora: offline?.occurredAt ?? new Date(),
+              branchId,
+              priceListId: selectedPriceList?.id ?? priceListId,
+            },
+          );
+          const descuentosOferta = pendientes.map(
+            ({ line, product }, indice) => {
+              const calculado =
+                resultadoOfertas.renglones[indice]?.offerDiscountMinor ?? 0n;
+              const visto = line.expectedOfferDiscountMinor;
+              if (visto !== undefined && !/^\d{1,15}$/.test(visto))
+                throw new BadRequestException(
+                  "El ahorro por ofertas de un producto no es válido.",
+                );
+              if (!offline)
+                return {
+                  calculado,
+                  cobrado: calculado,
+                  distinto: (visto ?? "0") !== calculado.toString(),
+                };
+              // Sin conexión se respeta lo cobrado; la diferencia queda como
+              // aviso "a revisar".
+              const cobrado = BigInt(visto ?? "0");
+              if (cobrado !== calculado)
+                offline.issues.push({
+                  kind: "OFERTA_DISTINTA",
+                  detail: {
+                    productId: product.id,
+                    nombre: product.name,
+                    cobradoMinor: cobrado.toString(),
+                    calculadoMinor: calculado.toString(),
+                  },
+                });
+              return { calculado, cobrado, distinto: false };
+            },
+          );
+          if (descuentosOferta.some((item) => item.distinto))
+            throw new ConflictException({
+              // El filtro global publica `error` como `code` y `details` tal cual.
+              error: "OFERTAS_CAMBIARON",
+              message:
+                "Las ofertas de la venta cambiaron (alguna empezó, venció o se modificó). Revisá el carrito actualizado y volvé a confirmar.",
+              details: {
+                ofertas: resultadoOfertas.renglones.map((renglon) => ({
+                  productId: renglon.productId,
+                  offerDiscountMinor: renglon.offerDiscountMinor.toString(),
+                  labels: renglon.labels,
+                })),
+              },
+            });
+          const aplicacionesOferta = offline
+            ? await aplicacionesSinConexion(
+                tx,
+                organizationId,
+                input.appliedOffers,
+                resultadoOfertas.aplicaciones,
+                ofertasVenta,
+                pendientes.map(({ product }, indice) => ({
+                  productId: product.id,
+                  cobradoMinor: descuentosOferta[indice]!.cobrado,
+                  calculadoMinor: descuentosOferta[indice]!.calculado,
+                })),
+                offline.issues,
+              )
+            : conOferta(resultadoOfertas.aplicaciones, ofertasVenta);
+          for (const [
+            indice,
+            { line, product, unitPriceMinor },
+          ] of pendientes.entries()) {
+            const lineOfferMinor = descuentosOferta[indice]!.cobrado;
+            const lineGeneralMinor = BigInt(line.discountMinor ?? 0);
+            const lineDiscountMinor = lineOfferMinor + lineGeneralMinor;
             const lineSubtotalMinor = unitPriceMinor * BigInt(line.quantity);
             if (lineDiscountMinor > lineSubtotalMinor)
               throw new BadRequestException(
                 `El descuento no puede superar el subtotal de ${product.name}.`,
               );
             let remaining = line.quantity;
-            let assignedDiscountMinor = 0n;
+            let assignedOfferMinor = 0n;
+            let assignedGeneralMinor = 0n;
             const physicalLots = await tx.productLot.findMany({
               where: {
                 organizationId,
@@ -1229,35 +1383,44 @@ export class SalesService {
                 `${product.name}: stock vendible insuficiente. Disponibles: ${available}; solicitadas: ${remaining}.${expiredQuantity ? ` Hay ${expiredQuantity} unidades vencidas que no se pueden vender.` : " Actualizá el stock e intentá nuevamente."}`,
               );
             // Sin conexión se descuenta lo que hay; el resto queda como
-            // faltante sin lote (nunca stock negativo) y con aviso.
+            // faltante sin lote (nunca stock negativo) y con aviso. La oferta
+            // y el descuento general se reparten por separado entre lotes;
+            // el remanente va al último.
             for (const { lot, quantity } of allocateSaleLots(
               lots,
               Math.min(available, remaining),
               line.packQuantity,
             )) {
-              const lotDiscountMinor =
-                quantity === remaining
-                  ? lineDiscountMinor - assignedDiscountMinor
-                  : (lineDiscountMinor * BigInt(quantity)) /
-                    BigInt(line.quantity);
-              assignedDiscountMinor += lotDiscountMinor;
+              const ultimo = quantity === remaining;
+              const lotOfferMinor = ultimo
+                ? lineOfferMinor - assignedOfferMinor
+                : (lineOfferMinor * BigInt(quantity)) / BigInt(line.quantity);
+              const lotGeneralMinor = ultimo
+                ? lineGeneralMinor - assignedGeneralMinor
+                : (lineGeneralMinor * BigInt(quantity)) / BigInt(line.quantity);
+              assignedOfferMinor += lotOfferMinor;
+              assignedGeneralMinor += lotGeneralMinor;
               items.push({
                 productId: line.productId!,
                 lotId: lot.id,
                 quantity,
                 unitPriceMinor,
-                discountMinor: lotDiscountMinor,
+                discountMinor: lotOfferMinor + lotGeneralMinor,
+                offerDiscountMinor: lotOfferMinor,
               });
               remaining -= quantity;
               if (!remaining) break;
             }
             if (remaining > 0 && offline) {
+              const faltanteOfferMinor = lineOfferMinor - assignedOfferMinor;
               items.push({
                 productId: line.productId!,
                 lotId: null,
                 quantity: remaining,
                 unitPriceMinor,
-                discountMinor: lineDiscountMinor - assignedDiscountMinor,
+                discountMinor:
+                  faltanteOfferMinor + lineGeneralMinor - assignedGeneralMinor,
+                offerDiscountMinor: faltanteOfferMinor,
               });
               offline.issues.push({
                 kind: "STOCK_FALTANTE",
@@ -1527,6 +1690,13 @@ export class SalesService {
               },
             });
           }
+          await guardarOfertasVenta(
+            tx,
+            organizationId,
+            sale.id,
+            aplicacionesOferta,
+            offline ? completedAt : undefined,
+          );
           await tx.salePayment.createMany({
             data: input.payments.map((payment) => ({
               saleId: sale.id,
@@ -1623,6 +1793,13 @@ export class SalesService {
               priceListId,
               totalMinor: total.toString(),
               priceOverrides,
+              ofertas: aplicacionesOferta.map(({ aplicacion }) => ({
+                offerId: aplicacion.offerId,
+                version: aplicacion.version,
+                label: aplicacion.label,
+                units: aplicacion.units,
+                discountMinor: aplicacion.discountMinor.toString(),
+              })),
               accountDueDate: dueDate?.toISOString().slice(0, 10) ?? null,
               items: items.map((item) => ({
                 description: item.description ?? null,
@@ -1631,6 +1808,7 @@ export class SalesService {
                 quantity: item.quantity,
                 unitPriceMinor: item.unitPriceMinor.toString(),
                 discountMinor: item.discountMinor.toString(),
+                offerDiscountMinor: (item.offerDiscountMinor ?? 0n).toString(),
               })),
               payments: input.payments.map((payment) => ({
                 method: payment.method,
@@ -2044,7 +2222,11 @@ export class SalesService {
   private serialize<
     T extends {
       totalMinor: bigint;
-      items: { unitPriceMinor: bigint; discountMinor: bigint }[];
+      items: {
+        unitPriceMinor: bigint;
+        discountMinor: bigint;
+        offerDiscountMinor: bigint;
+      }[];
       payments: { amountMinor: bigint }[];
     },
   >(sale: T) {
@@ -2055,6 +2237,7 @@ export class SalesService {
         ...item,
         unitPriceMinor: item.unitPriceMinor.toString(),
         discountMinor: item.discountMinor.toString(),
+        offerDiscountMinor: item.offerDiscountMinor.toString(),
       })),
       payments: sale.payments.map((payment) => ({
         ...payment,

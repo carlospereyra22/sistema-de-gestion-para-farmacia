@@ -35,3 +35,10 @@ Siguen pendientes balances materializados, reportes detallados por período y la
 - Un producto sin uso comercial puede eliminarse definitivamente, para corregir altas duplicadas o de prueba.
 - Si el producto tiene compras, lotes, movimientos, ventas, devoluciones o transferencias, el sistema bloquea la eliminación y se debe desactivar para preservar la trazabilidad.
 - La pantalla de Productos permite editar nombre, código de barras principal, categoría, laboratorio, datos farmacéuticos y precio general.
+
+# Ofertas (SISTEMA-103, 12/11/2026)
+
+- API: módulo `offers` (alta, edición con versión y control de concurrencia, publicar, pausar, reanudar, finalizar, duplicar, archivar, detalle con historial y ventas, `vigentes` para el motor, reporte por oferta) y motor puro con tests por tipo.
+- Venta: ofertas calculadas al confirmar, 409 `OFERTAS_CAMBIARON`, instantánea `SaleOffer`, reparto entre lotes, tope total con bloqueo, venta sin conexión con avisos, ticket y A4 con ofertas y "Usted ahorró".
+- Web: apartado Ofertas, ofertas en el carrito, cobro y venta confirmada, marca en el catálogo de Ventas y en Productos, filtro "Con oferta vigente", "Crear oferta para este producto", permisos en roles y precarga sin conexión.
+- Pendiente: condición por medio de pago y por cliente, reporte interactivo en Reportes.

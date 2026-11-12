@@ -79,6 +79,15 @@ import {
 } from "./lib/sale-catalog";
 import { ResumeSaleDialog } from "./resume-sale-dialog";
 import { PriceListsWorkspace } from "./price-lists-workspace";
+import { OfertasWorkspace } from "./ofertas-workspace";
+import { ProductOffersCard } from "./product-offers-card";
+import { getOfertasVigentes } from "./lib/ofertas-api";
+import {
+  ofertasDelCarrito,
+  ofertasDelProducto,
+  ofertasParaEnviar,
+} from "./lib/ofertas-carrito";
+import type { OfertaMotor } from "./lib/ofertas-motor";
 import { sortSaleLines } from "./lib/sort-sale-lines";
 import {
   FractionalPriceOptions,
@@ -340,6 +349,7 @@ import {
   ShoppingCart,
   ShieldCheck,
   Tags,
+  BadgePercent,
   Trash2,
   Users,
   Settings,
@@ -397,6 +407,7 @@ import {
   type UserListItem,
   actualizarBaseMedicamentos,
   enviarExhibidor,
+  OfertasCambiaronError,
 } from "./lib/api";
 import {
   effectiveSalePriceListId,
@@ -409,6 +420,7 @@ const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Productos", icon: Package },
   { name: "Categorías y laboratorios", icon: Shapes },
   { name: "Listas de precios", icon: Tags },
+  { name: "Ofertas", icon: BadgePercent },
   { name: "Inventario", icon: Boxes },
   { name: "Caja", icon: CashRegisterIcon },
   { name: "Compras", icon: ClipboardList },
@@ -432,6 +444,7 @@ const HISTORIAL_FACTURAS_MS = 15_000;
 const PANTALLAS_CON_CATALOGO_ORGANIZACION = new Set<string>([
   "Productos",
   "Listas de precios",
+  "Ofertas",
   "Transferencias",
 ]);
 
@@ -559,6 +572,12 @@ export function WorkspaceShell({
   const [pendingSaleConfirmation, setPendingSaleConfirmation] = useState<
     { action: "branch"; branchId: string } | { action: "logout" } | null
   >(null);
+  // "Crear oferta para este producto" desde Productos (SISTEMA-103).
+  const [ofertaParaProducto, setOfertaParaProducto] = useState<string>();
+  const limpiarOfertaParaProducto = useCallback(
+    () => setOfertaParaProducto(undefined),
+    [],
+  );
   const [listEditingProduct, setListEditingProduct] =
     useState<CatalogProduct>();
   // Producto que Compras pide crear desde un renglón importado; `resolve`
@@ -1029,7 +1048,7 @@ export function WorkspaceShell({
     >
       <header
         ref={sidebar.header}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
         <div className="flex items-center gap-3">
           <SidebarToggle
@@ -1050,6 +1069,7 @@ export function WorkspaceShell({
           </div>
           {(view === "Compras" ||
             view === "Listas de precios" ||
+            view === "Ofertas" ||
             view === "Clientes" ||
             view === "Proveedores" ||
             view === "Inventario" ||
@@ -1070,6 +1090,8 @@ export function WorkspaceShell({
                 <Truck size={22} aria-hidden />
               ) : view === "Listas de precios" ? (
                 <Tags size={22} aria-hidden />
+              ) : view === "Ofertas" ? (
+                <BadgePercent size={22} aria-hidden />
               ) : view === "Clientes" ? (
                 <ContactRound size={22} aria-hidden />
               ) : view === "Inventario" ? (
@@ -1403,8 +1425,36 @@ export function WorkspaceShell({
               stock={stock}
               canManage={permissionCodes.includes("CATALOG_MANAGE")}
               canSeeCosts={permissionCodes.includes("COST_READ")}
+              onOffers={
+                canOpenView("Ofertas", permissionCodes)
+                  ? () => setPage("Ofertas")
+                  : undefined
+              }
+              onCreateOffer={
+                permissionCodes.includes("OFFER_MANAGE")
+                  ? (productId) => {
+                      setOfertaParaProducto(productId);
+                      setPage("Ofertas");
+                    }
+                  : undefined
+              }
               done={() => void refresh()}
               error={setMessage}
+            />
+          ) : null}
+          {ready && view === "Ofertas" ? (
+            <OfertasWorkspace
+              key={`ofertas:${organizationId}`}
+              token={accessToken!}
+              organizationId={organizationId!}
+              branches={branches}
+              products={organizationProducts}
+              stock={stock}
+              canManage={permissionCodes.includes("OFFER_MANAGE")}
+              canSeeCosts={permissionCodes.includes("COST_READ")}
+              crearPara={ofertaParaProducto}
+              onCrearParaUsado={limpiarOfertaParaProducto}
+              onError={setMessage}
             />
           ) : null}
           {ready && view === "Categorías y laboratorios" ? (
@@ -2002,7 +2052,13 @@ function Products({
   onEditorClose,
   canManage = true,
   canSeeCosts = true,
+  onOffers,
+  onCreateOffer,
 }: {
+  /** Abre el apartado Ofertas (SISTEMA-103). */
+  onOffers?: () => void;
+  /** "Crear oferta para este producto": abre el alta con el producto elegido. */
+  onCreateOffer?: (productId: string) => void;
   token: string;
   organizationId: string;
   products: CatalogProduct[];
@@ -2051,6 +2107,23 @@ function Products({
   >("auto");
   const [description, setDescription] = useState("");
   const [editingProduct, setEditingProduct] = useState<CatalogProduct>();
+  // Ofertas activas y programadas (SISTEMA-103): etiqueta, filtro y detalle.
+  const [ofertasCatalogo, setOfertasCatalogo] = useState<OfertaMotor[]>([]);
+  const [soloConOferta, setSoloConOferta] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void getOfertasVigentes(token, organizationId)
+      .then((items) => {
+        if (current) setOfertasCatalogo(items);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [token, organizationId]);
+  const ahoraCatalogo = new Date();
+  const ofertasDe = (product: CatalogProduct) =>
+    ofertasDelProducto(product, ofertasCatalogo, ahoraCatalogo, branchId);
   // Abrir cajas (SISTEMA-103) desde la fila del producto.
   const [splittingProduct, setSplittingProduct] = useState<CatalogProduct>();
   const [generateInternalBarcode, setGenerateInternalBarcode] = useState(false);
@@ -3098,7 +3171,9 @@ function Products({
       (!lotQuery.trim() ||
         lotesDelProducto(stock, product.id).some(
           (lot) => lot.quantity > 0 && lotNumberMatches(lot.number, lotQuery),
-        ))
+        )) &&
+      (!soloConOferta ||
+        ofertasDe(product).some(({ estado }) => estado === "ACTIVA"))
     );
   });
   const productFilterKey = JSON.stringify([
@@ -3111,6 +3186,7 @@ function Products({
     stockFilter,
     expiryFilter,
     additionalFilters,
+    soloConOferta,
   ]);
   const productTotalPages = Math.max(
     1,
@@ -3176,6 +3252,15 @@ function Products({
                   setExpiryFilter(next.expiry);
                 }}
               />
+              <button
+                type="button"
+                aria-pressed={soloConOferta}
+                onClick={() => setSoloConOferta((value) => !value)}
+                className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-3 text-xs font-semibold shadow-sm ${soloConOferta ? "border-rose-300 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50"}`}
+              >
+                <BadgePercent size={16} />
+                Con oferta vigente
+              </button>
               {canManage && (
                 <button
                   type="button"
@@ -3369,6 +3454,19 @@ function Products({
                           primary={
                             <>
                               {product.name}
+                              {ofertasDe(product).map(
+                                ({ oferta, estado, label }) => (
+                                  <span
+                                    key={oferta.id}
+                                    title={`${estado === "ACTIVA" ? "En oferta" : "Oferta programada"}: ${oferta.name}`}
+                                    className={`ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${estado === "ACTIVA" ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-500"}`}
+                                  >
+                                    {estado === "ACTIVA"
+                                      ? label
+                                      : `Prog. ${label}`}
+                                  </span>
+                                ),
+                              )}
                               {/* Hecho sin conexión y todavía no enviado (SISTEMA-79). */}
                               {(product.porEnviar ||
                                 lotesDelProducto(stock, product.id).some(
@@ -3501,6 +3599,16 @@ function Products({
                                 <PackageOpen size={16} />
                               </RowIconAction>
                             ) : null}
+                            {onCreateOffer && (
+                              <RowIconAction
+                                tone="neutral"
+                                label={`Crear oferta para ${product.name}`}
+                                title="Crear oferta"
+                                onClick={() => onCreateOffer(product.id)}
+                              >
+                                <BadgePercent size={16} />
+                              </RowIconAction>
+                            )}
                             <RowIconAction
                               tone="edit"
                               label={`Editar ${product.name}`}
@@ -4409,6 +4517,17 @@ function Products({
                         </div>
                         <FractionalPriceOptions {...fractionProps} />
                         <SplitLinkOptions {...splitProps} />
+                        {editingProduct && (
+                          <ProductOffersCard
+                            ofertas={ofertasDe(editingProduct)}
+                            onOpen={onOffers}
+                            onCreate={
+                              onCreateOffer
+                                ? () => onCreateOffer(editingProduct.id)
+                                : undefined
+                            }
+                          />
+                        )}
                       </div>
                     );
                   })()}
@@ -5720,6 +5839,83 @@ function Sales({
       prices: price == null ? [] : [{ amountMinor: price }],
     };
   });
+  // Ofertas (SISTEMA-103): se aplican solas en el carrito. La API las
+  // recalcula al confirmar; si no coinciden responde 409 y se actualizan.
+  const [ofertasVigentes, setOfertasVigentes] = useState<OfertaMotor[]>([]);
+  const [ofertasVersion, setOfertasVersion] = useState(0);
+  const [ahoraOfertas, setAhoraOfertas] = useState(() => new Date());
+  const [avisoOfertas, setAvisoOfertas] = useState("");
+  useEffect(() => {
+    if (!active) return;
+    let current = true;
+    void getOfertasVigentes(token, organizationId)
+      .then((items) => {
+        if (current) setOfertasVigentes(items);
+      })
+      // Sin ofertas guardadas se vende sin ofertas; la API decide al cobrar.
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [active, token, organizationId, ofertasVersion]);
+  useEffect(() => {
+    if (!active) return;
+    // La vigencia depende de la hora (días y franjas): se revisa seguido.
+    const timer = window.setInterval(() => setAhoraOfertas(new Date()), 30_000);
+    const unsubscribe = subscribeSalesDataRefresh(() =>
+      setOfertasVersion((version) => version + 1),
+    );
+    return () => {
+      window.clearInterval(timer);
+      unsubscribe();
+    };
+  }, [active]);
+  const listPriceOf = (productId: string) =>
+    Number(productoPorId(products, productId)?.prices[0]?.amountMinor ?? 0);
+  const ofertasCarrito = ofertasDelCarrito(
+    lines.map((line) => ({
+      productId: line.productId,
+      description: line.description,
+      quantity: line.quantity,
+      listPriceMinor: listPriceOf(line.productId),
+      requestedUnitPriceMinor: line.requestedUnitPriceMinor,
+    })),
+    catalogProducts,
+    ofertasVigentes,
+    {
+      ahora: ahoraOfertas,
+      branchId,
+      priceListId: activeSaleListId || null,
+    },
+  );
+  const ahorroOferta = (productId: string) =>
+    ofertasCarrito.porProducto.get(productId)?.ahorroMinor ?? 0;
+  const offerSavings = ofertasCarrito.totalMinor;
+  // Si cambia el ahorro sin que cambie el carrito (venció, empezó o se
+  // modificó una oferta, o se reanudó la venta), se avisa a la cajera.
+  const firmaCarrito = JSON.stringify(
+    lines.map((line) => [
+      line.productId,
+      line.quantity,
+      line.requestedUnitPriceMinor ?? null,
+    ]),
+  );
+  const ultimoAhorro = useRef<{ firma: string; ahorro: number }>(undefined);
+  useEffect(() => {
+    const previo = ultimoAhorro.current;
+    ultimoAhorro.current = { firma: firmaCarrito, ahorro: offerSavings };
+    if (!lines.length) setAvisoOfertas("");
+    else if (
+      previo &&
+      previo.firma === firmaCarrito &&
+      previo.ahorro !== offerSavings
+    )
+      setAvisoOfertas(
+        offerSavings < previo.ahorro
+          ? "Una oferta del carrito venció o cambió. Revisá el total antes de cobrar."
+          : "Se aplicó una oferta al carrito. Revisá el total antes de cobrar.",
+      );
+  }, [firmaCarrito, offerSavings, lines.length]);
   const [receipt, setReceipt] = useState<Receipt>();
   const [conceptOpen, setConceptOpen] = useState(false);
   const [creditAccounts, setCreditAccounts] = useState<CustomerAccount[]>([]);
@@ -5816,7 +6012,7 @@ function Sales({
     (sum, line) => sum + line.discountMinor,
     0,
   );
-  const total = subtotal - discountMinor;
+  const total = subtotal - offerSavings - discountMinor;
   const searchTerm = productQuery.trim().toLocaleLowerCase();
   const exactBarcodeProduct = products.find(
     (item) =>
@@ -5978,12 +6174,12 @@ function Sales({
     if (
       !Number.isSafeInteger(nextDiscountMinor) ||
       nextDiscountMinor < 0 ||
-      nextDiscountMinor > subtotal
+      nextDiscountMinor > subtotal - offerSavings
     ) {
       error("Indicá un descuento válido que no supere el subtotal.");
       return;
     }
-    const nextTotal = subtotal - nextDiscountMinor;
+    const nextTotal = subtotal - offerSavings - nextDiscountMinor;
     let nextPayments: typeof payments;
     try {
       nextPayments = paymentsAfterDiscount(nextTotal, payments);
@@ -6005,7 +6201,10 @@ function Sales({
               line.unitPriceMinor ??
               productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
               0,
-          ) * line.quantity,
+          ) *
+            line.quantity -
+          // El descuento general va después de las ofertas.
+          (line.description ? 0 : ahorroOferta(line.productId)),
       ),
     );
     setPayments(nextPayments);
@@ -6287,6 +6486,7 @@ function Sales({
     setPaymentAmount("");
     setCheckoutOpen(false);
     setCheckoutError("");
+    setAvisoOfertas("");
     setClientOperationId(crypto.randomUUID());
   };
   /**
@@ -6325,7 +6525,7 @@ function Sales({
       cliente:
         customers.find((customer) => customer.id === customerId)?.name ??
         "Público general",
-      lineas: lines.map((line) => ({
+      lineas: lines.map((line, indice) => ({
         nombre: line.description ?? nombre(line.productId),
         cantidad: line.quantity,
         unitarioMinor: Number(
@@ -6334,10 +6534,18 @@ function Sales({
             productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
             0,
         ),
-        descuentoMinor: line.discountMinor,
+        // Descuento general repartido más el ahorro por ofertas.
+        descuentoMinor:
+          (cuerpo.items[indice]?.discountMinor ?? 0) +
+          (line.description ? 0 : ahorroOferta(line.productId)),
       })),
       pagos: finalPayments,
       factura: documentType === "INVOICE",
+      ofertas: ofertasCarrito.aplicaciones.map((aplicacion) => ({
+        label: aplicacion.label,
+        name: aplicacion.name,
+        amountMinor: Number(aplicacion.discountMinor),
+      })),
     });
     const cuerpoGuardado = {
       ...cuerpo,
@@ -6442,6 +6650,26 @@ function Sales({
         return reportPayment(
           "Agregá cobros hasta cubrir el total de la venta.",
         );
+      if (discountMinor > subtotal - offerSavings)
+        return reportPayment(
+          "Revisá el descuento general: con las ofertas supera el subtotal.",
+        );
+      // El descuento general se reparte sobre lo que queda después de las
+      // ofertas (el carrito pudo cambiar desde que se aplicó).
+      const lineasEnvio = discountMinor
+        ? distributeSaleDiscount(
+            lines,
+            discountMinor,
+            (line) =>
+              Number(
+                line.requestedUnitPriceMinor ??
+                  line.unitPriceMinor ??
+                  listPriceOf(line.productId),
+              ) *
+                line.quantity -
+              (line.description ? 0 : ahorroOferta(line.productId)),
+          )
+        : lines;
       setSubmitting(true);
       const cuerpo = {
         priceListId: salePriceListId || undefined,
@@ -6459,7 +6687,7 @@ function Sales({
         fiscalOptions: documentType === "INVOICE" ? fiscalOptions : undefined,
         clientOperationId,
         customerId: customerId || undefined,
-        items: lines.map((line) =>
+        items: lineasEnvio.map((line) =>
           line.description
             ? {
                 description: line.description,
@@ -6473,8 +6701,15 @@ function Sales({
                 packQuantity: Math.min(line.packQuantity ?? 0, line.quantity),
                 expectedUnitPriceMinor: productoPorId(products, line.productId)!
                   .prices[0]!.amountMinor,
+                // Ahorro por ofertas que ve la cajera: la API lo revalida.
+                expectedOfferDiscountMinor: String(
+                  ahorroOferta(line.productId),
+                ),
               },
         ),
+        ...(ofertasCarrito.aplicaciones.length
+          ? { appliedOffers: ofertasParaEnviar(ofertasCarrito.aplicaciones) }
+          : {}),
         payments: finalPayments.map((payment) => ({
           ...payment,
           cashSessionId: payment.method !== "ACCOUNT" ? session?.id : undefined,
@@ -6511,6 +6746,12 @@ function Sales({
       await loadHistory();
       done();
     } catch (cause) {
+      // Las ofertas cambiaron (empezó, venció o se modificó una): se
+      // actualizan y el carrito muestra el total nuevo para reconfirmar.
+      if (cause instanceof OfertasCambiaronError) {
+        setOfertasVersion((version) => version + 1);
+        setAhoraOfertas(new Date());
+      }
       // El mismo clientOperationId se conserva: reintentar no duplica la venta.
       reportPayment(
         cause instanceof Error
@@ -6543,10 +6784,12 @@ function Sales({
             productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
             0,
         ),
-        discountMinor: line.discountMinor,
+        discountMinor:
+          line.discountMinor +
+          (line.description ? 0 : ahorroOferta(line.productId)),
       })),
       subtotalMinor: subtotal,
-      discountMinor,
+      discountMinor: discountMinor + offerSavings,
       payments: finalPayments,
     };
   }
@@ -6674,6 +6917,9 @@ function Sales({
         onContinue={() => {
           setCheckoutOpen(false);
           setResumeNeeded(false);
+          // Al reanudar se revalidan las ofertas (pudieron vencer o cambiar).
+          setOfertasVersion((version) => version + 1);
+          setAhoraOfertas(new Date());
         }}
         onDiscard={() => {
           setLines([]);
@@ -6863,6 +7109,12 @@ function Sales({
             rows={catalogRows.map((item) => ({
               product: item,
               ...productStock(item.id),
+              offer: ofertasDelProducto(
+                item,
+                ofertasVigentes,
+                ahoraOfertas,
+                branchId,
+              ).find(({ estado }) => estado === "ACTIVA")?.label,
             }))}
             selectedId={selectedCatalogProduct?.id}
             hiddenCount={catalogMatches.length - catalogRows.length}
@@ -6894,6 +7146,18 @@ function Sales({
             onClear={clearCatalogSelection}
             onFinished={focusProductSearch}
             onInvalid={error}
+            offers={
+              selectedCatalogProduct
+                ? ofertasDelProducto(
+                    selectedCatalogProduct,
+                    ofertasVigentes,
+                    ahoraOfertas,
+                    branchId,
+                  )
+                    .filter(({ estado }) => estado === "ACTIVA")
+                    .map(({ label }) => label)
+                : []
+            }
           />
         </form>
       </section>
@@ -6902,6 +7166,37 @@ function Sales({
         lineCount={lines.length}
         unitCount={lines.reduce((sum, line) => sum + line.quantity, 0)}
         totalMinor={total}
+        offerSavingsMinor={offerSavings}
+        offerNotice={
+          ofertasCarrito.sugerencias.length || avisoOfertas ? (
+            <div
+              role="status"
+              className="flex shrink-0 flex-wrap items-center gap-2 border-t border-amber-200 bg-amber-50 px-5 py-2 text-sm text-amber-900"
+            >
+              {avisoOfertas && (
+                <span className="flex items-center gap-2 font-semibold">
+                  {avisoOfertas}
+                  <button
+                    type="button"
+                    aria-label="Cerrar aviso de ofertas"
+                    className="rounded p-0.5 hover:bg-amber-100"
+                    onClick={() => setAvisoOfertas("")}
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              )}
+              {ofertasCarrito.sugerencias.map((sugerencia) => (
+                <span
+                  key={sugerencia.offerId}
+                  className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-amber-200"
+                >
+                  {sugerencia.mensaje}
+                </span>
+              ))}
+            </div>
+          ) : null
+        }
         submitting={submitting}
         checkoutDisabled={!lines.length || submitting || !pricingReady}
         onCheckout={openCheckout}
@@ -6924,7 +7219,7 @@ function Sales({
         }
         discount={
           <SaleGeneralDiscount
-            subtotalMinor={subtotal}
+            subtotalMinor={subtotal - offerSavings}
             discountMinor={discountMinor}
             totalDiscountMinor={
               discountMinor +
@@ -7075,6 +7370,22 @@ function Sales({
                                 {saleProductDetail(product)}
                               </p>
                             )}
+                          {!line.description &&
+                            (ofertasCarrito.porProducto.get(line.productId)
+                              ?.labels.length ?? 0) > 0 && (
+                              <p className="flex flex-wrap gap-1">
+                                {ofertasCarrito.porProducto
+                                  .get(line.productId)!
+                                  .labels.map((label) => (
+                                    <span
+                                      key={label}
+                                      className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-700"
+                                    >
+                                      {label}
+                                    </span>
+                                  ))}
+                              </p>
+                            )}
                           <p className="flex items-center gap-2 text-xs text-slate-500">
                             {line.productId === lastAddedId && (
                               <span className="rounded-full bg-teal-100/70 px-2 py-0.5 text-[11px] font-semibold text-teal-800">
@@ -7181,8 +7492,11 @@ function Sales({
                               return false;
                             }
                             try {
+                              // El precio manual reemplaza la oferta.
                               const nextTotal =
-                                total + (next - unitPrice) * line.quantity;
+                                total +
+                                (next - unitPrice) * line.quantity +
+                                ahorroOferta(line.productId);
                               const nextPayments = paymentsAfterDiscount(
                                 nextTotal,
                                 payments,
@@ -7208,11 +7522,25 @@ function Sales({
                         />
                       )}
                       <div className="text-right text-[15px] font-semibold tabular-nums">
+                        {!line.description && ahorroOferta(line.productId) ? (
+                          <p className="text-[11px] font-medium text-slate-400 line-through">
+                            {money(unitPrice * line.quantity)}
+                          </p>
+                        ) : null}
                         <p>
                           {money(
-                            unitPrice * line.quantity - line.discountMinor,
+                            unitPrice * line.quantity -
+                              line.discountMinor -
+                              (line.description
+                                ? 0
+                                : ahorroOferta(line.productId)),
                           )}
                         </p>
+                        {!line.description && ahorroOferta(line.productId) ? (
+                          <p className="text-[10px] font-medium text-rose-700">
+                            Ahorrás {money(ahorroOferta(line.productId))}
+                          </p>
+                        ) : null}
                         {line.discountMinor ? (
                           <p className="text-[10px] font-medium text-teal-700">
                             Dto. {money(line.discountMinor)}
@@ -7263,6 +7591,7 @@ function Sales({
           ].join(" · ")}
           subtotalMinor={subtotal}
           discountMinor={discountMinor}
+          offerSavingsMinor={offerSavings}
           totalMinor={total}
           paidMinor={paid}
           payments={groupedPayments}
@@ -7364,6 +7693,7 @@ function Sales({
         <SaleConfirmedDialog
           saleId={receipt.sale.id}
           totalMinor={Number(receipt.sale.totalMinor)}
+          savingsMinor={receipt.discountMinor}
           customerName={receipt.customerName}
           payments={receipt.payments}
           storeName={storeName}

@@ -119,3 +119,24 @@ test("rejects control commands, missing real data and malformed amounts", () => 
   ])
     assert.throws(() => validateTicket(invalid));
 });
+test("ofertas (SISTEMA-103): un renglón por oferta, el resto como descuento y el ahorro", () => {
+  const conOfertas = {
+    ...ticket,
+    subtotalMinor: "3000",
+    discountMinor: "1200",
+    offerDiscountMinor: "1000",
+    offers: [{ label: "2x1", name: "Shampoo", amountMinor: "1000" }],
+    savingsMinor: "1200",
+    totalMinor: "1800",
+    changeMinor: "200",
+  };
+  validateTicket(conOfertas);
+  const text = buildTicketV2(conOfertas).toString("latin1");
+  assert.ok(text.includes("OFERTA 2X1 SHAMPOO"));
+  assert.ok(text.includes("DESCUENTO"));
+  assert.ok(text.includes("USTED AHORRO"));
+  // Una oferta sin importe se rechaza.
+  assert.throws(() =>
+    validateTicket({ ...conOfertas, offers: [{ label: "x", name: "y" }] }),
+  );
+});

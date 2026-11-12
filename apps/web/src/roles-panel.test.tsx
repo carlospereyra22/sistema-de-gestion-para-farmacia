@@ -69,7 +69,7 @@ describe("panel de roles", () => {
     // Con el formulario de rol nuevo abierto no se repite el botón Nuevo rol.
     expect(html).not.toContain("lucide-plus");
     expect(html).toContain("Ver rol");
-    expect(html).toContain("0 de 28 permisos");
+    expect(html).toContain("0 de 30 permisos");
     expect(html).toContain("Crear rol");
     expect(html).toContain('aria-label="Código del rol"');
   });

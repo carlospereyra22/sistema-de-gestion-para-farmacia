@@ -52,6 +52,7 @@ const A4_SCALE = 316 / 794;
 export function SaleConfirmedDialog({
   saleId,
   totalMinor,
+  savingsMinor = 0,
   customerName,
   payments,
   template,
@@ -70,6 +71,8 @@ export function SaleConfirmedDialog({
   aviso?: string;
   saleId: string;
   totalMinor: number;
+  /** "Usted ahorró": ofertas y descuentos (SISTEMA-103). */
+  savingsMinor?: number;
   customerName: string;
   payments: { method: SalesPaymentMethod; amountMinor: number }[];
   // Plantilla A4 y formato predeterminado de la organización; sin ella, ticket.
@@ -198,6 +201,11 @@ export function SaleConfirmedDialog({
                 {methodNames.join(" + ")}
               </span>
             </div>
+            {savingsMinor > 0 && (
+              <p className="mt-2 text-sm font-semibold text-rose-700">
+                El cliente ahorró {money(savingsMinor)}
+              </p>
+            )}
           </div>
           <dl className="mt-5 grid gap-3 rounded-2xl bg-slate-50 px-5 py-3.5 text-sm sm:grid-cols-2 sm:gap-0">
             <div className="flex min-w-0 items-center gap-3 sm:pr-4">

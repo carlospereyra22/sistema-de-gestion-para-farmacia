@@ -25,6 +25,7 @@ function setup(allowed = true) {
             quantity: 2,
             unitPriceMinor: 1000n,
             discountMinor: 500n,
+            offerDiscountMinor: 0n,
           },
         ],
         payments: [{ method: "CASH", amountMinor: 2000n }],

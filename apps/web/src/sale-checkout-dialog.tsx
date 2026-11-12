@@ -77,6 +77,7 @@ export function SaleCheckoutDialog({
   summary,
   subtotalMinor,
   discountMinor,
+  offerSavingsMinor = 0,
   totalMinor,
   paidMinor,
   payments,
@@ -99,6 +100,8 @@ export function SaleCheckoutDialog({
   summary: string;
   subtotalMinor: number;
   discountMinor: number;
+  /** Ahorro por ofertas (SISTEMA-103), aparte del descuento. */
+  offerSavingsMinor?: number;
   totalMinor: number;
   paidMinor: number;
   payments: { method: SalesPaymentMethod; amountMinor: number }[];
@@ -234,6 +237,13 @@ export function SaleCheckoutDialog({
                   label="Subtotal"
                   value={money(subtotalMinor)}
                 />
+                {offerSavingsMinor > 0 && (
+                  <TotalDetail
+                    Icon={Tag}
+                    label="Ahorro por ofertas"
+                    value={money(offerSavingsMinor)}
+                  />
+                )}
                 <TotalDetail
                   Icon={Tag}
                   label="Descuento"

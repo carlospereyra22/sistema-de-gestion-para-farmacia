@@ -259,3 +259,13 @@ Nuevo y Editar producto comparten el popup de código interno y etiquetas. Gener
   - Sin la marca, un precio distinto al sincronizado se sigue rechazando, como antes.
   - Los cambios quedan en la auditoría del producto.
 - Observaciones del producto (11/11/2026, SISTEMA-103): la descripción interna (marca, categoría y fuente de la referencia, cargadas al importar) se sigue guardando, pero no se muestra en el editor de producto. Guardar el producto la conserva sin cambios.
+
+## Ofertas (12/11/2026, SISTEMA-103)
+
+- Las ofertas son de la organización y aplican a todas o a algunas sucursales y listas de precios. Tipos: porcentaje, monto fijo por unidad, precio fijo, NxM (la de regalo es la más barata del grupo), n-ésima unidad al X %, por cantidad (escalones) y combo. Cualquier producto puede tener oferta, incluidos los medicamentos con receta. Una categoría incluye sus subcategorías. Ver OFFERS.md.
+- La venta las aplica sola. La API es la autoridad: recalcula al confirmar y, si el ahorro no coincide con el que vio la cajera, responde 409 para revisar el carrito y reconfirmar.
+- Orden: precio de lista efectivo → ofertas → descuento general (sobre el subtotal ya ofertado, sin superarlo) → reparto entre lotes con el remanente en el último. Un renglón recibe como máximo una oferta, la de mayor ahorro, salvo que todas las que lo tocan sean combinables. El precio especial de la cajera reemplaza la oferta. Nunca un precio negativo. Los conceptos manuales no reciben ofertas. La oferta de una caja no pasa a sus blísteres.
+- La venta guarda una instantánea de cada oferta aplicada; un cambio posterior no altera ventas, tickets, facturas, cuentas corrientes ni notas de crédito. La nota de crédito prorratea el descuento: devolver 1 de un 2x1 devuelve la mitad de lo pagado.
+- El estado vigente (programada, activa, vencida) se calcula con la fecha y la hora de Argentina. Una oferta usada nunca se borra: se finaliza o archiva. Alta, edición (antes y después), pausa, reanudación, finalización, duplicado y archivo quedan en auditoría.
+- Sin conexión, la PC aplica las ofertas guardadas; al sincronizar se respeta lo cobrado y, si la oferta ya no correspondía, queda el aviso "a revisar" OFERTA_DISTINTA (o TOPE_OFERTA_SUPERADO). Las ofertas se crean y editan sólo con conexión.
+- Crear, editar y cambiar el estado de ofertas requiere OFFER_MANAGE; verlas, OFFER_READ. Aplicarlas al vender no requiere permiso extra.

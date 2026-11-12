@@ -41,10 +41,24 @@ function validateTicket(ticket) {
   for (const value of [
     ticket.subtotalMinor,
     ticket.discountMinor,
+    ticket.offerDiscountMinor,
+    ticket.savingsMinor,
     ticket.receivedMinor,
     ticket.changeMinor,
   ])
     if (value != null && !money(value)) throw new Error("Importe inválido.");
+  if (
+    ticket.offers != null &&
+    (!Array.isArray(ticket.offers) ||
+      ticket.offers.length > 100 ||
+      ticket.offers.some(
+        (offer) =>
+          !text(offer?.label, 60) ||
+          !text(offer?.name, 160) ||
+          !money(offer?.amountMinor),
+      ))
+  )
+    throw new Error("Ofertas inválidas.");
   if (
     ticket.balanceAfterMinor != null &&
     !/^-?\d{1,12}$/.test(ticket.balanceAfterMinor)

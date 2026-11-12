@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import { Type, plainToInstance } from "class-transformer";
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -21,6 +22,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Min,
   MinLength,
   MaxLength,
@@ -50,6 +52,11 @@ class SaleLineDto {
   @Min(0)
   requestedUnitPriceMinor?: number;
   @IsOptional() @IsString() expectedUnitPriceMinor?: string;
+  // Ahorro por ofertas que vio la cajera (SISTEMA-103), en centavos.
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,15}$/)
+  expectedOfferDiscountMinor?: string;
   @IsOptional() @IsUUID() productId?: string;
   @IsOptional() @IsString() @MinLength(3) @MaxLength(160) description?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) unitPriceMinor?: number;
@@ -59,6 +66,22 @@ class SaleLineDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) packQuantity?: number;
   // Sin conexión: nombre que vio la PC, por si el producto ya no se vende.
   @IsOptional() @IsString() @MaxLength(200) productName?: string;
+}
+class AppliedOfferItemDto {
+  @IsUUID() productId!: string;
+  @Type(() => Number) @IsInt() @Min(1) units!: number;
+  @IsString() @Matches(/^\d{1,15}$/) grossMinor!: string;
+  @IsString() @Matches(/^\d{1,15}$/) discountMinor!: string;
+}
+/** Oferta que aplicó la PC sin conexión (SISTEMA-103). */
+class AppliedOfferDto {
+  @IsUUID() offerId!: string;
+  @Type(() => Number) @IsInt() @Min(1) version!: number;
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => AppliedOfferItemDto)
+  items!: AppliedOfferItemDto[];
 }
 class PaymentDto {
   @IsEnum(PaymentMethod) method!: PaymentMethod;
@@ -87,6 +110,12 @@ class CompleteSaleDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentDto)
   payments!: PaymentDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => AppliedOfferDto)
+  appliedOffers?: AppliedOfferDto[];
 }
 /** Mandar a ARCA una venta hecha con comprobante interno (SISTEMA-65). */
 class InvoiceInternalDto {

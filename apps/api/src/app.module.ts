@@ -12,6 +12,7 @@ import { EnvironmentModule } from "./config/environment.module";
 import { validateEnvironment } from "./config/environment.validation";
 import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { OffersModule } from "./offers/offers.module";
 import { OrganizationsModule } from "./organizations/organizations.module";
 import { PartiesModule } from "./parties/parties.module";
 import { PlatformModule } from "./platform/platform.module";
@@ -40,6 +41,7 @@ import { UsersModule } from "./users/users.module";
     CashModule,
     InventoryModule,
     SalesModule,
+    OffersModule,
     TransfersModule,
     UsersModule,
     RolesModule,
