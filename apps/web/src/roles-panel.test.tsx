@@ -74,3 +74,23 @@ describe("panel de roles", () => {
     expect(html).toContain('aria-label="Código del rol"');
   });
 });
+
+describe("listado de roles con muchos", () => {
+  it("muestra 5 por página y el paginador", () => {
+    const roles = Array.from({ length: 6 }, (_, indice) =>
+      role(`ROL_${indice}`, [], { name: `Rol ${indice}` }),
+    );
+    const html = renderToStaticMarkup(
+      <RolesPanel
+        token="t"
+        organizationId="o"
+        roles={roles}
+        onDone={() => undefined}
+        onError={() => undefined}
+      />,
+    );
+    expect(html).toContain("Rol 4");
+    expect(html).not.toContain("Rol 5");
+    expect(html).toContain("6 roles · 5 por página");
+  });
+});

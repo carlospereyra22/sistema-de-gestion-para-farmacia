@@ -94,3 +94,27 @@ describe("panel de usuarios", () => {
     expect(disabledCount(render("OWNER"))).toBe(0);
   });
 });
+
+describe("listado de usuarios con muchos", () => {
+  it("muestra 5 por página y el paginador", () => {
+    const usuarios = Array.from({ length: 7 }, (_, indice) =>
+      item({
+        displayName: `Usuario ${indice}`,
+        user: { id: `u${indice}`, email: `u${indice}@x.com`, active: true },
+      }),
+    );
+    const html = renderToStaticMarkup(
+      <UsersPanel
+        token="t"
+        organizationId="o"
+        users={usuarios}
+        options={options}
+        onDone={() => undefined}
+        onError={() => undefined}
+      />,
+    );
+    expect(html).toContain("u4@x.com");
+    expect(html).not.toContain("u5@x.com");
+    expect(html).toContain("7 usuarios · 5 por página");
+  });
+});
