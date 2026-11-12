@@ -315,8 +315,8 @@ describe("ofertas en el carrito de Ventas", () => {
             id: "c1",
             label: "Combo",
             nombre: "Combo pelo",
-            mensaje:
-              "Agregá Acondicionador y ahorrás $2.000 (18%) con «Combo pelo»",
+            agregar: "Agregá Acondicionador",
+            gana: "y ahorrás $2.000 (18%) con «Combo pelo»",
             combo: true,
             componentes: [
               { nombre: "Shampoo", cantidad: 1, enCarrito: 1 },
@@ -328,17 +328,19 @@ describe("ofertas en el carrito de Ventas", () => {
             id: "o2",
             label: "3x2",
             nombre: "3x2 jabón",
-            mensaje: "Agregá 1 más y te llevás 1 gratis (3x2)",
+            agregar: "Agregá 1 más",
+            gana: "y te llevás 1 gratis (3x2)",
             accion: { texto: "Agregar 1", onClick: () => {} },
           },
         ]}
       />,
     );
-    expect(html).toContain(
-      "Agregá Acondicionador y ahorrás $2.000 (18%) con «Combo pelo»",
-    );
+    expect(html).toContain("Agregá Acondicionador");
+    expect(html).toContain("y ahorrás $2.000 (18%) con «Combo pelo»");
+    expect(html).toContain("line-clamp-2");
+    expect(html).not.toContain("truncate text-[13px]");
     expect(html).toContain("Completar");
-    expect(html).toContain("Agregá 1 más y te llevás 1 gratis (3x2)");
+    expect(html).toContain("y te llevás 1 gratis (3x2)");
     expect(html).toContain('aria-label="Descartar Combo pelo"');
     expect(html).not.toContain(">Ofertas<");
   });

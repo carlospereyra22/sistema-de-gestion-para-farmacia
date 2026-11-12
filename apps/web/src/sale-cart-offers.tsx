@@ -4,8 +4,9 @@ export type SugerenciaCarrito = {
   id: string;
   label: string;
   nombre: string;
-  /** Lo que gana el cliente si completa la oferta. */
-  mensaje: string;
+  /** Qué agregar y qué gana el cliente si completa la oferta. */
+  agregar: string;
+  gana: string;
   combo?: boolean;
   /** Combo: qué tiene el carrito y qué falta de cada producto. */
   componentes?: { nombre: string; cantidad: number; enCarrito: number }[];
@@ -52,13 +53,12 @@ export function SaleCartOffers({
         </p>
       )}
       {sugerencias.map((sugerencia) => {
-        const texto = sugerencia.mensaje;
         return (
           <div
             key={sugerencia.id}
-            className="flex h-9 items-center gap-2 rounded-lg bg-rose-50/60 px-2.5"
+            className="flex items-start gap-2 rounded-lg bg-rose-50/60 px-2.5 py-1.5"
           >
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">
+            <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">
               {sugerencia.combo ? (
                 <Package size={11} />
               ) : (
@@ -66,12 +66,15 @@ export function SaleCartOffers({
               )}
               {sugerencia.label}
             </span>
-            <span
-              className="min-w-0 flex-1 truncate text-[13px] text-slate-700"
-              title={texto}
+            <p
+              className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-[18px] text-slate-700"
+              title={`${sugerencia.agregar} ${sugerencia.gana}`}
             >
-              {texto}
-            </span>
+              {sugerencia.agregar}{" "}
+              <strong className="font-semibold text-rose-700">
+                {sugerencia.gana}
+              </strong>
+            </p>
             {sugerencia.accion && (
               <button
                 type="button"

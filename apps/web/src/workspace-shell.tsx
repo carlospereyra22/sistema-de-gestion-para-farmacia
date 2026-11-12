@@ -84,7 +84,7 @@ import { ProductOffersCard } from "./product-offers-card";
 import { getOfertasVigentes } from "./lib/ofertas-api";
 import {
   detalleOfertaVenta,
-  mensajeSugerencia,
+  partesSugerencia,
   ofertasDelCarrito,
   ofertasDelProducto,
   ofertasParaEnviar,
@@ -5939,7 +5939,7 @@ function Sales({
             id: oferta.id,
             label: sugerencia.label,
             nombre: oferta.name,
-            mensaje: mensajeSugerencia(oferta, sugerencia.faltan, {
+            ...partesSugerencia(oferta, sugerencia.faltan, {
               combo: {
                 faltantes: componentes.flatMap((item) => {
                   const falta =
@@ -5983,7 +5983,7 @@ function Sales({
           id: oferta.id,
           label: sugerencia.label,
           nombre: oferta.name,
-          mensaje: mensajeSugerencia(oferta, sugerencia.faltan, {
+          ...partesSugerencia(oferta, sugerencia.faltan, {
             enCarrito: sugerencia.productIds.reduce(
               (suma, id) => suma + cantidadEnCarrito(id),
               0,

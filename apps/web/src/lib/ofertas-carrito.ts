@@ -233,10 +233,10 @@ export function detalleOfertaVenta(
 }
 
 /**
- * Lo que gana el cliente si completa la oferta, para la sugerencia del
- * carrito: "Agregá 1 más y te llevás 1 gratis".
+ * Lo que gana el cliente si completa la oferta, en dos partes para mostrarla
+ * clara en el carrito: qué agregar y qué gana ("y te llevás 1 gratis").
  */
-export function mensajeSugerencia(
+export function partesSugerencia(
   oferta: OfertaMotor,
   faltan: number,
   extra: {
@@ -244,18 +244,25 @@ export function mensajeSugerencia(
     enCarrito?: number;
     combo?: { faltantes: string[]; ahorroMinor: number; listaMinor: number };
   } = {},
-): string {
+): { agregar: string; gana: string } {
   const combo = extra.combo;
-  const agregá = faltan === 1 ? "Agregá 1 más" : `Agregá ${faltan} más`;
+  const agregar = faltan === 1 ? "Agregá 1 más" : `Agregá ${faltan} más`;
   switch (oferta.type) {
     case "BUY_X_PAY_Y": {
       const gratis = (oferta.buyQuantity ?? 0) - (oferta.payQuantity ?? 0);
-      return `${agregá} y te llevás ${gratis === 1 ? "1 gratis" : `${gratis} gratis`} (${etiquetaOferta(oferta)})`;
+      return {
+        agregar,
+        gana: `y te llevás ${gratis} gratis (${etiquetaOferta(oferta)})`,
+      };
     }
     case "NTH_UNIT_PERCENT":
-      return oferta.percentBps === 10000
-        ? `${agregá} y la unidad ${oferta.nthUnit} te sale gratis`
-        : `${agregá} y la unidad ${oferta.nthUnit} sale ${porcentajeTexto(oferta.percentBps)} menos`;
+      return {
+        agregar,
+        gana:
+          oferta.percentBps === 10000
+            ? `y la unidad ${oferta.nthUnit} te sale gratis`
+            : `y la unidad ${oferta.nthUnit} sale ${porcentajeTexto(oferta.percentBps)} menos`,
+      };
     case "TIERED": {
       const escalon = [...oferta.tiers]
         .sort((a, b) => a.minQuantity - b.minQuantity)
@@ -263,17 +270,28 @@ export function mensajeSugerencia(
       const beneficio = escalon?.percentBps
         ? `${porcentajeTexto(escalon.percentBps)} menos`
         : `${pesos(escalon?.amountMinor ?? 0n)} menos por unidad`;
-      return `${agregá} y tenés ${beneficio} en cada una`;
+      return { agregar, gana: `y tenés ${beneficio} en cada una` };
     }
     case "BUNDLE": {
-      if (!combo) return `${agregá} y armás el combo «${oferta.name}»`;
+      if (!combo) return { agregar, gana: `y armás el combo «${oferta.name}»` };
       const pct =
         combo.listaMinor > 0
           ? Math.round((combo.ahorroMinor / combo.listaMinor) * 100)
           : 0;
-      return `Agregá ${combo.faltantes.join(" y ")} y ahorrás ${pesos(BigInt(combo.ahorroMinor))}${pct ? ` (${pct}%)` : ""} con «${oferta.name}»`;
+      return {
+        agregar: `Agregá ${combo.faltantes.join(" + ")}`,
+        gana: `y ahorrás ${pesos(BigInt(combo.ahorroMinor))}${pct ? ` (${pct}%)` : ""} con «${oferta.name}»`,
+      };
     }
     default:
-      return `${agregá} y aprovechás «${oferta.name}»`;
+      return { agregar, gana: `y aprovechás «${oferta.name}»` };
   }
+}
+
+/** La sugerencia en una sola frase. */
+export function mensajeSugerencia(
+  ...args: Parameters<typeof partesSugerencia>
+): string {
+  const { agregar, gana } = partesSugerencia(...args);
+  return `${agregar} ${gana}`;
 }
