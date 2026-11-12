@@ -17,6 +17,8 @@ export type ReceiptLineInput = {
   quantity: number;
   lotNumber: string;
   expiresAt?: Date;
+  /** Abrir cajas al recibir (SISTEMA-103): cuántas pasan al producto chico. */
+  openBoxes?: number;
 };
 export type ReceiptInput = {
   debt?: { amountMinor: string; dueOn: string | null };
@@ -36,6 +38,7 @@ export type DirectPurchaseInput = PurchaseInput & {
     quantity: number;
     lotNumber: string;
     expiresAt?: Date;
+    openBoxes?: number;
   }[];
 };
 

@@ -261,6 +261,20 @@ Decisión del usuario (09/11/2026): toda la cuenta corriente funciona sin conexi
 - Un cobro mixto conserva su desglose de medios de pago cuando después se le asignan artículos (también con conexión).
 - Migraciones `20261109120000_offline_accounts` y `20261109130000_offline_customer_update`: tipos de operación y de aviso.
 
+## Abrir cajas sin conexión (SISTEMA-103)
+
+Abrir cajas (ej. Buscapina x100 en blísteres x10) funciona sin internet:
+
+- desde Inventario y Productos, como operación de inventario `APERTURA`;
+- desde Compras, con «Abrir ya» en la recepción.
+
+La PC muestra enseguida la caja abierta y el producto chico con el mismo lote. Al volver se aplica una sola vez:
+
+- si faltan cajas, se abren hasta las que haya, con aviso;
+- en una recepción que no se puede abrir, la compra entra igual como caja.
+
+Ver `BOX_SPLIT.md`.
+
 ## Transferencias sin conexión (SISTEMA-71)
 
 Decisión del usuario (09/11/2026): sin conexión se puede enviar (preparar y despachar) y recibir sólo lo que ya estaba en tránsito cuando había internet. Reglas en `BUSINESS_RULES.md` (transferencias sin conexión).

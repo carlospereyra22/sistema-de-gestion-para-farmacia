@@ -8,6 +8,8 @@
 //   en el lote (otra PC vendió mientras tanto) se registra hasta lo que hay,
 //   nunca en negativo, y queda un aviso con la diferencia.
 // - Una corrección de lote no pisa un dato que otra PC cambió después.
+// - Abrir cajas (SISTEMA-103) que, al llegar, supera las cajas vendibles se
+//   registra hasta las que hay, con el mismo aviso.
 
 /**
  * Lote al que se refiere la operación: por su id, o por producto y número si
@@ -64,6 +66,16 @@ export type OperacionInventarioSinConexion = Base &
           reason: string;
         };
       }
+    | {
+        /** Abrir cajas (SISTEMA-103): N cajas del lote pasan a otro producto. */
+        tipo: "APERTURA";
+        cuerpo: {
+          lote: LoteDeLaOperacion;
+          boxes: number;
+          targetProductId?: string;
+          factor?: number;
+        };
+      }
   );
 
 export const KIND_INVENTARIO = {
@@ -71,6 +83,7 @@ export const KIND_INVENTARIO = {
   AJUSTE: "INVENTORY_ADJUSTMENT",
   DEVOLUCION: "INVENTORY_SUPPLIER_RETURN",
   EDICION_LOTE: "INVENTORY_LOT_EDIT",
+  APERTURA: "INVENTORY_STOCK_SPLIT",
 } as const;
 
 /**

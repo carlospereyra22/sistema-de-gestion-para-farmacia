@@ -65,3 +65,7 @@ Proveedores y clientes ya cuentan con alta y listado. Inventario permite recepci
 Transferencias, devoluciones, ajustes explícitos, balances materializados, auditoría y reportes siguen pendientes de implementación funcional.
 
 `InventoryMovement.unitCostMinor` (SISTEMA-31, nullable): costo de esa recepción en centavos, para conservar los distintos costos de un mismo lote. Null en filas anteriores.
+
+`Product.splitTargetProductId` + `Product.splitFactor` (SISTEMA-103, nullable, FK compuesta con `organizationId`, CHECK: ambos o ninguno, factor 2..1000, distinto del propio producto): en qué producto se abre una caja y cuántas unidades trae. `StockSplit` (SISTEMA-103): cada apertura de cajas, con `requestId` único por organización, huella, lotes y productos origen/destino, cajas, factor, actor y `purchaseReceiptId` opcional. Sus movimientos son `ADJUSTMENT_OUT`/`ADJUSTMENT_IN` con `referenceType = STOCK_SPLIT`. Ver `BOX_SPLIT.md`.
+
+`Product.priceManual` (SISTEMA-103, boolean, por defecto false): precio de venta editado a mano en un medicamento vinculado; la actualización automática actualiza la referencia pero no ese precio.

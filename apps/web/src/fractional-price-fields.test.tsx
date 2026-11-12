@@ -32,7 +32,7 @@ it.each([true, false])(
     expect(html).toContain("Recargo (%)");
     expect(html).toContain("7.072,76");
     expect(html).toContain(linked ? "automáticamente" : "precio base manual");
-    expect(html).toContain("no divide el stock");
+    expect(html).toContain("Solo modifica el precio; el stock no cambia");
   },
 );
 it("keeps the form compact when fractional pricing is disabled", () => {

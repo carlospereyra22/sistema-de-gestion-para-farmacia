@@ -43,6 +43,9 @@ const labels: Record<string, string> = {
   SUPPLIER_RETURN: "Devolución a proveedor",
   DISTRIBUTION: "Salida por distribución",
   DISTRIBUTION_REVERSAL: "Reversión de distribución",
+  // Abrir cajas (SISTEMA-103).
+  STOCK_SPLIT_OUT: "Caja abierta",
+  STOCK_SPLIT_IN: "Ingreso por apertura de caja",
 };
 
 export function OperationHistory(props: {
@@ -146,7 +149,11 @@ function HistoryDialog({
             item.referenceType === "DISTRIBUTION" ||
             item.referenceType === "DISTRIBUTION_REVERSAL"
               ? item.referenceType
-              : item.type,
+              : item.referenceType === "STOCK_SPLIT"
+                ? item.quantity < 0
+                  ? "STOCK_SPLIT_OUT"
+                  : "STOCK_SPLIT_IN"
+                : item.type,
           detail: [
             `Lote: ${item.lotNumber ?? "Sin lote"}`,
             `Variación: ${item.quantity > 0 ? "+" : ""}${item.quantity} unidades`,

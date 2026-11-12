@@ -47,8 +47,10 @@ import {
   lotReturnableStock,
   lotSupplierBreakdown,
   SUPPLIER_ADJUSTMENT,
+  STOCK_SPLIT,
 } from "./lot-suppliers";
 import { stockAvailability } from "./stock-availability";
+import { abrirCajasEnTx, splitPayload, type SplitInput } from "./stock-split";
 import { inventoryCosts, lotAdjustments, lotReturns } from "./lot-costs";
 
 function lotSupplierStock(
@@ -307,6 +309,7 @@ export class InventoryService {
           WHERE m.type IN ('PURCHASE_RECEIPT', 'TRANSFER_IN')
              OR (m.type IN ('ADJUSTMENT_IN', 'ADJUSTMENT_OUT')
                  AND m."referenceType" = ${SUPPLIER_ADJUSTMENT})
+             OR (m.type = 'ADJUSTMENT_IN' AND m."referenceType" = ${STOCK_SPLIT})
           GROUP BY m."lotId"
         ), devoluciones AS (
           SELECT r."lotId", count(*) AS c, sum(r.quantity) AS s, max(r."createdAt") AS u
@@ -877,6 +880,54 @@ export class InventoryService {
     );
   }
 
+  /**
+   * Abrir cajas (SISTEMA-103): N cajas de un lote pasan al producto vinculado
+   * con el mismo lote y vencimiento. Un reintento con el mismo `requestId`
+   * devuelve la apertura ya hecha; con otros datos, 409.
+   */
+  async split(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    input: SplitInput,
+  ) {
+    await this.assert(actorId, organizationId, "INVENTORY_MANAGE");
+    const payloadHash = splitPayload(input);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`split:${organizationId}:${input.requestId}`}, 0))`;
+      const previous = await tx.stockSplit.findUnique({
+        where: {
+          organizationId_requestId: {
+            organizationId,
+            requestId: input.requestId,
+          },
+        },
+      });
+      if (previous) {
+        if (
+          previous.payloadHash !== payloadHash ||
+          previous.branchId !== branchId
+        )
+          throw new ConflictException(
+            "Esta apertura ya se usó con otros datos. Actualizá el inventario.",
+          );
+        return {
+          id: previous.id,
+          sourceLotId: previous.sourceLotId,
+          targetLotId: previous.targetLotId,
+          targetProductId: previous.targetProductId,
+          boxes: previous.boxes,
+          units: previous.boxes * previous.factor,
+        };
+      }
+      return abrirCajasEnTx(
+        tx,
+        { actorId, organizationId, branchId },
+        { ...input, payloadHash },
+      );
+    });
+  }
+
   /** El ajuste dentro de una transacción (también el hecho sin conexión). */
   private async ajustarEnTx(
     tx: Prisma.TransactionClient,
@@ -1299,6 +1350,50 @@ export class InventoryService {
         );
         return devolucion?.id ?? null;
       }
+      case "APERTURA": {
+        // Abrir cajas (SISTEMA-103): hasta las cajas vendibles que haya al
+        // llegar; el resto queda como aviso.
+        const lote = await this.loteDe(
+          tx,
+          organizationId,
+          branchId,
+          op.cuerpo.lote,
+        );
+        const { registrado, falta } = hastaLoQueHay(
+          op.cuerpo.boxes,
+          stockAvailability(lote, sinConexion.contexto.occurredAt)
+            .sellableQuantity,
+        );
+        if (falta)
+          sinConexion.contexto.avisos.push({
+            kind: "AJUSTE_SUPERA_STOCK",
+            detail: await this.detalleDeSalida(tx, lote, {
+              tipo: "APERTURA",
+              pedido: op.cuerpo.boxes,
+              registrado,
+            }),
+          });
+        if (!registrado) return lote.id;
+        const input = {
+          requestId: op.clientOperationId,
+          lotId: lote.id,
+          boxes: registrado,
+          ...(op.cuerpo.targetProductId
+            ? { targetProductId: op.cuerpo.targetProductId }
+            : {}),
+          ...(op.cuerpo.factor ? { factor: op.cuerpo.factor } : {}),
+        };
+        await abrirCajasEnTx(
+          tx,
+          { actorId, organizationId, branchId },
+          {
+            ...input,
+            payloadHash: splitPayload(input),
+            occurredAt: sinConexion.contexto.occurredAt,
+          },
+        );
+        return lote.id;
+      }
       case "EDICION_LOTE":
         return this.editarLoteSinConexion(
           tx,
@@ -1347,7 +1442,7 @@ export class InventoryService {
     tx: Prisma.TransactionClient,
     lote: { productId: string; number: string },
     salida: {
-      tipo: "AJUSTE" | "DEVOLUCION";
+      tipo: "AJUSTE" | "DEVOLUCION" | "APERTURA";
       pedido: number;
       registrado: number;
     },

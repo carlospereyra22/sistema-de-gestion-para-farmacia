@@ -79,6 +79,9 @@ export class CreateProductDto {
   @IsOptional() @IsIn(["BOX", "BLISTER", "UNIT"]) saleUnit?: SaleUnitValue;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsBoolean() prescriptionRequired?: boolean;
+  @IsOptional() @IsBoolean() priceManual?: boolean;
+  @IsOptional() @IsUUID() splitTargetProductId?: string | null;
+  @IsOptional() @IsInt() @Min(2) @Max(1000) splitFactor?: number | null;
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(10)
@@ -165,6 +168,9 @@ export class UpdateProductDto {
   @IsOptional() @IsIn(["BOX", "BLISTER", "UNIT"]) saleUnit?: SaleUnitValue;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsBoolean() prescriptionRequired?: boolean;
+  @IsOptional() @IsBoolean() priceManual?: boolean;
+  @IsOptional() @IsUUID() splitTargetProductId?: string | null;
+  @IsOptional() @IsInt() @Min(2) @Max(1000) splitFactor?: number | null;
 }
 @Controller("organizations/:organizationId/catalog")
 @UseGuards(JwtAccessGuard)

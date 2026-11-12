@@ -67,6 +67,8 @@ class ReceiptDto {
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @IsString() lotNumber!: string;
   @IsOptional() @IsDateString() expiresAt?: string;
+  // Abrir cajas al recibir (SISTEMA-103): cuántas pasan ya al producto chico.
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) openBoxes?: number;
 }
 class ReceiptDebtDto {
   @IsString() @Matches(/^\d{1,14}$/) amountMinor!: string;
@@ -91,6 +93,8 @@ class DirectLotDto {
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @IsString() @MaxLength(100) lotNumber!: string;
   @IsOptional() @IsDateString() expiresAt?: string;
+  // Abrir cajas al recibir (SISTEMA-103): cuántas pasan ya al producto chico.
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) openBoxes?: number;
 }
 class DirectDto extends CreateDto {
   @IsOptional()
