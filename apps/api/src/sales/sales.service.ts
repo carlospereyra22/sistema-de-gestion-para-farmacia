@@ -1161,13 +1161,20 @@ export class SalesService {
                   "Un producto que ya no se vende necesita su precio cobrado para registrar la venta sin conexión.",
                 );
               const description = offlineConceptName(line.productName);
+              // Lo cobrado incluye el ahorro por ofertas que aplicó la PC.
+              const ofertaCobrada = /^\d{1,15}$/.test(
+                line.expectedOfferDiscountMinor ?? "",
+              )
+                ? BigInt(line.expectedOfferDiscountMinor!)
+                : 0n;
               items.push({
                 productId: null,
                 lotId: null,
                 description,
                 quantity: line.quantity,
                 unitPriceMinor: charged,
-                discountMinor: BigInt(line.discountMinor ?? 0),
+                discountMinor: BigInt(line.discountMinor ?? 0) + ofertaCobrada,
+                offerDiscountMinor: ofertaCobrada,
               });
               offline.issues.push({
                 kind: "PRODUCTO_NO_DISPONIBLE",

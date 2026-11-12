@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  detalleOfertaVenta,
+  mensajeSugerencia,
   ofertasDelCarrito,
   ofertasDelProducto,
   ofertasParaEnviar,
@@ -123,5 +125,117 @@ describe("ofertas en el carrito", () => {
       ["o1", "ACTIVA"],
       ["o2", "PROGRAMADA"],
     ]);
+  });
+});
+
+describe("ofertas explicadas para la cajera", () => {
+  const producto = (id: string) =>
+    ({
+      a: { nombre: "Shampoo", precioMinor: 600000 },
+      b: { nombre: "Acondicionador", precioMinor: 500000 },
+    })[id];
+
+  it("explica cada tipo en palabras", () => {
+    expect(detalleOfertaVenta(oferta({}), producto).texto).toBe(
+      "Llevando 3 pagás 2",
+    );
+    expect(
+      detalleOfertaVenta(
+        oferta({
+          type: "NTH_UNIT_PERCENT",
+          nthUnit: 2,
+          percentBps: 5000,
+          buyQuantity: null,
+          payQuantity: null,
+        }),
+        producto,
+      ).texto,
+    ).toBe("La unidad 2 con 50% menos");
+    expect(
+      detalleOfertaVenta(
+        oferta({
+          type: "TIERED",
+          buyQuantity: null,
+          payQuantity: null,
+          tiers: [{ minQuantity: 3, percentBps: 1500, amountMinor: null }],
+        }),
+        producto,
+      ).texto,
+    ).toBe("Desde 3: 15% menos");
+  });
+
+  it("muestra de qué está armado un combo y cuánto sale", () => {
+    const detalle = detalleOfertaVenta(
+      oferta({
+        name: "Combo pelo",
+        type: "BUNDLE",
+        buyQuantity: null,
+        payQuantity: null,
+        bundlePriceMinor: 900000n,
+        targets: [
+          { kind: "PRODUCT", id: "a", exclude: false, quantity: 1 },
+          { kind: "PRODUCT", id: "b", exclude: false, quantity: 2 },
+        ],
+      }),
+      producto,
+    );
+    expect(detalle.texto).toBe("1 × Shampoo + 2 × Acondicionador");
+    expect(detalle.combo).toEqual({
+      componentes: [
+        { productId: "a", nombre: "Shampoo", cantidad: 1, precioMinor: 600000 },
+        {
+          productId: "b",
+          nombre: "Acondicionador",
+          cantidad: 2,
+          precioMinor: 500000,
+        },
+      ],
+      listaMinor: 1600000,
+      comboMinor: 900000,
+    });
+  });
+});
+
+describe("sugerencias que dicen qué gana el cliente", () => {
+  it("NxM, segunda unidad, escalonada y combo", () => {
+    expect(mensajeSugerencia(oferta({}), 1)).toBe(
+      "Agregá 1 más y te llevás 1 gratis (3x2)",
+    );
+    expect(
+      mensajeSugerencia(
+        oferta({
+          type: "NTH_UNIT_PERCENT",
+          nthUnit: 2,
+          percentBps: 5000,
+          buyQuantity: null,
+          payQuantity: null,
+        }),
+        1,
+      ),
+    ).toBe("Agregá 1 más y la unidad 2 sale 50% menos");
+    expect(
+      mensajeSugerencia(
+        oferta({
+          type: "TIERED",
+          buyQuantity: null,
+          payQuantity: null,
+          tiers: [
+            { minQuantity: 3, percentBps: 1000, amountMinor: null },
+            { minQuantity: 6, percentBps: 1500, amountMinor: null },
+          ],
+        }),
+        2,
+        { enCarrito: 4 },
+      ),
+    ).toBe("Agregá 2 más y tenés 15% menos en cada una");
+    expect(
+      mensajeSugerencia(oferta({ name: "promo", type: "BUNDLE" }), 1, {
+        combo: {
+          faltantes: ["Shampoo"],
+          ahorroMinor: 1007500,
+          listaMinor: 10075000,
+        },
+      }),
+    ).toBe("Agregá Shampoo y ahorrás $10.075 (10%) con «promo»");
   });
 });

@@ -39,6 +39,8 @@ import {
 } from "./lib/oferta-formulario";
 import { pesos, type EstadoOferta, type TipoOferta } from "./lib/ofertas-motor";
 import { OfertaEditor } from "./oferta-editor";
+import { OfertaAccionDialog } from "./oferta-accion-dialog";
+import { BotonConAyuda } from "./boton-con-ayuda";
 import { accionesDe, ESTADOS_OFERTA } from "./lib/ofertas-estados";
 import { ProductFilterSelect } from "./product-filter-select";
 import { secondary, primary } from "./supplier-payables/dialog";
@@ -65,21 +67,37 @@ export function EstadoOfertaBadge({ estado }: { estado: EstadoOferta }) {
 
 const ACCION: Record<
   AccionOferta,
-  { label: string; icon: typeof Pause; confirmar?: string }
+  { label: string; icon: typeof Pause; ayuda: string }
 > = {
-  publicar: { label: "Publicar", icon: Send },
-  pausar: { label: "Pausar", icon: Pause },
-  reanudar: { label: "Reanudar", icon: Play },
+  publicar: {
+    label: "Publicar",
+    icon: Send,
+    ayuda: "Empieza a aplicarse sola en Ventas.",
+  },
+  pausar: {
+    label: "Pausar",
+    icon: Pause,
+    ayuda: "Deja de aplicarse hasta que la reanudes.",
+  },
+  reanudar: {
+    label: "Reanudar",
+    icon: Play,
+    ayuda: "Vuelve a aplicarse en Ventas.",
+  },
   finalizar: {
     label: "Finalizar ya",
     icon: Square,
-    confirmar: "La oferta deja de aplicarse ahora y no se puede reanudar.",
+    ayuda: "Termina ahora; no se puede reanudar.",
   },
-  duplicar: { label: "Duplicar", icon: Copy },
+  duplicar: {
+    label: "Duplicar",
+    icon: Copy,
+    ayuda: "Crea una copia en borrador para editarla.",
+  },
   archivar: {
     label: "Archivar",
     icon: Archive,
-    confirmar: "La oferta deja de aplicarse y sale del listado habitual.",
+    ayuda: "La saca del listado; no se borra.",
   },
 };
 
@@ -181,24 +199,31 @@ export function OfertasWorkspace({
     }
     return new Map([...ultimos].map(([id, { costo }]) => [id, costo]));
   }, [stock, canSeeCosts]);
+  // Las acciones que cambian el estado se confirman en un diálogo del
+  // sistema; duplicar no hace falta (la copia queda en borrador).
+  const [confirmacion, setConfirmacion] = useState<{
+    oferta: Oferta;
+    accion: Exclude<AccionOferta, "duplicar">;
+  }>();
+  const realizar = async (oferta: Oferta, accion: AccionOferta) => {
+    const resultado = await accionOferta(
+      token,
+      organizationId,
+      oferta.id,
+      accion,
+    );
+    // La copia queda en borrador y se abre para editarla.
+    if (accion === "duplicar") {
+      setDetalle(undefined);
+      setEditor({ oferta: resultado });
+    } else if (detalle) setDetalle(resultado);
+    await cargar();
+  };
   const ejecutar = async (oferta: Oferta, accion: AccionOferta) => {
-    const confirmar = ACCION[accion].confirmar;
-    if (confirmar && !window.confirm(`${ACCION[accion].label}: ${confirmar}`))
-      return;
+    if (accion !== "duplicar") return setConfirmacion({ oferta, accion });
     setBusy(true);
     try {
-      const resultado = await accionOferta(
-        token,
-        organizationId,
-        oferta.id,
-        accion,
-      );
-      // La copia queda en borrador y se abre para editarla.
-      if (accion === "duplicar") {
-        setDetalle(undefined);
-        setEditor({ oferta: resultado });
-      } else if (detalle) setDetalle(resultado);
-      await cargar();
+      await realizar(oferta, accion);
     } catch (cause) {
       onError(
         cause instanceof Error
@@ -363,16 +388,20 @@ export function OfertasWorkspace({
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex justify-center gap-1">
-                    <IconoAccion
+                    <BotonConAyuda
                       label={`Ver ${oferta.name}`}
+                      title="Ver detalle"
+                      description="Ventas con la oferta e historial de cambios."
                       icon={Eye}
                       onClick={() => void abrirDetalle(oferta)}
                     />
                     {canManage &&
                       oferta.status !== "FINISHED" &&
                       oferta.status !== "ARCHIVED" && (
-                        <IconoAccion
+                        <BotonConAyuda
                           label={`Editar ${oferta.name}`}
+                          title="Editar"
+                          description="Cambiar productos, descuento o vigencia."
                           icon={Pencil}
                           disabled={busy}
                           onClick={() => setEditor({ oferta })}
@@ -380,9 +409,16 @@ export function OfertasWorkspace({
                       )}
                     {canManage &&
                       accionesDe(oferta).map((accion) => (
-                        <IconoAccion
+                        <BotonConAyuda
                           key={accion}
                           label={`${ACCION[accion].label} ${oferta.name}`}
+                          title={ACCION[accion].label}
+                          description={ACCION[accion].ayuda}
+                          tone={
+                            accion === "finalizar" || accion === "archivar"
+                              ? "danger"
+                              : "neutral"
+                          }
                           icon={ACCION[accion].icon}
                           disabled={busy}
                           onClick={() => void ejecutar(oferta, accion)}
@@ -426,6 +462,14 @@ export function OfertasWorkspace({
           }}
         />
       )}
+      {confirmacion && (
+        <OfertaAccionDialog
+          oferta={confirmacion.oferta}
+          accion={confirmacion.accion}
+          onConfirm={() => realizar(confirmacion.oferta, confirmacion.accion)}
+          onClose={() => setConfirmacion(undefined)}
+        />
+      )}
       {detalle && (
         <OfertaDetalle
           oferta={detalle}
@@ -438,31 +482,6 @@ export function OfertasWorkspace({
         />
       )}
     </div>
-  );
-}
-
-function IconoAccion({
-  label,
-  icon: Icono,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  icon: typeof Pause;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="rounded-md p-1.5 text-slate-500 hover:bg-teal-50 hover:text-teal-700 disabled:opacity-40"
-    >
-      <Icono size={16} />
-    </button>
   );
 }
 
@@ -527,35 +546,37 @@ export function OfertaDetalle({
         event.preventDefault();
         onClose();
       }}
-      className="m-auto w-[min(920px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto w-[min(960px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-[2px]"
     >
-      <div className="flex max-h-[90dvh] flex-col">
-        <header className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-5 py-4">
-          <span className="grid size-10 place-items-center rounded-xl bg-rose-50 text-sm font-bold text-rose-700">
-            <BadgePercent size={21} />
+      <div className="flex max-h-[92dvh] flex-col">
+        <header className="flex shrink-0 items-start gap-3 bg-gradient-to-r from-teal-700 to-teal-600 px-6 py-5 text-white">
+          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white/15">
+            <BadgePercent size={22} />
           </span>
           <div className="min-w-0">
-            <h2 id={titleId} className="truncate text-lg font-semibold">
-              {oferta.name}{" "}
-              <span className="ml-1 rounded-md bg-rose-50 px-1.5 py-0.5 text-sm font-bold text-rose-700">
+            <h2 id={titleId} className="truncate text-xl font-semibold">
+              {oferta.name}
+            </h2>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-teal-50">
+              <span className="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-rose-700">
                 {oferta.label}
               </span>
-            </h2>
-            <p className="mt-0.5 text-sm text-slate-500">
-              {textoVigencia(oferta)} · versión {oferta.version}
-            </p>
+              <EstadoOfertaBadge estado={oferta.estado} />
+              <span>
+                {textoVigencia(oferta)} · versión {oferta.version}
+              </span>
+            </div>
           </div>
-          <EstadoOfertaBadge estado={oferta.estado} />
           <button
             type="button"
             aria-label="Cerrar ventana"
             onClick={onClose}
-            className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-50"
+            className="ml-auto rounded-xl p-2 text-teal-50 hover:bg-white/15"
           >
-            <X size={19} />
+            <X size={20} />
           </button>
         </header>
-        <div className="min-h-0 space-y-5 overflow-y-auto p-5">
+        <div className="min-h-0 space-y-5 overflow-y-auto bg-slate-50/70 p-6">
           <dl className="grid gap-3 sm:grid-cols-4">
             {[
               ["Ventas", String(oferta.stats.ventas)],
@@ -568,15 +589,19 @@ export function OfertaDetalle({
             ].map(([titulo, valor]) => (
               <div
                 key={titulo}
-                className="rounded-xl border border-slate-200 p-3"
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgb(15_23_42_/_4%)]"
               >
-                <dt className="text-xs text-slate-500">{titulo}</dt>
-                <dd className="text-lg font-semibold tabular-nums">{valor}</dd>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {titulo}
+                </dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
+                  {valor}
+                </dd>
               </div>
             ))}
           </dl>
-          <section>
-            <h3 className="mb-2 font-semibold">Se aplica a</h3>
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="mb-2 font-semibold text-slate-900">Se aplica a</h3>
             <p className="text-sm text-slate-700">
               {oferta.targets
                 .filter((target) => !target.exclude)
@@ -609,8 +634,10 @@ export function OfertaDetalle({
               {oferta.combinable ? " · Combinable" : ""}
             </p>
           </section>
-          <section>
-            <h3 className="mb-2 font-semibold">Ventas con la oferta</h3>
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="mb-2 font-semibold text-slate-900">
+              Ventas con la oferta
+            </h3>
             {oferta.ventas.length ? (
               <table className="w-full text-sm">
                 <thead className="text-left text-xs uppercase text-slate-500">
@@ -658,8 +685,10 @@ export function OfertaDetalle({
               </p>
             )}
           </section>
-          <section>
-            <h3 className="mb-2 font-semibold">Historial de cambios</h3>
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="mb-2 font-semibold text-slate-900">
+              Historial de cambios
+            </h3>
             <ol className="space-y-1.5 text-sm">
               {oferta.historial.map((item) => (
                 <li key={item.id} className="flex flex-wrap gap-x-2">
@@ -688,7 +717,7 @@ export function OfertaDetalle({
           </section>
         </div>
         {canManage && (
-          <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-3">
+          <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4">
             {accionesDe(oferta).map((accion) => {
               const Icono = ACCION[accion].icon;
               return (

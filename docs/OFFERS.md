@@ -150,20 +150,33 @@ la venta sin conexión.
 ## Web
 
 - Ofertas (`?pagina=ofertas`): listado con filtros (estado, tipo, sucursal,
-  búsqueda por nombre o producto), columnas de vigencia, sucursales, estado,
-  ventas, unidades y descuento otorgado; alta y edición en 5 pasos con
-  escáner; detalle con historial y ventas; acciones.
-- Ventas: etiqueta y ahorro por renglón, subtotal tachado, aviso "Agregá 1
-  más y llevás 3x2", "Ahorro por ofertas" en el pie y en el cobro, "El
-  cliente ahorró" en la venta confirmada, marca en el catálogo y en el
-  detalle del producto. Si el ahorro cambia sin que cambie el carrito (venció
-  una oferta, se reanudó la venta), se avisa.
-- Productos: etiqueta "En oferta"/programada en la fila, filtro "Con oferta
-  vigente", ofertas del producto en el editor y "Crear oferta para este
-  producto".
-- El aviso de "por debajo del costo" se muestra en el resumen del alta (con
-  permiso de costos), con el costo del lote más reciente de la sucursal; no
-  bloquea.
+  búsqueda por nombre o producto); las archivadas se ven filtrando por
+  «Archivada». Columnas de vigencia, sucursales, estado, ventas, unidades y
+  descuento otorgado. Los íconos de acción muestran un aviso con el estilo del
+  sistema (qué hace cada uno) y las acciones que cambian el estado se
+  confirman en un diálogo propio, nunca el del navegador.
+- Alta y edición en 5 pasos (tipo, productos, descuento, vigencia, resumen),
+  con escáner y valores rápidos (10 %, 2x1, 2da al 50 %…). En Descuento y
+  Resumen, «Cómo queda» muestra el precio de lista de cada producto y el
+  precio con la oferta; en un combo, cada producto, el precio de lista del
+  combo y el del combo. Detalle con historial y ventas.
+- Ventas: etiqueta y ahorro por renglón, subtotal tachado, «Ahorro por
+  ofertas» en el pie y en el cobro, «El cliente ahorró» en la venta
+  confirmada. En el catálogo, la etiqueta de la oferta muestra al pasar el
+  mouse sus productos. El bloque del producto elegido muestra primero la
+  oferta (en un combo, hasta 5 productos con su precio, el precio del combo y
+  «Agregar combo») y «Ver producto» vuelve a la cara con la foto. En el
+  carrito, una línea por oferta a completar dice qué gana el cliente («Agregá
+  Shampoo y ahorrás $10.075 (10%)», «Agregá 1 más y te llevás 1 gratis»), con
+  el botón para completarla y la ✕ para descartarla en esa venta. Si el
+  ahorro cambia sin que cambie el carrito (venció una oferta, se reanudó la
+  venta), se avisa. Un precio manual sobre un producto en oferta avisa que la
+  oferta no se aplica.
+- Productos: etiqueta «En oferta»/programada en la fila, filtro «Con oferta
+  vigente», ofertas del producto en el editor y «Crear oferta para este
+  producto».
+- El aviso de «por debajo del costo» se muestra en el alta (con permiso de
+  costos), con el costo del lote más reciente de la sucursal; no bloquea.
 
 ## Reportes
 

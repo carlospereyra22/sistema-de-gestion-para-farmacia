@@ -83,10 +83,13 @@ import { OfertasWorkspace } from "./ofertas-workspace";
 import { ProductOffersCard } from "./product-offers-card";
 import { getOfertasVigentes } from "./lib/ofertas-api";
 import {
+  detalleOfertaVenta,
+  mensajeSugerencia,
   ofertasDelCarrito,
   ofertasDelProducto,
   ofertasParaEnviar,
 } from "./lib/ofertas-carrito";
+import { SaleCartOffers, type SugerenciaCarrito } from "./sale-cart-offers";
 import type { OfertaMotor } from "./lib/ofertas-motor";
 import { sortSaleLines } from "./lib/sort-sale-lines";
 import {
@@ -1340,6 +1343,7 @@ export function WorkspaceShell({
           ) : null}
           {view !== "Ventas" &&
             view !== "Listas de precios" &&
+            view !== "Ofertas" &&
             view !== "Caja" &&
             view !== "Cuentas corrientes" &&
             view !== "Cuentas por pagar" &&
@@ -5845,12 +5849,19 @@ function Sales({
   const [ofertasVersion, setOfertasVersion] = useState(0);
   const [ahoraOfertas, setAhoraOfertas] = useState(() => new Date());
   const [avisoOfertas, setAvisoOfertas] = useState("");
+  // Sugerencias que la cajera descartó en esta venta.
+  const [ofertasDescartadas, setOfertasDescartadas] = useState<string[]>([]);
   useEffect(() => {
     if (!active) return;
     let current = true;
     void getOfertasVigentes(token, organizationId)
       .then((items) => {
-        if (current) setOfertasVigentes(items);
+        if (!current) return;
+        setOfertasVigentes(items);
+        // La hora de la vigencia se renueva junto con las ofertas: si no,
+        // una oferta recién creada parecía programada hasta el próximo
+        // refresco (la hora quedaba la de cuando se salió de Ventas).
+        setAhoraOfertas(new Date());
       })
       // Sin ofertas guardadas se vende sin ofertas; la API decide al cobrar.
       .catch(() => {});
@@ -5860,7 +5871,9 @@ function Sales({
   }, [active, token, organizationId, ofertasVersion]);
   useEffect(() => {
     if (!active) return;
-    // La vigencia depende de la hora (días y franjas): se revisa seguido.
+    // La vigencia depende de la hora (días y franjas): se revisa seguido,
+    // y enseguida al volver a Ventas.
+    setAhoraOfertas(new Date());
     const timer = window.setInterval(() => setAhoraOfertas(new Date()), 30_000);
     const unsubscribe = subscribeSalesDataRefresh(() =>
       setOfertasVersion((version) => version + 1),
@@ -5888,24 +5901,129 @@ function Sales({
       priceListId: activeSaleListId || null,
     },
   );
+  // Nombre y precio efectivo de un producto, para explicar sus ofertas.
+  const productoVenta = (id: string) => {
+    const producto = productoPorId(products, id);
+    return producto
+      ? {
+          nombre: [producto.name, producto.presentation]
+            .filter(Boolean)
+            .join(" · "),
+          precioMinor: Number(producto.prices[0]?.amountMinor ?? 0),
+        }
+      : undefined;
+  };
+  const ofertasActivasDe = (producto: CatalogProduct) =>
+    ofertasDelProducto(producto, ofertasVigentes, ahoraOfertas, branchId)
+      .filter(({ estado }) => estado === "ACTIVA")
+      .map(({ oferta }) => detalleOfertaVenta(oferta, productoVenta));
+  const cantidadEnCarrito = (productId: string) =>
+    lines.find((line) => !line.description && line.productId === productId)
+      ?.quantity ?? 0;
+  const sugerenciasCarrito: SugerenciaCarrito[] =
+    ofertasCarrito.sugerencias.flatMap((sugerencia): SugerenciaCarrito[] => {
+      const oferta = ofertasVigentes.find(
+        (item) => item.id === sugerencia.offerId,
+      );
+      if (!oferta) return [];
+      if (oferta.type === "BUNDLE") {
+        const detalle = detalleOfertaVenta(oferta, productoVenta).combo;
+        const componentes = detalle?.componentes ?? [];
+        const armados = Math.min(
+          ...componentes.map((item) =>
+            Math.floor(cantidadEnCarrito(item.productId) / item.cantidad),
+          ),
+        );
+        return [
+          {
+            id: oferta.id,
+            label: sugerencia.label,
+            nombre: oferta.name,
+            mensaje: mensajeSugerencia(oferta, sugerencia.faltan, {
+              combo: {
+                faltantes: componentes.flatMap((item) => {
+                  const falta =
+                    item.cantidad * (armados + 1) -
+                    cantidadEnCarrito(item.productId);
+                  return falta > 0
+                    ? [`${falta > 1 ? `${falta} × ` : ""}${item.nombre}`]
+                    : [];
+                }),
+                ahorroMinor: detalle
+                  ? detalle.listaMinor - detalle.comboMinor
+                  : 0,
+                listaMinor: detalle?.listaMinor ?? 0,
+              },
+            }),
+            combo: true,
+            componentes: componentes.map((item) => ({
+              nombre: item.nombre,
+              cantidad: item.cantidad,
+              enCarrito:
+                cantidadEnCarrito(item.productId) - armados * item.cantidad,
+            })),
+            accion: {
+              texto: "Completar",
+              onClick: () => {
+                for (const item of componentes) {
+                  const falta =
+                    item.cantidad * (armados + 1) -
+                    cantidadEnCarrito(item.productId);
+                  if (falta > 0 && !addProductToSale(item.productId, falta))
+                    return;
+                }
+              },
+            },
+          },
+        ];
+      }
+      const productoId = sugerencia.productIds[0];
+      return [
+        {
+          id: oferta.id,
+          label: sugerencia.label,
+          nombre: oferta.name,
+          mensaje: mensajeSugerencia(oferta, sugerencia.faltan, {
+            enCarrito: sugerencia.productIds.reduce(
+              (suma, id) => suma + cantidadEnCarrito(id),
+              0,
+            ),
+          }),
+          ...(productoId
+            ? {
+                accion: {
+                  texto: `Agregar ${sugerencia.faltan}`,
+                  onClick: () => {
+                    addProductToSale(productoId, sugerencia.faltan);
+                  },
+                },
+              }
+            : {}),
+        },
+      ];
+    });
   const ahorroOferta = (productId: string) =>
     ofertasCarrito.porProducto.get(productId)?.ahorroMinor ?? 0;
   const offerSavings = ofertasCarrito.totalMinor;
   // Si cambia el ahorro sin que cambie el carrito (venció, empezó o se
   // modificó una oferta, o se reanudó la venta), se avisa a la cajera.
-  const firmaCarrito = JSON.stringify(
+  // Cliente y lista entran en la firma: cambiarlos no es "cambió una oferta".
+  const firmaCarrito = JSON.stringify([
+    activeSaleListId,
     lines.map((line) => [
       line.productId,
       line.quantity,
       line.requestedUnitPriceMinor ?? null,
     ]),
-  );
+  ]);
   const ultimoAhorro = useRef<{ firma: string; ahorro: number }>(undefined);
   useEffect(() => {
     const previo = ultimoAhorro.current;
     ultimoAhorro.current = { firma: firmaCarrito, ahorro: offerSavings };
-    if (!lines.length) setAvisoOfertas("");
-    else if (
+    if (!lines.length) {
+      setAvisoOfertas("");
+      setOfertasDescartadas([]);
+    } else if (
       previo &&
       previo.firma === firmaCarrito &&
       previo.ahorro !== offerSavings
@@ -7109,12 +7227,22 @@ function Sales({
             rows={catalogRows.map((item) => ({
               product: item,
               ...productStock(item.id),
-              offer: ofertasDelProducto(
-                item,
-                ofertasVigentes,
-                ahoraOfertas,
-                branchId,
-              ).find(({ estado }) => estado === "ACTIVA")?.label,
+              ...(() => {
+                const oferta = ofertasActivasDe(item)[0];
+                return oferta
+                  ? {
+                      offer: oferta.label,
+                      offerInfo: {
+                        nombre: oferta.nombre,
+                        lineas: oferta.combo
+                          ? oferta.combo.componentes.map(
+                              (item) => `${item.cantidad} × ${item.nombre}`,
+                            )
+                          : [oferta.texto],
+                      },
+                    }
+                  : {};
+              })(),
             }))}
             selectedId={selectedCatalogProduct?.id}
             hiddenCount={catalogMatches.length - catalogRows.length}
@@ -7146,18 +7274,18 @@ function Sales({
             onClear={clearCatalogSelection}
             onFinished={focusProductSearch}
             onInvalid={error}
-            offers={
+            ofertas={
               selectedCatalogProduct
-                ? ofertasDelProducto(
-                    selectedCatalogProduct,
-                    ofertasVigentes,
-                    ahoraOfertas,
-                    branchId,
-                  )
-                    .filter(({ estado }) => estado === "ACTIVA")
-                    .map(({ label }) => label)
+                ? ofertasActivasDe(selectedCatalogProduct)
                 : []
             }
+            onAddCombo={(componentes) => {
+              // Cada producto del combo con su cantidad; el stock lo revisa
+              // el mismo circuito de agregar.
+              for (const { productId, cantidad } of componentes)
+                if (!addProductToSale(productId, cantidad)) return;
+              clearCatalogSelection();
+            }}
           />
         </form>
       </section>
@@ -7168,34 +7296,16 @@ function Sales({
         totalMinor={total}
         offerSavingsMinor={offerSavings}
         offerNotice={
-          ofertasCarrito.sugerencias.length || avisoOfertas ? (
-            <div
-              role="status"
-              className="flex shrink-0 flex-wrap items-center gap-2 border-t border-amber-200 bg-amber-50 px-5 py-2 text-sm text-amber-900"
-            >
-              {avisoOfertas && (
-                <span className="flex items-center gap-2 font-semibold">
-                  {avisoOfertas}
-                  <button
-                    type="button"
-                    aria-label="Cerrar aviso de ofertas"
-                    className="rounded p-0.5 hover:bg-amber-100"
-                    onClick={() => setAvisoOfertas("")}
-                  >
-                    <X size={14} />
-                  </button>
-                </span>
-              )}
-              {ofertasCarrito.sugerencias.map((sugerencia) => (
-                <span
-                  key={sugerencia.offerId}
-                  className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-amber-200"
-                >
-                  {sugerencia.mensaje}
-                </span>
-              ))}
-            </div>
-          ) : null
+          <SaleCartOffers
+            aviso={avisoOfertas || undefined}
+            onCerrarAviso={() => setAvisoOfertas("")}
+            sugerencias={sugerenciasCarrito.filter(
+              (sugerencia) => !ofertasDescartadas.includes(sugerencia.id),
+            )}
+            onDescartar={(id) =>
+              setOfertasDescartadas((actuales) => [...actuales, id])
+            }
+          />
         }
         submitting={submitting}
         checkoutDisabled={!lines.length || submitting || !pricingReady}
@@ -7384,6 +7494,20 @@ function Sales({
                                       {label}
                                     </span>
                                   ))}
+                              </p>
+                            )}
+                          {/* El precio manual reemplaza la oferta: se avisa. */}
+                          {!line.description &&
+                            line.requestedUnitPriceMinor !== undefined &&
+                            line.requestedUnitPriceMinor !==
+                              listPriceOf(line.productId) &&
+                            product &&
+                            ofertasActivasDe(product).length > 0 && (
+                              <p className="text-[11px] font-medium text-amber-700">
+                                Precio manual: no se aplica la oferta{" "}
+                                {ofertasActivasDe(product)
+                                  .map(({ label }) => label)
+                                  .join(", ")}
                               </p>
                             )}
                           <p className="flex items-center gap-2 text-xs text-slate-500">

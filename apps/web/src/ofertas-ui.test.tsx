@@ -7,6 +7,11 @@ import { OfertaEditor } from "./oferta-editor";
 import { OfertaDetalle, EstadoOfertaBadge } from "./ofertas-workspace";
 import { accionesDe } from "./lib/ofertas-estados";
 import { ProductOffersCard } from "./product-offers-card";
+import { PreciosOferta } from "./oferta-precios";
+import { SaleCartOffers } from "./sale-cart-offers";
+import { SaleProductDetail } from "./sale-product-detail";
+import { OfertaAccionDialog } from "./oferta-accion-dialog";
+import { BotonConAyuda } from "./boton-con-ayuda";
 import { SaleCatalogTable } from "./sale-catalog-table";
 import { SaleCurrentPanel } from "./sale-current-panel";
 
@@ -213,5 +218,262 @@ describe("ofertas en Ventas y Productos", () => {
     expect(html).toContain("Vigente");
     expect(html).toContain("Ver en Ofertas");
     expect(html).toContain("Crear oferta para este producto");
+  });
+});
+
+describe("vista previa de precios en el alta", () => {
+  const producto = (id: string, precio: string) =>
+    ({
+      id,
+      name: id,
+      prices: [{ amountMinor: precio }],
+    }) as unknown as CatalogProduct;
+  const destino = (id: string, quantity = "") => ({
+    kind: "PRODUCT" as const,
+    id,
+    name: `Producto ${id}`,
+    exclude: false,
+    quantity,
+  });
+
+  it("muestra el precio de lista y cuánto queda con la oferta", () => {
+    const html = renderToStaticMarkup(
+      <PreciosOferta
+        entrada={{
+          name: "Veinte",
+          type: "PERCENT",
+          percentBps: 2000,
+          startsAt: "2026-11-10T12:00:00.000Z",
+          targets: [{ kind: "PRODUCT", id: "a" }],
+        }}
+        etiqueta="-20%"
+        destinos={[destino("a")]}
+        productosPorId={new Map([["a", producto("a", "1000000")]])}
+        precioEjemplo="10000"
+        onPrecioEjemplo={() => {}}
+      />,
+    );
+    expect(html).toContain("Producto a");
+    expect(html).toContain("$10.000");
+    expect(html).toContain("$8.000");
+    expect(html).toContain("−20%");
+  });
+
+  it("en un combo muestra cada producto, el precio de lista y el del combo", () => {
+    const html = renderToStaticMarkup(
+      <PreciosOferta
+        entrada={{
+          name: "Combo",
+          type: "BUNDLE",
+          bundlePriceMinor: "900000",
+          startsAt: "2026-11-10T12:00:00.000Z",
+          targets: [
+            { kind: "PRODUCT", id: "a", quantity: 1 },
+            { kind: "PRODUCT", id: "b", quantity: 1 },
+          ],
+        }}
+        destinos={[destino("a", "1"), destino("b", "1")]}
+        productosPorId={
+          new Map([
+            ["a", producto("a", "600000")],
+            ["b", producto("b", "500000")],
+          ])
+        }
+        precioEjemplo=""
+        onPrecioEjemplo={() => {}}
+      />,
+    );
+    expect(html).toContain("Precio de lista del combo");
+    expect(html).toContain("$11.000");
+    expect(html).toContain("Con la oferta");
+    expect(html).toContain("$9.000");
+  });
+
+  it("sin descuento completo muestra igual el precio del producto", () => {
+    const html = renderToStaticMarkup(
+      <PreciosOferta
+        entrada={null}
+        destinos={[destino("a")]}
+        productosPorId={new Map([["a", producto("a", "1250000")]])}
+        precioEjemplo=""
+        onPrecioEjemplo={() => {}}
+      />,
+    );
+    expect(html).toContain("$12.500");
+    expect(html).toContain("Completá el descuento");
+  });
+});
+
+describe("ofertas en el carrito de Ventas", () => {
+  it("una línea por oferta: qué falta, completar y descartar", () => {
+    const html = renderToStaticMarkup(
+      <SaleCartOffers
+        onCerrarAviso={() => {}}
+        onDescartar={() => {}}
+        sugerencias={[
+          {
+            id: "c1",
+            label: "Combo",
+            nombre: "Combo pelo",
+            mensaje:
+              "Agregá Acondicionador y ahorrás $2.000 (18%) con «Combo pelo»",
+            combo: true,
+            componentes: [
+              { nombre: "Shampoo", cantidad: 1, enCarrito: 1 },
+              { nombre: "Acondicionador", cantidad: 1, enCarrito: 0 },
+            ],
+            accion: { texto: "Completar", onClick: () => {} },
+          },
+          {
+            id: "o2",
+            label: "3x2",
+            nombre: "3x2 jabón",
+            mensaje: "Agregá 1 más y te llevás 1 gratis (3x2)",
+            accion: { texto: "Agregar 1", onClick: () => {} },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(
+      "Agregá Acondicionador y ahorrás $2.000 (18%) con «Combo pelo»",
+    );
+    expect(html).toContain("Completar");
+    expect(html).toContain("Agregá 1 más y te llevás 1 gratis (3x2)");
+    expect(html).toContain('aria-label="Descartar Combo pelo"');
+    expect(html).not.toContain(">Ofertas<");
+  });
+
+  it("sin ofertas ni avisos no ocupa lugar", () => {
+    expect(
+      renderToStaticMarkup(
+        <SaleCartOffers
+          onCerrarAviso={() => {}}
+          onDescartar={() => {}}
+          sugerencias={[]}
+        />,
+      ),
+    ).toBe("");
+  });
+});
+
+describe("confirmación de acciones", () => {
+  it("explica qué pasa al finalizar, con el estilo del sistema", () => {
+    const html = renderToStaticMarkup(
+      <OfertaAccionDialog
+        oferta={{ name: "2x1 shampoo", label: "2x1" }}
+        accion="finalizar"
+        onConfirm={async () => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain("Finalizar oferta");
+    expect(html).toContain("no se puede reanudar");
+    expect(html).toContain("duplicala");
+    expect(html).toContain("Finalizar ya");
+    expect(html).toContain("Volver");
+    expect(html).toContain("2x1 shampoo");
+  });
+
+  it("archivar aclara que no se borra", () => {
+    const html = renderToStaticMarkup(
+      <OfertaAccionDialog
+        oferta={{ name: "Martes", label: "Martes -10%" }}
+        accion="archivar"
+        onConfirm={async () => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain("No se borra");
+  });
+});
+
+describe("ayuda de los botones de acción", () => {
+  it("no usa el aviso del navegador y describe la acción para lectores", () => {
+    const html = renderToStaticMarkup(
+      <BotonConAyuda
+        label="Pausar 2x1 shampoo"
+        title="Pausar"
+        description="Deja de aplicarse hasta que la reanudes."
+        icon={() => null}
+        onClick={() => {}}
+      />,
+    );
+    expect(html).toContain('aria-label="Pausar 2x1 shampoo"');
+    expect(html).toContain('aria-description="Deja de aplicarse');
+    expect(html).not.toContain("title=");
+  });
+});
+
+describe("bloque del producto en Ventas con oferta", () => {
+  const producto = {
+    id: "p1",
+    name: "Shampoo",
+    activeIngredient: null,
+    concentration: null,
+    pharmaceuticalForm: null,
+    presentation: null,
+    barcodes: [],
+    category: null,
+    prices: [{ amountMinor: "600000" }],
+  } as unknown as CatalogProduct;
+  const props = {
+    token: "t",
+    organizationId: "o",
+    product: producto,
+    available: 5,
+    quantity: 1,
+    onQuantityChange: () => {},
+    onAdd: () => {},
+    onClear: () => {},
+    onFinished: () => {},
+    onInvalid: () => {},
+  };
+
+  it("con combo muestra primero la oferta, lo que incluye y cómo volver a la foto", () => {
+    const html = renderToStaticMarkup(
+      <SaleProductDetail
+        {...props}
+        onAddCombo={() => {}}
+        ofertas={[
+          {
+            id: "c1",
+            label: "Combo",
+            nombre: "Combo pelo",
+            texto: "1 × Shampoo + 1 × Acondicionador",
+            combo: {
+              componentes: [
+                {
+                  productId: "p1",
+                  nombre: "Shampoo",
+                  cantidad: 1,
+                  precioMinor: 600000,
+                },
+                {
+                  productId: "p2",
+                  nombre: "Acondicionador",
+                  cantidad: 1,
+                  precioMinor: 500000,
+                },
+              ],
+              listaMinor: 1100000,
+              comboMinor: 900000,
+            },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain('aria-label="Oferta del producto"');
+    expect(html).toContain('aria-label="Productos del combo"');
+    expect(html).toContain("Acondicionador");
+    expect(html).toContain("Ahorrás");
+    expect(html).toContain("Agregar combo");
+    expect(html).toContain("Ver producto");
+    expect(html).toContain("h-[108px]");
+  });
+
+  it("sin ofertas muestra la cara del producto de siempre", () => {
+    const html = renderToStaticMarkup(<SaleProductDetail {...props} />);
+    expect(html).toContain('aria-label="Producto elegido"');
+    expect(html).not.toContain("Ver producto");
   });
 });

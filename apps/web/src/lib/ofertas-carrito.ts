@@ -2,6 +2,7 @@ import {
   calcularOfertas,
   estadoOferta,
   etiquetaOferta,
+  pesos,
   productoEntra,
   type AplicacionOferta,
   type OfertaMotor,
@@ -131,4 +132,148 @@ export function ofertasDelProducto(
       return [];
     return [{ oferta, estado, label: etiquetaOferta(oferta) }];
   });
+}
+
+/** Una oferta explicada para la cajera (detalle del producto en Ventas). */
+export type DetalleOfertaVenta = {
+  id: string;
+  label: string;
+  nombre: string;
+  texto: string;
+  combo?: {
+    componentes: {
+      productId: string;
+      nombre: string;
+      cantidad: number;
+      precioMinor: number;
+    }[];
+    listaMinor: number;
+    comboMinor: number;
+  };
+};
+
+const porcentajeTexto = (bps: number | null) =>
+  `${String((bps ?? 0) / 100).replace(".", ",")}%`;
+
+export function detalleOfertaVenta(
+  oferta: OfertaMotor,
+  producto: (id: string) => { nombre: string; precioMinor: number } | undefined,
+): DetalleOfertaVenta {
+  const base = {
+    id: oferta.id,
+    label: etiquetaOferta(oferta),
+    nombre: oferta.name,
+  };
+  switch (oferta.type) {
+    case "PERCENT":
+      return {
+        ...base,
+        texto: `${porcentajeTexto(oferta.percentBps)} menos en cada unidad`,
+      };
+    case "AMOUNT_OFF":
+      return {
+        ...base,
+        texto: `${pesos(oferta.amountMinor ?? 0n)} menos en cada unidad`,
+      };
+    case "FIXED_PRICE":
+      return {
+        ...base,
+        texto: `Cada unidad a ${pesos(oferta.fixedPriceMinor ?? 0n)}`,
+      };
+    case "BUY_X_PAY_Y":
+      return {
+        ...base,
+        texto: `Llevando ${oferta.buyQuantity} pagás ${oferta.payQuantity}`,
+      };
+    case "NTH_UNIT_PERCENT":
+      return {
+        ...base,
+        texto:
+          oferta.percentBps === 10000
+            ? `La unidad ${oferta.nthUnit} es gratis`
+            : `La unidad ${oferta.nthUnit} con ${porcentajeTexto(oferta.percentBps)} menos`,
+      };
+    case "TIERED":
+      return {
+        ...base,
+        texto: [...oferta.tiers]
+          .sort((a, b) => a.minQuantity - b.minQuantity)
+          .map(
+            (tier) =>
+              `Desde ${tier.minQuantity}: ${tier.percentBps ? porcentajeTexto(tier.percentBps) : pesos(tier.amountMinor ?? 0n)} menos`,
+          )
+          .join(" · "),
+      };
+    case "BUNDLE": {
+      const componentes = oferta.targets
+        .filter((target) => target.kind === "PRODUCT" && !target.exclude)
+        .map((target) => ({
+          productId: target.id,
+          nombre: producto(target.id)?.nombre ?? "Producto",
+          cantidad: target.quantity ?? 1,
+          precioMinor: producto(target.id)?.precioMinor ?? 0,
+        }));
+      const lista = componentes.reduce(
+        (suma, item) => suma + item.precioMinor * item.cantidad,
+        0,
+      );
+      const combo =
+        oferta.bundlePriceMinor !== null
+          ? Math.min(Number(oferta.bundlePriceMinor), lista)
+          : lista - Math.round((lista * (oferta.percentBps ?? 0)) / 10000);
+      return {
+        ...base,
+        texto: componentes
+          .map((item) => `${item.cantidad} × ${item.nombre}`)
+          .join(" + "),
+        combo: { componentes, listaMinor: lista, comboMinor: combo },
+      };
+    }
+  }
+}
+
+/**
+ * Lo que gana el cliente si completa la oferta, para la sugerencia del
+ * carrito: "Agregá 1 más y te llevás 1 gratis".
+ */
+export function mensajeSugerencia(
+  oferta: OfertaMotor,
+  faltan: number,
+  extra: {
+    /** Unidades de la oferta que ya hay en el carrito (escalonada). */
+    enCarrito?: number;
+    combo?: { faltantes: string[]; ahorroMinor: number; listaMinor: number };
+  } = {},
+): string {
+  const combo = extra.combo;
+  const agregá = faltan === 1 ? "Agregá 1 más" : `Agregá ${faltan} más`;
+  switch (oferta.type) {
+    case "BUY_X_PAY_Y": {
+      const gratis = (oferta.buyQuantity ?? 0) - (oferta.payQuantity ?? 0);
+      return `${agregá} y te llevás ${gratis === 1 ? "1 gratis" : `${gratis} gratis`} (${etiquetaOferta(oferta)})`;
+    }
+    case "NTH_UNIT_PERCENT":
+      return oferta.percentBps === 10000
+        ? `${agregá} y la unidad ${oferta.nthUnit} te sale gratis`
+        : `${agregá} y la unidad ${oferta.nthUnit} sale ${porcentajeTexto(oferta.percentBps)} menos`;
+    case "TIERED": {
+      const escalon = [...oferta.tiers]
+        .sort((a, b) => a.minQuantity - b.minQuantity)
+        .find((tier) => tier.minQuantity > (extra.enCarrito ?? 0));
+      const beneficio = escalon?.percentBps
+        ? `${porcentajeTexto(escalon.percentBps)} menos`
+        : `${pesos(escalon?.amountMinor ?? 0n)} menos por unidad`;
+      return `${agregá} y tenés ${beneficio} en cada una`;
+    }
+    case "BUNDLE": {
+      if (!combo) return `${agregá} y armás el combo «${oferta.name}»`;
+      const pct =
+        combo.listaMinor > 0
+          ? Math.round((combo.ahorroMinor / combo.listaMinor) * 100)
+          : 0;
+      return `Agregá ${combo.faltantes.join(" y ")} y ahorrás ${pesos(BigInt(combo.ahorroMinor))}${pct ? ` (${pct}%)` : ""} con «${oferta.name}»`;
+    }
+    default:
+      return `${agregá} y aprovechás «${oferta.name}»`;
+  }
 }

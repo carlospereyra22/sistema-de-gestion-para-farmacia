@@ -225,7 +225,7 @@ export function SaleCheckoutDialog({
             <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
               <div>
                 <p className="text-sm font-semibold text-slate-700">
-                  Total a pagar
+                  Total a cobrar
                 </p>
                 <p className="text-[36px] font-bold leading-10 tracking-tight tabular-nums text-teal-800">
                   {money(totalMinor)}

@@ -476,6 +476,11 @@ export function ofertaDePrueba(entrada: OfertaEntrada): OfertaMotor {
 export type VistaPrevia = {
   texto: string;
   etiqueta: string;
+  /** Unidades del ejemplo (las del grupo en NxM, 2da unidad o escalón). */
+  cantidad: number;
+  /** Importe de lista de esas unidades y lo que se paga con la oferta. */
+  brutoMinor: number;
+  finalMinor: number;
   /** Precio por unidad con la oferta (para el aviso de costo). */
   unidadMinor: number;
 };
@@ -512,6 +517,9 @@ export function vistaPrevia(
     const unidades = renglones.reduce((suma, item) => suma + item.quantity, 0);
     return {
       etiqueta: etiquetaOferta(oferta),
+      cantidad: unidades,
+      brutoMinor: Number(bruto),
+      finalMinor: Number(bruto - ahorro),
       texto: `El combo de ${pesos(bruto)} queda en ${pesos(bruto - ahorro)}.`,
       unidadMinor: Number((bruto - ahorro) / BigInt(unidades)),
     };
@@ -554,6 +562,9 @@ export function vistaPrevia(
   const final = bruto - resultado.totalMinor;
   return {
     etiqueta: etiquetaOferta(oferta),
+    cantidad,
+    brutoMinor: Number(bruto),
+    finalMinor: Number(final),
     texto:
       cantidad === 1
         ? `Un producto de ${pesos(bruto)} queda en ${pesos(final)}.`
