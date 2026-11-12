@@ -1,6 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
 
-import type { TipoOferta, TipoProductoOferta } from "./ofertas-motor";
+import type {
+  MedioPago,
+  TipoOferta,
+  TipoProductoOferta,
+} from "./ofertas-motor";
 
 export type OfertaEntrada = {
   name: string;
@@ -24,6 +28,9 @@ export type OfertaEntrada = {
   payQuantity?: number | null;
   nthUnit?: number | null;
   bundlePriceMinor?: string | null;
+  paymentMethods?: MedioPago[] | null;
+  allProducts?: boolean | null;
+  minPurchaseMinor?: string | null;
   tiers?:
     | {
         minQuantity: number;
@@ -62,6 +69,9 @@ export type OfertaNormalizada = {
     payQuantity: number | null;
     nthUnit: number | null;
     bundlePriceMinor: bigint | null;
+    paymentMethods: MedioPago[];
+    allProducts: boolean;
+    minPurchaseMinor: bigint | null;
   };
   tiers: {
     minQuantity: number;
@@ -166,6 +176,9 @@ export function validarOferta(entrada: OfertaEntrada): OfertaNormalizada {
     payQuantity: null,
     nthUnit: null,
     bundlePriceMinor: null,
+    paymentMethods: [],
+    allProducts: Boolean(entrada.allProducts),
+    minPurchaseMinor: null,
   };
   if (Math.abs(datos.priority) > 1000)
     error("La prioridad va de -1000 a 1000.");
@@ -239,6 +252,34 @@ export function validarOferta(entrada: OfertaEntrada): OfertaNormalizada {
         bps === null ? null : porcentajeBps(bps, "el porcentaje del combo");
       break;
     }
+    case "PAYMENT_METHOD": {
+      datos.percentBps = porcentajeBps(entrada.percentBps, "el porcentaje");
+      const medios = [...new Set(entrada.paymentMethods ?? [])];
+      if (!medios.length) error("Elegí al menos un medio de pago.");
+      datos.paymentMethods = medios;
+      // El descuento es sobre lo cobrado, no por unidad: no lleva topes.
+      if (datos.maxUnitsPerSale !== null || datos.maxUnitsTotal !== null)
+        error("Las ofertas por medio de pago no llevan tope de unidades.");
+      break;
+    }
+    case "SPEND_THRESHOLD": {
+      datos.minPurchaseMinor = importe(
+        entrada.minPurchaseMinor,
+        "el monto mínimo",
+      );
+      if (!datos.minPurchaseMinor) error("Indicá desde qué monto de compra.");
+      const monto = importe(entrada.amountMinor, "el monto");
+      const bps = entrada.percentBps ?? null;
+      if ((monto === null) === (bps === null))
+        error("El descuento es un porcentaje o un monto, no los dos.");
+      datos.amountMinor = monto;
+      datos.percentBps =
+        bps === null ? null : porcentajeBps(bps, "el porcentaje");
+      // Es una vez por venta: no lleva topes de unidades.
+      if (datos.maxUnitsPerSale !== null || datos.maxUnitsTotal !== null)
+        error("Las ofertas por monto de compra no llevan tope de unidades.");
+      break;
+    }
     default:
       error("Elegí un tipo de oferta.");
   }
@@ -255,7 +296,15 @@ export function validarOferta(entrada: OfertaEntrada): OfertaNormalizada {
       quantity: target.quantity ?? null,
     };
   });
-  if (!targets.some((target) => !target.exclude))
+  if (datos.allProducts) {
+    if (entrada.type === "BUNDLE")
+      error("El combo se arma con productos puntuales, no con todos.");
+    // Con todos los productos, lo elegido sólo puede ser una exclusión.
+    if (targets.some((target) => !target.exclude))
+      error(
+        "Con «Todos los productos», lo que elijas queda excluido de la oferta.",
+      );
+  } else if (!targets.some((target) => !target.exclude))
     error("Elegí al menos un producto, categoría o laboratorio.");
   if (entrada.type === "BUNDLE") {
     if (

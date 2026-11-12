@@ -417,6 +417,9 @@ export class OffersService {
           payQuantity: original.payQuantity,
           nthUnit: original.nthUnit,
           bundlePriceMinor: original.bundlePriceMinor,
+          paymentMethods: original.paymentMethods,
+          allProducts: original.allProducts,
+          minPurchaseMinor: original.minPurchaseMinor,
         },
       });
       await this.guardarRelaciones(tx, organizationId, copia.id, {
@@ -529,14 +532,18 @@ export class OffersService {
       payQuantity: oferta.payQuantity,
       nthUnit: oferta.nthUnit,
       bundlePriceMinor: oferta.bundlePriceMinor?.toString() ?? null,
+      paymentMethods: oferta.paymentMethods,
+      allProducts: oferta.allProducts,
+      minPurchaseMinor: oferta.minPurchaseMinor?.toString() ?? null,
       tiers: motor.tiers.map((tier) => ({
         minQuantity: tier.minQuantity,
         percentBps: tier.percentBps,
         amountMinor: tier.amountMinor?.toString() ?? null,
       })),
       targets,
-      alcance:
-        incluidos.length === 1
+      alcance: oferta.allProducts
+        ? "Todos los productos"
+        : incluidos.length === 1
           ? incluidos[0]!.name
           : `${incluidos.length} ${oferta.type === "BUNDLE" ? "productos" : "elementos"}`,
       createdAt: oferta.createdAt.toISOString(),
@@ -832,6 +839,9 @@ function foto(oferta: OfertaConRelaciones): Prisma.InputJsonObject {
     payQuantity: oferta.payQuantity,
     nthUnit: oferta.nthUnit,
     bundlePriceMinor: oferta.bundlePriceMinor?.toString() ?? null,
+    paymentMethods: oferta.paymentMethods,
+    allProducts: oferta.allProducts,
+    minPurchaseMinor: oferta.minPurchaseMinor?.toString() ?? null,
     tiers: oferta.tiers.map((tier) => ({
       minQuantity: tier.minQuantity,
       percentBps: tier.percentBps,

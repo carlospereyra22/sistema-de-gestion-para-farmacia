@@ -33,7 +33,7 @@ import {
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { OffersService, type AccionOferta } from "./offers.service";
-import type { EstadoOferta, TipoOferta } from "./ofertas-motor";
+import type { EstadoOferta, MedioPago, TipoOferta } from "./ofertas-motor";
 
 const TIPOS: TipoOferta[] = [
   "PERCENT",
@@ -43,6 +43,15 @@ const TIPOS: TipoOferta[] = [
   "NTH_UNIT_PERCENT",
   "TIERED",
   "BUNDLE",
+  "PAYMENT_METHOD",
+  "SPEND_THRESHOLD",
+];
+const MEDIOS_PAGO: MedioPago[] = [
+  "CASH",
+  "CARD",
+  "TRANSFER",
+  "ACCOUNT",
+  "OTHER",
 ];
 const ESTADOS: EstadoOferta[] = [
   "BORRADOR",
@@ -158,6 +167,13 @@ class OfferDto {
   @Max(100)
   nthUnit?: number | null;
   @IsOptional() @IsString() @Matches(IMPORTE) bundlePriceMinor?: string | null;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsIn(MEDIOS_PAGO, { each: true })
+  paymentMethods?: MedioPago[] | null;
+  @IsOptional() @IsBoolean() allProducts?: boolean;
+  @IsOptional() @IsString() @Matches(IMPORTE) minPurchaseMinor?: string | null;
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)

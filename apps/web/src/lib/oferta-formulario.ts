@@ -3,6 +3,8 @@ import {
   calcularOfertas,
   etiquetaOferta,
   pesos,
+  textoMedios,
+  type MedioPago,
   type OfertaMotor,
   type TipoOferta,
   type TipoProductoOferta,
@@ -24,15 +26,16 @@ export const TIPOS_OFERTA: {
   },
   {
     type: "AMOUNT_OFF",
-    titulo: "Monto fijo",
-    descripcion: "Pesos menos en cada unidad.",
-    ejemplo: "$1.500 menos: $10.000 queda en $8.500.",
+    titulo: "Pesos de descuento",
+    descripcion: "Le restás un monto en pesos al precio de cada unidad.",
+    ejemplo: "$1.500 menos: un producto de $10.000 se vende a $8.500.",
   },
   {
     type: "FIXED_PRICE",
-    titulo: "Precio fijo",
-    descripcion: "El producto pasa a costar un precio durante la oferta.",
-    ejemplo: "Ibuprofeno x20 a $5.000.",
+    titulo: "Precio de oferta",
+    descripcion:
+      "Elegís cuánto cuesta cada unidad mientras dure la oferta, sin importar su precio de lista.",
+    ejemplo: "Ibuprofeno x20 de $6.800 se vende a $5.000.",
   },
   {
     type: "BUY_X_PAY_Y",
@@ -60,6 +63,28 @@ export const TIPOS_OFERTA: {
       "Un conjunto de productos con sus cantidades a un precio total o con un %.",
     ejemplo: "Shampoo + acondicionador a $9.000.",
   },
+  {
+    type: "PAYMENT_METHOD",
+    titulo: "Medio de pago",
+    descripcion:
+      "Un porcentaje menos al pagar con ciertos medios. Si pagan una parte con otro medio, se descuenta sólo esa parte.",
+    ejemplo: "10% pagando en efectivo los martes.",
+  },
+  {
+    type: "SPEND_THRESHOLD",
+    titulo: "Por monto de compra",
+    descripcion:
+      "Si la compra llega a un monto, un porcentaje o pesos menos sobre el total (una vez por venta).",
+    ejemplo: "Comprando $100.000 o más: 10% menos.",
+  },
+];
+
+/** Medios de pago que se pueden elegir en una oferta por medio de pago. */
+export const MEDIOS_OFERTA: { value: MedioPago; label: string }[] = [
+  { value: "CASH", label: "Efectivo" },
+  { value: "TRANSFER", label: "Transferencia" },
+  { value: "CARD", label: "Tarjeta" },
+  { value: "ACCOUNT", label: "Cuenta corriente" },
 ];
 
 export const DIAS_SEMANA = [
@@ -98,6 +123,13 @@ export type FormularioOferta = {
   unidad: string;
   escalones: EscalonFormulario[];
   comboModo: "PRECIO" | "PORCENTAJE";
+  /** Sólo ofertas por medio de pago. */
+  medios: MedioPago[];
+  /** Todos los productos: lo elegido queda como exclusión. */
+  todos: boolean;
+  /** Sólo por monto de compra: desde cuánto y si descuenta % o pesos. */
+  minimo: string;
+  montoModo: "PORCENTAJE" | "MONTO";
   destinos: DestinoFormulario[];
   /** `datetime-local` en hora de Argentina. */
   inicio: string;
@@ -186,6 +218,10 @@ export function formularioVacio(
     unidad: "2",
     escalones: [{ desde: "3", modo: "PORCENTAJE", valor: "" }],
     comboModo: "PRECIO",
+    medios: ["CASH"],
+    todos: false,
+    minimo: "",
+    montoModo: "PORCENTAJE",
     destinos,
     inicio: fechaLocal(ahora),
     fin: "",
@@ -222,6 +258,13 @@ export function formularioDesdeOferta(oferta: Oferta): FormularioOferta {
         }))
       : [{ desde: "3", modo: "PORCENTAJE", valor: "" }],
     comboModo: oferta.bundlePriceMinor !== null ? "PRECIO" : "PORCENTAJE",
+    medios: oferta.paymentMethods?.length ? oferta.paymentMethods : ["CASH"],
+    todos: Boolean(oferta.allProducts),
+    minimo: minorATexto(oferta.minPurchaseMinor ?? null),
+    montoModo:
+      oferta.type === "SPEND_THRESHOLD" && oferta.amountMinor !== null
+        ? "MONTO"
+        : "PORCENTAJE",
     destinos: oferta.targets.map((target) => ({
       ...target,
       quantity: target.quantity === null ? "" : String(target.quantity),
@@ -259,6 +302,7 @@ export function erroresPaso(
       ? null
       : "Poné un nombre de al menos 3 letras.";
   if (paso === "productos") {
+    if (formulario.todos && formulario.type !== "BUNDLE") return null;
     if (!formulario.destinos.some((destino) => !destino.exclude))
       return "Elegí al menos un producto, categoría o laboratorio.";
     if (formulario.type === "BUNDLE") {
@@ -291,6 +335,7 @@ export function erroresPaso(
 export function armarEntrada(
   formulario: FormularioOferta,
 ): OfertaEntrada | string {
+  const todos = formulario.todos && formulario.type !== "BUNDLE";
   const entrada: OfertaEntrada = {
     name: formulario.name.trim(),
     type: formulario.type,
@@ -300,10 +345,12 @@ export function armarEntrada(
     productKind: formulario.productKind,
     branchIds: formulario.sucursales,
     priceListIds: formulario.listas,
+    allProducts: todos,
     targets: formulario.destinos.map((destino) => ({
       kind: destino.kind,
       id: destino.id,
-      exclude: destino.exclude,
+      // Con todos los productos, lo elegido es lo que no entra.
+      exclude: todos || destino.exclude,
       quantity: formulario.type === "BUNDLE" ? entero(destino.quantity) : null,
     })),
   };
@@ -384,6 +431,29 @@ export function armarEntrada(
       }
       break;
     }
+    case "SPEND_THRESHOLD": {
+      const minimo = pesosAMinor(formulario.minimo);
+      if (!minimo) return "Indicá desde qué monto de compra.";
+      entrada.minPurchaseMinor = String(minimo);
+      if (formulario.montoModo === "PORCENTAJE") {
+        const bps = porcentajeABps(formulario.porcentaje);
+        if (!bps) return "Indicá un porcentaje entre 0,01 y 100.";
+        entrada.percentBps = bps;
+      } else {
+        const monto = pesosAMinor(formulario.monto);
+        if (!monto) return "Indicá cuántos pesos se descuentan.";
+        entrada.amountMinor = String(monto);
+      }
+      break;
+    }
+    case "PAYMENT_METHOD": {
+      const bps = porcentajeABps(formulario.porcentaje);
+      if (!bps) return "Indicá un porcentaje entre 0,01 y 100.";
+      if (!formulario.medios.length) return "Elegí al menos un medio de pago.";
+      entrada.percentBps = bps;
+      entrada.paymentMethods = formulario.medios;
+      break;
+    }
   }
   const inicio = fechaIso(formulario.inicio);
   if (!inicio) return "Revisá la vigencia: indicá desde cuándo.";
@@ -417,6 +487,15 @@ export function armarEntrada(
     ["topeTotal", formulario.topeTotal],
   ] as const) {
     if (!texto.trim()) {
+      entrada[campo === "topeVenta" ? "maxUnitsPerSale" : "maxUnitsTotal"] =
+        null;
+      continue;
+    }
+    // Medio de pago y monto de compra son sobre la venta: no llevan topes.
+    if (
+      formulario.type === "PAYMENT_METHOD" ||
+      formulario.type === "SPEND_THRESHOLD"
+    ) {
       entrada[campo === "topeVenta" ? "maxUnitsPerSale" : "maxUnitsTotal"] =
         null;
       continue;
@@ -459,6 +538,8 @@ export function ofertaDePrueba(entrada: OfertaEntrada): OfertaMotor {
     payQuantity: entrada.payQuantity ?? null,
     nthUnit: entrada.nthUnit ?? null,
     bundlePriceMinor: monto(entrada.bundlePriceMinor),
+    paymentMethods: entrada.paymentMethods ?? [],
+    minPurchaseMinor: monto(entrada.minPurchaseMinor),
     tiers: (entrada.tiers ?? []).map((tier) => ({
       minQuantity: tier.minQuantity,
       percentBps: tier.percentBps ?? null,
@@ -497,6 +578,34 @@ export function vistaPrevia(
   const oferta = ofertaDePrueba(entrada);
   const ahora = new Date("2000-01-02T15:00:00.000Z");
   const contexto = { ahora, branchId: "", priceListId: null };
+  if (entrada.type === "SPEND_THRESHOLD") {
+    // Ejemplo: una compra justo del monto mínimo.
+    const minimo = BigInt(entrada.minPurchaseMinor ?? "0");
+    if (minimo <= 0n) return null;
+    const ahorro = calcularOfertas(
+      [
+        {
+          productId: "ejemplo",
+          quantity: 1,
+          unitPriceMinor: minimo,
+          categoryId: null,
+          laboratoryId: null,
+          isMedication: false,
+          manualPrice: false,
+        },
+      ],
+      [{ ...oferta, allProducts: true, targets: [] }],
+      contexto,
+    ).totalMinor;
+    return {
+      etiqueta: etiquetaOferta(oferta),
+      cantidad: 1,
+      brutoMinor: Number(minimo),
+      finalMinor: Number(minimo - ahorro),
+      texto: `Una compra de ${pesos(minimo)} queda en ${pesos(minimo - ahorro)}.`,
+      unidadMinor: Number(minimo - ahorro),
+    };
+  }
   if (entrada.type === "BUNDLE") {
     const renglones = entrada.targets.map((target) => ({
       productId: target.id,
@@ -538,6 +647,8 @@ export function vistaPrevia(
             )
           : 1;
   const id = "ejemplo";
+  // Medio de pago: el ejemplo paga todo con el primer medio de la oferta.
+  const medio = entrada.paymentMethods?.[0];
   const resultado = calcularOfertas(
     [
       {
@@ -556,7 +667,15 @@ export function vistaPrevia(
         targets: [{ kind: "PRODUCT", id, exclude: false, quantity: null }],
       },
     ],
-    contexto,
+    entrada.type === "PAYMENT_METHOD" && medio
+      ? {
+          ...contexto,
+          cobro: {
+            pagos: [{ method: medio, amountMinor: BigInt(precioEjemploMinor) }],
+            otrosMinor: 0n,
+          },
+        }
+      : contexto,
   );
   const bruto = BigInt(precioEjemploMinor) * BigInt(cantidad);
   const final = bruto - resultado.totalMinor;
@@ -566,9 +685,11 @@ export function vistaPrevia(
     brutoMinor: Number(bruto),
     finalMinor: Number(final),
     texto:
-      cantidad === 1
-        ? `Un producto de ${pesos(bruto)} queda en ${pesos(final)}.`
-        : `Llevando ${cantidad} de ${pesos(BigInt(precioEjemploMinor))} pagás ${pesos(final)} en lugar de ${pesos(bruto)}.`,
+      entrada.type === "PAYMENT_METHOD"
+        ? `Pagando con ${textoMedios(entrada.paymentMethods ?? [])}, un producto de ${pesos(bruto)} queda en ${pesos(final)}.`
+        : cantidad === 1
+          ? `Un producto de ${pesos(bruto)} queda en ${pesos(final)}.`
+          : `Llevando ${cantidad} de ${pesos(BigInt(precioEjemploMinor))} pagás ${pesos(final)} en lugar de ${pesos(bruto)}.`,
     unidadMinor: Number(final / BigInt(cantidad)),
   };
 }

@@ -80,6 +80,8 @@ type SaleInput = {
     requestedUnitPriceMinor?: number;
     /** Ahorro por ofertas que vio la cajera (SISTEMA-103), en centavos. */
     expectedOfferDiscountMinor?: string;
+    /** La cajera eligió no aplicar ofertas a este producto. */
+    skipOffers?: boolean;
     packQuantity?: number;
     /** Sin conexión: nombre visto en la PC, por si el producto ya no se vende. */
     productName?: string;
@@ -91,6 +93,8 @@ type SaleInput = {
   }[];
   /** Sin conexión: ofertas que aplicó la PC, para la instantánea. */
   appliedOffers?: OfertaAplicadaEnPc[];
+  /** Ofertas que la cajera quitó de esta venta: no se aplican. */
+  skippedOfferIds?: string[];
 };
 
 export type OfflineSaleInput = SaleInput & {
@@ -1263,11 +1267,14 @@ export class SalesService {
           // precio de lista efectivo, antes de repartir por lotes. El precio
           // manual de la cajera reemplaza la oferta. Sin conexión vale la hora
           // en que se hizo la venta.
+          const quitadas = new Set(input.skippedOfferIds ?? []);
           const ofertasVenta = pendientes.length
-            ? await cargarOfertasMotor(tx, organizationId, {
-                desde: offline?.occurredAt ?? new Date(),
-                bloquear: true,
-              })
+            ? (
+                await cargarOfertasMotor(tx, organizationId, {
+                  desde: offline?.occurredAt ?? new Date(),
+                  bloquear: true,
+                })
+              ).filter((oferta) => !quitadas.has(oferta.id))
             : [];
           const resultadoOfertas = calcularOfertas(
             pendientes.map(
@@ -1279,6 +1286,7 @@ export class SalesService {
                 laboratoryId: product.laboratoryId,
                 isMedication: product.isMedication,
                 manualPrice: unitPriceMinor !== basePriceMinor,
+                sinOfertas: line.skipOffers === true,
               }),
             ),
             ofertasVenta,
@@ -1286,6 +1294,27 @@ export class SalesService {
               ahora: offline?.occurredAt ?? new Date(),
               branchId,
               priceListId: selectedPriceList?.id ?? priceListId,
+              // Ofertas por medio de pago: se calculan con los pagos. Lo que
+              // no pasa por el motor (conceptos, descuentos generales) entra
+              // en el total de la venta.
+              cobro: {
+                pagos: input.payments.map((payment) => ({
+                  method: payment.method,
+                  amountMinor: BigInt(payment.amountMinor),
+                })),
+                otrosMinor:
+                  items.reduce(
+                    (suma, item) =>
+                      suma +
+                      item.unitPriceMinor * BigInt(item.quantity) -
+                      item.discountMinor,
+                    0n,
+                  ) -
+                  pendientes.reduce(
+                    (suma, { line }) => suma + BigInt(line.discountMinor ?? 0),
+                    0n,
+                  ),
+              },
             },
           );
           const descuentosOferta = pendientes.map(

@@ -5,15 +5,17 @@ para la cajera. Implementado el 12/11/2026.
 
 ## Tipos
 
-| Tipo (`OfferType`) | Qué hace                                                 | Etiqueta     |
-| ------------------ | -------------------------------------------------------- | ------------ |
-| `PERCENT`          | X % sobre el precio de lista                             | `-20%`       |
-| `AMOUNT_OFF`       | $X menos por unidad (nunca por debajo de $0)             | `-$1.500`    |
-| `FIXED_PRICE`      | El producto pasa a costar $X (si es más caro, no aplica) | `$5.000`     |
-| `BUY_X_PAY_Y`      | Lleva N, paga M; regala la unidad más barata del grupo   | `2x1`, `3x2` |
-| `NTH_UNIT_PERCENT` | Una de cada N unidades con X % menos                     | `2da al 50%` |
-| `TIERED`           | Escalones: desde N unidades, X % o $X por unidad         | `3+ -15%`    |
-| `BUNDLE`           | Productos con sus cantidades a precio total o con un %   | `Combo`      |
+| Tipo (`OfferType`) | Qué hace                                                 | Etiqueta              |
+| ------------------ | -------------------------------------------------------- | --------------------- |
+| `PERCENT`          | X % sobre el precio de lista                             | `-20%`                |
+| `AMOUNT_OFF`       | $X menos por unidad (nunca por debajo de $0)             | `-$1.500`             |
+| `FIXED_PRICE`      | El producto pasa a costar $X (si es más caro, no aplica) | `$5.000`              |
+| `BUY_X_PAY_Y`      | Lleva N, paga M; regala la unidad más barata del grupo   | `2x1`, `3x2`          |
+| `NTH_UNIT_PERCENT` | Una de cada N unidades con X % menos                     | `2da al 50%`          |
+| `TIERED`           | Escalones: desde N unidades, X % o $X por unidad         | `3+ -15%`             |
+| `BUNDLE`           | Productos con sus cantidades a precio total o con un %   | `Combo`               |
+| `PAYMENT_METHOD`   | X % pagando con ciertos medios, proporcional a lo pagado | `-10% efectivo`       |
+| `SPEND_THRESHOLD`  | Desde $X de compra, X % o $X menos (una vez por venta)   | `Desde $100.000 -10%` |
 
 Si la oferta tiene un solo día de la semana, la etiqueta lo dice
 ("Martes -10%"). Las reglas tipo "hoy martes, 10 % en estos productos" son
@@ -37,6 +39,9 @@ hay JSON sin validar.
   medicamentos con receta pueden tener oferta (decisión del usuario del
   11/11/2026).
 - Combos: sólo productos puntuales, con la cantidad de cada uno.
+- Todos los productos (`Offer.allProducts`): la oferta vale para todo el
+  catálogo, con las exclusiones de `OfferTarget` (lo elegido sólo puede ser
+  exclusión) y respetando `productKind`. No se permite en combos (CHECK).
 - Sucursales (`OfferBranch`) y listas de precios (`OfferPriceList`): sin filas,
   aplica a todas.
 - Abrir cajas: la caja y el blíster son productos distintos; la oferta de la
@@ -55,9 +60,10 @@ hay JSON sin validar.
 - Estado guardado: `DRAFT`, `PUBLISHED`, `PAUSED`, `FINISHED`, `ARCHIVED`. El
   estado vigente se calcula con la fecha y la hora, sin cron: Borrador,
   Programada, Activa, Pausada, Vencida, Finalizada, Archivada.
-- Acciones: publicar, pausar, reanudar, finalizar ya, duplicar (queda en
-  borrador) y archivar. Una oferta nunca se borra. Una finalizada o archivada
-  no se edita (se duplica). Una oferta usada en ventas no cambia de tipo.
+- Acciones: publicar, pausar, reanudar, finalizar ya y archivar. Una oferta
+  nunca se borra. Una finalizada o archivada no se edita: se crea una nueva.
+  La web no ofrece «Duplicar» (12/11/2026: no aportaba nada); el endpoint de
+  la API sigue existiendo. Una oferta usada en ventas no cambia de tipo.
 - La edición sube `version` y exige `expectedUpdatedAt` (409 si otra persona
   la cambió).
 
@@ -121,7 +127,13 @@ la venta sin conexión.
   `OFERTA_DISTINTA`. Un stock de oferta superado deja `TOPE_OFERTA_SUPERADO`.
   Una oferta que venció por fecha después de la venta pero estaba vigente a
   esa hora se respeta sin aviso.
-- Las ofertas sólo se crean y editan con conexión.
+- Las ofertas sólo se crean y editan con conexión. Sin conexión, el apartado
+  Ofertas muestra la copia guardada en la PC (listado y detalles ya abiertos)
+  con un aviso, y oculta crear, editar y las acciones de estado.
+- Por medio de pago, por monto de compra, «Todos los productos», «No aplicar»
+  en un producto (`skipOffers`) y las ofertas quitadas de la venta
+  (`skippedOfferIds`) funcionan igual sin conexión: el motor es el mismo y la
+  venta guardada los manda al sincronizar.
 
 ## Fiscal y tickets
 
@@ -186,8 +198,67 @@ del listado: por oferta, ventas, unidades, descuento otorgado y facturación
 descuento general). Excluye ventas anuladas. Filtros de fecha y sucursal.
 Queda listo para sumarlo a `REPORTS_PLAN.md`.
 
+## Por medio de pago (12/11/2026)
+
+Tipo `PAYMENT_METHOD`: un porcentaje (`percentBps`) y uno o más medios
+(`Offer.paymentMethods`: efectivo, transferencia, tarjeta, cuenta corriente),
+sobre los productos elegidos (o todos) y con la vigencia de siempre (ej.
+«10% en efectivo los martes»). No lleva topes de unidades.
+
+- **Proporcional**: el porcentaje se aplica sobre la parte del ticket que se
+  paga con esos medios. Ticket $10.000 con 10% en efectivo: $4.000 con tarjeta
+  y el resto en efectivo → el efectivo cubre $6.000, descuento $600, total
+  $9.400. Se calcula con los importes que no tienen vuelto
+  (`descuentoPorMedioDePago` en el motor): si el efectivo no da el descuento y
+  hay efectivo, `d = p·E·Q / (T − p·E)` con Q lo pagado con los medios que
+  califican; si no, `d = p·E·(T − K) / T` con K lo pagado con los otros. T es
+  el total de la venta sin este descuento (incluye conceptos, precios
+  especiales y descuento general) y E lo que vale lo que entra en la oferta.
+- Se calcula **después** de las demás ofertas, sobre el precio ya ofertado, y
+  respeta «combinable» como las demás. Varias ofertas por medio de pago no se
+  suman: va la de mayor ahorro (lo habitual es una sola; que cada farmacia
+  elija sumarlas queda pendiente).
+- Venta: la API recibe los pagos y recalcula; el descuento se reparte entre los
+  renglones elegibles y queda como cualquier oferta (`offerDiscountMinor`,
+  `SaleOffer`), así que fiscal, tickets, devoluciones y reportes no cambian.
+- Web: el carrito sólo la sugiere («Pagando con efectivo… ahorrás $X (se
+  aplica al cobrar)»). En la ventana de cobro el total se recalcula con los
+  pagos cargados y el que se está cargando; el importe precargado se actualiza
+  solo si la cajera no lo tocó (`lib/ofertas-cobro.ts`). Al confirmar se
+  recalcula con los pagos finales y eso es lo que se manda.
+
+## No combinables: gana la mejor (12/11/2026)
+
+Las ofertas de toda la venta (por monto de compra y por medio de pago) se
+calculan después de las de producto. Si una quedó bloqueada en algún producto
+por otra oferta no combinable, el motor prueba también sin la oferta que la
+bloquea y se queda con el resultado de mayor ahorro total para el cliente. Ej.:
+10% superando $100.000 (no combinable) y 15% en efectivo → pagando en efectivo
+gana el 15%. Con 20% por cantidad en un solo producto, ese producto conserva el
+20% y el 15% en efectivo va al resto, porque así se ahorra más.
+
+## Por monto de compra (12/11/2026)
+
+Tipo `SPEND_THRESHOLD`: un monto mínimo (`Offer.minPurchaseMinor`) y un
+porcentaje (`percentBps`) o pesos (`amountMinor`), sobre los productos elegidos
+o «Todos los productos». Ej.: «comprando $100.000 o más, 10% menos».
+
+- El mínimo se mide con lo que entra en la oferta **ya con las demás ofertas**
+  (precio ofertado). Si llega, el descuento es una vez por venta: el % sobre
+  ese importe o los pesos (nunca más que el importe), repartido entre los
+  renglones proporcional a su neto.
+- Se calcula después de las ofertas por producto y antes de las por medio de
+  pago (que miden el total ya con este descuento). Respeta «combinable»; varias
+  ofertas por monto no se suman: va la de mayor ahorro. No lleva topes de
+  unidades.
+- Carrito: si falta hasta un 30% del mínimo, sugiere «Sumá $X más y tenés …
+  menos».
+- Por medio de pago y por monto con «Todos los productos» no marcan cada
+  producto como «En oferta» (no cambian su precio).
+
 ## Fuera de esta versión
 
-- Condición por medio de pago y por cliente puntual (sólo listas de precios).
+- Condición por cliente puntual (sólo listas de precios).
+- Sumar varias ofertas por medio de pago en una misma venta.
 - Crear o editar ofertas sin conexión.
 - Reporte interactivo de ofertas en Reportes.

@@ -22,6 +22,11 @@ import { RolePermissionPicker } from "./role-permission-picker";
 import { StatusToast } from "./status-toast";
 import { useFitToViewport } from "./use-fit-to-viewport";
 import { field, primary, secondary } from "./supplier-payables/dialog";
+import { usePage } from "./lib/use-page";
+import { Pagination } from "./pagination";
+
+/** Tarjetas por página en el listado (el bloque no crece sin fin). */
+export const ROLES_POR_PAGINA = 5;
 
 /** Cantidad de módulos que se muestran como chip antes del "+N más". */
 const visibleModules = 3;
@@ -206,6 +211,7 @@ export function RolesPanel({
     }
   };
   const selected = countRolePermissions(permissionCodes);
+  const pagina = usePage(roles, ROLES_POR_PAGINA);
   return (
     <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(380px,0.85fr)]">
       {notice ? (
@@ -233,7 +239,7 @@ export function RolesPanel({
           )}
         </div>
         <div className="mt-5 space-y-3">
-          {roles.map((role) => (
+          {pagina.visible.map((role) => (
             <RoleCard
               key={role.id}
               role={role}
@@ -247,6 +253,20 @@ export function RolesPanel({
             </p>
           )}
         </div>
+        {roles.length > ROLES_POR_PAGINA && (
+          <div className="mt-4">
+            <Pagination
+              compact
+              total={roles.length}
+              currentPage={pagina.current}
+              totalPages={pagina.totalPages}
+              noun="roles"
+              label="Páginas de roles"
+              pageSize={ROLES_POR_PAGINA}
+              onChange={pagina.setPage}
+            />
+          </div>
+        )}
       </section>
       <form
         ref={panelRef}

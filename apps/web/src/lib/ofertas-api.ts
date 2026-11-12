@@ -2,6 +2,7 @@ import { apiFetch as fetch } from "./api-fetch";
 import {
   ofertaDesdeJson,
   type EstadoOferta,
+  type MedioPago,
   type OfertaMotor,
   type OfertaMotorJson,
   type TipoOferta,
@@ -49,6 +50,12 @@ export type Oferta = {
   payQuantity: number | null;
   nthUnit: number | null;
   bundlePriceMinor: string | null;
+  /** Medios que dan el descuento (sólo ofertas por medio de pago). */
+  paymentMethods?: MedioPago[];
+  /** Todos los productos, con las exclusiones de `targets`. */
+  allProducts?: boolean;
+  /** Monto mínimo de compra (sólo ofertas por monto de compra). */
+  minPurchaseMinor?: string | null;
   tiers: {
     minQuantity: number;
     percentBps: number | null;
@@ -111,6 +118,9 @@ export type OfertaEntrada = {
   payQuantity?: number | null;
   nthUnit?: number | null;
   bundlePriceMinor?: string | null;
+  paymentMethods?: MedioPago[];
+  allProducts?: boolean;
+  minPurchaseMinor?: string | null;
   tiers?: {
     minQuantity: number;
     percentBps?: number | null;
@@ -125,7 +135,7 @@ export type OfertaEntrada = {
 };
 
 export type AccionOferta =
-  "publicar" | "pausar" | "reanudar" | "finalizar" | "archivar" | "duplicar";
+  "publicar" | "pausar" | "reanudar" | "finalizar" | "archivar";
 
 async function pedir<T>(
   token: string,

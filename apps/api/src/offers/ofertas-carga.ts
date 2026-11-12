@@ -101,6 +101,9 @@ export function ofertaMotor(
     payQuantity: oferta.payQuantity,
     nthUnit: oferta.nthUnit,
     bundlePriceMinor: oferta.bundlePriceMinor,
+    paymentMethods: oferta.paymentMethods,
+    allProducts: oferta.allProducts,
+    minPurchaseMinor: oferta.minPurchaseMinor,
     tiers: [...oferta.tiers]
       .sort((a, b) => a.minQuantity - b.minQuantity)
       .map((tier) => ({
@@ -175,5 +178,11 @@ export function parametrosOferta(oferta: OfertaMotor): Prisma.InputJsonObject {
     combinable: oferta.combinable,
     priority: oferta.priority,
     maxUnitsPerSale: oferta.maxUnitsPerSale,
+    ...(oferta.paymentMethods?.length
+      ? { paymentMethods: [...oferta.paymentMethods] }
+      : {}),
+    ...(oferta.minPurchaseMinor
+      ? { minPurchaseMinor: oferta.minPurchaseMinor.toString() }
+      : {}),
   };
 }

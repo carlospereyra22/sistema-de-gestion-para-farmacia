@@ -1545,6 +1545,10 @@ enum OfferType {
   NTH_UNIT_PERCENT
   TIERED
   BUNDLE
+  /// Porcentaje por pagar con ciertos medios, proporcional a lo pagado con ellos.
+  PAYMENT_METHOD
+  /// Desde un monto de compra de lo que entra en la oferta, un % o $ menos (una vez por venta).
+  SPEND_THRESHOLD
 }
 
 enum OfferStatus {
@@ -1585,6 +1589,8 @@ model Offer {
   allBranches Boolean @default(true)
   allPriceLists Boolean @default(true)
   productKind OfferProductKind @default(ALL)
+  /// Todos los productos (con las exclusiones de targets). Nunca en combos.
+  allProducts Boolean @default(false)
   maxUnitsPerSale Int?
   maxUnitsTotal Int?
   percentBps Int?
@@ -1594,6 +1600,10 @@ model Offer {
   payQuantity Int?
   nthUnit Int?
   bundlePriceMinor BigInt?
+  /// Monto mínimo de compra (sólo SPEND_THRESHOLD).
+  minPurchaseMinor BigInt?
+  /// Medios de pago que dan el descuento (sólo PAYMENT_METHOD; vacío en los demás tipos).
+  paymentMethods PaymentMethod[] @default([])
   version Int @default(1)
   createdById String @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamptz(6)

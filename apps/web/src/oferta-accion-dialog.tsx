@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { AccionOferta, Oferta } from "./lib/ofertas-api";
 
-type AccionConfirmada = Exclude<AccionOferta, "duplicar">;
+type AccionConfirmada = AccionOferta;
 
 const ACCIONES: Record<
   AccionConfirmada,

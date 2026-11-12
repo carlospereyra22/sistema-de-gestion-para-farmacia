@@ -16,14 +16,14 @@ export const ESTADOS_OFERTA: { value: EstadoOferta; label: string }[] = [
 export function accionesDe(oferta: Pick<Oferta, "status">): AccionOferta[] {
   switch (oferta.status) {
     case "DRAFT":
-      return ["publicar", "duplicar", "archivar"];
+      return ["publicar", "archivar"];
     case "PUBLISHED":
-      return ["pausar", "finalizar", "duplicar", "archivar"];
+      return ["pausar", "finalizar", "archivar"];
     case "PAUSED":
-      return ["reanudar", "finalizar", "duplicar", "archivar"];
+      return ["reanudar", "finalizar", "archivar"];
     case "FINISHED":
-      return ["duplicar", "archivar"];
+      return ["archivar"];
     case "ARCHIVED":
-      return ["duplicar"];
+      return [];
   }
 }

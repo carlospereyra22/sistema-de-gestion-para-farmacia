@@ -3512,6 +3512,8 @@ export async function createSale(
       requestedUnitPriceMinor?: number;
       /** Ahorro por ofertas que vio la cajera (SISTEMA-103). */
       expectedOfferDiscountMinor?: string;
+      /** La cajera eligió no aplicar ofertas a este producto. */
+      skipOffers?: boolean;
     }[];
     payments: {
       method: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
@@ -3519,6 +3521,8 @@ export async function createSale(
       cashSessionId?: string;
     }[];
     /** Sin conexión: ofertas que aplicó la PC (SISTEMA-103). */
+    /** Ofertas que la cajera quitó de esta venta. */
+    skippedOfferIds?: string[];
     appliedOffers?: {
       offerId: string;
       version: number;
