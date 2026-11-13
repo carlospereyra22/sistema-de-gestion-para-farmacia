@@ -97,6 +97,7 @@ export function ProductSyncStatus({
               Última revisión registrada:{" "}
               {checked && Number.isFinite(Date.parse(checked))
                 ? new Date(checked).toLocaleString("es-AR", {
+                    hourCycle: "h23",
                     timeZone: "America/Argentina/Buenos_Aires",
                   })
                 : "pendiente"}

@@ -417,6 +417,7 @@ export function NotificationBell({
                       <span className="mt-1 block text-[10px] text-slate-400">
                         Vista el{" "}
                         {new Date(alert.seenAt).toLocaleString("es-AR", {
+                          hourCycle: "h23",
                           day: "2-digit",
                           month: "2-digit",
                           hour: "2-digit",
@@ -457,7 +458,7 @@ export function NotificationBell({
             </label>
             <p className="text-[10px] text-slate-400">
               {updated
-                ? `Consultado ${updated.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} · `
+                ? `Consultado ${updated.toLocaleTimeString("es-AR", { hourCycle: "h23", hour: "2-digit", minute: "2-digit" })} · `
                 : ""}
               Actualización cada minuto. Mínimo para esta sesión.
             </p>

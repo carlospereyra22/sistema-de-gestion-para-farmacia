@@ -682,6 +682,7 @@ export function OfertaDetalle({
                           ? new Date(venta.completedAt).toLocaleString(
                               "es-AR",
                               {
+                                hourCycle: "h23",
                                 timeZone: "America/Argentina/Buenos_Aires",
                               },
                             )
@@ -714,6 +715,7 @@ export function OfertaDetalle({
                 <li key={item.id} className="flex flex-wrap gap-x-2">
                   <span className="text-slate-500">
                     {new Date(item.createdAt).toLocaleString("es-AR", {
+                      hourCycle: "h23",
                       timeZone: "America/Argentina/Buenos_Aires",
                     })}
                   </span>

@@ -703,6 +703,7 @@ export function textoVigencia(
 ): string {
   const fecha = (iso: string) =>
     new Date(iso).toLocaleString("es-AR", {
+      hourCycle: "h23",
       timeZone: "America/Argentina/Buenos_Aires",
       day: "2-digit",
       month: "2-digit",

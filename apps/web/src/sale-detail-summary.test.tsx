@@ -53,3 +53,30 @@ it("keeps the historical total and sale status separate from fiscal authorizatio
   expect(cancelled).toContain("Anulada");
   expect(cancelled).toContain("Comprobante interno");
 });
+
+it("muestra el desglose cuando la venta tuvo ofertas o descuento", () => {
+  const html = renderToStaticMarkup(
+    <SaleDetailTotal
+      total="$ 95.625,00"
+      status="COMPLETED"
+      documentType="INTERNAL"
+      desglose={{ subtotal: "$ 106.250,00", ofertas: "$ 10.625,00" }}
+    />,
+  );
+  expect(html).toContain("Subtotal");
+  expect(html).toContain("Ahorro por ofertas");
+  expect(html).toContain("−$ 10.625,00");
+  expect(html).not.toContain(">Descuento<");
+});
+
+it("sin descuentos no muestra desglose", () => {
+  const html = renderToStaticMarkup(
+    <SaleDetailTotal
+      total="$ 100,00"
+      status="COMPLETED"
+      documentType="INTERNAL"
+      desglose={{ subtotal: "$ 100,00" }}
+    />,
+  );
+  expect(html).not.toContain("Subtotal");
+});

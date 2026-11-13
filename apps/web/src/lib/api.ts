@@ -3145,6 +3145,22 @@ export async function saveTicketHeader(
   return response.json();
 }
 
+/** Oferta aplicada en una venta ya registrada (SISTEMA-104). */
+export type OfertaDeVentaRegistrada = {
+  offerId: string;
+  name: string;
+  label: string;
+  type: string;
+  units: number;
+  discountMinor: string;
+  items: {
+    productId: string;
+    units: number;
+    grossMinor: string;
+    discountMinor: string;
+  }[];
+};
+
 export type Sale = {
   id: string;
   documentType?: "INTERNAL" | "INVOICE";
@@ -3171,6 +3187,8 @@ export type Sale = {
     method: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
     amountMinor: string;
   }[];
+  /** Ofertas aplicadas; las trae el historial paginado (SISTEMA-104). */
+  offers?: OfertaDeVentaRegistrada[];
   /** Factura de producción de la venta (número de ARCA), si tiene. */
   fiscalDocuments?: {
     status: string;
@@ -3486,6 +3504,47 @@ export async function getSales(
   if (!response.ok)
     throw await responseError(response, "No se pudieron cargar las ventas.");
   return (await response.json()) as Sale[];
+}
+
+/** Filtros del historial de ventas paginado en el servidor (SISTEMA-104). */
+export type FiltroHistorialVentas = {
+  from?: string;
+  to?: string;
+  status?: Sale["status"];
+  documentType?: "INTERNAL" | "INVOICE";
+  method?: Sale["payments"][number]["method"];
+  /** Comienzo del código interno. */
+  q?: string;
+};
+
+export type PaginaHistorialVentas = {
+  items: Sale[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export async function getSalesHistory(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  filtro: FiltroHistorialVentas,
+  page: number,
+  pageSize = 10,
+): Promise<PaginaHistorialVentas> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  for (const [clave, valor] of Object.entries(filtro))
+    if (valor) params.set(clave, String(valor));
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/history?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo cargar el historial.");
+  return (await response.json()) as PaginaHistorialVentas;
 }
 
 export async function createSale(

@@ -456,6 +456,7 @@ export function PriceListsWorkspace({
                       Última actualización{" "}
                       {list.updatedAt
                         ? new Date(list.updatedAt).toLocaleString("es-AR", {
+                            hourCycle: "h23",
                             dateStyle: "short",
                             timeStyle: "short",
                           })

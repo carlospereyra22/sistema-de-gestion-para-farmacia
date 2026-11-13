@@ -176,6 +176,7 @@ function normalizeSale(input) {
       logoRaster: input.store?.logoRaster,
     },
     date: new Date(input.date).toLocaleString("es-AR", {
+      hourCycle: "h23",
       timeZone: "America/Argentina/Buenos_Aires",
     }),
   };

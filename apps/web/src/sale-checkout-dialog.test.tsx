@@ -132,3 +132,71 @@ it("muestra lo que falta en el mismo panel del vuelto, con lo recibido", () => {
   expect(html).toMatch(/Recibido \$\s5\.000,00 de \$\s17\.070,00/);
   expect(html).not.toContain("Vuelto</p>");
 });
+
+it("explica el ahorro por ofertas con un ícono y su detalle", () => {
+  const html = render({
+    offerSavingsMinor: 678_750,
+    offers: [
+      {
+        id: "o1",
+        label: "2x1",
+        nombre: "Verano 2x1",
+        ahorroMinor: 678_750,
+        productos: [{ nombre: "Protector solar", unidades: 2 }],
+      },
+    ],
+  });
+  expect(html).toContain('aria-label="Ver por qué se descuenta"');
+  expect(html).toContain('role="tooltip"');
+  expect(html).toContain("Verano 2x1");
+  expect(html).toContain("2 × Protector solar");
+  expect(html).toMatch(/−\$\s6\.787,50/);
+});
+
+it("sin detalle de ofertas no muestra el ícono", () => {
+  const html = render({ offerSavingsMinor: 1000 });
+  expect(html).toContain("Ahorro por ofertas");
+  expect(html).not.toContain("Ver por qué se descuenta");
+});
+
+it("con tarjeta mantiene la forma del cobro: misma grilla y panel de lo que falta", () => {
+  const efectivo = render();
+  const tarjeta = render({
+    method: "CARD",
+    amount: "17.070",
+    receivedMinor: 1_707_000,
+  });
+  const grilla = "sm:grid-cols-[minmax(0,1fr)_250px]";
+  expect(efectivo).toContain(grilla);
+  expect(tarjeta).toContain(grilla);
+  expect(tarjeta).toContain("Faltan</p>");
+  expect(tarjeta).not.toContain("Vuelto</p>");
+  expect(tarjeta).toContain("Para un pago mixto");
+  expect(tarjeta).not.toContain('aria-label="Montos rápidos"');
+  expect(tarjeta).not.toContain("Completar");
+});
+
+it("deja fija la columna del ahorro cuando el medio de pago puede cambiarlo", () => {
+  expect(render()).not.toContain("Ahorro por ofertas");
+  const html = render({ showOfferSavings: true });
+  expect(html).toContain("Ahorro por ofertas");
+  expect(html).toMatch(/\$\s0,00/);
+});
+
+it("en el detalle de ofertas el nombre va arriba, antes que la etiqueta", () => {
+  const html = render({
+    offerSavingsMinor: 1_062_500,
+    offers: [
+      {
+        id: "o1",
+        label: "Desde $100.000 -10%",
+        nombre: "supera los 100k",
+        ahorroMinor: 1_062_500,
+        productos: [],
+      },
+    ],
+  });
+  expect(html.indexOf("supera los 100k")).toBeLessThan(
+    html.indexOf("Desde $100.000 -10%"),
+  );
+});

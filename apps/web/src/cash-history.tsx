@@ -135,7 +135,9 @@ export function CashHistory({
                 return (
                   <tr key={closure.id} className="border-b">
                     <td className="px-2 py-3">
-                      {new Date(closure.closedAt!).toLocaleString("es-AR")}
+                      {new Date(closure.closedAt!).toLocaleString("es-AR", {
+                        hourCycle: "h23",
+                      })}
                     </td>
                     <td className="px-2 py-3">{closure.cashRegisterName}</td>
                     <td className="px-2 py-3 text-xs text-slate-500">

@@ -88,6 +88,7 @@ import {
   ofertasDelCarrito,
   ofertasDelProducto,
   ofertasParaEnviar,
+  productosDeAplicacion,
 } from "./lib/ofertas-carrito";
 import { SaleCartOffers, type SugerenciaCarrito } from "./sale-cart-offers";
 import { SaleOffersControl } from "./sale-offers-control";
@@ -96,7 +97,11 @@ import {
   textoMedios,
   type OfertaMotor,
 } from "./lib/ofertas-motor";
-import { pagosDelCobro, type PagoCobro } from "./lib/ofertas-cobro";
+import {
+  pagosDelCobro,
+  saldoConMedio,
+  type PagoCobro,
+} from "./lib/ofertas-cobro";
 import { sortSaleLines } from "./lib/sort-sale-lines";
 import {
   FractionalPriceOptions,
@@ -138,6 +143,8 @@ import {
   historialConPendientes,
   type VentaDelHistorial,
 } from "./lib/historial-con-pendientes";
+import { filtrarHistorialLocal } from "./lib/historial-local";
+import { useHistorialVentas, VENTAS_POR_PAGINA } from "./use-historial-ventas";
 import { getSubscriptionStatus } from "./lib/subscription-status";
 import { SinConexionError } from "./lib/api-fetch";
 import {
@@ -166,6 +173,12 @@ import { lotesParaTransferir } from "./lib/transferencias-sin-conexion";
 import { useSincronizarVentas } from "./lib/use-sincronizar-ventas";
 import { SaleCreditActions } from "./sale-credit-actions";
 import { SaleDetailTotal, SalePaymentSummary } from "./sale-detail-summary";
+import {
+  AhorroDeVentaDetalle,
+  DescuentoDeRenglonDetalle,
+  OfertasDeVentaDetalle,
+} from "./sale-detail-offers";
+import { TooltipFlotante } from "./tooltip-flotante";
 import { Pagination } from "./pagination";
 import { getSaleTicket } from "./lib/api";
 import { useSearchParams } from "react-router-dom";
@@ -290,6 +303,11 @@ import {
   facturaEsperaCaja,
   numeroDeVenta,
 } from "./lib/numero-venta";
+import {
+  descuentosDeRenglon,
+  descuentosDeVenta,
+  ofertasDeProducto,
+} from "./lib/descuentos-venta";
 import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { useConectividad } from "./lib/conectividad";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
@@ -338,6 +356,8 @@ import {
   Pencil,
   X,
   ReceiptText,
+  FileText,
+  Wallet,
   Boxes,
   Check,
   LayoutDashboard,
@@ -359,6 +379,7 @@ import {
   ShieldCheck,
   Tags,
   BadgePercent,
+  Info,
   Trash2,
   Users,
   Settings,
@@ -391,6 +412,8 @@ import {
   getPriceLists,
   getRoles,
   getSales,
+  getSalesHistory,
+  type FiltroHistorialVentas,
   getStock,
   getTransfers,
   getUserCreateOptions,
@@ -444,6 +467,28 @@ const money = (minor: string | number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
     Number(minor) / 100,
   );
+// De dónde vino el ahorro de una venta, para la columna del historial.
+const origenAhorro = (descuento: {
+  ofertasMinor: number;
+  descuentoMinor: number;
+}) =>
+  descuento.ofertasMinor && descuento.descuentoMinor
+    ? "Oferta y descuento"
+    : descuento.ofertasMinor
+      ? "Oferta"
+      : "Descuento";
+// Desglose del total en el detalle de una venta (SISTEMA-104): solo si tuvo
+// ofertas o descuento.
+const desgloseVenta = (sale: Sale) => {
+  const descuento = descuentosDeVenta(sale.items);
+  return {
+    subtotal: money(descuento.subtotalMinor),
+    ofertas: descuento.ofertasMinor ? money(descuento.ofertasMinor) : undefined,
+    descuento: descuento.descuentoMinor
+      ? money(descuento.descuentoMinor)
+      : undefined,
+  };
+};
 // Sin busqueda se muestra todo el catalogo; el tope evita renderizar miles de filas.
 const SALE_CATALOG_ROW_LIMIT = 200;
 /** Cada cuánto se revisa el historial mientras una factura espera a ARCA. */
@@ -6592,7 +6637,22 @@ function Sales({
         );
         return;
       }
-    } else if (!paymentAmount.trim()) precargarMonto(Math.max(total - paid, 0));
+    } else if (
+      !paymentAmount.trim() ||
+      // Un importe que cubría todo (exacto o con vuelto) no es un pago
+      // parcial: al cambiar de medio pasa a ser lo que falta con el nuevo
+      // medio, y el efecto de abajo lo ajusta si hay ofertas por medio de
+      // pago. Solo un importe menor se conserva para el pago mixto (SISTEMA-104).
+      (paymentAmountMinor ?? 0) >= Math.max(total - paid, 0)
+    )
+      // Lo que falta ya con el medio nuevo: precargar el saldo del medio
+      // anterior hacía aparecer un instante «Faltan» y «Completar» (con ofertas
+      // por medio de pago el total cambia) y el cobro temblaba (SISTEMA-104).
+      precargarMonto(
+        hayOfertaPorPago
+          ? saldoConMedio(payments, value, totalConPagos)
+          : Math.max(total - paid, 0),
+      );
     setMethod(value);
   };
   const loadHistory = async () => {
@@ -7214,6 +7274,7 @@ function Sales({
             organizationId,
             branchId,
           )}
+          actualizacion={history}
           products={products}
           customers={customers}
           operationReason={operationReason}
@@ -7468,6 +7529,12 @@ function Sales({
             onDescartar={(id) =>
               setOfertasDescartadas((actuales) => [...actuales, id])
             }
+            aplicadas={ofertasCarrito.aplicaciones.map((aplicacion) => ({
+              id: aplicacion.offerId,
+              label: aplicacion.label,
+              nombre: aplicacion.name,
+              ahorroMinor: Number(aplicacion.discountMinor),
+            }))}
           />
         }
         submitting={submitting}
@@ -7915,6 +7982,20 @@ function Sales({
           subtotalMinor={subtotal}
           discountMinor={discountMinor}
           offerSavingsMinor={offerSavings}
+          // Con ofertas por medio de pago el ahorro va y viene según el medio:
+          // la columna queda fija para que el total no se corra.
+          showOfferSavings={hayOfertaPorPago || ofertasBase.totalMinor > 0}
+          offers={ofertasCarrito.aplicaciones.map((aplicacion) => ({
+            id: aplicacion.offerId,
+            label: aplicacion.label,
+            nombre: aplicacion.name,
+            ahorroMinor: Number(aplicacion.discountMinor),
+            productos: productosDeAplicacion(
+              aplicacion.items,
+              (productId) =>
+                productoPorId(products, productId)?.name ?? "Producto",
+            ),
+          }))}
           totalMinor={total}
           paidMinor={paid}
           payments={groupedPayments}
@@ -8063,12 +8144,19 @@ function SalesHistory({
   onPrint,
   fiscalCapabilities,
   onInvoiced,
+  actualizacion,
 }: {
   token: string;
   organizationId: string;
   branchId: string;
-  /** Incluye las vendidas sin conexión que todavía no llegaron (SISTEMA-66). */
+  /**
+   * Copia local más las vendidas sin conexión que todavía no llegaron
+   * (SISTEMA-66). Con conexión la lista sale del servidor paginada
+   * (SISTEMA-104); esto aporta las pendientes y el respaldo sin internet.
+   */
   sales: VentaDelHistorial[];
+  /** Cambia cuando hay que volver a pedir el historial al servidor. */
+  actualizacion: unknown;
   products: CatalogProduct[];
   customers: Party[];
   operationReason: string;
@@ -8081,11 +8169,24 @@ function SalesHistory({
   fiscalCapabilities?: SaleFiscalCapabilities | null;
   onInvoiced: (sale: Sale) => void;
 }): ReactElement {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [status, setStatus] = useState<"" | Sale["status"]>("");
+  const [filtro, setFiltro] = useState<FiltroHistorialVentas>({});
+  const cambiarFiltro = (cambio: Partial<FiltroHistorialVentas>) => {
+    setFiltro((actual) => ({ ...actual, ...cambio }));
+    setPage(1);
+  };
+  const hayFiltros = Object.values(filtro).some(Boolean);
   const [selectedSaleId, setSelectedSaleId] = useState<string>();
   const [page, setPage] = useState(1);
+  const historial = useHistorialVentas({
+    token,
+    organizationId,
+    branchId,
+    filtro,
+    page,
+    respaldo: sales,
+    actualizacion,
+  });
+  const [exportando, setExportando] = useState(false);
   const detailDialog = useRef<HTMLDialogElement>(null);
   const actionPending = useRef(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -8104,26 +8205,25 @@ function SalesHistory({
       setActionBusy(false);
     }
   };
-  const filteredSales = sales.filter((sale) => {
-    const date = sale.completedAt?.slice(0, 10) ?? "";
-    return (
-      (!from || date >= from) &&
-      (!to || date <= to) &&
-      (!status || sale.status === status)
-    );
-  });
-  filteredSales.sort(
-    (a, b) =>
-      (b.completedAt ?? "").localeCompare(a.completedAt ?? "") ||
-      b.id.localeCompare(a.id),
+  const pageSales: VentaDelHistorial[] = historial.ventas;
+  // La venta abierta se conserva mientras se vuelve a pedir la página (por
+  // ejemplo, después de anularla).
+  const ultimaAbierta = useRef<VentaDelHistorial | undefined>(undefined);
+  const encontrada = selectedSaleId
+    ? pageSales.find((sale) => sale.id === selectedSaleId)
+    : undefined;
+  if (encontrada) ultimaAbierta.current = encontrada;
+  const selectedSale: VentaDelHistorial | undefined = selectedSaleId
+    ? (encontrada ??
+      (ultimaAbierta.current?.id === selectedSaleId
+        ? ultimaAbierta.current
+        : undefined))
+    : undefined;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(historial.total / VENTAS_POR_PAGINA),
   );
-  const selectedSale = sales.find((sale) => sale.id === selectedSaleId);
-  const totalPages = Math.max(1, Math.ceil(filteredSales.length / 10));
   const currentPage = Math.min(page, totalPages);
-  const pageSales = filteredSales.slice(
-    (currentPage - 1) * 10,
-    currentPage * 10,
-  );
   useEffect(() => {
     const dialog = detailDialog.current;
     if (selectedSaleId) dialog?.showModal();
@@ -8146,8 +8246,40 @@ function SalesHistory({
     );
     return labels.length ? [...new Set(labels)].join(" + ") : "Sin cobro";
   };
-  const exportCsv = () => {
-    const rows = filteredSales.map((sale) => {
+  // Exporta todas las ventas del filtro, no solo la página (SISTEMA-104).
+  const ventasParaExportar = async (): Promise<VentaDelHistorial[]> => {
+    if (historial.sinConexion) return filtrarHistorialLocal(sales, filtro);
+    const todas: VentaDelHistorial[] = filtrarHistorialLocal(
+      sales.filter((sale) => sale.porEnviar),
+      filtro,
+    );
+    for (let pagina = 1; pagina <= 200; pagina += 1) {
+      const resultado = await getSalesHistory(
+        token,
+        organizationId,
+        branchId,
+        filtro,
+        pagina,
+        100,
+      );
+      todas.push(...resultado.items);
+      if (pagina * 100 >= resultado.total) break;
+    }
+    return todas;
+  };
+  const exportCsv = async () => {
+    if (exportando) return;
+    setExportando(true);
+    let ventasCsv: VentaDelHistorial[];
+    try {
+      ventasCsv = await ventasParaExportar();
+    } catch {
+      setExportando(false);
+      setActionMessage("No se pudo exportar el historial. Probá de nuevo.");
+      return;
+    }
+    setExportando(false);
+    const rows = ventasCsv.map((sale) => {
       const numero = numeroDeVenta(sale);
       return [
         [
@@ -8159,10 +8291,17 @@ function SalesHistory({
           .join(" "),
         numero.interno,
         sale.completedAt
-          ? new Date(sale.completedAt).toLocaleString("es-AR")
+          ? new Date(sale.completedAt).toLocaleString("es-AR", {
+              hourCycle: "h23",
+            })
           : "",
         customerName(sale),
         money(sale.totalMinor),
+        (() => {
+          const descuento = descuentosDeVenta(sale.items);
+          const ahorro = descuento.ofertasMinor + descuento.descuentoMinor;
+          return ahorro ? `−${money(ahorro)} (${origenAhorro(descuento)})` : "";
+        })(),
         paymentName(sale),
         sale.porEnviar
           ? "Por enviar"
@@ -8178,6 +8317,7 @@ function SalesHistory({
         "Fecha",
         "Cliente",
         "Total",
+        "Ahorro",
         "Pago",
         "Estado",
       ],
@@ -8208,10 +8348,11 @@ function SalesHistory({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={exportCsv}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700"
+            onClick={() => void exportCsv()}
+            disabled={exportando}
+            className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-60"
           >
-            Exportar CSV
+            {exportando ? "Exportando…" : "Exportar CSV"}
           </button>
           <button
             type="button"
@@ -8223,49 +8364,130 @@ function SalesHistory({
         </div>
       </div>
       <section className="border bg-white p-4">
-        <div className="grid items-end gap-3 sm:grid-cols-3">
+        {/* Filtros del historial (SISTEMA-104): los aplica el servidor sobre
+            todas las ventas de la sucursal. */}
+        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <label className="text-xs font-medium text-slate-600">
             Desde
             <input
               type="date"
-              value={from}
-              onChange={(event) => {
-                setFrom(event.target.value);
-                setPage(1);
-              }}
-              className="mt-1 h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={filtro.from ?? ""}
+              max={filtro.to || undefined}
+              onChange={(event) =>
+                cambiarFiltro({ from: event.target.value || undefined })
+              }
+              className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
             />
           </label>
           <label className="text-xs font-medium text-slate-600">
             Hasta
             <input
               type="date"
-              value={to}
-              onChange={(event) => {
-                setTo(event.target.value);
-                setPage(1);
-              }}
-              className="mt-1 h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={filtro.to ?? ""}
+              min={filtro.from || undefined}
+              onChange={(event) =>
+                cambiarFiltro({ to: event.target.value || undefined })
+              }
+              className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
             />
           </label>
           <ProductFilterSelect
             label="Estado"
             icon={<ReceiptText size={18} />}
-            value={status}
+            value={filtro.status ?? ""}
             options={[
               { value: "", label: "Todos" },
               { value: "COMPLETED", label: "Confirmada" },
               { value: "CANCELLED", label: "Anulada" },
             ]}
-            onChange={(value) => {
-              setStatus(value as "" | Sale["status"]);
-              setPage(1);
-            }}
+            onChange={(value) =>
+              cambiarFiltro({
+                status: (value || undefined) as Sale["status"] | undefined,
+              })
+            }
           />
+          <ProductFilterSelect
+            label="Comprobante"
+            icon={<FileText size={18} />}
+            value={filtro.documentType ?? ""}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "INTERNAL", label: "Compr. interno" },
+              { value: "INVOICE", label: "Factura" },
+            ]}
+            onChange={(value) =>
+              cambiarFiltro({
+                documentType: (value || undefined) as
+                  FiltroHistorialVentas["documentType"] | undefined,
+              })
+            }
+          />
+          <ProductFilterSelect
+            label="Medio de pago"
+            icon={<Wallet size={18} />}
+            value={filtro.method ?? ""}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "CASH", label: "Efectivo" },
+              { value: "CARD", label: "Tarjeta" },
+              { value: "TRANSFER", label: "Transferencia" },
+              { value: "ACCOUNT", label: "Cuenta corriente" },
+            ]}
+            onChange={(value) =>
+              cambiarFiltro({
+                method: (value || undefined) as
+                  FiltroHistorialVentas["method"] | undefined,
+              })
+            }
+          />
+          <label className="text-xs font-medium text-slate-600">
+            Código interno
+            <span className="mt-1 flex h-12 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+              <Search size={16} aria-hidden className="text-teal-700" />
+              <input
+                type="search"
+                aria-label="Buscar por código interno"
+                placeholder="Ej. 90283CBC"
+                value={filtro.q ?? ""}
+                maxLength={36}
+                onChange={(event) =>
+                  cambiarFiltro({ q: event.target.value.trim() || undefined })
+                }
+                className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase text-slate-800 outline-none placeholder:font-sans placeholder:normal-case placeholder:text-slate-400"
+              />
+            </span>
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <p role="status">
+            {/* El total queda fijo al cambiar de página: solo se reemplaza
+                cuando llega la respuesta. */}
+            {historial.listo
+              ? `${historial.total} venta${historial.total === 1 ? "" : "s"}${hayFiltros ? " con estos filtros" : ""}`
+              : " "}
+            {historial.sinConexion
+              ? " · Sin conexión con el servidor: se muestran las ventas guardadas en esta PC."
+              : ""}
+          </p>
+          {hayFiltros && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltro({});
+                setPage(1);
+              }}
+              className="rounded-lg px-2 py-1 font-semibold text-teal-700 hover:bg-teal-50"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
       </section>
       <section className="overflow-hidden border bg-white">
-        <div className="overflow-x-auto">
+        <div
+          aria-busy={historial.cargando}
+          className={`overflow-x-auto transition-opacity ${historial.cargando && historial.listo ? "opacity-60" : ""}`}
+        >
           <table className="w-full min-w-210 text-left text-sm">
             <thead className="bg-[#edf3f5] text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
@@ -8273,6 +8495,7 @@ function SalesHistory({
                 <th className="px-4 py-3">Fecha</th>
                 <th className="px-4 py-3">Cliente</th>
                 <th className="px-4 py-3">Total</th>
+                <th className="px-4 py-3">Ahorro</th>
                 <th className="px-4 py-3">Pago</th>
                 <th className="px-4 py-3">Estado</th>
               </tr>
@@ -8302,20 +8525,24 @@ function SalesHistory({
                         }}
                         className="text-left"
                       >
-                        <span
-                          className={
-                            numero.texto === numero.interno
-                              ? "font-mono"
-                              : "font-semibold text-slate-700"
-                          }
-                        >
-                          {numero.texto}
-                        </span>
-                        {numero.texto !== numero.interno && (
-                          <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
-                            {numero.interno}
-                            {numero.prueba ? " · prueba" : ""}
+                        {/* Comprobante interno: tipo y número en una línea.
+                            Factura: número de ARCA y abajo el interno
+                            (SISTEMA-104). */}
+                        {numero.texto === numero.interno ? (
+                          <span className="font-semibold text-slate-700">
+                            Compr. interno{" "}
+                            <span className="font-mono">{numero.interno}</span>
                           </span>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-slate-700">
+                              {numero.texto}
+                            </span>
+                            <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
+                              {numero.interno}
+                              {numero.prueba ? " · prueba" : ""}
+                            </span>
+                          </>
                         )}
                         {numero.despues && (
                           <span className="mt-0.5 block text-[10px] font-medium text-amber-700">
@@ -8326,12 +8553,40 @@ function SalesHistory({
                     </td>
                     <td className="px-4 py-3">
                       {sale.completedAt
-                        ? new Date(sale.completedAt).toLocaleString("es-AR")
+                        ? new Date(sale.completedAt).toLocaleString("es-AR", {
+                            hourCycle: "h23",
+                          })
                         : "—"}
                     </td>
                     <td className="px-4 py-3">{customerName(sale)}</td>
                     <td className="px-4 py-3 font-semibold">
                       {money(sale.totalMinor)}
+                    </td>
+                    {/* Ahorro en su propia columna (SISTEMA-104): cuánto y
+                        si fue por oferta, descuento o ambos. */}
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const descuento = descuentosDeVenta(sale.items);
+                        const ahorro =
+                          descuento.ofertasMinor + descuento.descuentoMinor;
+                        if (!ahorro)
+                          return <span className="text-slate-300">—</span>;
+                        // Al pasar el mouse dice qué oferta o descuento fue.
+                        return (
+                          <TooltipFlotante
+                            label={`Ver el ahorro de la venta ${numero.interno}`}
+                            detenerClick={false}
+                            className="rounded-md px-1 font-semibold tabular-nums text-rose-700 hover:bg-rose-50"
+                            trigger={<>−{money(ahorro)}</>}
+                          >
+                            <AhorroDeVentaDetalle
+                              offers={sale.offers ?? []}
+                              ofertasMinor={descuento.ofertasMinor}
+                              descuentoMinor={descuento.descuentoMinor}
+                            />
+                          </TooltipFlotante>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">{paymentName(sale)}</td>
                     <td className="px-4 py-3">
@@ -8348,10 +8603,10 @@ function SalesHistory({
                   </tr>
                 );
               })}
-              {!filteredSales.length ? (
+              {!pageSales.length && !historial.cargando ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-10 text-center text-slate-500"
                   >
                     No hay ventas para los filtros seleccionados.
@@ -8363,7 +8618,7 @@ function SalesHistory({
         </div>
       </section>
       <Pagination
-        total={filteredSales.length}
+        total={historial.total}
         currentPage={currentPage}
         totalPages={totalPages}
         noun="ventas"
@@ -8389,7 +8644,9 @@ function SalesHistory({
               <p className="mt-1 text-sm text-slate-500">
                 {customerName(selectedSale)} ·{" "}
                 {selectedSale.completedAt
-                  ? new Date(selectedSale.completedAt).toLocaleString("es-AR")
+                  ? new Date(selectedSale.completedAt).toLocaleString("es-AR", {
+                      hourCycle: "h23",
+                    })
                   : ""}
               </p>
             )}
@@ -8408,52 +8665,106 @@ function SalesHistory({
           {selectedSale ? (
             <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_290px]">
               <div>
-                <div className="divide-y divide-slate-100 rounded-lg border">
-                  <div className="grid grid-cols-[1fr_70px_110px] gap-3 bg-slate-50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {/* Renglones compactos y la lista con scroll propio: con
+                    muchos productos el pago y el total siguen a la vista. El
+                    detalle de la oferta se ve al pasar el mouse (SISTEMA-104). */}
+                <div className="overflow-hidden rounded-lg border">
+                  <div className="grid grid-cols-[minmax(0,1fr)_56px_150px] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                     <span>Producto</span>
-                    <span>Cant.</span>
+                    <span className="text-center">Cant.</span>
                     <span className="text-right">Total</span>
                   </div>
-                  {selectedSale.items.map((item) => {
-                    const product = productoPorId(products, item.productId);
-                    const lineTotal =
-                      Number(item.unitPriceMinor ?? 0) * item.quantity -
-                      Number(item.discountMinor ?? 0);
-                    return (
-                      <div
-                        key={item.id}
-                        className="grid grid-cols-[1fr_70px_110px] gap-3 px-4 py-3 text-sm"
-                      >
-                        <span>
-                          {item.description ??
-                            product?.name ??
-                            "Producto histórico"}
-                          {(() => {
-                            const barcode =
-                              product?.barcodes.find((code) => code.primary)
-                                ?.code ?? product?.barcodes[0]?.code;
-                            return barcode ? (
-                              <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
-                                {barcode}
-                              </span>
-                            ) : null;
-                          })()}
-                          {item.productId && item.lotId === null && (
-                            <span
-                              className="mt-1 block w-fit rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
-                              title="Se vendió sin conexión y, al sincronizar, no había stock para descontar. Revisalo en las notificaciones."
-                            >
-                              Sin stock al sincronizar
+                  <div className="max-h-[min(52dvh,440px)] divide-y divide-slate-100 overflow-y-auto">
+                    {selectedSale.items.map((item) => {
+                      const product = productoPorId(products, item.productId);
+                      const lineTotal =
+                        Number(item.unitPriceMinor ?? 0) * item.quantity -
+                        Number(item.discountMinor ?? 0);
+                      const descuento = descuentosDeRenglon(item);
+                      const ahorro =
+                        descuento.ofertasMinor + descuento.descuentoMinor;
+                      const barcode =
+                        product?.barcodes.find((code) => code.primary)?.code ??
+                        product?.barcodes[0]?.code;
+                      const nombre =
+                        item.description ??
+                        product?.name ??
+                        "Producto histórico";
+                      return (
+                        <div
+                          key={item.id}
+                          className="grid grid-cols-[minmax(0,1fr)_56px_150px] items-center gap-3 px-4 py-2 text-sm"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate" title={nombre}>
+                              {nombre}
                             </span>
-                          )}
-                        </span>
-                        <span>{item.quantity}</span>
-                        <span className="text-right font-medium">
-                          {money(lineTotal)}
-                        </span>
-                      </div>
-                    );
-                  })}
+                            {barcode ||
+                            (item.productId && item.lotId === null) ? (
+                              <span className="flex items-center gap-2">
+                                {barcode ? (
+                                  <span className="font-mono text-[11px] text-slate-400">
+                                    {barcode}
+                                  </span>
+                                ) : null}
+                                {item.productId && item.lotId === null && (
+                                  <span
+                                    className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                                    title="Se vendió sin conexión y, al sincronizar, no había stock para descontar. Revisalo en las notificaciones."
+                                  >
+                                    Sin stock al sincronizar
+                                  </span>
+                                )}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="text-center tabular-nums">
+                            {item.quantity}
+                          </span>
+                          <span className="flex items-center justify-end gap-2 text-right">
+                            {ahorro > 0 ? (
+                              <>
+                                <span className="text-[11px] text-slate-400 line-through tabular-nums">
+                                  {money(descuento.subtotalMinor)}
+                                </span>
+                                <span className="font-semibold tabular-nums">
+                                  {money(lineTotal)}
+                                </span>
+                                <TooltipFlotante
+                                  label={`Ver el descuento de ${nombre}`}
+                                  className="size-5 shrink-0 text-rose-700 hover:bg-rose-50"
+                                  trigger={
+                                    <BadgePercent
+                                      size={15}
+                                      aria-hidden="true"
+                                    />
+                                  }
+                                >
+                                  <DescuentoDeRenglonDetalle
+                                    ofertas={ofertasDeProducto(
+                                      selectedSale.offers ?? [],
+                                      item.productId,
+                                    )}
+                                    subtotalMinor={descuento.subtotalMinor}
+                                    ofertasMinor={descuento.ofertasMinor}
+                                    descuentoMinor={descuento.descuentoMinor}
+                                    totalMinor={lineTotal}
+                                  />
+                                </TooltipFlotante>
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-semibold tabular-nums">
+                                  {money(lineTotal)}
+                                </span>
+                                <span aria-hidden className="size-5 shrink-0" />
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 <SalePaymentSummary payments={selectedSale.payments} />
               </div>
@@ -8466,6 +8777,20 @@ function SalesHistory({
                       total={money(selectedSale.totalMinor)}
                       status={selectedSale.status}
                       documentType={selectedSale.documentType}
+                      desglose={desgloseVenta(selectedSale)}
+                      infoOfertas={
+                        selectedSale.offers?.length ? (
+                          <TooltipFlotante
+                            label="Ver qué ofertas se aplicaron"
+                            className="size-4 text-rose-700 hover:bg-rose-100"
+                            trigger={<Info size={13} aria-hidden="true" />}
+                          >
+                            <OfertasDeVentaDetalle
+                              offers={selectedSale.offers}
+                            />
+                          </TooltipFlotante>
+                        ) : undefined
+                      }
                     />
                     <p className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
                       Venta hecha sin conexión: está guardada en esta PC y se
@@ -8492,6 +8817,20 @@ function SalesHistory({
                       total={money(selectedSale.totalMinor)}
                       status={selectedSale.status}
                       documentType={selectedSale.documentType}
+                      desglose={desgloseVenta(selectedSale)}
+                      infoOfertas={
+                        selectedSale.offers?.length ? (
+                          <TooltipFlotante
+                            label="Ver qué ofertas se aplicaron"
+                            className="size-4 text-rose-700 hover:bg-rose-100"
+                            trigger={<Info size={13} aria-hidden="true" />}
+                          >
+                            <OfertasDeVentaDetalle
+                              offers={selectedSale.offers}
+                            />
+                          </TooltipFlotante>
+                        ) : undefined
+                      }
                     />
                     <div className="flex items-center gap-2">
                       <button

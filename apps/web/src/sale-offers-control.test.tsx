@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SaleOffersControl } from "./sale-offers-control";
+import { SaleOffersControl, TablaOfertasVenta } from "./sale-offers-control";
 import { SaleCurrentPanel } from "./sale-current-panel";
 
 describe("ofertas de la venta en el pie", () => {
@@ -71,5 +71,40 @@ describe("ofertas de la venta en el pie", () => {
     // El control reemplaza al título: no suma otro elemento al pie.
     expect(html).toContain("Título que abre");
     expect(html).not.toContain("<span>Ahorro por ofertas</span>");
+  });
+});
+
+describe("tabla de ofertas de la venta (SISTEMA-104)", () => {
+  it("muestra nombre, descuento, ahorro, acción y el total ahorrado", () => {
+    const html = renderToStaticMarkup(
+      <TablaOfertasVenta
+        aplicadas={[
+          {
+            id: "o1",
+            label: "Desde $100.000 -10%",
+            nombre: "supera los 100k",
+            ahorroMinor: 1_062_500,
+          },
+          { id: "o3", label: "2x1", nombre: "2x1 jabón", ahorroMinor: 37_500 },
+        ]}
+        quitadas={[{ id: "o2", label: "3x2", nombre: "3x2 shampoo" }]}
+        onQuitar={() => {}}
+        onAplicar={() => {}}
+      />,
+    );
+    for (const columna of ["Oferta", "Descuento", "Ahorro"])
+      expect(html).toContain(`>${columna}</th>`);
+    expect(html).toContain("supera los 100k");
+    expect(html).toContain("Desde $100.000 -10%");
+    expect(html).toMatch(/−\$\s10\.625,00/);
+    expect(html).toContain("Total ahorrado");
+    expect(html).toMatch(/−\$\s11\.000,00/);
+    expect(html).toContain(
+      'aria-label="Quitar la oferta supera los 100k de la venta"',
+    );
+    expect(html).toContain(
+      'aria-label="Volver a aplicar la oferta 3x2 shampoo"',
+    );
+    expect(html).toContain("line-through");
   });
 });

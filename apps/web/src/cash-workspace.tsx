@@ -424,7 +424,7 @@ export function CashWorkspace({
                 organizationId={organizationId}
                 branchId={branchId}
                 id={closure.id}
-                label={`${closure.cashRegisterName} · ${new Date(closure.closedAt!).toLocaleString("es-AR")}`}
+                label={`${closure.cashRegisterName} · ${new Date(closure.closedAt!).toLocaleString("es-AR", { hourCycle: "h23" })}`}
                 archived={archived}
                 done={() => {
                   void loadClosures().catch((cause: unknown) =>

@@ -70,30 +70,48 @@ export function SaleDocumentChoice({
           </button>
         )}
       </div>
-      {/* Avisos de la factura elegida. */}
-      <div>
-        {value === "INVOICE" &&
-          !invoiceDisabled &&
-          environment === "HOMOLOGATION" && (
-            <p className="mt-1.5 text-[11px] text-amber-700">
-              Homologación · Sin validez fiscal
-            </p>
-          )}
-        {value === "INVOICE" && !invoiceDisabled && sinCaja && (
-          <p className="mt-1.5 text-[11px] text-amber-700">
-            Sin caja abierta: la factura se emite al incorporar el cobro a una
-            caja.
-          </p>
-        )}
-        {value === "INVOICE" && !invoiceDisabled && summary && (
+      {/* Una sola línea de alto fijo, siempre reservada, para que el cobro no
+          cambie de tamaño al pasar de comprobante interno a factura
+          (SISTEMA-104). Si no entra, se corta y el título la muestra entera. */}
+      {(() => {
+        const avisos: { texto: string; alerta: boolean }[] = [];
+        if (value === "INTERNAL")
+          avisos.push({
+            texto:
+              "No va a ARCA · Se puede facturar después desde el historial",
+            alerta: false,
+          });
+        else if (!invoiceDisabled) {
+          if (environment === "HOMOLOGATION")
+            avisos.push({
+              texto: "Homologación · Sin validez fiscal",
+              alerta: true,
+            });
+          if (sinCaja)
+            avisos.push({
+              texto:
+                "Sin caja abierta: se emite al incorporar el cobro a una caja",
+              alerta: true,
+            });
+          if (summary) avisos.push({ texto: summary, alerta: false });
+        }
+        return (
           <p
-            className="mt-1.5 truncate text-[11px] text-slate-500"
-            title={summary}
+            className="mt-1.5 h-4 truncate text-[11px] leading-4"
+            title={avisos.map((aviso) => aviso.texto).join(" · ") || undefined}
           >
-            {summary}
+            {avisos.map((aviso, index) => (
+              <span
+                key={aviso.texto}
+                className={aviso.alerta ? "text-amber-700" : "text-slate-500"}
+              >
+                {index > 0 && <span className="text-slate-300"> · </span>}
+                {aviso.texto}
+              </span>
+            ))}
           </p>
-        )}
-      </div>
+        );
+      })()}
     </fieldset>
   );
 }

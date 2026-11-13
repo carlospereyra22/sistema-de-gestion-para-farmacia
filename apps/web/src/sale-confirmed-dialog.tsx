@@ -47,7 +47,9 @@ const FORMAT_LABELS: Record<PrintFormat, string> = {
   A4: "A4",
 };
 // Hoja A4 (794 × 1123 px) dentro de la columna de vista previa.
-const A4_SCALE = 316 / 794;
+// Ancho útil de la columna de vista previa (360 px menos márgenes) sobre el
+// ancho de una hoja A4 a 96 dpi.
+const A4_SCALE = 336 / 794;
 
 export function SaleConfirmedDialog({
   saleId,
@@ -145,12 +147,16 @@ export function SaleConfirmedDialog({
             onNewSale();
           }
         }}
-        className={`sale-confirmed-dialog relative grid max-h-full w-full overflow-y-auto overflow-x-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-200 ${previewOpen ? "max-w-[900px] sm:grid-cols-[minmax(0,1fr)_340px]" : "max-w-[560px]"}`}
+        className={`sale-confirmed-dialog relative grid max-h-full w-full overflow-y-auto overflow-x-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-200 ${previewOpen ? "max-w-[920px] sm:grid-cols-[minmax(0,1fr)_360px]" : "max-w-[560px]"}`}
       >
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-gradient-to-br from-emerald-50 to-teal-50"
-        />
+        {/* Adorno de la esquina: con la vista previa abierta esa esquina es
+            la del ticket y lo tapaba (SISTEMA-104). */}
+        {!previewOpen && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-gradient-to-br from-emerald-50 to-teal-50"
+          />
+        )}
         <button
           type="button"
           aria-label="Cerrar"
@@ -329,7 +335,10 @@ export function SaleConfirmedDialog({
                 ? "Vista previa · Hoja A4"
                 : "Vista previa del ticket · 80 mm"}
             </p>
-            <div className="m-3 mt-2 min-h-[360px] flex-1 overflow-hidden rounded-lg bg-white shadow-inner sm:h-[480px] sm:flex-none">
+            {/* Ocupa todo el alto del panel (SISTEMA-104). Con alto base 0 la
+                hoja A4, que mide 1123 px antes de escalarse, no estira el
+                popup: solo toma lo que sobra. */}
+            <div className="m-3 mt-2 min-h-[360px] flex-1 overflow-hidden rounded-lg bg-white shadow-inner sm:h-0">
               {ticket && previewA4 ? (
                 <iframe
                   title="Vista previa del comprobante A4"

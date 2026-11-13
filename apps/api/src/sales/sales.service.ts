@@ -37,6 +37,10 @@ import type { ThermalTicket } from "@gestion/contracts";
 import { groupTicketItems } from "./group-ticket-items";
 import { manualConcept } from "./manual-concept";
 import { saleUnitPrice } from "./sale-unit-price";
+import {
+  whereHistorialVentas,
+  type FiltroHistorialVentas,
+} from "./historial-ventas";
 import { cargarOfertasMotor } from "../offers/ofertas-carga";
 import { calcularOfertas } from "../offers/ofertas-motor";
 import {
@@ -213,6 +217,86 @@ export class SalesService {
         },
       })
       .then((sales) => sales.map((sale) => this.serialize(sale)));
+  }
+
+  /**
+   * Historial paginado y filtrado en el servidor (SISTEMA-104): llega a
+   * todas las ventas de la sucursal, no solo a las últimas 200 de `list`.
+   */
+  async history(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    filtro: FiltroHistorialVentas,
+    page: number,
+    pageSize: number,
+  ) {
+    await this.assert(actorId, organizationId, "SALE_READ");
+    const where = whereHistorialVentas(organizationId, branchId, filtro);
+    const [total, sales] = await this.prisma.$transaction([
+      this.prisma.sale.count({ where }),
+      this.prisma.sale.findMany({
+        where,
+        orderBy: [
+          { completedAt: { sort: "desc", nulls: "last" } },
+          { id: "desc" },
+        ],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          items: true,
+          payments: true,
+          fiscalTrial: true,
+          // Qué ofertas se aplicaron, para el detalle del historial.
+          offers: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              offerId: true,
+              name: true,
+              label: true,
+              type: true,
+              units: true,
+              discountMinor: true,
+              items: {
+                select: {
+                  productId: true,
+                  units: true,
+                  grossMinor: true,
+                  discountMinor: true,
+                },
+              },
+            },
+          },
+          fiscalDocuments: {
+            where: { kind: "INVOICE" },
+            select: {
+              status: true,
+              point: true,
+              number: true,
+              voucherType: true,
+              deferredReason: true,
+            },
+          },
+        },
+      }),
+    ]);
+    return {
+      items: sales.map((sale) => ({
+        ...this.serialize(sale),
+        offers: sale.offers.map((offer) => ({
+          ...offer,
+          discountMinor: offer.discountMinor.toString(),
+          items: offer.items.map((item) => ({
+            ...item,
+            grossMinor: item.grossMinor.toString(),
+            discountMinor: item.discountMinor.toString(),
+          })),
+        })),
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async invoice(
