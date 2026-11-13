@@ -5,6 +5,7 @@ import {
   ofertasDelCarrito,
   ofertasDelProducto,
   ofertasParaEnviar,
+  productosDeAplicacion,
 } from "./ofertas-carrito";
 import type { OfertaMotor } from "./ofertas-motor";
 
@@ -255,5 +256,24 @@ describe("sugerencias que dicen qué gana el cliente", () => {
         },
       }),
     ).toBe("Agregá Shampoo y ahorrás $10.075 (10%) con «promo»");
+  });
+});
+
+describe("productos que alcanzó una oferta (cobro)", () => {
+  it("suma las unidades de cada producto y respeta el orden", () => {
+    const nombres: Record<string, string> = { a: "Ibuprofeno", b: "Agua" };
+    expect(
+      productosDeAplicacion(
+        [
+          { productId: "a", units: 2 },
+          { productId: "b", units: 1 },
+          { productId: "a", units: 1 },
+        ],
+        (id) => nombres[id] ?? "Producto",
+      ),
+    ).toEqual([
+      { nombre: "Ibuprofeno", unidades: 3 },
+      { nombre: "Agua", unidades: 1 },
+    ]);
   });
 });

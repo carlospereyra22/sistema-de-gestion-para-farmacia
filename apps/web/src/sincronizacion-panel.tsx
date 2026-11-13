@@ -49,6 +49,7 @@ const pesos = (minor: string) =>
   });
 const hora = (iso: string) =>
   new Date(iso).toLocaleString("es-AR", {
+    hourCycle: "h23",
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",

@@ -65,3 +65,5 @@ API: `GET/PATCH organizations/:id/document-template` (`?branchId=` devuelve el f
 ## Ofertas en el ticket (SISTEMA-103, 12/11/2026)
 
 El contrato `ThermalTicket` suma `offerDiscountMinor`, `offers` (etiqueta, nombre e importe) y `savingsMinor`. ESC/POS, el ticket del navegador y el A4 imprimen un renglón por oferta ("OFERTA 2X1 SHAMPOO − $X"), el resto como DESCUENTO y "USTED AHORRÓ $X" al pie. `discountMinor` sigue siendo el descuento total: un agente anterior ignora los campos nuevos e imprime SUBTOTAL − DESCUENTO = TOTAL. El agrupado de renglones no cambia. El componente de impresión debe reiniciarse para tomar el nuevo renglón.
+
+En el ticket del navegador (vista previa e impresión por navegador), los renglones con importe reservan el ancho completo del número y es el texto el que baja de línea, así una oferta con nombre largo no parte el importe; ofertas y descuento llevan "- " como en ESC/POS (SISTEMA-104).

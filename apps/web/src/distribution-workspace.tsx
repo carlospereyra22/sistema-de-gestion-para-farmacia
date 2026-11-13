@@ -616,8 +616,10 @@ export function DistributionWorkspace({
                   }}
                   className="block w-full border-b border-slate-100 p-3 text-left text-sm"
                 >
-                  {new Date(doc.createdAt).toLocaleString("es-AR")} ·{" "}
-                  {doc.destination} · {doc.items.length} lotes{" "}
+                  {new Date(doc.createdAt).toLocaleString("es-AR", {
+                    hourCycle: "h23",
+                  })}{" "}
+                  · {doc.destination} · {doc.items.length} lotes{" "}
                   {doc.reversedAt ? "· Revertida" : ""}
                 </button>
               ))}

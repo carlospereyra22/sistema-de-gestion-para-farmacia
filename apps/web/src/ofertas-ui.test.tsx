@@ -503,3 +503,51 @@ describe("bloque del producto en Ventas con oferta", () => {
     expect(html).not.toContain("Ver producto");
   });
 });
+
+describe("pasador con ofertas cumplidas (SISTEMA-104)", () => {
+  const aplicada = {
+    id: "o9",
+    label: "Desde $100.000 -10%",
+    nombre: "supera los 100k",
+    ahorroMinor: 1_062_500,
+  };
+
+  it("una oferta cumplida no hace desaparecer el pasador y mantiene su tamaño", () => {
+    const html = renderToStaticMarkup(
+      <SaleCartOffers
+        onCerrarAviso={() => {}}
+        onDescartar={() => {}}
+        sugerencias={[]}
+        aplicadas={[aplicada]}
+      />,
+    );
+    expect(html).toContain('aria-label="Ofertas de la venta"');
+    expect(html).toContain("Oferta aplicada");
+    expect(html).toContain("bg-rose-100");
+    expect(html).toMatch(/ahorrás \$\s10\.625,00/);
+    // Mismo ancho que una sugerencia: lugar de la ✕ y de las flechas.
+    expect(html).toContain("size-[22px]");
+    expect(html).toContain("w-[96px]");
+  });
+
+  it("las sugerencias van primero y las aplicadas suman al contador", () => {
+    const html = renderToStaticMarkup(
+      <SaleCartOffers
+        onCerrarAviso={() => {}}
+        onDescartar={() => {}}
+        sugerencias={[
+          {
+            id: "o2",
+            label: "3x2",
+            nombre: "3x2 jabón",
+            agregar: "Agregá 1 más",
+            gana: "y te llevás 1 gratis (3x2)",
+          },
+        ]}
+        aplicadas={[aplicada]}
+      />,
+    );
+    expect(html).toContain("y te llevás 1 gratis (3x2)");
+    expect(html).toContain("1/2");
+  });
+});

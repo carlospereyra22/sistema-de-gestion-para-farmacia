@@ -401,6 +401,7 @@ function HistoryDialog({
                       </span>
                       <span className="mt-1 block pl-5 text-xs text-slate-500">
                         {new Date(row.date).toLocaleString("es-AR", {
+                          hourCycle: "h23",
                           timeZone: "America/Argentina/Buenos_Aires",
                         })}
                         {row.amount !== undefined

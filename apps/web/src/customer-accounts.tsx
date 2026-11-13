@@ -1111,6 +1111,7 @@ export function CustomerAccounts({
                                 <td className="px-3 py-2 whitespace-nowrap">
                                   {new Date(movement.createdAt).toLocaleString(
                                     "es-AR",
+                                    { hourCycle: "h23" },
                                   )}
                                 </td>
                                 <td className="px-3 py-2">
@@ -1400,7 +1401,9 @@ function PurchaseDetail({
         </h4>
         <span className="text-xs text-slate-500">
           {detail.completedAt
-            ? new Date(detail.completedAt).toLocaleString("es-AR")
+            ? new Date(detail.completedAt).toLocaleString("es-AR", {
+                hourCycle: "h23",
+              })
             : ""}
           {detail.status === "CANCELLED" ? " · Anulada" : ""}
         </span>

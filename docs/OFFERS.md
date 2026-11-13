@@ -173,14 +173,24 @@ la venta sin conexión.
   precio con la oferta; en un combo, cada producto, el precio de lista del
   combo y el del combo. Detalle con historial y ventas.
 - Ventas: etiqueta y ahorro por renglón, subtotal tachado, «Ahorro por
-  ofertas» en el pie y en el cobro, «El cliente ahorró» en la venta
-  confirmada. En el catálogo, la etiqueta de la oferta muestra al pasar el
+  ofertas» en el pie y en el cobro (en el cobro, un ícono ⓘ explica al pasar
+  el mouse o con Tab qué ofertas descuentan, a qué productos y cuánto; se
+  quitan desde el carrito), «El cliente ahorró» en la venta
+  confirmada. En el historial, la lista tiene la columna «Ahorro» (importe y si fue
+  oferta, descuento o ambos) y el detalle tacha el precio de cada renglón y desglosa
+  subtotal, ahorro por ofertas y descuento (SISTEMA-104; sale de
+  `discountMinor` y `offerDiscountMinor` de cada renglón). Qué oferta se
+  aplicó se ve al pasar el mouse: en cada renglón (lista, oferta, descuento y
+  lo cobrado) y junto al ahorro (cada oferta con su etiqueta y ahorro). En el catálogo, la etiqueta de la oferta muestra al pasar el
   mouse sus productos. El bloque del producto elegido muestra primero la
   oferta (en un combo, hasta 5 productos con su precio, el precio del combo y
   «Agregar combo») y «Ver producto» vuelve a la cara con la foto. En el
   carrito, una línea por oferta a completar dice qué gana el cliente («Agregá
   Shampoo y ahorrás $10.075 (10%)», «Agregá 1 más y te llevás 1 gratis»), con
-  el botón para completarla y la ✕ para descartarla en esa venta. Si el
+  el botón para completarla y la ✕ para descartarla en esa venta. Después de
+  las sugerencias, el mismo pasador muestra las ofertas ya aplicadas (con ✓)
+  con su ahorro; al cumplirse una sugerencia salta a su versión aplicada, así
+  el pasador no desaparece (SISTEMA-104). Si el
   ahorro cambia sin que cambie el carrito (venció una oferta, se reanudó la
   venta), se avisa. Un precio manual sobre un producto en oferta avisa que la
   oferta no se aplica.
@@ -224,7 +234,9 @@ sobre los productos elegidos (o todos) y con la vigencia de siempre (ej.
 - Web: el carrito sólo la sugiere («Pagando con efectivo… ahorrás $X (se
   aplica al cobrar)»). En la ventana de cobro el total se recalcula con los
   pagos cargados y el que se está cargando; el importe precargado se actualiza
-  solo si la cajera no lo tocó (`lib/ofertas-cobro.ts`). Al confirmar se
+  solo si la cajera no lo tocó (`lib/ofertas-cobro.ts`). Al cambiar de medio,
+  un importe que cubría todo (exacto o con vuelto) pasa a ser lo que falta con
+  el nuevo medio; solo uno menor se conserva como pago mixto (SISTEMA-104). Al confirmar se
   recalcula con los pagos finales y eso es lo que se manda.
 
 ## No combinables: gana la mejor (12/11/2026)

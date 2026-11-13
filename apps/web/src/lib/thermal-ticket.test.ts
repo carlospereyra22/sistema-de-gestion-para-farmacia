@@ -109,4 +109,31 @@ describe("ofertas en el ticket (SISTEMA-103)", () => {
     expect(html).toContain("DESCUENTO");
     expect(html).toContain("USTED AHORRÓ");
   });
+
+  it("en los renglones con importe el número no se parte y las ofertas restan", () => {
+    const html = thermalTicketHtml(
+      {
+        ...ticket,
+        subtotalMinor: "10625000",
+        discountMinor: "1062500",
+        offerDiscountMinor: "1062500",
+        offers: [
+          {
+            label: "Desde $100.000 -10%",
+            name: "supera los 100k",
+            amountMinor: "1062500",
+          },
+        ],
+        totalMinor: "9562500",
+      },
+      "https://gestion.test",
+    );
+    expect(html).toContain(
+      ".row.amount{grid-template-columns:minmax(0,1fr) max-content}",
+    );
+    expect(html).toContain(".row.amount>span:last-child{white-space:nowrap}");
+    expect(html).toContain(
+      '<div class="row amount"><span>Oferta Desde $100.000 -10% supera los 100k</span><span>- <span style="font-weight:400">$</span> 10.625,00</span></div>',
+    );
+  });
 });

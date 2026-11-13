@@ -131,6 +131,7 @@ export function CashLatestClosure({
         <p className="cash-metric-note">
           {closure
             ? new Date(closure.closedAt!).toLocaleTimeString("es-AR", {
+                hourCycle: "h23",
                 hour: "2-digit",
                 minute: "2-digit",
               })

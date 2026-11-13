@@ -7,6 +7,7 @@ import {
   CircleCheck,
   Coins,
   CreditCard,
+  Info,
   ShoppingBag,
   ShoppingCart,
   Tag,
@@ -48,14 +49,87 @@ const editableTarget = (target: EventTarget) =>
     ),
   );
 
+/** Una oferta aplicada, explicada en el cobro (SISTEMA-104). */
+export type OfertaDelCobro = {
+  id: string;
+  label: string;
+  nombre: string;
+  ahorroMinor: number;
+  productos: { nombre: string; unidades: number }[];
+};
+
+/**
+ * Ícono junto al ahorro que, al pasar el mouse o con Tab, explica qué ofertas
+ * descuentan. Es solo CSS (hover/focus) para no sumar estado; quitar ofertas
+ * sigue siendo desde el carrito.
+ */
+function OfertasDelCobroInfo({ ofertas }: { ofertas: OfertaDelCobro[] }) {
+  const tooltipId = useId();
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label="Ver por qué se descuenta"
+        aria-describedby={tooltipId}
+        className="grid size-5 place-items-center rounded-full text-teal-700 outline-none hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-teal-300"
+      >
+        <Info size={14} aria-hidden="true" />
+      </button>
+      <span
+        id={tooltipId}
+        role="tooltip"
+        className="invisible absolute left-1/2 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white text-left opacity-0 shadow-lg transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+      >
+        <span className="block border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">
+          Ofertas aplicadas en esta venta
+        </span>
+        <span className="block max-h-64 divide-y divide-slate-100 overflow-y-auto">
+          {/* Igual que la lista del carrito: arriba el nombre y el ahorro,
+              abajo la etiqueta y los productos. */}
+          {ofertas.map((oferta) => (
+            <span key={oferta.id} className="block px-3 py-2">
+              <span className="flex items-baseline gap-3">
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">
+                  {oferta.nombre}
+                </span>
+                <span className="shrink-0 text-xs font-semibold tabular-nums text-rose-700">
+                  −{money(oferta.ahorroMinor)}
+                </span>
+              </span>
+              <span className="mt-1 flex">
+                <span className="min-w-0 truncate rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">
+                  {oferta.label}
+                </span>
+              </span>
+              {oferta.productos.map((producto) => (
+                <span
+                  key={producto.nombre}
+                  className="mt-0.5 block truncate text-[11px] text-slate-500"
+                >
+                  {producto.unidades} × {producto.nombre}
+                </span>
+              ))}
+            </span>
+          ))}
+        </span>
+        <span className="block border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+          Para quitar una oferta, volvé al carrito.
+        </span>
+      </span>
+    </span>
+  );
+}
+
 function TotalDetail({
   Icon,
   label,
   value,
+  info,
 }: {
   Icon: typeof ShoppingBag;
   label: string;
   value: string;
+  info?: ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -63,7 +137,10 @@ function TotalDetail({
         <Icon size={19} aria-hidden="true" />
       </span>
       <div>
-        <p className="text-xs text-slate-500">{label}</p>
+        <p className="flex items-center gap-1 text-xs text-slate-500">
+          {label}
+          {info}
+        </p>
         <p className="text-[15px] font-semibold tabular-nums text-slate-800">
           {value}
         </p>
@@ -78,6 +155,8 @@ export function SaleCheckoutDialog({
   subtotalMinor,
   discountMinor,
   offerSavingsMinor = 0,
+  showOfferSavings = false,
+  offers = [],
   totalMinor,
   paidMinor,
   payments,
@@ -102,6 +181,10 @@ export function SaleCheckoutDialog({
   discountMinor: number;
   /** Ahorro por ofertas (SISTEMA-103), aparte del descuento. */
   offerSavingsMinor?: number;
+  /** Mostrar la columna del ahorro aunque sea $ 0 (SISTEMA-104). */
+  showOfferSavings?: boolean;
+  /** Detalle de las ofertas que forman el ahorro (SISTEMA-104). */
+  offers?: OfertaDelCobro[];
   totalMinor: number;
   paidMinor: number;
   payments: { method: SalesPaymentMethod; amountMinor: number }[];
@@ -237,11 +320,16 @@ export function SaleCheckoutDialog({
                   label="Subtotal"
                   value={money(subtotalMinor)}
                 />
-                {offerSavingsMinor > 0 && (
+                {(offerSavingsMinor > 0 || showOfferSavings) && (
                   <TotalDetail
                     Icon={Tag}
                     label="Ahorro por ofertas"
                     value={money(offerSavingsMinor)}
+                    info={
+                      offers.length ? (
+                        <OfertasDelCobroInfo ofertas={offers} />
+                      ) : undefined
+                    }
                   />
                 )}
                 <TotalDetail
@@ -360,9 +448,8 @@ export function SaleCheckoutDialog({
 
           {showAmount ? (
             <div className="rounded-2xl border border-slate-200 px-5 py-4">
-              <div
-                className={`grid gap-4 ${cashEntry || shortMinor > 0 ? "sm:grid-cols-[minmax(0,1fr)_250px]" : ""}`}
-              >
+              {/* Siempre dos columnas: cambiar de medio no cambia la forma. */}
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_250px]">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3">
                     <label
@@ -455,12 +542,20 @@ export function SaleCheckoutDialog({
                         </button>
                       ))}
                     </div>
-                  ) : null}
+                  ) : (
+                    // Mismo alto que los montos rápidos del efectivo.
+                    <p className="mt-2.5 flex h-8 items-center text-xs text-slate-500">
+                      Para un pago mixto, ingresá un importe menor y completá
+                      con otro medio.
+                    </p>
+                  )}
                 </div>
                 {/* Mismo lugar para el vuelto o lo que falta: la ventana no crece. */}
                 {/* Mismo panel para el vuelto o lo que falta: cambia el
                     contenido, no la forma, y la ventana no salta. */}
-                {cashEntry || shortMinor > 0 ? (
+                {/* Con tarjeta o transferencia no hay vuelto: muestra lo que
+                    falta, en gris si el importe cubre todo. */}
+                {showAmount ? (
                   <div
                     aria-live="polite"
                     className="flex flex-col justify-center rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100"
@@ -477,12 +572,18 @@ export function SaleCheckoutDialog({
                               : "text-slate-400"
                         }
                       />
-                      {shortMinor > 0 ? "Faltan" : "Vuelto"}
+                      {shortMinor > 0 || !cashEntry ? "Faltan" : "Vuelto"}
                     </p>
                     <p
-                      className={`mt-0.5 truncate text-[28px] font-bold leading-9 tabular-nums transition-colors ${shortMinor > 0 ? "text-amber-700" : deliveredChange > 0 ? "text-teal-700" : "text-slate-300"}`}
+                      className={`mt-0.5 truncate text-[28px] font-bold leading-9 tabular-nums transition-colors ${shortMinor > 0 ? "text-amber-700" : cashEntry && deliveredChange > 0 ? "text-teal-700" : "text-slate-300"}`}
                     >
-                      {money(shortMinor > 0 ? shortMinor : deliveredChange)}
+                      {money(
+                        shortMinor > 0
+                          ? shortMinor
+                          : cashEntry
+                            ? deliveredChange
+                            : 0,
+                      )}
                     </p>
                     {shortMinor > 0 ? (
                       <>

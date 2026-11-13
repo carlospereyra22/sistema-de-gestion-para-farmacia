@@ -97,6 +97,26 @@ export function ofertasDelCarrito(
   };
 }
 
+/**
+ * Productos que alcanzó una oferta, con sus unidades sumadas, para explicar el
+ * ahorro en el cobro (SISTEMA-104). Mantiene el orden en que aparecen.
+ */
+export function productosDeAplicacion(
+  items: readonly { productId: string; units: number }[],
+  nombre: (productId: string) => string,
+): { nombre: string; unidades: number }[] {
+  const porProducto = new Map<string, number>();
+  for (const item of items)
+    porProducto.set(
+      item.productId,
+      (porProducto.get(item.productId) ?? 0) + item.units,
+    );
+  return [...porProducto].map(([productId, unidades]) => ({
+    nombre: nombre(productId),
+    unidades,
+  }));
+}
+
 /** Las ofertas aplicadas, como las manda una venta sin conexión. */
 export function ofertasParaEnviar(aplicaciones: readonly AplicacionOferta[]) {
   return aplicaciones.map((aplicacion) => ({

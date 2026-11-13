@@ -389,3 +389,15 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
 - No combinables (12/11/2026, decisión del usuario «según combinable, pero gana la mejor»): si una oferta de toda la venta queda bloqueada por otra no combinable, el motor compara con el cálculo sin la que la bloquea y se queda con el de mayor ahorro total.
 - Por monto de compra (12/11/2026, pedido del usuario): tipo `SPEND_THRESHOLD`, mínimo medido sobre lo que entra en la oferta ya con las demás ofertas, % o pesos una vez por venta, después de las ofertas por producto y antes de las por medio de pago; va la de mayor ahorro y respeta «combinable».
 - La web no ofrece «Duplicar» (12/11/2026, pedido del usuario); el endpoint sigue.
+
+# Historial de ventas paginado en el servidor (13/11/2026, SISTEMA-104)
+
+- Problema: `GET sales` devuelve solo las últimas 200 ventas y la web filtraba y paginaba sobre esas. En una sucursal con 366 ventas, las 166 más viejas (por ejemplo, una del 17/10 que sí figuraba en el cierre de caja) no se podían ver, reimprimir, anular ni facturar desde el historial. Los datos nunca se perdieron.
+- `GET sales/history` filtra y pagina en el servidor sobre todas las ventas de la sucursal: `page`, `pageSize` (hasta 100), `from`/`to` (días civiles de Argentina, inclusive, sobre `completedAt`), `status`, `documentType`, `method` (alguno de los pagos) y `q` (comienzo del código interno, buscado como rango de uuid sobre la clave primaria). Devuelve `{ items, total, page, pageSize }` y cada venta trae sus ofertas aplicadas (`SaleOffer` con sus renglones). Orden: `completedAt` descendente (nulos al final) e id.
+- `GET sales` sigue igual (últimas 200) para el inicio, los avisos de facturas en espera y la copia local. El historial pide cada página; las ventas de la PC sin enviar van arriba de la primera página y, sin conexión, se filtra la copia local en la PC con las mismas reglas (`lib/historial-local.ts`). Exportar CSV recorre todas las páginas del filtro.
+- Como `GET sales`, el historial lleva `@AllowOwnerWhenBlocked`: el dueño sigue viendo sus ventas con la farmacia bloqueada.
+- No se agregó índice: alcanza el de `(organizationId, branchId, createdAt)` para acotar la sucursal. Si una sucursal llega a cientos de miles de ventas, evaluar un índice sobre `completedAt`.
+
+# Horas en formato de 24 h (13/11/2026, SISTEMA-104)
+
+- En `es-AR`, `toLocaleString` y `toLocaleTimeString` usan reloj de 12 h sin «a. m./p. m.»: una venta de las 20:14 se veía «08:14» y un cierre de caja parecía anterior a su apertura (00:31 se veía «12:31»). Toda fecha con hora lleva `hourCycle: "h23"` (37 lugares de la web y el agente de impresión). `lib/formato-hora.test.ts` falla si vuelve a aparecer una fecha con `es-AR` sin opciones.

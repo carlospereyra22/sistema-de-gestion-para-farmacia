@@ -1332,8 +1332,10 @@ export function PurchasesWorkspace({
                   className="mb-3 rounded-lg border p-3 text-sm"
                 >
                   <p className="font-medium">
-                    {new Date(r.createdAt).toLocaleString("es-AR")} ·{" "}
-                    {r.actorName}
+                    {new Date(r.createdAt).toLocaleString("es-AR", {
+                      hourCycle: "h23",
+                    })}{" "}
+                    · {r.actorName}
                   </p>
                   {r.notes && <p>{r.notes}</p>}
                   {r.items.map((i) => (
@@ -1359,8 +1361,10 @@ export function PurchasesWorkspace({
                   </p>
                   {detail.legacyMovements.map((m) => (
                     <p key={m.id}>
-                      {new Date(m.occurredAt).toLocaleString("es-AR")} ·{" "}
-                      {m.quantity} un. · Lote {m.lotNumber}
+                      {new Date(m.occurredAt).toLocaleString("es-AR", {
+                        hourCycle: "h23",
+                      })}{" "}
+                      · {m.quantity} un. · Lote {m.lotNumber}
                     </p>
                   ))}
                 </section>
