@@ -38,7 +38,7 @@ import { ProductFilterSelect } from "./product-filter-select";
 
 const groupStyle: Record<PlatformAuditGroup, [LucideIcon, string]> = {
   soporte: [LifeBuoy, "bg-violet-50 text-violet-700"],
-  cobros: [Wallet, "bg-[#e8faf5] text-[#087f70]"],
+  cobros: [Wallet, "bg-marca-970 text-marca-535"],
   farmacias: [Building2, "bg-sky-50 text-sky-700"],
   accesos: [KeyRound, "bg-amber-50 text-amber-700"],
   arca: [Landmark, "bg-slate-100 text-slate-600"],

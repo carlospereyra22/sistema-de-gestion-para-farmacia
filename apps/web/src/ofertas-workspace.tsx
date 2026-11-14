@@ -539,10 +539,10 @@ export function OfertaDetalle({
         event.preventDefault();
         onClose();
       }}
-      className="m-auto w-[min(960px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-[2px]"
+      className="m-auto w-[min(960px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-velo/40 backdrop:backdrop-blur-[2px]"
     >
       <div className="flex max-h-[92dvh] flex-col">
-        <header className="flex shrink-0 items-start gap-3 bg-gradient-to-r from-teal-700 to-teal-600 px-6 py-5 text-white">
+        <header className="tema-claro flex shrink-0 items-start gap-3 bg-gradient-to-r from-teal-700 to-teal-600 px-6 py-5 text-white">
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white/15">
             <BadgePercent size={22} />
           </span>

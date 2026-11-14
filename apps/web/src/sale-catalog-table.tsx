@@ -91,7 +91,7 @@ export function SaleCatalogTable({
                 aria-label={`${product.name}, ${stockLabel}, ${price === undefined ? "sin precio" : money(price)}`}
                 onClick={() => onSelect(product.id)}
                 onDoubleClick={() => onAdd(product.id)}
-                className={`cursor-pointer transition-colors ${selected ? "bg-teal-50/60 shadow-[inset_3px_0_0_#0d9488]" : "hover:bg-slate-50/70"} ${level === "out" ? "opacity-75" : ""}`}
+                className={`cursor-pointer transition-colors ${selected ? "bg-teal-50/60 shadow-[inset_3px_0_0_var(--color-marca-600)]" : "hover:bg-slate-50/70"} ${level === "out" ? "opacity-75" : ""}`}
               >
                 <td className="px-3 py-2.5">
                   <div className="flex min-w-0 items-center gap-3">
@@ -150,7 +150,7 @@ export function SaleCatalogTable({
                     <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700">
                       <span
                         aria-hidden
-                        className="size-[7px] rounded-full bg-[#f6ac43]"
+                        className="size-[7px] rounded-full bg-ambar-798"
                       />
                       {available}
                     </span>

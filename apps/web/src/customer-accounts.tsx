@@ -1289,7 +1289,7 @@ function PaymentConfirmedDialog({
       ref={dialog}
       onCancel={onClose}
       aria-labelledby="payment-confirmed-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
     >
       <div className="flex size-12 items-center justify-center rounded-full bg-teal-100 text-teal-700">
         <ShieldCheck size={25} />

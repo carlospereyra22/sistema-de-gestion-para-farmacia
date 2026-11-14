@@ -48,7 +48,7 @@ export function SoporteSesion({
       onClick={onVolver}
       aria-label={`Volver al panel (estás como ${etiqueta})`}
       title={`Soporte: estás como ${etiqueta}`}
-      className="group fixed bottom-3 left-3 z-[100] inline-flex h-8 items-center gap-0 rounded-full border border-white/10 bg-[#1b2735]/90 px-2 text-slate-200 shadow-[0_4px_14px_rgb(15_23_42_/_28%)] backdrop-blur transition-all duration-200 hover:gap-1.5 hover:bg-[#1b2735] hover:pr-3 hover:text-white focus-visible:gap-1.5 focus-visible:pr-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 motion-reduce:transition-none"
+      className="tema-claro group fixed bottom-3 left-3 z-[100] inline-flex h-8 items-center gap-0 rounded-full border border-white/10 bg-petroleo-268/90 px-2 text-slate-200 shadow-[0_4px_14px_rgb(15_23_42_/_28%)] backdrop-blur transition-all duration-200 hover:gap-1.5 hover:bg-petroleo-268 hover:pr-3 hover:text-white focus-visible:gap-1.5 focus-visible:pr-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 motion-reduce:transition-none"
     >
       <ArrowLeft size={15} aria-hidden="true" className="shrink-0" />
       <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-semibold transition-[max-width] duration-200 group-hover:max-w-40 group-focus-visible:max-w-40 motion-reduce:transition-none">

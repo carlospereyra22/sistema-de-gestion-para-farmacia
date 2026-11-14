@@ -45,7 +45,7 @@ export function PayableDialog({
         e.preventDefault();
         onClose();
       }}
-      className={`m-auto ${confirmation ? "w-[min(440px,calc(100vw-2rem))]" : "w-[min(760px,calc(100vw-2rem))]"} max-h-[90dvh] overflow-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-800 shadow-2xl backdrop:bg-slate-950/35`}
+      className={`m-auto ${confirmation ? "w-[min(440px,calc(100vw-2rem))]" : "w-[min(760px,calc(100vw-2rem))]"} max-h-[90dvh] overflow-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-800 shadow-2xl backdrop:bg-velo/35`}
     >
       {confirmation}
       <div hidden={Boolean(confirmation)}>

@@ -52,7 +52,7 @@ export function CobrosPorMes({
           const fila = mensual[punto.dataIndex];
           if (!fila) return "";
           const [anio, mes] = fila.month.split("-");
-          return `<span style="color:#64748b">${mes}/${anio}</span><br/><b>${ars(fila.amountMinor)}</b>`;
+          return `<span style="color:var(--color-niebla-554)">${mes}/${anio}</span><br/><b>${ars(fila.amountMinor)}</b>`;
         },
       },
       xAxis: {
@@ -115,7 +115,7 @@ export function CobrosPorMes({
         </Suspense>
         {total === 0n && (
           <p className="pointer-events-none absolute inset-0 grid place-items-center">
-            <span className="rounded-full border border-[#dce7ef] bg-white/90 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm">
+            <span className="rounded-full border border-niebla-913 bg-white/90 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm">
               Todavía no hay cobros en estos meses
             </span>
           </p>
@@ -161,7 +161,7 @@ export function EstadoDeFarmacias({
         {grupos.map(({ grupo, etiqueta, descripcion, cantidad }) => (
           <li
             key={grupo}
-            className="flex items-center gap-3 rounded-xl border border-[#e6eef3] px-3 py-2.5"
+            className="flex items-center gap-3 rounded-xl border border-niebla-935 px-3 py-2.5"
           >
             <span
               aria-hidden="true"

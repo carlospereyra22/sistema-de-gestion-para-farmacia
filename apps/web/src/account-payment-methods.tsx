@@ -40,7 +40,7 @@ export function AccountPaymentMethods({
             hidden={hint !== option.value}
             className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 pb-1.5"
           >
-            <span className="block whitespace-nowrap rounded-lg border border-[#d3e5e0] bg-white px-2.5 py-1.5 text-[11px] font-normal leading-4 text-slate-600 shadow-md">
+            <span className="block whitespace-nowrap rounded-lg border border-marca-907 bg-white px-2.5 py-1.5 text-[11px] font-normal leading-4 text-slate-600 shadow-md">
               {option.label}
             </span>
           </span>

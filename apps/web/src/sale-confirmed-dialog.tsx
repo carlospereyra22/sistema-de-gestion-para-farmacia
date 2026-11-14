@@ -28,7 +28,7 @@ const money = (minor: number) =>
 
 const primary = "bg-teal-700 text-white shadow-sm hover:bg-teal-800";
 const secondary =
-  "border border-[#0f9b8e] bg-white text-[#087f70] hover:bg-teal-50";
+  "border border-marca-619 bg-white text-marca-535 hover:bg-teal-50";
 
 const METHOD_LABELS: Record<SalesPaymentMethod, string> = {
   CASH: "Efectivo",
@@ -135,7 +135,7 @@ export function SaleConfirmedDialog({
   };
   const previewA4 = format === "A4" && template;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-velo/35 p-4 backdrop-blur-sm">
       <section
         role="dialog"
         aria-modal="true"

@@ -38,7 +38,7 @@ export function PestanaPausada({
     }
   };
   return (
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-900/60 p-4">
+    <div className="fixed inset-0 z-[100] grid place-items-center bg-velo/60 p-4">
       <section
         role="alertdialog"
         aria-modal="true"

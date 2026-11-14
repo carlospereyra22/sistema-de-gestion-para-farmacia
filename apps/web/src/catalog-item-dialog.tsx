@@ -61,7 +61,7 @@ export function CatalogItemDialog({
         event.preventDefault();
         if (!lock.current) onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl backdrop:bg-velo/40 backdrop:backdrop-blur-sm"
     >
       <div className="flex items-center justify-between">
         <span
@@ -131,7 +131,7 @@ export function CatalogItemDialog({
           </button>
           <button
             disabled={busy || (!deleting && value.trim().length < 2)}
-            className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${deleting ? "bg-rose-600 hover:bg-rose-700" : "bg-[#31826a] hover:bg-[#276c58]"}`}
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${deleting ? "bg-rose-600 hover:bg-rose-700" : "bg-marca-550 hover:bg-marca-482"}`}
           >
             {busy ? "Guardando…" : deleting ? "Eliminar" : "Guardar cambios"}
           </button>

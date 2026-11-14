@@ -17,19 +17,19 @@ export function AccountSummary({
         currency: "ARS",
       }),
       icon: Wallet,
-      color: "#315da8",
+      color: "var(--color-azul-487)",
     },
     {
       label: "Cuentas habilitadas",
       value: String(enabled),
       icon: ShieldCheck,
-      color: "#2d8a3f",
+      color: "var(--color-verde-561)",
     },
     {
       label: "Clientes con deuda",
       value: String(owing),
       icon: Users,
-      color: "#7c3aed",
+      color: "var(--color-violeta-541)",
     },
   ];
   return (

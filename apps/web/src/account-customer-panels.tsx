@@ -376,7 +376,7 @@ export function AccountCustomerProfile({
           ? "Límite autorizado: sin límite"
           : `Límite: ${money(account.creditLimitMinor)}`,
       icon: ShieldCheck,
-      color: "#2874a6",
+      color: "var(--color-azul-536)",
     },
     {
       label: "Último pago",
@@ -390,7 +390,7 @@ export function AccountCustomerProfile({
         ? "Importe y fecha del último cobro registrado"
         : "Sin cobros registrados",
       icon: History,
-      color: "#188469",
+      color: "var(--color-marca-549)",
     },
     {
       label: "Plazo de pago",
@@ -400,7 +400,7 @@ export function AccountCustomerProfile({
           : `${account.accountTermDays} días`,
       note: "Para nuevas ventas",
       icon: CalendarClock,
-      color: "#7954b3",
+      color: "var(--color-violeta-530)",
     },
   ];
   return (
@@ -510,7 +510,7 @@ export function AccountCustomerProfile({
                   hidden={activeHint !== label}
                   className="absolute inset-x-0 bottom-full z-50 pb-2"
                 >
-                  <span className="block rounded-lg border border-[#d3e5e0] bg-white px-[9px] py-[7px] text-[11px] font-normal leading-4 text-slate-600 shadow-[0_4px_12px_rgb(15_23_42_/_10%)]">
+                  <span className="block rounded-lg border border-marca-907 bg-white px-[9px] py-[7px] text-[11px] font-normal leading-4 text-slate-600 shadow-[0_4px_12px_rgb(15_23_42_/_10%)]">
                     {note}
                   </span>
                 </dd>

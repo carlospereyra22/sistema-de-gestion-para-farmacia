@@ -1093,12 +1093,16 @@ export function WorkspaceShell({
       }}
     />
   );
+  const administrationActive = (tab: "users" | "roles" | "branches") =>
+    tab === "branches"
+      ? view === "Organización"
+      : view === "Administración" && administrationTab === tab;
   const administrationButtonClass = (tab: "users" | "roles" | "branches") =>
-    `flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${(tab === "branches" ? view === "Organización" : view === "Administración" && administrationTab === tab) ? "border-[#cce8de] bg-[#e9f8f3] font-semibold text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-[#f5f8fa] hover:text-slate-800"}`;
+    `flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${administrationActive(tab) ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`;
   return (
     <main
       ref={sidebar.shell}
-      className="workspace-shell min-h-screen bg-[#f4f8fa] text-slate-900"
+      className="workspace-shell min-h-screen bg-fondo text-slate-900"
     >
       <header
         ref={sidebar.header}
@@ -1308,7 +1312,7 @@ export function WorkspaceShell({
         />
         <NavigationRail
           collapsed={!sidebar.expanded}
-          className="workspace-navigation border-r border-slate-200 bg-[#fcfefe] px-3 py-5"
+          className="workspace-navigation border-r border-slate-200 bg-niebla-996 px-3 py-5"
         >
           <p className="px-3 pb-3 text-xs font-semibold tracking-wide text-slate-600">
             OPERACIÓN
@@ -1323,10 +1327,11 @@ export function WorkspaceShell({
                     key={name}
                     aria-label={name}
                     onClick={() => setPage(name)}
-                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-[#cce8de] bg-[#e9f8f3] font-semibold text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-[#f5f8fa] hover:text-slate-800"}`}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`}
                   >
                     <span
-                      className={`grid size-6 shrink-0 place-items-center rounded-md ${active ? "bg-white text-[#087f70] shadow-sm" : "text-slate-500"}`}
+                      className={`grid size-6 shrink-0 place-items-center rounded-md ${active ? "bg-white text-marca-535 shadow-sm" : "text-slate-500"}`}
                     >
                       <Icon className="size-4" />
                     </span>
@@ -1347,6 +1352,9 @@ export function WorkspaceShell({
                 type="button"
                 onClick={() => openAdministration("users")}
                 aria-label="Usuarios"
+                aria-current={
+                  administrationActive("users") ? "page" : undefined
+                }
                 className={administrationButtonClass("users")}
               >
                 <span className="grid size-6 shrink-0 place-items-center text-current">
@@ -1360,6 +1368,9 @@ export function WorkspaceShell({
                 type="button"
                 onClick={() => openAdministration("roles")}
                 aria-label="Roles y permisos"
+                aria-current={
+                  administrationActive("roles") ? "page" : undefined
+                }
                 className={administrationButtonClass("roles")}
               >
                 <span className="grid size-6 shrink-0 place-items-center text-current">
@@ -1373,6 +1384,9 @@ export function WorkspaceShell({
                 type="button"
                 onClick={() => setPage("Organización")}
                 aria-label="Organización"
+                aria-current={
+                  administrationActive("branches") ? "page" : undefined
+                }
                 className={administrationButtonClass("branches")}
               >
                 <span className="grid size-6 shrink-0 place-items-center text-current">
@@ -1384,7 +1398,7 @@ export function WorkspaceShell({
           </nav>
         </NavigationRail>
         <section
-          className={`workspace-content min-w-0 bg-[#f4f8fa] p-4 lg:px-7 lg:py-3 ${view === "Transferencias" ? "flex flex-col" : ""}`}
+          className={`workspace-content min-w-0 bg-fondo p-4 lg:px-7 lg:py-3 ${view === "Transferencias" ? "flex flex-col" : ""}`}
         >
           {accessToken && organizationId && branches.length > 0 && !branchId ? (
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
@@ -3767,7 +3781,7 @@ function Products({
               )
                 clearForm();
             }}
-            className="m-auto w-[min(960px,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/35"
+            className="m-auto w-[min(960px,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-velo/35"
             onPointerDown={(event) => {
               backdropPress.current =
                 event.target === event.currentTarget && event.button === 0;
@@ -3869,7 +3883,9 @@ function Products({
                   <span
                     aria-hidden
                     style={{
-                      backgroundColor: isMedication ? "#087f73" : "#cbd5e1",
+                      backgroundColor: isMedication
+                        ? "var(--color-marca-535)"
+                        : "var(--color-slate-300)",
                     }}
                     className="relative h-6 w-11 shrink-0 rounded-full bg-slate-200 transition before:absolute before:left-1 before:top-1 before:size-4 before:rounded-full before:bg-white before:shadow-sm before:transition-transform peer-checked:bg-teal-700 peer-checked:before:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500 peer-focus-visible:ring-offset-2"
                   />
@@ -4680,7 +4696,7 @@ function Products({
                     {isMedication && (
                       <label className="mt-0 block text-xs font-semibold text-slate-600">
                         Requiere receta
-                        <span className="mt-1 flex h-10 items-center justify-between rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-normal text-slate-700 transition hover:border-[#69a997]">
+                        <span className="mt-1 flex h-10 items-center justify-between rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-normal text-slate-700 transition hover:border-marca-686">
                           {prescriptionRequired
                             ? "Sí, requiere receta"
                             : "No requiere receta"}
@@ -4694,12 +4710,12 @@ function Products({
                           />
                           <span
                             aria-hidden="true"
-                            className="relative h-6 w-11 rounded-full bg-slate-200 transition before:absolute before:left-1 before:top-1 before:h-4 before:w-4 before:rounded-full before:bg-white before:shadow-sm before:transition-transform peer-checked:bg-[#31826a] peer-checked:before:translate-x-5"
+                            className="relative h-6 w-11 rounded-full bg-slate-200 transition before:absolute before:left-1 before:top-1 before:h-4 before:w-4 before:rounded-full before:bg-white before:shadow-sm before:transition-transform peer-checked:bg-marca-550 peer-checked:before:translate-x-5"
                           />
                         </span>
                       </label>
                     )}
-                    <div className="hidden rounded-md border border-[#cfe6df] bg-[#f3faf7] p-3 text-xs leading-5 text-slate-600">
+                    <div className="hidden rounded-md border border-marca-908 bg-marca-971 p-3 text-xs leading-5 text-slate-600">
                       Se crea activo. Podés desactivarlo después sin perder
                       historial.
                     </div>
@@ -8357,7 +8373,7 @@ function SalesHistory({
           <button
             type="button"
             onClick={onBack}
-            className="h-10 rounded-lg bg-[#31826a] px-4 text-sm font-semibold text-white"
+            className="h-10 rounded-lg bg-marca-550 px-4 text-sm font-semibold text-white"
           >
             Nueva venta
           </button>
@@ -8489,7 +8505,7 @@ function SalesHistory({
           className={`overflow-x-auto transition-opacity ${historial.cargando && historial.listo ? "opacity-60" : ""}`}
         >
           <table className="w-full min-w-210 text-left text-sm">
-            <thead className="bg-[#edf3f5] text-[10px] uppercase tracking-wide text-slate-500">
+            <thead className="bg-niebla-958 text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Fecha</th>
@@ -8511,7 +8527,7 @@ function SalesHistory({
                       setActionMessage("");
                       setSelectedSaleId(sale.id);
                     }}
-                    className={`cursor-pointer hover:bg-[#f6faf9] ${selectedSaleId === sale.id ? "bg-[#eef9f5]" : ""}`}
+                    className={`cursor-pointer hover:bg-slate-50 ${selectedSaleId === sale.id ? "bg-marca-970" : ""}`}
                   >
                     <td className="px-4 py-3 text-xs">
                       <button
@@ -8632,7 +8648,7 @@ function SalesHistory({
           event.preventDefault();
           if (!actionPending.current) setSelectedSaleId(undefined);
         }}
-        className="m-auto w-[calc(100%-2rem)] max-w-5xl rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+        className="m-auto w-[calc(100%-2rem)] max-w-5xl rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
       >
         <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-teal-50/60 p-5">
           <div>

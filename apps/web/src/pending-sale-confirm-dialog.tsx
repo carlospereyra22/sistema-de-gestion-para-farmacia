@@ -34,7 +34,7 @@ export function PendingSaleConfirmDialog({
         event.preventDefault();
         onCancel();
       }}
-      className="m-auto w-[min(460px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/40"
+      className="m-auto w-[min(460px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-velo/40"
     >
       <div className="flex items-start gap-3 px-6 pt-6">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700">

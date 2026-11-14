@@ -1932,7 +1932,7 @@ function PurchaseDialog({
         e.preventDefault();
         close();
       }}
-      className={`m-auto ${confirmation ? "w-[min(440px,calc(100vw-2rem))]" : "w-[min(1080px,calc(100vw-2rem))]"} max-w-[calc(100vw-2rem)] max-h-[90dvh] overflow-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-950/35`}
+      className={`m-auto ${confirmation ? "w-[min(440px,calc(100vw-2rem))]" : "w-[min(1080px,calc(100vw-2rem))]"} max-w-[calc(100vw-2rem)] max-h-[90dvh] overflow-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-velo/35`}
     >
       {confirmation}
       <div hidden={Boolean(confirmation)}>

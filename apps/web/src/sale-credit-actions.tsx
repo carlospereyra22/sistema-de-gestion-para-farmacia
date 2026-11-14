@@ -136,7 +136,7 @@ export function SaleCreditActions({
           setMode(undefined);
         }}
         aria-labelledby="credit-actions-title"
-        className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-950/40"
+        className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-velo/40"
       >
         <header className="flex items-center justify-between gap-3">
           <h2 id="credit-actions-title" className="text-lg font-semibold">

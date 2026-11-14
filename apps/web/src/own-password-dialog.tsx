@@ -29,7 +29,7 @@ export function OwnPasswordDialog({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
     >
       <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-teal-50/60 p-5">
         <div className="min-w-0">

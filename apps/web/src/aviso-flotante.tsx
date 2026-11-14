@@ -42,12 +42,12 @@ export function useAvisoFlotante() {
             <div
               role="tooltip"
               style={{ left: posicion.left, top: posicion.top }}
-              className="pointer-events-none fixed z-[100] w-max max-w-72 -translate-x-1/2 -translate-y-full rounded-[9px] border border-[#d3e5e0] bg-white px-3 py-2 text-left shadow-[0_4px_16px_rgb(15_23_42_/_12%)]"
+              className="pointer-events-none fixed z-[100] w-max max-w-72 -translate-x-1/2 -translate-y-full rounded-[9px] border border-marca-907 bg-white px-3 py-2 text-left shadow-[0_4px_16px_rgb(15_23_42_/_12%)]"
             >
               {contenido}
               <span
                 aria-hidden
-                className="absolute left-1/2 top-full size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-[#d3e5e0] bg-white"
+                className="absolute left-1/2 top-full size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-marca-907 bg-white"
               />
             </div>,
             document.body,

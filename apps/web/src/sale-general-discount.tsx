@@ -89,7 +89,7 @@ export function SaleGeneralDiscount({
             </button>
           ))}
         </div>
-        <label className="sale-general-discount-field flex h-9 w-28 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-sm tabular-nums focus-within:border-[#31826a]">
+        <label className="sale-general-discount-field flex h-9 w-28 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-sm tabular-nums focus-within:border-marca-550">
           {mode === "amount" && (
             <span aria-hidden className="text-slate-500">
               $

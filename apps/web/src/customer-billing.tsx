@@ -167,7 +167,7 @@ export function CustomerBillingDialog({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
     >
       <form
         className="flex max-h-[85dvh] flex-col"

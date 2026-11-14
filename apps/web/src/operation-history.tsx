@@ -273,7 +273,7 @@ function HistoryDialog({
         outside.current = false;
       }}
       aria-labelledby="operation-history-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-4xl rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl outline-none backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-4xl rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl outline-none backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
     >
       <div className="flex h-[85dvh] flex-col overflow-hidden">
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-teal-50/60 px-6 py-5">

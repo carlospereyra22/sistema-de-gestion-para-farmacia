@@ -235,7 +235,7 @@ export function SaleCheckoutDialog({
     amountInput.current?.focus();
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-velo/35 p-4 backdrop-blur-sm">
       <section
         role="dialog"
         aria-modal="true"

@@ -33,10 +33,18 @@ Sólo presentación: no cambia datos, cálculos, consultas ni la API.
   `entrando` hay animación CSS, así los widgets de abajo aparecen cuando se ven y un
   filtro, una página o un re-render no repiten nada. Los gráficos se montan recién ahí.
 - **Gráficos** (`opcionAnimada`, ECharts): la línea se dibuja de izquierda a derecha en
-  1,75 s con avance constante (ECharts hace aparecer cada punto según su X, así coincide
-  con el trazo) y la comparativa, punteada, 250 ms después. Las barras crecen desde el eje
-  con desfase de 50–85 ms según cantidad. Ejes y escalas no se tocan. Cada barra lleva su
-  nombre: al cambiar filtros ECharts la reconoce y la anima desde su largo anterior.
+  2,1 s y la comparativa, punteada, 250 ms después. Las barras crecen desde el eje en
+  1,6–1,9 s con desfase de 50–90 ms según cantidad. Desde el 13/11/2026 (SISTEMA-105, pedido
+  del usuario) usan la misma curva que los números (`easeOutPower`: rápido y después más
+  lento); como ECharts hace aparecer cada punto de la línea a ritmo constante según su X,
+  el retraso de cada punto se calcula con la inversa de la curva (`tiempoParaLlegar`) para
+  que aparezca cuando el trazo llega. Todo termina antes de 2,5 s. Ejes y escalas no se
+  tocan. Cada barra lleva su nombre: al cambiar filtros ECharts la reconoce y la anima
+  desde su largo anterior.
+- **Reportes oculto** (SISTEMA-105): al ir a otra página Reportes queda montado pero
+  oculto y sus gráficos miden 0. Antes se achicaban a 0 con animación y al volver se
+  agrandaban ("van para atrás y vuelven"). `ajusteDeTamano` ignora el tamaño 0 y, al
+  volver, sólo ajusta si el tamaño cambió mientras tanto, sin animación.
 - **Tablas, alertas y cierres**: las filas aparecen con 3 px y 200 ms (tope 180 ms de
   desfase) sólo en la primera entrada; sus cifras nunca cuentan. Los tres totales de
   cierres cuentan 2,1 s con su signo real. Las alertas tienen hover de 1 px.

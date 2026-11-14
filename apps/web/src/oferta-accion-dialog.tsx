@@ -138,7 +138,7 @@ export function OfertaAccionDialog({
         event.preventDefault();
         if (!pendiente.current) onClose();
       }}
-      className="m-auto w-[min(460px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-[2px]"
+      className="m-auto w-[min(460px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-velo/40 backdrop:backdrop-blur-[2px]"
     >
       <div className="p-6">
         <div className="flex items-start gap-3">

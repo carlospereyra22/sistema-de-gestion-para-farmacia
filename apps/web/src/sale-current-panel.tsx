@@ -46,7 +46,7 @@ export function SaleCurrentPanel({
       className="sale-current-panel flex min-h-[585px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:h-full lg:min-h-0"
     >
       <header className="flex items-center gap-3 px-5 pb-3 pt-4">
-        <span className="grid size-10 shrink-0 place-items-center rounded-[11px] bg-[#e8faf5] text-[#087f70]">
+        <span className="grid size-10 shrink-0 place-items-center rounded-[11px] bg-marca-970 text-marca-535">
           <ShoppingCart size={20} />
         </span>
         <div className="min-w-0 flex-1">
@@ -95,7 +95,7 @@ export function SaleCurrentPanel({
           <p className="text-xs font-semibold text-slate-600">
             Total a cobrar ({unitCount} unidad{unitCount === 1 ? "" : "es"})
           </p>
-          <strong className="sale-current-total block whitespace-nowrap text-[28px] font-bold leading-9 tracking-tight tabular-nums text-[#087f70]">
+          <strong className="sale-current-total block whitespace-nowrap text-[28px] font-bold leading-9 tracking-tight tabular-nums text-marca-535">
             {money(totalMinor)}
           </strong>
         </div>
