@@ -28,9 +28,15 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
   herramientas Python del catalogo externo.
 - `deploy/oracle/`: despliegue del backend en VPS Oracle (systemd + nginx). La web
   se sube manualmente a Netlify.
+- `deploy/docker/` y `apps/api/Dockerfile`: la API en contenedores, una imagen y
+  varios roles (API x2, worker de tareas programadas, migraciones). Ver
+  `docs/DOCKER.md`.
 
 Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
 `localhost:5173`, API `localhost:3000`, PostgreSQL nativo `gestion_dev`).
+Probar la API en Docker (dentro de WSL): `Iniciar Gestion - Docker.cmd` /
+`Detener Gestion - Docker.cmd` (`scripts/docker-local.ps1`); usa el mismo puerto
+3000, se usa uno u otro.
 
 ## Indice de documentacion (`docs/`)
 
@@ -54,6 +60,8 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
   `MODO_OSCURO.md` (colores por tokens; nada de hex sueltos).
 - Modo sin internet: `OFFLINE.md`.
 - Rendimiento y volumen (catálogo por partes, mediciones): `RENDIMIENTO.md`.
+- Escalabilidad, Docker e instalacion: `ESCALABILIDAD.md` (diagnostico y etapas),
+  `DOCKER.md` (API en contenedores), `INSTALACION.md` (que instalar en cada ambiente).
 - Operacion: `INICIAR_PRUEBAS.md`, `PUBLICAR_PRODUCCION.md`,
   `LOCAL_PRODUCTION_PARITY.md`, `NETLIFY.md`, `PRODUCTION_BOOTSTRAP.md`.
 
@@ -63,16 +71,18 @@ Unica carpeta de skills del proyecto, para Codex y Claude Code. No crear copias 
 `.claude/skills/` ni en otro lugar. Antes de empezar una tarea, leer completo el
 `SKILL.md` que corresponda:
 
-| Tarea                                                    | Leer                                              |
-| -------------------------------------------------------- | ------------------------------------------------- |
-| Cambiar backend: endpoints, servicios, reglas de negocio | `.agents/skills/nueva-funcionalidad-api/SKILL.md` |
-| Cambiar frontend: pantallas, componentes, `lib/`         | `.agents/skills/nueva-funcionalidad-web/SKILL.md` |
-| Arreglar una vista con selectores o agregar uno          | `.agents/skills/selectores-web/SKILL.md`          |
-| Cambiar `schema.prisma` o crear migraciones              | `.agents/skills/migracion-prisma/SKILL.md`        |
-| Terminar cualquier cambio de codigo                      | `.agents/skills/cerrar-tarea/SKILL.md`            |
-| Ramas, commits, pull requests, merge o conflictos de git | `.agents/skills/git-equipo/SKILL.md`              |
-| Publicar en test/produccion, versiones (tags), hotfix    | `.agents/skills/publicar-ambientes/SKILL.md`      |
-| Crear o cargar tareas en Trello                          | `.agents/skills/crear-tareas-trello/SKILL.md`     |
+| Tarea                                                               | Leer                                              |
+| ------------------------------------------------------------------- | ------------------------------------------------- |
+| Cambiar backend: endpoints, servicios, reglas de negocio            | `.agents/skills/nueva-funcionalidad-api/SKILL.md` |
+| Cambiar frontend: pantallas, componentes, `lib/`                    | `.agents/skills/nueva-funcionalidad-web/SKILL.md` |
+| Arreglar una vista con selectores o agregar uno                     | `.agents/skills/selectores-web/SKILL.md`          |
+| Cambiar `schema.prisma` o crear migraciones                         | `.agents/skills/migracion-prisma/SKILL.md`        |
+| Terminar cualquier cambio de codigo                                 | `.agents/skills/cerrar-tarea/SKILL.md`            |
+| Ramas, commits, pull requests, merge o conflictos de git            | `.agents/skills/git-equipo/SKILL.md`              |
+| Publicar en test/produccion, versiones (tags), hotfix               | `.agents/skills/publicar-ambientes/SKILL.md`      |
+| Crear o cargar tareas en Trello                                     | `.agents/skills/crear-tareas-trello/SKILL.md`     |
+| Docker, roles de la API, tareas programadas, integraciones externas | `.agents/skills/docker-api/SKILL.md`              |
+| Instalar o reparar un ambiente (PC, Docker, servidor)               | `.agents/skills/instalar-ambiente/SKILL.md`       |
 
 Una skill nueva va en `.agents/skills/<nombre>/SKILL.md` (frontmatter `name` y
 `description`) y se agrega a esta tabla.

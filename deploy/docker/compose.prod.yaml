@@ -1,0 +1,108 @@
+# API en contenedores (SISTEMA-106). Una sola imagen, varios roles:
+#   api-1, api-2  copias de la API con las tareas programadas apagadas
+#   worker        tareas programadas (precios, cola fiscal, cargos), sin puerto
+#   migrate       `prisma migrate deploy`, sólo cuando se lo pide
+#   consola       comandos de servidor (precios, plataforma, catálogo)
+#
+# Etapa 1: PostgreSQL, nginx y certbot siguen nativos en el servidor. Los
+# contenedores usan la red del host, así que DATABASE_URL (127.0.0.1) y el
+# firewall no cambian y la API sigue escuchando sólo en loopback.
+#
+# Las variables GESTION_* salen del archivo que se pasa con --env-file
+# (ver entorno.ejemplo.env). Uso y vuelta atrás: docs/DOCKER.md.
+
+name: ${GESTION_PROYECTO:-gestion}
+
+x-app: &app
+  image: ${GESTION_IMAGEN:?definir GESTION_IMAGEN}
+  # Secretos del servidor (DATABASE_URL, JWT...). El mismo archivo que usa systemd.
+  env_file:
+    - ${GESTION_ENTORNO:?definir GESTION_ENTORNO}
+  # Usuario del servidor dueño de la clave fiscal (ubuntu: 1000).
+  user: "${GESTION_UID:-1000}:${GESTION_GID:-1000}"
+  network_mode: host
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+x-api: &api
+  <<: *app
+  command: ["node", "/app/entrada/main.js"]
+  mem_limit: ${GESTION_MEMORIA_API:-1g}
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:'+process.env.PORT+'/api/v1/health').then(r=>r.json()).then(h=>process.exit(h.status==='ok'&&h.database==='ok'?0:1)).catch(()=>process.exit(1))"
+    interval: 15s
+    timeout: 5s
+    retries: 3
+    start_period: 40s
+
+x-api-entorno: &api-entorno
+  NODE_ENV: production
+  HOST: 127.0.0.1
+  # Las tareas programadas corren sólo en el worker.
+  PRICE_REFRESH_SCHEDULER: "off"
+  FISCAL_QUEUE_WORKER: "off"
+  SUBSCRIPTION_SCHEDULER: "off"
+  DATABASE_CONNECTION_LIMIT: ${GESTION_CONEXIONES_API:-10}
+  DATABASE_POOL_TIMEOUT: "20"
+
+services:
+  api-1:
+    <<: *api
+    environment:
+      <<: *api-entorno
+      PORT: ${GESTION_PUERTO_1:-3000}
+
+  api-2:
+    <<: *api
+    environment:
+      <<: *api-entorno
+      PORT: ${GESTION_PUERTO_2:-3002}
+
+  worker:
+    <<: *app
+    command: ["node", "/app/entrada/worker.js"]
+    mem_limit: ${GESTION_MEMORIA_WORKER:-2g}
+    environment:
+      NODE_ENV: production
+      DATABASE_CONNECTION_LIMIT: ${GESTION_CONEXIONES_WORKER:-5}
+      DATABASE_POOL_TIMEOUT: "20"
+
+  migrate:
+    <<: *app
+    profiles: ["herramientas"]
+    restart: "no"
+    read_only: false
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    environment:
+      NODE_ENV: production
+      CHECKPOINT_DISABLE: "1"
+
+  consola:
+    <<: *app
+    profiles: ["herramientas"]
+    restart: "no"
+    command:
+      ["node", "-e", "console.log('Indicá el comando. Ver docs/DOCKER.md.')"]
+    environment:
+      NODE_ENV: production
+      PRICE_REFRESH_SCHEDULER: "off"
+      FISCAL_QUEUE_WORKER: "off"
+      SUBSCRIPTION_SCHEDULER: "off"
+      DATABASE_CONNECTION_LIMIT: "3"

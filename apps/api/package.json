@@ -6,6 +6,7 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/src/main.js",
+    "start:worker": "node dist/src/worker.js",
     "precios": "node dist/src/price-refresh.cli.js",
     "catalogo-medicamentos": "node dist/src/medicine-catalog.cli.js",
     "fiscal-prueba": "node dist/src/fiscal-prueba.cli.js",

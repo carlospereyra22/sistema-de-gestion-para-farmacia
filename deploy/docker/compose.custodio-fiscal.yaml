@@ -1,0 +1,30 @@
+# Clave maestra de las credenciales fiscales (SISTEMA-106). Sólo producción.
+# Reemplaza al drop-in de systemd 40-fiscal-vault.conf que instala
+# deploy/oracle/prepare-fiscal-vault.sh: monta la clave de sólo lectura y le
+# dice a la API dónde está. Sin esto la API no puede abrir los certificados de
+# ARCA guardados ("No se pudo abrir la clave técnica protegida"), ni en
+# homologación ni en producción, aunque la emisión real esté apagada.
+# `actualizar.sh produccion` lo suma siempre. Test (preprod) no tiene clave.
+
+x-custodio: &custodio
+  FISCAL_VAULT_KEY_FILE: ${GESTION_CLAVE_FISCAL:-/etc/gestion-fiscal/vault.key}
+
+x-clave: &clave
+  - ${GESTION_CLAVE_FISCAL:-/etc/gestion-fiscal/vault.key}:${GESTION_CLAVE_FISCAL:-/etc/gestion-fiscal/vault.key}:ro
+
+services:
+  api-1:
+    environment: *custodio
+    volumes: *clave
+  api-2:
+    environment: *custodio
+    volumes: *clave
+  worker:
+    environment: *custodio
+    volumes: *clave
+  migrate:
+    environment: *custodio
+    volumes: *clave
+  consola:
+    environment: *custodio
+    volumes: *clave
