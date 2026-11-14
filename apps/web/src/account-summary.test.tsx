@@ -16,7 +16,7 @@ it("distributes the three existing metrics without changing their values", () =>
   expect(html).toContain(">4</dd>");
   expect(html).toContain(">2</dd>");
   expect(html.match(/border-top-width:4px/g)).toHaveLength(3);
-  expect(html).toContain("#315da8");
-  expect(html).toContain("#2d8a3f");
-  expect(html).toContain("#7c3aed");
+  expect(html).toContain("var(--color-azul-487)");
+  expect(html).toContain("var(--color-verde-561)");
+  expect(html).toContain("var(--color-violeta-541)");
 });

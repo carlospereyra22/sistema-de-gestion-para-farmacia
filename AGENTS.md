@@ -50,7 +50,8 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
 - Ofertas y promociones: `OFFERS.md`.
 - Landing comercial: `LANDING.md`.
 - Plataforma y cobro a farmacias: `PLATFORM.md`.
-- Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`.
+- Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`,
+  `MODO_OSCURO.md` (colores por tokens; nada de hex sueltos).
 - Modo sin internet: `OFFLINE.md`.
 - Rendimiento y volumen (catálogo por partes, mediciones): `RENDIMIENTO.md`.
 - Operacion: `INICIAR_PRUEBAS.md`, `PUBLICAR_PRODUCCION.md`,

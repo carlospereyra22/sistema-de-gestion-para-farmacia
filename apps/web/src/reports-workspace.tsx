@@ -125,7 +125,7 @@ export function ReportsWorkspace({
       <nav
         role="tablist"
         aria-label="Reportes"
-        className="flex gap-1 overflow-x-auto rounded-xl border border-[#dce7ef] bg-white p-1"
+        className="flex gap-1 overflow-x-auto rounded-xl border border-niebla-913 bg-white p-1"
       >
         {reportTabs.map((tab) => {
           const Icon = tabIcons[tab.id];
@@ -144,7 +144,7 @@ export function ReportsWorkspace({
               }}
               className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-[background-color,color,box-shadow] duration-200 ease-out ${
                 active
-                  ? "bg-[#e8faf5] text-[#087f70] ring-1 ring-inset ring-[#cce8de]"
+                  ? "bg-marca-970 text-marca-535 ring-1 ring-inset ring-marca-908"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >

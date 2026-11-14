@@ -300,7 +300,7 @@ export function DashboardMedicineSearch({
       <div
         className={
           loading || searched || error
-            ? "border-t border-[#e8edf2] p-3 sm:p-4"
+            ? "border-t border-niebla-935 p-3 sm:p-4"
             : ""
         }
         aria-busy={loading}

@@ -36,7 +36,7 @@ export function AccountCollectionDialog({
         if (!busy) onClose();
       }}
       aria-labelledby="sale-collection-title"
-      className="account-sale-collection-dialog m-auto max-h-[92vh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-slate-950/35"
+      className="account-sale-collection-dialog m-auto max-h-[92vh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-velo/35"
     >
       <header className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
         <div>

@@ -271,7 +271,7 @@ export function DistributionWorkspace({
           e.preventDefault();
           if (!busy) setOpen(false);
         }}
-        className="m-auto max-h-[92dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40"
+        className="m-auto max-h-[92dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl backdrop:bg-velo/40"
         aria-labelledby="distribution-title"
       >
         <header className="flex flex-wrap items-start justify-between gap-4">

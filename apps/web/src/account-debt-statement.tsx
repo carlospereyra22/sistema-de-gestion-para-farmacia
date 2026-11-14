@@ -229,7 +229,7 @@ export function AccountDebtStatement({
         event.preventDefault();
         if (!printing) onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-5xl rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto w-[calc(100%-2rem)] max-w-5xl rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-velo/35"
     >
       <div className="flex h-[88dvh] max-h-[92dvh] flex-col">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 p-5">

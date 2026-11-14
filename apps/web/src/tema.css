@@ -1,0 +1,182 @@
+/*
+ * Tema claro / oscuro (SISTEMA-105). Ver docs/MODO_OSCURO.md.
+ *
+ * Los colores propios del sistema se usan como cualquier color de Tailwind
+ * (`text-marca-535`, `border-niebla-913`, `var(--color-marca-535)`); el número
+ * es la luminosidad: más alto, más claro. No usar hex sueltos (`bg-[#e8faf5]`)
+ * ni `#fff` en CSS: no se adaptan al modo oscuro. Si hace falta un color nuevo,
+ * agregarlo acá y correr `node scripts/generar-tema-oscuro.mjs` desde apps/web.
+ */
+
+/* `dark:` queda disponible para casos puntuales; casi nunca hace falta. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme static {
+  /* Fondo de la aplicación y velo detrás de los diálogos. */
+  --color-fondo: #f4f8fa;
+  --color-velo: #020617;
+
+  /* Marca: verde azulado de botones, montos y estados activos. */
+  --color-marca-985: #f5fcfa;
+  --color-marca-971: #f1f7f6;
+  --color-marca-970: #e8faf5;
+  --color-marca-958: #dff8ed;
+  --color-marca-941: #d3f4ea;
+  --color-marca-927: #d2eee6;
+  --color-marca-908: #cce8de;
+  --color-marca-907: #d3e5e0;
+  --color-marca-894: #bce7dc;
+  --color-marca-855: #5eead4;
+  --color-marca-839: #99d9ce;
+  --color-marca-754: #94b8b2;
+  --color-marca-704: #14b8a6;
+  --color-marca-686: #69a997;
+  --color-marca-664: #2ea89c;
+  --color-marca-652: #3fa392;
+  --color-marca-648: #6c9991;
+  --color-marca-619: #009b8c;
+  --color-marca-600: #0d9488;
+  --color-marca-571: #008b7c;
+  --color-marca-553: #008577;
+  --color-marca-550: #31826a;
+  --color-marca-535: #087f70;
+  --color-marca-511: #0f766e;
+  --color-marca-489: #087061;
+  --color-marca-482: #276c58;
+  --color-marca-474: #066b60;
+  --color-marca-437: #115e59;
+  --color-marca-422: #0b5a52;
+  --color-marca-386: #164e47;
+
+  /* Petróleo: azul verdoso de encabezados y texto principal. */
+  --color-petroleo-637: #4397b6;
+  --color-petroleo-562: #2380a1;
+  --color-petroleo-558: #3d7f8a;
+  --color-petroleo-517: #2c7380;
+  --color-petroleo-471: #2c6470;
+  --color-petroleo-452: #245f6a;
+  --color-petroleo-333: #233a42;
+  --color-petroleo-307: #203047;
+  --color-petroleo-268: #1b2735;
+
+  /* Niebla: grises azulados de bordes y fondos suaves. */
+  --color-niebla-996: #fcfefe;
+  --color-niebla-973: #eef8fb;
+  --color-niebla-958: #eaf3f5;
+  --color-niebla-935: #e2ebf0;
+  --color-niebla-913: #d9e4eb;
+  --color-niebla-900: #cfe2e6;
+  --color-niebla-888: #cbdde9;
+
+  /* Ámbar, rosa y violeta: avisos, errores y acentos. */
+  --color-ambar-989: #fffbf2;
+  --color-ambar-965: #fff2d8;
+  --color-ambar-932: #fae6c4;
+  --color-ambar-872: #f5cf89;
+  --color-ambar-798: #f6ac43;
+  --color-ambar-718: #e58c16;
+  --color-ambar-701: #d98b1a;
+  --color-ambar-666: #d97706;
+  --color-ambar-555: #b45309;
+  --color-rosa-719: #fb7185;
+  --color-rosa-623: #e44363;
+  --color-rosa-586: #e11d48;
+  --color-rosa-577: #dc2626;
+  --color-rosa-535: #c81e1e;
+  --color-violeta-709: #a78bfa;
+  --color-violeta-569: #7c5cd6;
+
+  /* Indicadores de Inicio y de cuentas corrientes (se usan desde `style`). */
+  --color-marca-549: #188469;
+  --color-verde-964: #e7f8ef;
+  --color-verde-561: #2d8a3f;
+  --color-verde-551: #04875a;
+  --color-azul-961: #eaf3ff;
+  --color-azul-536: #2874a6;
+  --color-azul-531: #1d64d8;
+  --color-azul-511: #4f46e5;
+  --color-azul-487: #315da8;
+  --color-niebla-711: #94a3b8;
+  --color-niebla-554: #64748b;
+  --color-ambar-626: #b77918;
+  --color-ambar-613: #c26a06;
+  --color-rosa-970: #fff1f4;
+  --color-rosa-564: #be4563;
+  --color-violeta-960: #f3effe;
+  --color-violeta-541: #7c3aed;
+  --color-violeta-530: #7954b3;
+}
+
+:root.dark {
+  color-scheme: dark;
+}
+
+/* El fondo de la app es el más oscuro en cualquier ancho de pantalla. */
+:root.dark body {
+  background: var(--color-fondo);
+}
+
+/*
+ * Encabezado y barra lateral con el verde azulado de la marca: le dan
+ * identidad al modo oscuro y separan la navegación del contenido.
+ */
+:root.dark .workspace-header {
+  background: linear-gradient(
+    90deg,
+    oklch(27% 0.05 194),
+    oklch(25.5% 0.034 226) 45%,
+    oklch(25.5% 0.034 232)
+  );
+  border-color: oklch(35% 0.045 204);
+}
+:root.dark .workspace-navigation {
+  background: linear-gradient(
+    180deg,
+    oklch(26.5% 0.05 192),
+    oklch(23% 0.034 228) 70%
+  );
+  border-color: oklch(35% 0.045 204);
+}
+:root.dark .workspace-navigation [aria-current="page"] {
+  border-color: oklch(52% 0.1 182 / 55%);
+  background: linear-gradient(
+    90deg,
+    oklch(42% 0.09 182 / 55%),
+    oklch(36% 0.07 190 / 30%)
+  );
+  color: oklch(90% 0.07 180);
+  box-shadow:
+    inset 3px 0 0 oklch(78% 0.13 180),
+    0 4px 14px oklch(10% 0.03 200 / 35%);
+}
+
+/* El anillo de foco se separa del control con el color de la superficie. */
+@layer base {
+  :root.dark * {
+    --tw-ring-offset-color: var(--color-white);
+  }
+}
+
+/* Las sombras sobre fondo oscuro necesitan más intensidad para notarse. */
+:root.dark [class~="border"][class~="bg-white"] {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 22%);
+}
+
+/* Al cambiar de tema, todo cambia junto (sin botones que se animan aparte). */
+:root.cambiando-tema,
+:root.cambiando-tema * {
+  transition: none !important;
+}
+
+/*
+ * `tema-claro`: la zona conserva los colores del tema claro también en modo
+ * oscuro. Para vistas previas de papel (tickets, A4, etiquetas) y paneles de
+ * marca que ya son oscuros con texto blanco. En capa base: si la zona tiene
+ * `text-white` u otro color propio, ése manda.
+ */
+@layer base {
+  :root.dark .tema-claro {
+    color-scheme: light;
+    color: var(--color-petroleo-307);
+  }
+}

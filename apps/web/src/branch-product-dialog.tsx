@@ -88,7 +88,7 @@ export function BranchProductDialog({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="m-auto max-h-[90dvh] w-[min(460px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-slate-900/35"
+      className="m-auto max-h-[90dvh] w-[min(460px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-velo/35"
     >
       <form
         onSubmit={(event) => {

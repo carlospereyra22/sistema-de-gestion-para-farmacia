@@ -23,9 +23,12 @@ export const MOVIMIENTO = {
   /** Espera antes de que cuente la primera tarjeta y desfase entre tarjetas. */
   contadorRetraso: 120,
   contadorDesfase: 65,
-  /** Línea del período actual y la del período comparado (empieza después). */
-  lineaPrincipal: 1750,
-  lineaComparativa: 1400,
+  /**
+   * Línea del período actual y la del período comparado (empieza después).
+   * Con la misma curva que los números: rápido al principio y frena al final.
+   */
+  lineaPrincipal: 2100,
+  lineaComparativa: 1800,
   lineaRetraso: 300,
   lineaComparativaRetraso: 550,
   /** Barras horizontales: espera inicial. Duración y desfase según cantidad. */
@@ -53,6 +56,20 @@ export function easeOutPower(t: number, potencia = 3.2) {
 }
 
 /**
+ * Inversa de `easeOutPower`: en qué fracción del tiempo la animación llega a
+ * `avance` (0 a 1) del recorrido. La línea la usa para que cada punto aparezca
+ * justo cuando el trazo pasa por él.
+ */
+export function tiempoParaLlegar(avance: number, potencia = 3.2) {
+  if (avance <= 0) return 0;
+  if (avance >= 1) return 1;
+  return 1 - (1 - avance) ** (1 / potencia);
+}
+
+/** Curva de entrada de los gráficos: la misma de los números que suben. */
+const curvaEntrada = (t: number) => easeOutPower(t);
+
+/**
  * Valor que se muestra a los `transcurrido` ms de una animación de `desde` a
  * `hasta`. Antes del `retraso` queda en `desde`; al terminar es exactamente
  * `hasta` (sin restos de punto flotante).
@@ -72,9 +89,9 @@ export function valorAnimado(
 
 /** Duración y desfase de las barras: más corto cuanto más larga la lista. */
 export function ritmoBarras(cantidad: number) {
-  if (cantidad <= 3) return { duracion: 1150, desfase: 85 };
-  if (cantidad <= 8) return { duracion: 1100, desfase: 70 };
-  return { duracion: 1000, desfase: 50 };
+  if (cantidad <= 3) return { duracion: 1900, desfase: 90 };
+  if (cantidad <= 8) return { duracion: 1750, desfase: 70 };
+  return { duracion: 1600, desfase: 50 };
 }
 
 type Entorno = {
@@ -176,20 +193,29 @@ export function opcionAnimada(
   if (tipo === "linea")
     return {
       ...comun,
-      // Avance constante: ECharts hace aparecer cada punto según su posición en
-      // X, así el punto aparece justo cuando el trazo llega.
-      series: series.map((serie, indice) => ({
-        ...serie,
-        animationDuration:
+      // Misma curva que los números: el trazo avanza rápido y frena al final.
+      // ECharts hace aparecer cada punto con el retraso de su índice (sin
+      // índice, el del trazo): se calcula cuándo llega el trazo a ese punto.
+      series: series.map((serie, indice) => {
+        const duracion =
           indice === 0
             ? MOVIMIENTO.lineaPrincipal
-            : MOVIMIENTO.lineaComparativa,
-        animationDelay:
+            : MOVIMIENTO.lineaComparativa;
+        const retraso =
           indice === 0
             ? MOVIMIENTO.lineaRetraso
-            : MOVIMIENTO.lineaComparativaRetraso,
-        animationEasing: "linear" as const,
-      })),
+            : MOVIMIENTO.lineaComparativaRetraso;
+        const puntos = Array.isArray(serie.data) ? serie.data.length : 0;
+        return {
+          ...serie,
+          animationDuration: duracion,
+          animationEasing: curvaEntrada,
+          animationDelay: (punto?: number | null) =>
+            punto == null || puntos < 2
+              ? retraso
+              : retraso + duracion * tiempoParaLlegar(punto / (puntos - 1)),
+        };
+      }),
     };
   return {
     ...comun,
@@ -199,7 +225,7 @@ export function opcionAnimada(
       return {
         ...serie,
         animationDuration: duracion,
-        animationEasing: "cubicOut" as const,
+        animationEasing: curvaEntrada,
         // Los rankings se cargan al revés (el primero arriba): la de arriba
         // crece primero.
         animationDelay: (indice: number) =>
@@ -208,4 +234,25 @@ export function opcionAnimada(
       };
     }),
   };
+}
+
+export type MedidaGrafico = { ancho: number; alto: number; oculto: boolean };
+
+/**
+ * Qué hacer cuando cambia el tamaño del lugar del gráfico. Reportes queda
+ * montado pero oculto al ir a otra página y ahí mide 0: no se toca (achicarlo y
+ * agrandarlo al volver se veía como gráficos que iban para atrás y volvían).
+ * Al volver sólo se ajusta si el tamaño cambió mientras tanto, y sin animación.
+ */
+export function ajusteDeTamano(
+  previa: MedidaGrafico,
+  ancho: number,
+  alto: number,
+): { accion: "nada" | "directo" | "animado"; medida: MedidaGrafico } {
+  if (ancho === 0 || alto === 0)
+    return { accion: "nada", medida: { ...previa, oculto: true } };
+  const medida = { ancho, alto, oculto: false };
+  if (ancho === previa.ancho && alto === previa.alto)
+    return { accion: "nada", medida };
+  return { accion: previa.oculto ? "directo" : "animado", medida };
 }

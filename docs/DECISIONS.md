@@ -401,3 +401,10 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
 # Horas en formato de 24 h (13/11/2026, SISTEMA-104)
 
 - En `es-AR`, `toLocaleString` y `toLocaleTimeString` usan reloj de 12 h sin «a. m./p. m.»: una venta de las 20:14 se veía «08:14» y un cierre de caja parecía anterior a su apertura (00:31 se veía «12:31»). Toda fecha con hora lleva `hourCycle: "h23"` (37 lugares de la web y el agente de impresión). `lib/formato-hora.test.ts` falla si vuelve a aparecer una fecha con `es-AR` sin opciones.
+
+# Modo oscuro (13/11/2026, SISTEMA-105)
+
+- Pedido del usuario: switch claro/oscuro en el menú de la cuenta, recordado por navegador. Se guarda en `localStorage` de la PC (no en el usuario ni en la API): rige también en la pantalla de ingreso y no necesita migración. Por defecto, claro.
+- Se implementa redefiniendo las variables de color de Tailwind y las propias bajo `:root.dark`, en vez de agregar `dark:` en cada componente (más de 4.000 clases de color en ~300 archivos). La paleta oscura la genera `apps/web/scripts/generar-tema-oscuro.mjs` invirtiendo la luminosidad en OKLCH; así las pantallas nuevas quedan bien sin trabajo extra.
+- Los ~110 colores hex fijos de la web pasaron a tokens con nombre (`marca`, `petroleo`, `niebla`, `ambar`, `rosa`, `violeta`, `azul`, `verde` + luminosidad) o al color de Tailwind equivalente; se unificaron sólo los casi idénticos, el modo claro se ve igual. Un test impide volver a usar hex sueltos en clases.
+- Tickets, A4 y etiquetas se siguen viendo en papel blanco; la impresión no cambia (el bloque oscuro es sólo `@media screen`). Ver `MODO_OSCURO.md`.

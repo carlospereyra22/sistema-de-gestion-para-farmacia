@@ -20,7 +20,7 @@ export function ResumeSaleDialog({
       ref={dialog}
       onCancel={(event) => event.preventDefault()}
       aria-labelledby="resume-sale-title"
-      className="m-auto w-[min(440px,calc(100%-2rem))] rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto w-[min(440px,calc(100%-2rem))] rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-velo/35"
     >
       <h2 id="resume-sale-title" className="text-lg font-semibold">
         ¿Querés continuar con la venta?

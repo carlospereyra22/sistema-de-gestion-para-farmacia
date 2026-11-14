@@ -30,7 +30,7 @@ export function CashDialog({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-slate-950/35 ${wide ? "max-w-5xl" : "max-w-md"}`}
+      className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-velo/35 ${wide ? "max-w-5xl" : "max-w-md"}`}
     >
       <header className="mb-5 flex items-center gap-3">
         <span className="rounded-xl bg-teal-50 p-2 text-teal-700">

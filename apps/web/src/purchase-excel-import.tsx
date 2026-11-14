@@ -519,7 +519,7 @@ export function PurchaseExcelReview({
         event.preventDefault();
         cancel();
       }}
-      className="m-auto flex max-h-[90dvh] w-[min(1180px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/40"
+      className="m-auto flex max-h-[90dvh] w-[min(1180px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-velo/40"
     >
       <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div className="min-w-0">

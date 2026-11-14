@@ -28,6 +28,9 @@ import {
 } from "./lib/api";
 import { idDeEstaPc } from "./lib/venta-sin-conexion";
 import { SesionesAbiertasDialog } from "./sesiones-abiertas-dialog";
+import { cambiarTema } from "./lib/tema";
+import { TemaSwitch } from "./tema-switch";
+import { useTema } from "./use-tema";
 
 export function AccountMenu({
   email,
@@ -50,6 +53,7 @@ export function AccountMenu({
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const tema = useTema();
   const [fullscreenError, setFullscreenError] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [viendoSesiones, setViendoSesiones] = useState(false);
@@ -120,7 +124,7 @@ export function AccountMenu({
       >
         <span
           aria-hidden="true"
-          className="grid size-10 shrink-0 place-items-center rounded-full bg-[#e4f6f0] text-sm font-bold tracking-wide text-[#087f70]"
+          className="grid size-10 shrink-0 place-items-center rounded-full bg-marca-958 text-sm font-bold tracking-wide text-marca-535"
         >
           {initials}
         </span>
@@ -177,6 +181,7 @@ export function AccountMenu({
             </div>
           </div>
           <div className="p-2">
+            <TemaSwitch tema={tema} onChange={cambiarTema} />
             <InstallMenuButton
               onDone={() => setOpen(false)}
               onError={(message) => {

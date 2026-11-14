@@ -332,7 +332,7 @@ export function SuppliersWorkspace({
                           ? setSelectedId(s.id)
                           : setEditor({ supplier: s, readOnly: true })
                       }
-                      className={`cursor-pointer transition-colors ${selectedId === s.id ? "bg-teal-50/60 shadow-[inset_3px_0_0_#0d9488]" : "hover:bg-slate-50/60"}`}
+                      className={`cursor-pointer transition-colors ${selectedId === s.id ? "bg-teal-50/60 shadow-[inset_3px_0_0_var(--color-marca-600)]" : "hover:bg-slate-50/60"}`}
                     >
                       <td className="max-w-64 px-5 py-2.5">
                         <button

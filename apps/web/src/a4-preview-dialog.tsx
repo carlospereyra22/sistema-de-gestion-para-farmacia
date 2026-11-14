@@ -54,7 +54,7 @@ export function A4PreviewDialog({
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();
       }}
-      className="m-auto h-[95dvh] w-[min(96vw,900px)] max-w-none rounded-2xl border border-slate-200 p-0 shadow-2xl backdrop:bg-slate-950/40"
+      className="m-auto h-[95dvh] w-[min(96vw,900px)] max-w-none rounded-2xl border border-slate-200 p-0 shadow-2xl backdrop:bg-velo/40"
     >
       <div className="flex h-full flex-col">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-teal-50/60 px-5 py-3">

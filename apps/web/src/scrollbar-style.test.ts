@@ -4,7 +4,9 @@ import { expect, it } from "vitest";
 it("shares visible thin scrollbars across the workspace, including checkout", () => {
   const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
   expect(css).toMatch(/\*\s*\{\s*scrollbar-width: thin;/);
-  expect(css).toContain("scrollbar-color: #94b8b2 #f1f7f6");
+  expect(css).toContain(
+    "scrollbar-color: var(--color-marca-754) var(--color-marca-971)",
+  );
   expect(css).toMatch(
     /\*::-webkit-scrollbar\s*\{\s*width: 6px;\s*height: 6px;/,
   );

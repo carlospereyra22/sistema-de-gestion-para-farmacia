@@ -204,7 +204,7 @@ export function SaleProductDetail({
               type="button"
               disabled={available <= 0}
               onClick={onAdd}
-              className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[0.65rem] border border-[#0f9b8e] bg-white px-3 text-sm font-semibold text-[#087f70] hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+              className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[0.65rem] border border-marca-619 bg-white px-3 text-sm font-semibold text-marca-535 hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
             >
               <Plus size={16} /> Agregar
               <kbd className="rounded border border-current px-1 text-[10px] font-medium">
@@ -305,7 +305,7 @@ export function SaleProductDetail({
           type="button"
           disabled={available <= 0}
           onClick={onAdd}
-          className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[0.65rem] border border-[#0f9b8e] bg-white px-3 text-sm font-semibold text-[#087f70] hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+          className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[0.65rem] border border-marca-619 bg-white px-3 text-sm font-semibold text-marca-535 hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
         >
           <Plus size={16} /> Agregar
           <kbd className="rounded border border-current px-1 text-[10px] font-medium">

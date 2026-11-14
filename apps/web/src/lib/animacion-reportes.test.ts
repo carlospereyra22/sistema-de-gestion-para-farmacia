@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ajusteDeTamano,
   easeOutPower,
   MOVIMIENTO,
   opcionAnimada,
   ritmoBarras,
+  tiempoParaLlegar,
   tocaAnimarReportes,
   valorAnimado,
 } from "./animacion-reportes";
@@ -119,17 +121,18 @@ describe("gráficos de Reportes (SISTEMA-90)", () => {
       animationDuration: MOVIMIENTO.lineaPrincipal,
       data: [1000, 230000000],
     });
-    expect(anterior).toMatchObject({
-      lineStyle: { type: "dashed" },
-      animationDelay: MOVIMIENTO.lineaComparativaRetraso,
-    });
-    expect(Number(anterior!.animationDelay)).toBeGreaterThan(
-      Number(actual!.animationDelay),
-    );
+    expect(anterior).toMatchObject({ lineStyle: { type: "dashed" } });
+    const retraso = (serie: Record<string, unknown> | undefined) =>
+      serie!.animationDelay as (punto?: number | null) => number;
+    // Sin índice es el retraso del trazo; la comparativa empieza después.
+    expect(retraso(actual)(null)).toBe(MOVIMIENTO.lineaRetraso);
+    expect(retraso(anterior)(null)).toBe(MOVIMIENTO.lineaComparativaRetraso);
     // Los ejes no se tocan: el pico conserva su escala real.
     expect(entrada.yAxis).toEqual(tendencia.yAxis);
-    expect(MOVIMIENTO.lineaPrincipal).toBeGreaterThanOrEqual(1500);
-    expect(MOVIMIENTO.lineaPrincipal).toBeLessThanOrEqual(1900);
+    // Entre la espera y el dibujo, nunca más de 2,5 s (como los números).
+    expect(
+      MOVIMIENTO.lineaRetraso + MOVIMIENTO.lineaPrincipal,
+    ).toBeLessThanOrEqual(2500);
   });
 
   it("las barras crecen de a una, la de arriba primero, en una secuencia compacta", () => {
@@ -147,8 +150,8 @@ describe("gráficos de Reportes (SISTEMA-90)", () => {
     const { duracion, desfase } = ritmoBarras(10);
     expect(desfase).toBeGreaterThanOrEqual(40);
     expect(desfase).toBeLessThanOrEqual(60);
-    // Las diez terminan en menos de 2 s, no una detrás de otra.
-    expect(retraso(0) + duracion).toBeLessThan(2000);
+    // Las diez terminan en menos de 2,5 s, no una detrás de otra.
+    expect(retraso(0) + duracion).toBeLessThan(2500);
     expect(barras!.data).toEqual(productos.series[0]!.data);
   });
 
@@ -184,5 +187,65 @@ describe("gráficos de Reportes (SISTEMA-90)", () => {
       { name: "B", value: 3, share: undefined },
       { name: "A", value: 5, share: undefined },
     ]);
+  });
+});
+
+describe("curva de los gráficos (SISTEMA-105)", () => {
+  it("barras y línea usan la curva de los números: rápido al principio, lento al final", () => {
+    const pagos = rankingOption([{ name: "Efectivo", value: 100 }], "money");
+    const [barras] = opcionAnimada(pagos, "barras", "entrada").series as Record<
+      string,
+      unknown
+    >[];
+    const curva = barras!.animationEasing as (t: number) => number;
+    expect(curva(0.35)).toBeCloseTo(easeOutPower(0.35));
+    expect(curva(0.35)).toBeGreaterThan(0.7);
+    expect(curva(1)).toBe(1);
+  });
+
+  it("cada punto de la línea aparece cuando el trazo llega a él", () => {
+    const puntos = Array.from({ length: 11 }, (_, i) => ({
+      bucket: `2026-10-${String(i + 1).padStart(2, "0")}`,
+      value: "100",
+      previous: null,
+    }));
+    const [actual] = opcionAnimada(
+      trendOption(puntos, "day", null),
+      "linea",
+      "entrada",
+    ).series as Record<string, unknown>[];
+    const retraso = actual!.animationDelay as (punto?: number | null) => number;
+    const curva = actual!.animationEasing as (t: number) => number;
+    for (const punto of [0, 3, 5, 10]) {
+      const t =
+        (retraso(punto) - MOVIMIENTO.lineaRetraso) / MOVIMIENTO.lineaPrincipal;
+      expect(curva(t)).toBeCloseTo(punto / 10, 5);
+    }
+    expect(tiempoParaLlegar(0.75)).toBeLessThan(0.4);
+  });
+});
+
+describe("tamaño del gráfico con Reportes oculto (SISTEMA-105)", () => {
+  const visible = { ancho: 800, alto: 260, oculto: false };
+
+  it("oculto (mide 0) no se toca y al volver igual no se mueve", () => {
+    const oculto = ajusteDeTamano(visible, 0, 0);
+    expect(oculto).toEqual({
+      accion: "nada",
+      medida: { ...visible, oculto: true },
+    });
+    expect(ajusteDeTamano(oculto.medida, 800, 260).accion).toBe("nada");
+  });
+
+  it("si cambió el tamaño mientras estaba oculto, se ajusta sin animación", () => {
+    const oculto = ajusteDeTamano(visible, 0, 0).medida;
+    expect(ajusteDeTamano(oculto, 900, 260)).toEqual({
+      accion: "directo",
+      medida: { ancho: 900, alto: 260, oculto: false },
+    });
+  });
+
+  it("visible y con otro tamaño, ajusta con la transición de siempre", () => {
+    expect(ajusteDeTamano(visible, 700, 260).accion).toBe("animado");
   });
 });

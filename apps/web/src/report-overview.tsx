@@ -88,7 +88,7 @@ function Panel({
       style={{ "--orden": orden } as CSSProperties}
     >
       <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-        <span className="text-[#087f70]">{icon}</span>
+        <span className="text-marca-535">{icon}</span>
         {title}
       </h2>
       {hint ? (
@@ -236,7 +236,7 @@ export function ReportOverviewTab({
       {actualizando ? (
         <p
           role="status"
-          className="reportes-actualizando pointer-events-none absolute -top-2.5 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-[#cce8de] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#087f70] shadow-sm"
+          className="reportes-actualizando pointer-events-none absolute -top-2.5 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-marca-908 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-marca-535 shadow-sm"
         >
           <RefreshCw
             size={11}
@@ -390,9 +390,9 @@ export function ReportOverviewContent({
           {meta.dataQuality.warnings.map((warning) => (
             <li
               key={warning}
-              className="flex items-start gap-2.5 rounded-xl border border-[#dce7ef] bg-[#f6faf9] px-3.5 py-2.5 text-xs leading-5 text-slate-600"
+              className="flex items-start gap-2.5 rounded-xl border border-niebla-913 bg-slate-50 px-3.5 py-2.5 text-xs leading-5 text-slate-600"
             >
-              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[#e8faf5] text-[#087f70]">
+              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-marca-970 text-marca-535">
                 <Info size={12} aria-hidden />
               </span>
               <span>
@@ -512,7 +512,7 @@ export function ReportOverviewContent({
           >
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px] text-sm">
-                <thead className="bg-[#f6faf9] text-left text-[11px] uppercase text-slate-500">
+                <thead className="bg-slate-50 text-left text-[11px] uppercase text-slate-500">
                   <tr>
                     <th className="px-3 py-2 font-semibold">Sucursal</th>
                     <th className="px-3 py-2 text-right font-semibold">
@@ -536,7 +536,7 @@ export function ReportOverviewContent({
                   {tables.branches.map((row, index) => (
                     <tr
                       key={row.id}
-                      className="reportes-fila border-t border-slate-100 transition-colors duration-150 hover:bg-[#f8fbfa]"
+                      className="reportes-fila border-t border-slate-100 transition-colors duration-150 hover:bg-slate-50"
                       style={{ "--fila": index } as CSSProperties}
                     >
                       <td className="px-3 py-2 text-slate-800">{row.name}</td>
@@ -565,7 +565,7 @@ export function ReportOverviewContent({
                 {tables.branches.length > 1 ? (
                   <tfoot>
                     <tr
-                      className="reportes-fila border-t border-[#cce8de] bg-[#f2fbf8] font-semibold"
+                      className="reportes-fila border-t border-marca-908 bg-teal-50 font-semibold"
                       style={
                         { "--fila": tables.branches.length } as CSSProperties
                       }
@@ -624,7 +624,7 @@ export function ReportOverviewContent({
                     <button
                       type="button"
                       onClick={onOpenInventory}
-                      className="group flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:border-[#cce8de] hover:bg-[#f2fbf8] hover:shadow-[0_3px_10px_rgb(25_56_74_/_6%)] focus-visible:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 motion-reduce:transform-none"
+                      className="group flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:border-marca-908 hover:bg-teal-50 hover:shadow-[0_3px_10px_rgb(25_56_74_/_6%)] focus-visible:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 motion-reduce:transform-none"
                     >
                       <span
                         className={`grid size-8 shrink-0 place-items-center rounded-full ${alert.kind === "expired" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}`}
@@ -645,7 +645,7 @@ export function ReportOverviewContent({
                       </span>
                       <ChevronRight
                         size={16}
-                        className="text-slate-400 transition-transform duration-150 ease-out group-hover:translate-x-0.5 group-hover:text-[#087f70] group-focus-visible:translate-x-0.5 motion-reduce:transform-none"
+                        className="text-slate-400 transition-transform duration-150 ease-out group-hover:translate-x-0.5 group-hover:text-marca-535 group-focus-visible:translate-x-0.5 motion-reduce:transform-none"
                         aria-hidden
                       />
                     </button>

@@ -304,7 +304,7 @@ export function OfertaEditor({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="m-auto w-[min(1080px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-[2px]"
+      className="m-auto w-[min(1080px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-velo/40 backdrop:backdrop-blur-[2px]"
     >
       <form
         className="flex max-h-[92dvh] flex-col"
@@ -314,7 +314,7 @@ export function OfertaEditor({
           else avanzar();
         }}
       >
-        <header className="shrink-0 bg-gradient-to-r from-teal-700 to-teal-600 px-6 pb-4 pt-5 text-white">
+        <header className="tema-claro shrink-0 bg-gradient-to-r from-teal-700 to-teal-600 px-6 pb-4 pt-5 text-white">
           <div className="flex items-start gap-3">
             <span className="grid size-11 place-items-center rounded-2xl bg-white/15">
               <BadgePercent size={22} />

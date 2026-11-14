@@ -49,7 +49,7 @@ export function AccountDeliveryForm({
         event.preventDefault();
         onCancel();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-950/30"
+      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-velo/30"
     >
       <div className="mb-5 flex items-center justify-between gap-3">
         <h2

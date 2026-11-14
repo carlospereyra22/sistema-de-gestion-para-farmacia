@@ -53,7 +53,7 @@ export function SaleConceptDialog({
       onCancel={onClose}
       aria-labelledby="sale-concept-title"
       style={{ width: "min(440px, calc(100vw - 32px))" }}
-      className="m-auto max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-xl backdrop:bg-velo/35"
     >
       <header className="flex items-center justify-between gap-3">
         <h2 id="sale-concept-title" className="text-lg font-semibold">

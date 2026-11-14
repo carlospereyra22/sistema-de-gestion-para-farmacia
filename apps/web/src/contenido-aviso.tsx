@@ -10,7 +10,7 @@ export function ContenidoAviso({
 }) {
   return (
     <>
-      <p className="text-[13px] font-semibold leading-[18px] text-[#115e59]">
+      <p className="text-[13px] font-semibold leading-[18px] text-marca-437">
         {titulo}
       </p>
       {children && (

@@ -162,7 +162,7 @@ function AddUserDialog({
                     aria-checked={elegido}
                     disabled={busy}
                     onClick={() => setRoleCode(code)}
-                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "border-[#9fd9c8] bg-[#eefaf6] text-[#087f70]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800"}`}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "border-marca-839 bg-marca-970 text-marca-535" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800"}`}
                   >
                     {elegido && <Check size={14} aria-hidden="true" />}
                     {name}
@@ -385,7 +385,7 @@ function SubscriptionForm({
         <p className="mt-1 text-xs text-slate-500">
           Si lo dejás vacío, se usa la fórmula del plan.
         </p>
-        <h3 className="mt-6 border-t border-[#e6eef3] pt-4 text-sm font-semibold text-slate-800">
+        <h3 className="mt-6 border-t border-niebla-935 pt-4 text-sm font-semibold text-slate-800">
           Contacto
         </h3>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -516,7 +516,7 @@ export function PlatformOrganizationDetail({
   const back = (
     <button
       type="button"
-      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-white hover:text-[#087f70]"
+      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-white hover:text-marca-535"
       onClick={onBack}
     >
       <ArrowLeft size={16} />
@@ -719,7 +719,7 @@ export function PlatformOrganizationDetail({
                       <span className="flex items-center gap-3">
                         <span
                           aria-hidden="true"
-                          className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${user.active ? "bg-[#e4f6f0] text-[#087f70]" : "bg-slate-100 text-slate-500"}`}
+                          className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${user.active ? "bg-marca-958 text-marca-535" : "bg-slate-100 text-slate-500"}`}
                         >
                           {iniciales(user.displayName || user.email)}
                         </span>

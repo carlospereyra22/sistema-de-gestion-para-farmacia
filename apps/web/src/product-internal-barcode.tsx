@@ -109,7 +109,7 @@ export function ProductInternalBarcode({
         aria-labelledby="barcode-title"
         style={{ width: "min(560px, calc(100vw - 32px))" }}
         tabIndex={-1}
-        className="m-auto max-h-[90dvh] overflow-y-auto rounded-2xl border-0 bg-white p-6 shadow-xl outline-none backdrop:bg-slate-950/40"
+        className="m-auto max-h-[90dvh] overflow-y-auto rounded-2xl border-0 bg-white p-6 shadow-xl outline-none backdrop:bg-velo/40"
       >
         <header className="flex items-start justify-between gap-4">
           <div>
