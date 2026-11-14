@@ -1,0 +1,37 @@
+# Lo que nunca entra a la imagen (SISTEMA-106). Ver docs/DOCKER.md.
+**/node_modules
+**/dist
+**/coverage
+**/.cache
+**/*.tsbuildinfo
+**/*.log
+.git
+.github
+.vscode
+.idea
+.claude
+.agents
+.pnpm-store
+
+# Secretos, bases y respaldos
+**/.env
+**/.env.*
+!**/.env.example
+**/*.dump
+**/*.dump.partial
+**/*.key
+**/*.pem
+
+# Datos y entregas locales
+data
+SUBIR-A-NETLIFY
+SUBIR-A-NETLIFY-PREPROD
+SUBIR A PRODUCCION LANDING
+
+# La imagen es sólo de la API
+apps/web
+apps/landing
+docs
+scripts
+*.cmd
+*.md

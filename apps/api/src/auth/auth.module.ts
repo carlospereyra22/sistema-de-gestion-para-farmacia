@@ -6,6 +6,7 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { BranchAccessGuard } from "./branch-access.guard";
 import { JwtAccessGuard } from "./jwt-access.guard";
+import { LimiteDeLogin } from "./limite-login";
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { JwtAccessGuard } from "./jwt-access.guard";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAccessGuard, BranchAccessGuard],
+  providers: [AuthService, JwtAccessGuard, BranchAccessGuard, LimiteDeLogin],
   exports: [AuthService, JwtAccessGuard, BranchAccessGuard, JwtModule],
 })
 export class AuthModule {}

@@ -353,6 +353,14 @@
 
 - Panel de plataforma atado a la pestaña (11/11/2026, SISTEMA-94, riesgo de seguridad alto): el código del panel ya no queda en la sesión del navegador, que comparten todas las pestañas. Al ingresarlo se entrega un token de plataforma que la web guarda sólo en memoria y manda en `X-Plataforma`. Vence a los 30 minutos sin uso y como máximo a las 8 horas, y la guardia lo exige del mismo usuario y sesión. La sesión del superadmin usa una cookie no persistente, con vencimiento a las 12 horas y a la hora sin uso. Ver `PLATFORM.md`. El usuario eligió la cookie separada (SISTEMA-100): el superadmin usa `gestion_plataforma`, así que entrar al panel no reemplaza la sesión de la farmacia en ese navegador. Ver `PLATFORM.md`.
 
+- 14/11/2026 (SISTEMA-106): escalabilidad y Docker. Decisiones del usuario: dejar lista la API en contenedores con procesos separados, apuntar a más de 100 farmacias y seguir por ahora en el servidor gratuito de Oracle, sabiendo que hoy hay una farmacia real. No se construye de más: se hace ahora lo barato hoy y caro con clientes (empaquetado, separación de procesos, límite de login, tope de conexiones, documentación) y el resto queda por etapas con su disparador en `ESCALABILIDAD.md`.
+  - Una sola imagen y varios roles (API x2, worker, migraciones), no microservicios. En la etapa 1 PostgreSQL y nginx quedan nativos y los contenedores usan la red del servidor: no cambian `DATABASE_URL`, el firewall ni la vuelta atrás a systemd.
+  - Límite de intentos de login sin dependencia nueva (se descartó `@nestjs/throttler` para no sumar un paquete ni tocar el lockfile): 8 fallos por correo en 5 minutos, en memoria de cada copia. Se cuenta por correo y no por IP porque detrás del proxy de Netlify todas las farmacias llegan con la misma IP. Riesgo aceptado: alguien que conozca un correo puede bloquearle los inicios nuevos durante 5 minutos (se eligió un bloqueo corto porque es un punto de venta); las sesiones abiertas no se cortan.
+  - La imagen incluye la CLI de Prisma (más pesada) para que la misma imagen aplique las migraciones, sin instalar nada en el servidor.
+  - Netlify se mantiene para la web; lo que se va a quitar es el proxy de la API, cuando haya dominio. La mudanza de dirección se hace una sola vez porque reinicia la app instalada y la copia sin conexión.
+  - Integraciones futuras con obras sociales, PAMI y recetas electrónicas: módulos del monolito con el patrón de Fiscal y reintentos en el worker; no se diseñaron todavía.
+  - Nada se aplicó en el servidor. El pase a Docker se hace primero en test y requiere autorización. Ver `DOCKER.md`.
+
 ## OPEN
 
 - Credential recovery policy for production.

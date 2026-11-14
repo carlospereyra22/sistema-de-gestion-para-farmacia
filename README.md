@@ -9,6 +9,14 @@ el backend del VPS y, si queda saludable, prepara **SUBIR-A-NETLIFY** para subir
 manualmente al sitio existente. Requiere confirmar y hacerlo fuera del horario
 de cobros. [Instrucciones y recuperación](docs/PUBLICAR_PRODUCCION.md).
 
+## Instalación, Docker y escalabilidad
+
+- [Qué instalar en cada ambiente](docs/INSTALACION.md): PC de desarrollo, Docker,
+  PC de la farmacia y servidores.
+- [API en Docker](docs/DOCKER.md): una imagen, dos copias de la API, worker y
+  migraciones.
+- [Escalabilidad](docs/ESCALABILIDAD.md): diagnóstico y etapas.
+
 ## Current status
 
 La fundacion de aplicaciones, el modelo Prisma, la primera migracion y el seed estan listos. El entorno actual usa PostgreSQL 18 nativo porque Docker/WSL no es estable en esta computadora.
