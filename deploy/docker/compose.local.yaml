@@ -1,0 +1,112 @@
+# Prueba de la imagen en una PC con Docker (en WSL, SISTEMA-106).
+# NO es producción: base propia y vacía dentro de Docker, claves de ejemplo.
+# No toca la base nativa `gestion_dev` ni sus datos.
+#
+#   docker compose -f deploy/docker/compose.local.yaml up -d --build
+#   docker compose -f deploy/docker/compose.local.yaml run --rm sembrar   (una vez)
+#   docker compose -f deploy/docker/compose.local.yaml down               (-v borra la base)
+#
+# Antes, detener la API de pruebas: usa el mismo puerto 3000. La web de
+# desarrollo (5173) se puede dejar. Pasos y qué mirar: docs/DOCKER.md.
+
+name: gestion-local
+
+x-app: &app
+  build:
+    context: ../..
+    dockerfile: apps/api/Dockerfile
+  image: gestion-api:local
+  init: true
+  # Clave propia de esta PC para las credenciales fiscales copiadas de
+  # gestion_dev (la crea `scripts/docker-local.ps1 copiar-datos`). Sin ella la
+  # API arranca igual, pero no puede abrir los certificados de ARCA.
+  env_file:
+    - path: ../../.cache/docker-local/clave-fiscal.env
+      required: false
+  # WSL se apaga cuando no queda ninguna terminal de Ubuntu abierta: al volver a
+  # abrirla, los contenedores arrancan solos.
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+x-entorno: &entorno
+  NODE_ENV: development
+  HOST: 0.0.0.0
+  PORT: "3000"
+  CORS_ORIGIN: http://localhost:5173
+  DATABASE_URL: postgresql://gestion_docker:gestion_docker_password@db:5432/gestion_docker?schema=public
+  JWT_ACCESS_SECRET: clave-de-ejemplo-solo-para-pruebas-locales-0123456789
+  FISCAL_LOCAL_TESTING: "true"
+
+x-sin-tareas: &sin-tareas
+  <<: *entorno
+  PRICE_REFRESH_SCHEDULER: "off"
+  FISCAL_QUEUE_WORKER: "off"
+  SUBSCRIPTION_SCHEDULER: "off"
+  DATABASE_CONNECTION_LIMIT: "10"
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: gestion_docker
+      POSTGRES_PASSWORD: gestion_docker_password
+      POSTGRES_DB: gestion_docker
+    volumes:
+      - datos:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gestion_docker -d gestion_docker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    <<: *app
+    read_only: false
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    environment:
+      <<: *entorno
+      CHECKPOINT_DISABLE: "1"
+
+  api-1:
+    <<: *app
+    command: ["node", "/app/entrada/main.js"]
+    environment: *sin-tareas
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  api-2:
+    <<: *app
+    command: ["node", "/app/entrada/main.js"]
+    environment: *sin-tareas
+    ports:
+      - "127.0.0.1:3002:3000"
+
+  worker:
+    <<: *app
+    command: ["node", "/app/entrada/worker.js"]
+    environment:
+      <<: *entorno
+      DATABASE_CONNECTION_LIMIT: "5"
+
+  # Usuario dueño de ejemplo para poder entrar. Sólo a pedido.
+  sembrar:
+    <<: *app
+    profiles: ["herramientas"]
+    restart: "no"
+    command: ["node", "/app/apps/api/dist/prisma/seed.js"]
+    environment:
+      <<: *entorno
+      SEED_OWNER_EMAIL: owner@demo.local
+      SEED_OWNER_PASSWORD: clave-de-prueba-local-1234
+
+volumes:
+  datos:

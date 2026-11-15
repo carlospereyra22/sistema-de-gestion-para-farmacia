@@ -25,7 +25,9 @@ it("summarizes the cart and shows a single large total with Cobrar", () => {
   expect(html).toContain("Total a cobrar (4 unidades)");
   expect(html.match(/text-\[28px\]/g)).toHaveLength(1);
   expect(html).toContain("Cobrar");
-  expect(html).toContain("Ctrl + Enter");
+  // El atajo queda como ayuda del botón, no dentro de él.
+  expect(html).toContain('title="Cobrar (Ctrl + Enter)"');
+  expect(html).not.toContain("<kbd");
   expect(html).toContain("Vaciar venta");
 });
 

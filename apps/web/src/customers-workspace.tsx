@@ -227,7 +227,7 @@ export function CustomersWorkspace({
                   <tr
                     key={c.id}
                     onClick={() => setSelectedId(c.id)}
-                    className={`cursor-pointer transition-colors ${selectedId === c.id ? "bg-teal-50/60 shadow-[inset_3px_0_0_#0d9488]" : "hover:bg-slate-50/70"}`}
+                    className={`cursor-pointer transition-colors ${selectedId === c.id ? "bg-teal-50/60 shadow-[inset_3px_0_0_var(--color-marca-600)]" : "hover:bg-slate-50/70"}`}
                   >
                     <td className="px-5 py-2.5">
                       <button

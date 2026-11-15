@@ -64,7 +64,7 @@ export function BotonEntrarComo({
         title="Entrar como este usuario"
         className={
           destacado
-            ? "inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#cce8de] bg-[#f1fbf7] px-3 text-sm font-semibold text-[#087f70] transition-colors hover:border-[#087f70] hover:bg-[#087f70] hover:text-white disabled:opacity-50"
+            ? "inline-flex h-9 items-center gap-1.5 rounded-lg border border-marca-908 bg-teal-50 px-3 text-sm font-semibold text-marca-535 transition-colors hover:border-marca-535 hover:bg-marca-535 hover:text-white disabled:opacity-50"
             : "inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-teal-800 hover:bg-teal-50 disabled:opacity-50"
         }
         onClick={() => {
@@ -152,12 +152,12 @@ export function PlatformSoporte({
         {reglas.map(({ icono: Icono, titulo, texto }) => (
           <li
             key={titulo}
-            className="flex items-start gap-3 rounded-xl border border-[#dce7ef] bg-white/70 px-4 py-3"
+            className="flex items-start gap-3 rounded-xl border border-niebla-913 bg-white/70 px-4 py-3"
           >
             <Icono
               size={18}
               aria-hidden="true"
-              className="mt-0.5 shrink-0 text-[#087f70]"
+              className="mt-0.5 shrink-0 text-marca-535"
             />
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-slate-800">
@@ -291,11 +291,11 @@ function UsuariosDeFarmacia({
             return (
               <li
                 key={usuario.id}
-                className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-colors ${usuario.active ? "border-[#e2ebf0] bg-white hover:border-[#cce8de] hover:bg-[#fbfefd]" : "border-dashed border-slate-200 bg-slate-50/60"}`}
+                className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-colors ${usuario.active ? "border-niebla-935 bg-white hover:border-marca-908 hover:bg-marca-985" : "border-dashed border-slate-200 bg-slate-50/60"}`}
               >
                 <span
                   aria-hidden="true"
-                  className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold tracking-wide ${usuario.active ? "bg-[#e4f6f0] text-[#087f70]" : "bg-slate-200 text-slate-500"}`}
+                  className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold tracking-wide ${usuario.active ? "bg-marca-958 text-marca-535" : "bg-slate-200 text-slate-500"}`}
                 >
                   {iniciales(nombre)}
                 </span>

@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import { Type, plainToInstance } from "class-transformer";
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -21,12 +22,18 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
+  Max,
   Min,
   MinLength,
   MaxLength,
   ValidateNested,
   validate,
 } from "class-validator";
+import {
+  MAXIMO_PAGINA_HISTORIAL,
+  TAMANIO_PAGINA_HISTORIAL,
+} from "./historial-ventas";
 import { PaymentMethod } from "@prisma/client";
 
 import type { AuthenticatedRequest } from "../auth/auth.types";
@@ -50,6 +57,13 @@ class SaleLineDto {
   @Min(0)
   requestedUnitPriceMinor?: number;
   @IsOptional() @IsString() expectedUnitPriceMinor?: string;
+  // Ahorro por ofertas que vio la cajera (SISTEMA-103), en centavos.
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,15}$/)
+  expectedOfferDiscountMinor?: string;
+  // La cajera eligió no aplicar ofertas a este producto (SISTEMA-103).
+  @IsOptional() @IsBoolean() skipOffers?: boolean;
   @IsOptional() @IsUUID() productId?: string;
   @IsOptional() @IsString() @MinLength(3) @MaxLength(160) description?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) unitPriceMinor?: number;
@@ -59,6 +73,22 @@ class SaleLineDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) packQuantity?: number;
   // Sin conexión: nombre que vio la PC, por si el producto ya no se vende.
   @IsOptional() @IsString() @MaxLength(200) productName?: string;
+}
+class AppliedOfferItemDto {
+  @IsUUID() productId!: string;
+  @Type(() => Number) @IsInt() @Min(1) units!: number;
+  @IsString() @Matches(/^\d{1,15}$/) grossMinor!: string;
+  @IsString() @Matches(/^\d{1,15}$/) discountMinor!: string;
+}
+/** Oferta que aplicó la PC sin conexión (SISTEMA-103). */
+class AppliedOfferDto {
+  @IsUUID() offerId!: string;
+  @Type(() => Number) @IsInt() @Min(1) version!: number;
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => AppliedOfferItemDto)
+  items!: AppliedOfferItemDto[];
 }
 class PaymentDto {
   @IsEnum(PaymentMethod) method!: PaymentMethod;
@@ -87,6 +117,18 @@ class CompleteSaleDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentDto)
   payments!: PaymentDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => AppliedOfferDto)
+  appliedOffers?: AppliedOfferDto[];
+  // Ofertas que la cajera quitó de esta venta (SISTEMA-103).
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID("all", { each: true })
+  skippedOfferIds?: string[];
 }
 /** Mandar a ARCA una venta hecha con comprobante interno (SISTEMA-65). */
 class InvoiceInternalDto {
@@ -142,6 +184,26 @@ class SettleCreditDto {
   @IsBoolean() confirm!: boolean;
 }
 
+/** Filtros del historial de ventas (SISTEMA-104). */
+class SalesHistoryQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAXIMO_PAGINA_HISTORIAL)
+  pageSize?: number;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) from?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) to?: string;
+  @IsOptional() @IsIn(["COMPLETED", "CANCELLED"]) status?:
+    "COMPLETED" | "CANCELLED";
+  @IsOptional() @IsIn(["INTERNAL", "INVOICE"]) documentType?:
+    "INTERNAL" | "INVOICE";
+  @IsOptional()
+  @IsIn(["CASH", "CARD", "TRANSFER", "ACCOUNT", "OTHER"])
+  method?: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
+  @IsOptional() @IsString() @MaxLength(36) q?: string;
+}
 @Controller("organizations/:organizationId/branches/:branchId/sales")
 @UseGuards(JwtAccessGuard, BranchAccessGuard)
 export class SalesController {
@@ -289,6 +351,28 @@ export class SalesController {
       organizationId,
       branchId,
       saleId,
+    );
+  }
+  /**
+   * Historial paginado y con filtros (SISTEMA-104). Es la misma consulta de
+   * ventas que el dueño sigue viendo con la farmacia bloqueada.
+   */
+  @AllowOwnerWhenBlocked()
+  @Get("history")
+  history(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Query() query: SalesHistoryQueryDto,
+  ) {
+    const { page = 1, pageSize = TAMANIO_PAGINA_HISTORIAL, ...filtro } = query;
+    return this.sales.history(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      filtro,
+      page,
+      pageSize,
     );
   }
   @AllowOwnerWhenBlocked()

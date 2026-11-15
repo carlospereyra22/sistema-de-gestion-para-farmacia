@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AlfaBetaService } from "./alfabeta.service";
-import { fractionalPrice } from "./fractional-price";
+import { expectedSalePrice } from "./fractional-price";
 import { MedicineCatalogService } from "./medicine-catalog.service";
 import {
   isPartialSnapshot,
@@ -50,6 +50,8 @@ type LinkedProduct = {
   saleUnit: string;
   priceDivisor: number | null;
   priceMarkupBps: number;
+  /** Precio editado a mano (SISTEMA-103): se actualiza sólo la referencia. */
+  priceManual: boolean;
   prices: { amountMinor: bigint }[];
 };
 
@@ -71,20 +73,7 @@ export function nextArgentinaPriceRefresh(now = new Date()): Date {
   return new Date(utcDay + 24 * 3600000 + SCHEDULED_UTC_HOURS[0] * 3600000);
 }
 
-// Precio de venta que corresponde a una referencia, o null si la unidad de
-// venta no admite precio automático (blíster/unidad sin divisor configurado).
-export function expectedSalePrice(
-  amount: bigint,
-  product: Pick<LinkedProduct, "saleUnit" | "priceDivisor" | "priceMarkupBps">,
-): bigint | null {
-  if (product.priceDivisor != null)
-    return fractionalPrice(
-      amount,
-      product.priceDivisor,
-      product.priceMarkupBps,
-    );
-  return product.saleUnit === "BOX" ? amount : null;
-}
+export { expectedSalePrice };
 
 @Injectable()
 export class CatalogPriceRefreshService
@@ -418,6 +407,7 @@ export class CatalogPriceRefreshService
         saleUnit: true,
         priceDivisor: true,
         priceMarkupBps: true,
+        priceManual: true,
         prices: {
           where: { priceList: { is: { name: "Precio general" } } },
           select: { amountMinor: true },
@@ -501,7 +491,9 @@ export class CatalogPriceRefreshService
       return "skipped";
     }
     const amount = BigInt(reference.priceMinor);
-    const sale = expectedSalePrice(amount, product);
+    const sale = product.priceManual
+      ? null
+      : expectedSalePrice(amount, product);
     // Sin cambios de referencia ni de precio de venta: no abre transacción.
     if (
       product.externalReferencePriceMinor === amount &&
@@ -538,7 +530,10 @@ export class CatalogPriceRefreshService
       let salePriceChanged = false;
       let priceListId: string | null = null;
       let previousSale: bigint | null = null;
-      const saleAmount = expectedSalePrice(amount, current);
+      // Precio manual (SISTEMA-103): la referencia se actualiza, el precio no.
+      const saleAmount = current.priceManual
+        ? null
+        : expectedSalePrice(amount, current);
       // Only an explicitly configured divisor permits automatic fractional pricing.
       if (saleAmount !== null) {
         const priceList = await tx.priceList.upsert({

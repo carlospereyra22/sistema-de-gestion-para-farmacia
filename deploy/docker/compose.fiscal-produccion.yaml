@@ -1,0 +1,19 @@
+# Sólo producción con emisión fiscal real (SISTEMA-106). Se suma con un `-f`
+# más, después de compose.custodio-fiscal.yaml (que monta la clave maestra).
+# Reemplaza al drop-in de systemd deploy/oracle/60-fiscal-production.conf:
+# mismas dos variables. No usar en test ni en una PC.
+# Requisitos previos: docs/PRODUCTION_FISCAL_CHECKLIST.md.
+
+x-fiscal: &fiscal
+  FISCAL_RECOVERY_VERIFIED: "yes"
+  FISCAL_PRODUCTION_ISSUANCE: enabled
+
+services:
+  api-1:
+    environment: *fiscal
+  api-2:
+    environment: *fiscal
+  worker:
+    environment: *fiscal
+  consola:
+    environment: *fiscal

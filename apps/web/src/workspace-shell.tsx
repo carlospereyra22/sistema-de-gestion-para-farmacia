@@ -69,6 +69,7 @@ import { canDismissProductBackdrop } from "./lib/product-backdrop";
 import { SaleQuantityInput } from "./sale-quantity-input";
 import { SaleCatalogTable } from "./sale-catalog-table";
 import { SaleProductDetail } from "./sale-product-detail";
+import { SaleStockSwitch } from "./sale-stock-switch";
 import {
   filterSaleCatalog,
   nextSaleCatalogSelection,
@@ -78,8 +79,36 @@ import {
 } from "./lib/sale-catalog";
 import { ResumeSaleDialog } from "./resume-sale-dialog";
 import { PriceListsWorkspace } from "./price-lists-workspace";
+import { OfertasWorkspace } from "./ofertas-workspace";
+import { ProductOffersCard } from "./product-offers-card";
+import { getOfertasVigentes } from "./lib/ofertas-api";
+import {
+  detalleOfertaVenta,
+  partesSugerencia,
+  ofertasDelCarrito,
+  ofertasDelProducto,
+  ofertasParaEnviar,
+  productosDeAplicacion,
+} from "./lib/ofertas-carrito";
+import { SaleCartOffers, type SugerenciaCarrito } from "./sale-cart-offers";
+import { SaleOffersControl } from "./sale-offers-control";
+import {
+  etiquetaOferta,
+  textoMedios,
+  type OfertaMotor,
+} from "./lib/ofertas-motor";
+import {
+  pagosDelCobro,
+  saldoConMedio,
+  type PagoCobro,
+} from "./lib/ofertas-cobro";
 import { sortSaleLines } from "./lib/sort-sale-lines";
-import { FractionalPriceFields } from "./fractional-price-fields";
+import {
+  FractionalPriceOptions,
+  FractionalPriceToggle,
+} from "./fractional-price-fields";
+import { SplitLinkOptions, SplitLinkToggle } from "./split-link-fields";
+import { ProductSplitDialog } from "./split-boxes-dialog";
 import { fractionalPricePreview } from "./lib/fractional-price-preview";
 import { toggleFractionalPrice } from "./lib/toggle-fractional-price";
 import { parsePrice } from "./lib/price-lists-api";
@@ -114,6 +143,8 @@ import {
   historialConPendientes,
   type VentaDelHistorial,
 } from "./lib/historial-con-pendientes";
+import { filtrarHistorialLocal } from "./lib/historial-local";
+import { useHistorialVentas, VENTAS_POR_PAGINA } from "./use-historial-ventas";
 import { getSubscriptionStatus } from "./lib/subscription-status";
 import { SinConexionError } from "./lib/api-fetch";
 import {
@@ -142,6 +173,12 @@ import { lotesParaTransferir } from "./lib/transferencias-sin-conexion";
 import { useSincronizarVentas } from "./lib/use-sincronizar-ventas";
 import { SaleCreditActions } from "./sale-credit-actions";
 import { SaleDetailTotal, SalePaymentSummary } from "./sale-detail-summary";
+import {
+  AhorroDeVentaDetalle,
+  DescuentoDeRenglonDetalle,
+  OfertasDeVentaDetalle,
+} from "./sale-detail-offers";
+import { TooltipFlotante } from "./tooltip-flotante";
 import { Pagination } from "./pagination";
 import { getSaleTicket } from "./lib/api";
 import { useSearchParams } from "react-router-dom";
@@ -266,6 +303,11 @@ import {
   facturaEsperaCaja,
   numeroDeVenta,
 } from "./lib/numero-venta";
+import {
+  descuentosDeRenglon,
+  descuentosDeVenta,
+  ofertasDeProducto,
+} from "./lib/descuentos-venta";
 import { TOKEN_SIN_CONEXION } from "./lib/cache-local";
 import { useConectividad } from "./lib/conectividad";
 import { shouldRouteSalesSearchKey } from "./lib/sales-search-key";
@@ -310,9 +352,12 @@ import {
   Archive,
   ArchiveRestore,
   ArrowLeftRight,
+  PackageOpen,
   Pencil,
   X,
   ReceiptText,
+  FileText,
+  Wallet,
   Boxes,
   Check,
   LayoutDashboard,
@@ -333,6 +378,8 @@ import {
   ShoppingCart,
   ShieldCheck,
   Tags,
+  BadgePercent,
+  Info,
   Trash2,
   Users,
   Settings,
@@ -365,6 +412,8 @@ import {
   getPriceLists,
   getRoles,
   getSales,
+  getSalesHistory,
+  type FiltroHistorialVentas,
   getStock,
   getTransfers,
   getUserCreateOptions,
@@ -390,6 +439,7 @@ import {
   type UserListItem,
   actualizarBaseMedicamentos,
   enviarExhibidor,
+  OfertasCambiaronError,
 } from "./lib/api";
 import {
   effectiveSalePriceListId,
@@ -402,6 +452,7 @@ const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Productos", icon: Package },
   { name: "Categorías y laboratorios", icon: Shapes },
   { name: "Listas de precios", icon: Tags },
+  { name: "Ofertas", icon: BadgePercent },
   { name: "Inventario", icon: Boxes },
   { name: "Caja", icon: CashRegisterIcon },
   { name: "Compras", icon: ClipboardList },
@@ -416,6 +467,28 @@ const money = (minor: string | number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
     Number(minor) / 100,
   );
+// De dónde vino el ahorro de una venta, para la columna del historial.
+const origenAhorro = (descuento: {
+  ofertasMinor: number;
+  descuentoMinor: number;
+}) =>
+  descuento.ofertasMinor && descuento.descuentoMinor
+    ? "Oferta y descuento"
+    : descuento.ofertasMinor
+      ? "Oferta"
+      : "Descuento";
+// Desglose del total en el detalle de una venta (SISTEMA-104): solo si tuvo
+// ofertas o descuento.
+const desgloseVenta = (sale: Sale) => {
+  const descuento = descuentosDeVenta(sale.items);
+  return {
+    subtotal: money(descuento.subtotalMinor),
+    ofertas: descuento.ofertasMinor ? money(descuento.ofertasMinor) : undefined,
+    descuento: descuento.descuentoMinor
+      ? money(descuento.descuentoMinor)
+      : undefined,
+  };
+};
 // Sin busqueda se muestra todo el catalogo; el tope evita renderizar miles de filas.
 const SALE_CATALOG_ROW_LIMIT = 200;
 /** Cada cuánto se revisa el historial mientras una factura espera a ARCA. */
@@ -425,6 +498,7 @@ const HISTORIAL_FACTURAS_MS = 15_000;
 const PANTALLAS_CON_CATALOGO_ORGANIZACION = new Set<string>([
   "Productos",
   "Listas de precios",
+  "Ofertas",
   "Transferencias",
 ]);
 
@@ -552,6 +626,12 @@ export function WorkspaceShell({
   const [pendingSaleConfirmation, setPendingSaleConfirmation] = useState<
     { action: "branch"; branchId: string } | { action: "logout" } | null
   >(null);
+  // "Crear oferta para este producto" desde Productos (SISTEMA-103).
+  const [ofertaParaProducto, setOfertaParaProducto] = useState<string>();
+  const limpiarOfertaParaProducto = useCallback(
+    () => setOfertaParaProducto(undefined),
+    [],
+  );
   const [listEditingProduct, setListEditingProduct] =
     useState<CatalogProduct>();
   // Producto que Compras pide crear desde un renglón importado; `resolve`
@@ -1013,16 +1093,20 @@ export function WorkspaceShell({
       }}
     />
   );
+  const administrationActive = (tab: "users" | "roles" | "branches") =>
+    tab === "branches"
+      ? view === "Organización"
+      : view === "Administración" && administrationTab === tab;
   const administrationButtonClass = (tab: "users" | "roles" | "branches") =>
-    `flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${(tab === "branches" ? view === "Organización" : view === "Administración" && administrationTab === tab) ? "border-[#cce8de] bg-[#e9f8f3] font-semibold text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-[#f5f8fa] hover:text-slate-800"}`;
+    `flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${administrationActive(tab) ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`;
   return (
     <main
       ref={sidebar.shell}
-      className="workspace-shell min-h-screen bg-[#f4f8fa] text-slate-900"
+      className="workspace-shell min-h-screen bg-fondo text-slate-900"
     >
       <header
         ref={sidebar.header}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
         <div className="flex items-center gap-3">
           <SidebarToggle
@@ -1043,6 +1127,7 @@ export function WorkspaceShell({
           </div>
           {(view === "Compras" ||
             view === "Listas de precios" ||
+            view === "Ofertas" ||
             view === "Clientes" ||
             view === "Proveedores" ||
             view === "Inventario" ||
@@ -1063,6 +1148,8 @@ export function WorkspaceShell({
                 <Truck size={22} aria-hidden />
               ) : view === "Listas de precios" ? (
                 <Tags size={22} aria-hidden />
+              ) : view === "Ofertas" ? (
+                <BadgePercent size={22} aria-hidden />
               ) : view === "Clientes" ? (
                 <ContactRound size={22} aria-hidden />
               ) : view === "Inventario" ? (
@@ -1225,7 +1312,7 @@ export function WorkspaceShell({
         />
         <NavigationRail
           collapsed={!sidebar.expanded}
-          className="workspace-navigation border-r border-slate-200 bg-[#fcfefe] px-3 py-5"
+          className="workspace-navigation border-r border-slate-200 bg-niebla-996 px-3 py-5"
         >
           <p className="px-3 pb-3 text-xs font-semibold tracking-wide text-slate-600">
             OPERACIÓN
@@ -1240,10 +1327,11 @@ export function WorkspaceShell({
                     key={name}
                     aria-label={name}
                     onClick={() => setPage(name)}
-                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-[#cce8de] bg-[#e9f8f3] font-semibold text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-[#f5f8fa] hover:text-slate-800"}`}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`}
                   >
                     <span
-                      className={`grid size-6 shrink-0 place-items-center rounded-md ${active ? "bg-white text-[#087f70] shadow-sm" : "text-slate-500"}`}
+                      className={`grid size-6 shrink-0 place-items-center rounded-md ${active ? "bg-white text-marca-535 shadow-sm" : "text-slate-500"}`}
                     >
                       <Icon className="size-4" />
                     </span>
@@ -1264,6 +1352,9 @@ export function WorkspaceShell({
                 type="button"
                 onClick={() => openAdministration("users")}
                 aria-label="Usuarios"
+                aria-current={
+                  administrationActive("users") ? "page" : undefined
+                }
                 className={administrationButtonClass("users")}
               >
                 <span className="grid size-6 shrink-0 place-items-center text-current">
@@ -1277,6 +1368,9 @@ export function WorkspaceShell({
                 type="button"
                 onClick={() => openAdministration("roles")}
                 aria-label="Roles y permisos"
+                aria-current={
+                  administrationActive("roles") ? "page" : undefined
+                }
                 className={administrationButtonClass("roles")}
               >
                 <span className="grid size-6 shrink-0 place-items-center text-current">
@@ -1290,6 +1384,9 @@ export function WorkspaceShell({
                 type="button"
                 onClick={() => setPage("Organización")}
                 aria-label="Organización"
+                aria-current={
+                  administrationActive("branches") ? "page" : undefined
+                }
                 className={administrationButtonClass("branches")}
               >
                 <span className="grid size-6 shrink-0 place-items-center text-current">
@@ -1301,7 +1398,7 @@ export function WorkspaceShell({
           </nav>
         </NavigationRail>
         <section
-          className={`workspace-content min-w-0 bg-[#f4f8fa] p-4 lg:px-7 lg:py-3 ${view === "Transferencias" ? "flex flex-col" : ""}`}
+          className={`workspace-content min-w-0 bg-fondo p-4 lg:px-7 lg:py-3 ${view === "Transferencias" ? "flex flex-col" : ""}`}
         >
           {accessToken && organizationId && branches.length > 0 && !branchId ? (
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
@@ -1311,6 +1408,7 @@ export function WorkspaceShell({
           ) : null}
           {view !== "Ventas" &&
             view !== "Listas de precios" &&
+            view !== "Ofertas" &&
             view !== "Caja" &&
             view !== "Cuentas corrientes" &&
             view !== "Cuentas por pagar" &&
@@ -1396,8 +1494,36 @@ export function WorkspaceShell({
               stock={stock}
               canManage={permissionCodes.includes("CATALOG_MANAGE")}
               canSeeCosts={permissionCodes.includes("COST_READ")}
+              onOffers={
+                canOpenView("Ofertas", permissionCodes)
+                  ? () => setPage("Ofertas")
+                  : undefined
+              }
+              onCreateOffer={
+                permissionCodes.includes("OFFER_MANAGE")
+                  ? (productId) => {
+                      setOfertaParaProducto(productId);
+                      setPage("Ofertas");
+                    }
+                  : undefined
+              }
               done={() => void refresh()}
               error={setMessage}
+            />
+          ) : null}
+          {ready && view === "Ofertas" ? (
+            <OfertasWorkspace
+              key={`ofertas:${organizationId}`}
+              token={accessToken!}
+              organizationId={organizationId!}
+              branches={branches}
+              products={organizationProducts}
+              stock={stock}
+              canManage={permissionCodes.includes("OFFER_MANAGE")}
+              canSeeCosts={permissionCodes.includes("COST_READ")}
+              crearPara={ofertaParaProducto}
+              onCrearParaUsado={limpiarOfertaParaProducto}
+              onError={setMessage}
             />
           ) : null}
           {ready && view === "Categorías y laboratorios" ? (
@@ -1995,7 +2121,13 @@ function Products({
   onEditorClose,
   canManage = true,
   canSeeCosts = true,
+  onOffers,
+  onCreateOffer,
 }: {
+  /** Abre el apartado Ofertas (SISTEMA-103). */
+  onOffers?: () => void;
+  /** "Crear oferta para este producto": abre el alta con el producto elegido. */
+  onCreateOffer?: (productId: string) => void;
   token: string;
   organizationId: string;
   products: CatalogProduct[];
@@ -2044,9 +2176,34 @@ function Products({
   >("auto");
   const [description, setDescription] = useState("");
   const [editingProduct, setEditingProduct] = useState<CatalogProduct>();
+  // Ofertas activas y programadas (SISTEMA-103): etiqueta, filtro y detalle.
+  const [ofertasCatalogo, setOfertasCatalogo] = useState<OfertaMotor[]>([]);
+  const [soloConOferta, setSoloConOferta] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void getOfertasVigentes(token, organizationId)
+      .then((items) => {
+        if (current) setOfertasCatalogo(items);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [token, organizationId]);
+  const ahoraCatalogo = new Date();
+  const ofertasDe = (product: CatalogProduct) =>
+    ofertasDelProducto(product, ofertasCatalogo, ahoraCatalogo, branchId);
+  // Abrir cajas (SISTEMA-103) desde la fila del producto.
+  const [splittingProduct, setSplittingProduct] = useState<CatalogProduct>();
   const [generateInternalBarcode, setGenerateInternalBarcode] = useState(false);
   const [fractionEnabled, setFractionEnabled] = useState(false);
   const [fractionDivisor, setFractionDivisor] = useState("2");
+  // Abrir cajas (SISTEMA-103): en qué producto se abre esta caja.
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitTargetId, setSplitTargetId] = useState("");
+  const [splitFactor, setSplitFactor] = useState("");
+  // Precio editado a mano en un medicamento vinculado (SISTEMA-103).
+  const [priceManual, setPriceManual] = useState(false);
   const [fractionMarkup, setFractionMarkup] = useState("0");
   const [fractionBase, setFractionBase] = useState("");
   const [productImage, setProductImage] = useState<string | null | undefined>();
@@ -2202,7 +2359,9 @@ function Products({
   const [retailLinkSearchRevision, setRetailLinkSearchRevision] = useState(0);
   const [retailLinkHint, setRetailLinkHint] = useState("");
   const scannedMedicine = useRef<MedicineReference | null>(null);
-  const priceLocked =
+  // Precio que sigue al padrón. Se puede editar igual: queda manual y la
+  // actualización automática ya no lo cambia (SISTEMA-103).
+  const priceSynced =
     isMedication &&
     (saleUnit === "BOX" || fractionEnabled) &&
     Boolean(
@@ -2211,6 +2370,11 @@ function Products({
         editingProduct.externalReferenceName &&
         editingProduct.externalReferencePriceMinor != null),
     );
+  const priceLocked = priceSynced && !priceManual;
+  const referencePriceMinor =
+    selectedReference?.priceMinor ??
+    editingProduct?.externalReferencePriceMinor ??
+    null;
   const fractionLinked =
     isMedication &&
     Boolean(
@@ -2318,6 +2482,25 @@ function Products({
         throw new Error(
           "Revisá el precio base, el divisor (entero mayor a cero) y el recargo del fraccionamiento.",
         );
+      const splitUnits = Number(splitFactor);
+      if (
+        !initialProduct &&
+        splitEnabled &&
+        (!splitTargetId ||
+          !Number.isInteger(splitUnits) ||
+          splitUnits < 2 ||
+          splitUnits > 1000)
+      )
+        throw new Error(
+          "Para abrir cajas elegí el producto y cuántas unidades trae cada caja (de 2 a 1000).",
+        );
+      const splitInput = initialProduct
+        ? {}
+        : splitEnabled
+          ? { splitTargetProductId: splitTargetId, splitFactor: splitUnits }
+          : editingProduct?.splitTargetProductId
+            ? { splitTargetProductId: null, splitFactor: null }
+            : {};
       const fractionInput = initialProduct
         ? {}
         : {
@@ -2349,6 +2532,10 @@ function Products({
             brand,
             isMedication,
             ...fractionInput,
+            ...splitInput,
+            ...(priceManual !== (editingProduct.priceManual ?? false)
+              ? { priceManual }
+              : {}),
             imageDataUrl: productImage,
             name,
             priceMinor:
@@ -2389,6 +2576,8 @@ function Products({
             brand: brand || undefined,
             isMedication,
             ...fractionInput,
+            ...splitInput,
+            ...(priceManual ? { priceManual: true } : {}),
             imageDataUrl: productImage ?? undefined,
             name,
             priceMinor: fractionEnabled
@@ -2590,6 +2779,10 @@ function Products({
     if (optionCreateLock.current) return;
     setFractionEnabled(false);
     setFractionDivisor("2");
+    setSplitEnabled(false);
+    setSplitTargetId("");
+    setSplitFactor("");
+    setPriceManual(false);
     setFractionMarkup("0");
     setFractionBase("");
     if (!keepOpen) onEditorClose?.();
@@ -2906,6 +3099,10 @@ function Products({
     );
     setFractionEnabled(product.priceDivisor != null);
     setFractionDivisor(String(product.priceDivisor ?? 2));
+    setSplitEnabled(product.splitTargetProductId != null);
+    setSplitTargetId(product.splitTargetProductId ?? "");
+    setSplitFactor(product.splitFactor ? String(product.splitFactor) : "");
+    setPriceManual(product.priceManual ?? false);
     setFractionMarkup(String((product.priceMarkupBps ?? 0) / 100));
     setFractionBase(
       String(
@@ -3043,7 +3240,9 @@ function Products({
       (!lotQuery.trim() ||
         lotesDelProducto(stock, product.id).some(
           (lot) => lot.quantity > 0 && lotNumberMatches(lot.number, lotQuery),
-        ))
+        )) &&
+      (!soloConOferta ||
+        ofertasDe(product).some(({ estado }) => estado === "ACTIVA"))
     );
   });
   const productFilterKey = JSON.stringify([
@@ -3056,6 +3255,7 @@ function Products({
     stockFilter,
     expiryFilter,
     additionalFilters,
+    soloConOferta,
   ]);
   const productTotalPages = Math.max(
     1,
@@ -3121,6 +3321,15 @@ function Products({
                   setExpiryFilter(next.expiry);
                 }}
               />
+              <button
+                type="button"
+                aria-pressed={soloConOferta}
+                onClick={() => setSoloConOferta((value) => !value)}
+                className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-3 text-xs font-semibold shadow-sm ${soloConOferta ? "border-rose-300 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50"}`}
+              >
+                <BadgePercent size={16} />
+                Con oferta vigente
+              </button>
               {canManage && (
                 <button
                   type="button"
@@ -3199,7 +3408,7 @@ function Products({
                 },
                 { label: "Lote", className: "w-px" },
                 {
-                  label: "Stock vendible total",
+                  label: "Vendibles",
                   className: "w-px",
                   hint: {
                     title: "Qué incluye",
@@ -3209,7 +3418,7 @@ function Products({
                 { label: "Próx. venc." },
                 { label: "Estado" },
                 ...(canManage
-                  ? [{ label: "Acciones", align: "right" as const }]
+                  ? [{ label: "Acciones", align: "center" as const }]
                   : []),
               ]}
               footer={
@@ -3314,6 +3523,19 @@ function Products({
                           primary={
                             <>
                               {product.name}
+                              {ofertasDe(product).map(
+                                ({ oferta, estado, label }) => (
+                                  <span
+                                    key={oferta.id}
+                                    title={`${estado === "ACTIVA" ? "En oferta" : "Oferta programada"}: ${oferta.name}`}
+                                    className={`ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${estado === "ACTIVA" ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-500"}`}
+                                  >
+                                    {estado === "ACTIVA"
+                                      ? label
+                                      : `Prog. ${label}`}
+                                  </span>
+                                ),
+                              )}
                               {/* Hecho sin conexión y todavía no enviado (SISTEMA-79). */}
                               {(product.porEnviar ||
                                 lotesDelProducto(stock, product.id).some(
@@ -3429,8 +3651,33 @@ function Products({
                         ) : null}
                       </DataTableCell>
                       {canManage && (
-                        <DataTableCell align="right">
+                        <DataTableCell align="center">
                           <span className="inline-flex gap-1.5">
+                            {product.splitTargetProductId &&
+                            stock.some(
+                              (lot) =>
+                                lot.productId === product.id &&
+                                lot.sellableQuantity > 0,
+                            ) ? (
+                              <RowIconAction
+                                tone="neutral"
+                                label={`Abrir cajas de ${product.name}`}
+                                title="Abrir cajas"
+                                onClick={() => setSplittingProduct(product)}
+                              >
+                                <PackageOpen size={16} />
+                              </RowIconAction>
+                            ) : null}
+                            {onCreateOffer && (
+                              <RowIconAction
+                                tone="neutral"
+                                label={`Crear oferta para ${product.name}`}
+                                title="Crear oferta"
+                                onClick={() => onCreateOffer(product.id)}
+                              >
+                                <BadgePercent size={16} />
+                              </RowIconAction>
+                            )}
                             <RowIconAction
                               tone="edit"
                               label={`Editar ${product.name}`}
@@ -3504,6 +3751,21 @@ function Products({
             onClose={() => setProductSaveError("")}
           />
         )}
+        {splittingProduct && (
+          <ProductSplitDialog
+            token={token}
+            organizationId={organizationId}
+            branchId={branchId}
+            product={splittingProduct}
+            products={knownProducts}
+            stock={stock}
+            onClose={() => setSplittingProduct(undefined)}
+            onDone={() => {
+              setSplittingProduct(undefined);
+              done();
+            }}
+          />
+        )}
         {formOpen ? (
           <dialog
             ref={productEditorDialog}
@@ -3519,7 +3781,7 @@ function Products({
               )
                 clearForm();
             }}
-            className="m-auto w-[min(960px,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/35"
+            className="m-auto w-[min(960px,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-velo/35"
             onPointerDown={(event) => {
               backdropPress.current =
                 event.target === event.currentTarget && event.button === 0;
@@ -3621,7 +3883,9 @@ function Products({
                   <span
                     aria-hidden
                     style={{
-                      backgroundColor: isMedication ? "#087f73" : "#cbd5e1",
+                      backgroundColor: isMedication
+                        ? "var(--color-marca-535)"
+                        : "var(--color-slate-300)",
                     }}
                     className="relative h-6 w-11 shrink-0 rounded-full bg-slate-200 transition before:absolute before:left-1 before:top-1 before:size-4 before:rounded-full before:bg-white before:shadow-sm before:transition-transform peer-checked:bg-teal-700 peer-checked:before:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500 peer-focus-visible:ring-offset-2"
                   />
@@ -4266,58 +4530,128 @@ function Products({
                     />
                     Precio y venta
                   </h3>
-                  <FractionalPriceFields
-                    enabled={fractionEnabled}
-                    linked={fractionLinked}
-                    base={
-                      fractionLinked
+                  {(() => {
+                    const fractionProps = {
+                      enabled: fractionEnabled,
+                      linked: fractionLinked,
+                      base: fractionLinked
                         ? fractionReferenceMinor === null
                           ? ""
                           : String(Number(fractionReferenceMinor) / 100)
-                        : fractionBase
-                    }
-                    divisor={fractionDivisor}
-                    markup={fractionMarkup}
-                    result={fractionResult}
-                    disabled={!!initialProduct}
-                    onEnabled={(enabled) => {
-                      const draft = toggleFractionalPrice({
-                        enabled,
-                        linked: fractionLinked,
-                        box: saleUnit === "BOX",
-                        referenceMinor: fractionReferenceMinor,
-                        price,
-                        base: fractionBase,
-                      });
-                      setFractionBase(draft.base);
-                      setPrice(draft.price);
-                      setFractionEnabled(enabled);
-                    }}
-                    onBase={setFractionBase}
-                    onDivisor={setFractionDivisor}
-                    onMarkup={setFractionMarkup}
-                  />
+                        : fractionBase,
+                      divisor: fractionDivisor,
+                      markup: fractionMarkup,
+                      result: fractionResult,
+                      disabled: !!initialProduct,
+                      onEnabled: (enabled: boolean) => {
+                        const draft = toggleFractionalPrice({
+                          enabled,
+                          linked: fractionLinked,
+                          box: saleUnit === "BOX",
+                          referenceMinor: fractionReferenceMinor,
+                          price,
+                          base: fractionBase,
+                        });
+                        setFractionBase(draft.base);
+                        setPrice(draft.price);
+                        setFractionEnabled(enabled);
+                      },
+                      onBase: setFractionBase,
+                      onDivisor: setFractionDivisor,
+                      onMarkup: setFractionMarkup,
+                    };
+                    const splitProps = {
+                      enabled: splitEnabled,
+                      product: {
+                        id: editingProduct?.id ?? "",
+                        name,
+                        presentation,
+                        laboratory: laboratoryId
+                          ? { id: laboratoryId, name: "" }
+                          : null,
+                        active: true,
+                      },
+                      products: knownProducts,
+                      targetId: splitTargetId,
+                      factor: splitFactor,
+                      disabled: !!initialProduct,
+                      onEnabled: setSplitEnabled,
+                      onTarget: setSplitTargetId,
+                      onFactor: setSplitFactor,
+                    };
+                    // Las dos opciones lado a lado; sus campos, debajo.
+                    return (
+                      <div className="mt-3 space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <FractionalPriceToggle {...fractionProps} />
+                          <SplitLinkToggle {...splitProps} />
+                        </div>
+                        <FractionalPriceOptions {...fractionProps} />
+                        <SplitLinkOptions {...splitProps} />
+                        {editingProduct && (
+                          <ProductOffersCard
+                            ofertas={ofertasDe(editingProduct)}
+                            onOpen={onOffers}
+                            onCreate={
+                              onCreateOffer
+                                ? () => onCreateOffer(editingProduct.id)
+                                : undefined
+                            }
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div
                     className={`mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2 ${isMedication ? "lg:grid-cols-3" : ""}`}
                   >
-                    <Input
-                      label="Precio de venta"
-                      disabled={
-                        priceLocked || fractionEnabled || !!initialProduct
-                      }
-                      type="number"
-                      value={
-                        fractionEnabled
-                          ? fractionResult === null
-                            ? ""
-                            : (Number(fractionResult) / 100).toFixed(2)
-                          : price
-                      }
-                      onChange={setPrice}
-                      placeholder="Ej. 9900"
-                      labelClassName="mt-0 text-xs font-semibold text-slate-600"
-                      className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
-                    />
+                    <div>
+                      <Input
+                        label="Precio de venta"
+                        prefix="$"
+                        disabled={fractionEnabled || !!initialProduct}
+                        type="number"
+                        value={
+                          fractionEnabled
+                            ? fractionResult === null
+                              ? ""
+                              : (Number(fractionResult) / 100).toFixed(2)
+                            : price
+                        }
+                        onChange={(value) => {
+                          setPrice(value);
+                          // Cambiarlo en un vinculado lo deja fijo a mano.
+                          if (priceLocked) setPriceManual(true);
+                        }}
+                        placeholder="Ej. 9900"
+                        labelClassName="mt-0 text-xs font-semibold text-slate-600"
+                        className="h-10 rounded-md border-slate-300 !text-sm placeholder:text-slate-400"
+                      />
+                      {priceSynced && !fractionEnabled && !initialProduct && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {priceManual ? (
+                            <>
+                              Precio manual: no se actualiza solo.{" "}
+                              <button
+                                type="button"
+                                className="font-medium text-teal-700 underline-offset-2 hover:underline"
+                                onClick={() => {
+                                  setPriceManual(false);
+                                  if (referencePriceMinor != null)
+                                    setPrice(
+                                      String(Number(referencePriceMinor) / 100),
+                                    );
+                                }}
+                              >
+                                Volver al automático
+                              </button>
+                            </>
+                          ) : (
+                            "Se actualiza solo con el padrón. Si lo cambiás, queda fijo."
+                          )}
+                        </p>
+                      )}
+                    </div>
                     <div className="mt-0 block text-xs font-semibold text-slate-600">
                       <span className="mb-1 block">Se vende por</span>
                       <ProductFilterSelect
@@ -4362,7 +4696,7 @@ function Products({
                     {isMedication && (
                       <label className="mt-0 block text-xs font-semibold text-slate-600">
                         Requiere receta
-                        <span className="mt-1 flex h-10 items-center justify-between rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-normal text-slate-700 transition hover:border-[#69a997]">
+                        <span className="mt-1 flex h-10 items-center justify-between rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-normal text-slate-700 transition hover:border-marca-686">
                           {prescriptionRequired
                             ? "Sí, requiere receta"
                             : "No requiere receta"}
@@ -4376,12 +4710,12 @@ function Products({
                           />
                           <span
                             aria-hidden="true"
-                            className="relative h-6 w-11 rounded-full bg-slate-200 transition before:absolute before:left-1 before:top-1 before:h-4 before:w-4 before:rounded-full before:bg-white before:shadow-sm before:transition-transform peer-checked:bg-[#31826a] peer-checked:before:translate-x-5"
+                            className="relative h-6 w-11 rounded-full bg-slate-200 transition before:absolute before:left-1 before:top-1 before:h-4 before:w-4 before:rounded-full before:bg-white before:shadow-sm before:transition-transform peer-checked:bg-marca-550 peer-checked:before:translate-x-5"
                           />
                         </span>
                       </label>
                     )}
-                    <div className="hidden rounded-md border border-[#cfe6df] bg-[#f3faf7] p-3 text-xs leading-5 text-slate-600">
+                    <div className="hidden rounded-md border border-marca-908 bg-marca-971 p-3 text-xs leading-5 text-slate-600">
                       Se crea activo. Podés desactivarlo después sin perder
                       historial.
                     </div>
@@ -4442,24 +4776,9 @@ function Products({
                       />
                     </div>
                   </section>
-                  <ProductFormSection
-                    title={
-                      description.trim()
-                        ? "Observaciones · Con notas"
-                        : "Observaciones"
-                    }
-                  >
-                    <label className="mt-3 block text-sm font-medium text-slate-700">
-                      Observaciones internas
-                      <textarea
-                        value={description}
-                        onChange={(event) => setDescription(event.target.value)}
-                        placeholder="Notas internas sobre el producto..."
-                        rows={3}
-                        className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-normal"
-                      />
-                    </label>
-                  </ProductFormSection>
+                  {/* Observaciones (SISTEMA-103): se guardan en la base (marca,
+                      categoría y fuente de la referencia) pero no se muestran
+                      en el editor; el formulario las conserva sin cambios. */}
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:px-7">
@@ -4603,6 +4922,7 @@ function Products({
         />
         <Input
           label="Precio de venta"
+          prefix="$"
           disabled={priceLocked}
           type="number"
           value={price}
@@ -4669,6 +4989,11 @@ function Inventory({
   const [inventoryMode, setInventoryMode] = useState<
     "receive" | "adjust" | "return"
   >("receive");
+  // Abrir cajas (SISTEMA-103).
+  const [splitLot, setSplitLot] = useState<StockLot | null>(null);
+  const splitProduct = splitLot
+    ? products.find((product) => product.id === splitLot.productId)
+    : undefined;
   const [scannedCode, setScannedCode] = useState("");
   const [scanStatus, setScanStatus] = useState("");
   const [scanError, setScanError] = useState(false);
@@ -4980,6 +5305,24 @@ function Inventory({
   return (
     <div className="workspace-split grid gap-6">
       <div className="min-w-0 self-start space-y-3">
+        {splitLot && splitProduct && (
+          <ProductSplitDialog
+            token={token}
+            organizationId={organizationId}
+            branchId={branchId}
+            product={splitProduct}
+            products={products}
+            stock={stock}
+            initialLotId={splitLot.id}
+            onClose={() => setSplitLot(null)}
+            onDone={(message) => {
+              setSplitLot(null);
+              setScanStatus(message);
+              setScanError(false);
+              done();
+            }}
+          />
+        )}
         {adjustmentError && (
           <ProductSaveErrorDialog
             title="No pudimos registrar el ajuste"
@@ -5004,6 +5347,13 @@ function Inventory({
             onAdjust={adjustLot}
             onReceive={receiveLot}
             onReturn={returnLot}
+            onSplit={setSplitLot}
+            canSplit={(lot) =>
+              Boolean(
+                products.find((product) => product.id === lot.productId)
+                  ?.splitTargetProductId,
+              )
+            }
             footer={
               <Pagination
                 integrated
@@ -5402,6 +5752,8 @@ function Sales({
       discountMinor: number;
       // Unidades de la línea vendidas como exhibidor cerrado.
       packQuantity?: number;
+      // La cajera eligió no aplicar ofertas a este producto.
+      skipOffers?: boolean;
     }[]
   >([]);
   const [resumeNeeded, setResumeNeeded] = useState(false);
@@ -5560,6 +5912,299 @@ function Sales({
       prices: price == null ? [] : [{ amountMinor: price }],
     };
   });
+  // Ofertas (SISTEMA-103): se aplican solas en el carrito. La API las
+  // recalcula al confirmar; si no coinciden responde 409 y se actualizan.
+  const [ofertasVigentes, setOfertasVigentes] = useState<OfertaMotor[]>([]);
+  const [ofertasVersion, setOfertasVersion] = useState(0);
+  const [ahoraOfertas, setAhoraOfertas] = useState(() => new Date());
+  const [avisoOfertas, setAvisoOfertas] = useState("");
+  // Sugerencias que la cajera descartó en esta venta.
+  const [ofertasDescartadas, setOfertasDescartadas] = useState<string[]>([]);
+  // Ofertas que la cajera quitó de toda la venta (la API también las saltea).
+  const [ofertasQuitadas, setOfertasQuitadas] = useState<string[]>([]);
+  useEffect(() => {
+    if (!active) return;
+    let current = true;
+    void getOfertasVigentes(token, organizationId)
+      .then((items) => {
+        if (!current) return;
+        setOfertasVigentes(items);
+        // La hora de la vigencia se renueva junto con las ofertas: si no,
+        // una oferta recién creada parecía programada hasta el próximo
+        // refresco (la hora quedaba la de cuando se salió de Ventas).
+        setAhoraOfertas(new Date());
+      })
+      // Sin ofertas guardadas se vende sin ofertas; la API decide al cobrar.
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [active, token, organizationId, ofertasVersion]);
+  useEffect(() => {
+    if (!active) return;
+    // La vigencia depende de la hora (días y franjas): se revisa seguido,
+    // y enseguida al volver a Ventas.
+    setAhoraOfertas(new Date());
+    const timer = window.setInterval(() => setAhoraOfertas(new Date()), 30_000);
+    const unsubscribe = subscribeSalesDataRefresh(() =>
+      setOfertasVersion((version) => version + 1),
+    );
+    return () => {
+      window.clearInterval(timer);
+      unsubscribe();
+    };
+  }, [active]);
+  const listPriceOf = (productId: string) =>
+    Number(productoPorId(products, productId)?.prices[0]?.amountMinor ?? 0);
+  const subtotal = lines.reduce(
+    (sum, line) =>
+      sum +
+      Number(
+        line.requestedUnitPriceMinor ??
+          line.unitPriceMinor ??
+          productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
+          0,
+      ) *
+        line.quantity,
+    0,
+  );
+  const discountMinor = lines.reduce(
+    (sum, line) => sum + line.discountMinor,
+    0,
+  );
+  const renglonesOferta = lines.map((line) => ({
+    productId: line.productId,
+    description: line.description,
+    quantity: line.quantity,
+    listPriceMinor: listPriceOf(line.productId),
+    requestedUnitPriceMinor: line.requestedUnitPriceMinor,
+    skipOffers: line.skipOffers,
+  }));
+  const contextoOfertas = {
+    ahora: ahoraOfertas,
+    branchId,
+    priceListId: activeSaleListId || null,
+  };
+  const ofertasVenta = ofertasVigentes.filter(
+    (oferta) => !ofertasQuitadas.includes(oferta.id),
+  );
+  // Ofertas sin mirar el cobro: las del carrito.
+  const ofertasBase = ofertasDelCarrito(
+    renglonesOferta,
+    catalogProducts,
+    ofertasVenta,
+    contextoOfertas,
+  );
+  // Ofertas por medio de pago (SISTEMA-103): dependen de cómo se cobra. El
+  // total de la venta incluye lo que no pasa por el motor (conceptos, precios
+  // especiales, descuento general), igual que en la API.
+  const hayOfertaPorPago = ofertasVigentes.some(
+    (oferta) => oferta.type === "PAYMENT_METHOD",
+  );
+  const ofertasConPagos = (pagos: readonly PagoCobro[]) => {
+    if (!hayOfertaPorPago) return ofertasBase;
+    const enCatalogo = new Set(catalogProducts.map((producto) => producto.id));
+    const brutoMotorMinor = renglonesOferta
+      .filter(
+        (renglon) => !renglon.description && enCatalogo.has(renglon.productId),
+      )
+      .reduce(
+        (suma, renglon) => suma + renglon.listPriceMinor * renglon.quantity,
+        0,
+      );
+    return ofertasDelCarrito(renglonesOferta, catalogProducts, ofertasVenta, {
+      ...contextoOfertas,
+      cobro: {
+        pagos: pagos.map((pago) => ({
+          method: pago.method,
+          amountMinor: BigInt(pago.amountMinor),
+        })),
+        otrosMinor: BigInt(subtotal - discountMinor - brutoMotorMinor),
+      },
+    });
+  };
+  const totalConPagos = (pagos: readonly PagoCobro[]) =>
+    subtotal - ofertasConPagos(pagos).totalMinor - discountMinor;
+  // Con la ventana de cobro abierta, el total se calcula con los pagos
+  // cargados y el que se está cargando (sin importe escrito, el que salda).
+  const montoAutomatico = useRef("");
+  const ofertasCarrito =
+    checkoutOpen && hayOfertaPorPago
+      ? ofertasConPagos(
+          pagosDelCobro({
+            pagos: payments,
+            metodo: method,
+            montoEscrito:
+              paymentAmount.trim() && paymentAmount !== montoAutomatico.current
+                ? parseArgentineAmountMinor(paymentAmount)
+                : undefined,
+            totalCon: totalConPagos,
+          }),
+        )
+      : ofertasBase;
+  // Nombre y precio efectivo de un producto, para explicar sus ofertas.
+  const productoVenta = (id: string) => {
+    const producto = productoPorId(products, id);
+    return producto
+      ? {
+          nombre: [producto.name, producto.presentation]
+            .filter(Boolean)
+            .join(" · "),
+          precioMinor: Number(producto.prices[0]?.amountMinor ?? 0),
+        }
+      : undefined;
+  };
+  const ofertasActivasDe = (producto: CatalogProduct) =>
+    ofertasDelProducto(producto, ofertasVigentes, ahoraOfertas, branchId)
+      .filter(({ estado }) => estado === "ACTIVA")
+      .map(({ oferta }) => detalleOfertaVenta(oferta, productoVenta));
+  const cantidadEnCarrito = (productId: string) =>
+    lines.find((line) => !line.description && line.productId === productId)
+      ?.quantity ?? 0;
+  const sugerenciasCarrito: SugerenciaCarrito[] =
+    ofertasBase.sugerencias.flatMap((sugerencia): SugerenciaCarrito[] => {
+      const oferta = ofertasVigentes.find(
+        (item) => item.id === sugerencia.offerId,
+      );
+      if (!oferta) return [];
+      // Por medio de pago: se aplica en el cobro, acá sólo se avisa.
+      if (sugerencia.medioDePago)
+        return [
+          {
+            id: oferta.id,
+            label: sugerencia.label,
+            nombre: oferta.name,
+            agregar: `Pagando con ${textoMedios(sugerencia.medioDePago.medios)}`,
+            gana: `ahorrás ${money(Number(sugerencia.medioDePago.ahorroMinor))} (se aplica al cobrar)`,
+          },
+        ];
+      // Por monto de compra: cuánto falta para llegar.
+      if (sugerencia.porMonto)
+        return [
+          {
+            id: oferta.id,
+            label: sugerencia.label,
+            nombre: oferta.name,
+            agregar: `Sumá ${money(Number(sugerencia.porMonto.faltaMinor))} más`,
+            gana: `y tenés ${oferta.percentBps ? `${String(oferta.percentBps / 100).replace(".", ",")}%` : money(Number(oferta.amountMinor ?? 0n))} menos con «${oferta.name}»`,
+          },
+        ];
+      if (oferta.type === "BUNDLE") {
+        const detalle = detalleOfertaVenta(oferta, productoVenta).combo;
+        const componentes = detalle?.componentes ?? [];
+        const armados = Math.min(
+          ...componentes.map((item) =>
+            Math.floor(cantidadEnCarrito(item.productId) / item.cantidad),
+          ),
+        );
+        return [
+          {
+            id: oferta.id,
+            label: sugerencia.label,
+            nombre: oferta.name,
+            ...partesSugerencia(oferta, sugerencia.faltan, {
+              combo: {
+                faltantes: componentes.flatMap((item) => {
+                  const falta =
+                    item.cantidad * (armados + 1) -
+                    cantidadEnCarrito(item.productId);
+                  return falta > 0
+                    ? [`${falta > 1 ? `${falta} × ` : ""}${item.nombre}`]
+                    : [];
+                }),
+                ahorroMinor: detalle
+                  ? detalle.listaMinor - detalle.comboMinor
+                  : 0,
+                listaMinor: detalle?.listaMinor ?? 0,
+              },
+            }),
+            combo: true,
+            componentes: componentes.map((item) => ({
+              nombre: item.nombre,
+              cantidad: item.cantidad,
+              enCarrito:
+                cantidadEnCarrito(item.productId) - armados * item.cantidad,
+            })),
+            accion: {
+              texto: "Completar",
+              onClick: () => {
+                for (const item of componentes) {
+                  const falta =
+                    item.cantidad * (armados + 1) -
+                    cantidadEnCarrito(item.productId);
+                  if (falta > 0 && !addProductToSale(item.productId, falta))
+                    return;
+                }
+              },
+            },
+          },
+        ];
+      }
+      const productoId = sugerencia.productIds[0];
+      return [
+        {
+          id: oferta.id,
+          label: sugerencia.label,
+          nombre: oferta.name,
+          ...partesSugerencia(oferta, sugerencia.faltan, {
+            enCarrito: sugerencia.productIds.reduce(
+              (suma, id) => suma + cantidadEnCarrito(id),
+              0,
+            ),
+          }),
+          ...(productoId
+            ? {
+                accion: {
+                  texto: `Agregar ${sugerencia.faltan}`,
+                  onClick: () => {
+                    addProductToSale(productoId, sugerencia.faltan);
+                  },
+                },
+              }
+            : {}),
+        },
+      ];
+    });
+  const ahorroOferta = (productId: string) =>
+    ofertasCarrito.porProducto.get(productId)?.ahorroMinor ?? 0;
+  const offerSavings = ofertasCarrito.totalMinor;
+  // El aviso de "cambió una oferta" mira el carrito sin el cobro: cambiar el
+  // medio de pago no es que cambió una oferta.
+  const ahorroBase = ofertasBase.totalMinor;
+  // Si cambia el ahorro sin que cambie el carrito (venció, empezó o se
+  // modificó una oferta, o se reanudó la venta), se avisa a la cajera.
+  // Cliente y lista entran en la firma: cambiarlos no es "cambió una oferta".
+  const firmaCarrito = JSON.stringify([
+    activeSaleListId,
+    // Quitar una oferta a mano no es "cambió una oferta".
+    ofertasQuitadas,
+    lines.map((line) => [
+      line.productId,
+      line.quantity,
+      line.requestedUnitPriceMinor ?? null,
+      // Elegir "No aplicar" no es "cambió una oferta".
+      line.skipOffers ?? false,
+    ]),
+  ]);
+  const ultimoAhorro = useRef<{ firma: string; ahorro: number }>(undefined);
+  useEffect(() => {
+    const previo = ultimoAhorro.current;
+    ultimoAhorro.current = { firma: firmaCarrito, ahorro: ahorroBase };
+    if (!lines.length) {
+      setAvisoOfertas("");
+      setOfertasDescartadas([]);
+      setOfertasQuitadas([]);
+    } else if (
+      previo &&
+      previo.firma === firmaCarrito &&
+      previo.ahorro !== ahorroBase
+    )
+      setAvisoOfertas(
+        ahorroBase < previo.ahorro
+          ? "Una oferta del carrito venció o cambió. Revisá el total antes de cobrar."
+          : "Se aplicó una oferta al carrito. Revisá el total antes de cobrar.",
+      );
+  }, [firmaCarrito, ahorroBase, lines.length]);
   const [receipt, setReceipt] = useState<Receipt>();
   const [conceptOpen, setConceptOpen] = useState(false);
   const [creditAccounts, setCreditAccounts] = useState<CustomerAccount[]>([]);
@@ -5640,23 +6285,7 @@ function Sales({
   const productStock = (id: string) =>
     stockByProduct.get(id) ?? { available: 0, expired: 0 };
   const available = (id: string) => productStock(id).available;
-  const subtotal = lines.reduce(
-    (sum, line) =>
-      sum +
-      Number(
-        line.requestedUnitPriceMinor ??
-          line.unitPriceMinor ??
-          productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
-          0,
-      ) *
-        line.quantity,
-    0,
-  );
-  const discountMinor = lines.reduce(
-    (sum, line) => sum + line.discountMinor,
-    0,
-  );
-  const total = subtotal - discountMinor;
+  const total = subtotal - offerSavings - discountMinor;
   const searchTerm = productQuery.trim().toLocaleLowerCase();
   const exactBarcodeProduct = products.find(
     (item) =>
@@ -5818,12 +6447,12 @@ function Sales({
     if (
       !Number.isSafeInteger(nextDiscountMinor) ||
       nextDiscountMinor < 0 ||
-      nextDiscountMinor > subtotal
+      nextDiscountMinor > subtotal - offerSavings
     ) {
       error("Indicá un descuento válido que no supere el subtotal.");
       return;
     }
-    const nextTotal = subtotal - nextDiscountMinor;
+    const nextTotal = subtotal - offerSavings - nextDiscountMinor;
     let nextPayments: typeof payments;
     try {
       nextPayments = paymentsAfterDiscount(nextTotal, payments);
@@ -5845,12 +6474,53 @@ function Sales({
               line.unitPriceMinor ??
               productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
               0,
-          ) * line.quantity,
+          ) *
+            line.quantity -
+          // El descuento general va después de las ofertas.
+          (line.description ? 0 : ahorroOferta(line.productId)),
       ),
     );
     setPayments(nextPayments);
   };
   const paid = payments.reduce((sum, payment) => sum + payment.amountMinor, 0);
+  // Aplicar o no las ofertas de un producto. Cambia el total: los pagos ya
+  // cargados se descartan, como al cambiar la lista o el descuento.
+  // Quitar o volver a aplicar una oferta en toda la venta.
+  const cambiarOfertaQuitada = (offerId: string, quitada: boolean) => {
+    setOfertasQuitadas((actuales) =>
+      quitada
+        ? [...new Set([...actuales, offerId])]
+        : actuales.filter((id) => id !== offerId),
+    );
+    setPayments([]);
+  };
+  const cambiarSinOfertas = (productId: string, sinOfertas: boolean) => {
+    setLines((current) =>
+      current.map((item) =>
+        !item.description && item.productId === productId
+          ? { ...item, skipOffers: sinOfertas || undefined }
+          : item,
+      ),
+    );
+    setPayments([]);
+  };
+  // Importe precargado por el sistema (lo que falta). Con ofertas por medio
+  // de pago el total cambia según el medio: si la cajera no lo tocó, se
+  // actualiza solo.
+  const precargarMonto = (minor: number) => {
+    const texto = cashAmountDraft(minor);
+    montoAutomatico.current = texto;
+    setPaymentAmount(texto);
+  };
+  useEffect(() => {
+    if (!checkoutOpen || !hayOfertaPorPago || method === "ACCOUNT") return;
+    if (!paymentAmount.trim() || paymentAmount !== montoAutomatico.current)
+      return;
+    const deseado = cashAmountDraft(Math.max(total - paid, 0));
+    if (deseado === paymentAmount) return;
+    montoAutomatico.current = deseado;
+    setPaymentAmount(deseado);
+  }, [checkoutOpen, hayOfertaPorPago, method, paymentAmount, total, paid]);
   const paymentAmountMinor = parseArgentineAmountMinor(paymentAmount);
   // Con la ventana de cobro abierta, los errores se muestran dentro de ella.
   const reportPayment = (message: string): undefined => {
@@ -5907,7 +6577,7 @@ function Sales({
   const openCheckout = () => {
     if (!lines.length || !pricingReady || submitting) return;
     setCheckoutError("");
-    if (!payments.length) setPaymentAmount(cashAmountDraft(total));
+    if (!payments.length) precargarMonto(total);
     setCheckoutOpen(true);
   };
   const closeCheckout = () => {
@@ -5930,7 +6600,7 @@ function Sales({
         setPaymentAmount("");
       } catch (cause) {
         setPayments(next);
-        setPaymentAmount(cashAmountDraft(Math.max(total - nextPaid, 0)));
+        precargarMonto(Math.max(total - nextPaid, 0));
         return reportPayment(
           cause instanceof Error
             ? cause.message
@@ -5939,7 +6609,7 @@ function Sales({
       }
     } else {
       setPayments(next);
-      setPaymentAmount(cashAmountDraft(Math.max(total - nextPaid, 0)));
+      precargarMonto(Math.max(total - nextPaid, 0));
     }
     setMethod(nextMethod);
   };
@@ -5956,7 +6626,7 @@ function Sales({
     setPayments(next);
     // Pago parcial: queda registrado y se precarga lo que falta.
     if (nextPaid < total) {
-      setPaymentAmount(cashAmountDraft(total - nextPaid));
+      precargarMonto(total - nextPaid);
       return;
     }
     setPaymentAmount("");
@@ -5983,8 +6653,22 @@ function Sales({
         );
         return;
       }
-    } else if (!paymentAmount.trim())
-      setPaymentAmount(cashAmountDraft(Math.max(total - paid, 0)));
+    } else if (
+      !paymentAmount.trim() ||
+      // Un importe que cubría todo (exacto o con vuelto) no es un pago
+      // parcial: al cambiar de medio pasa a ser lo que falta con el nuevo
+      // medio, y el efecto de abajo lo ajusta si hay ofertas por medio de
+      // pago. Solo un importe menor se conserva para el pago mixto (SISTEMA-104).
+      (paymentAmountMinor ?? 0) >= Math.max(total - paid, 0)
+    )
+      // Lo que falta ya con el medio nuevo: precargar el saldo del medio
+      // anterior hacía aparecer un instante «Faltan» y «Completar» (con ofertas
+      // por medio de pago el total cambia) y el cobro temblaba (SISTEMA-104).
+      precargarMonto(
+        hayOfertaPorPago
+          ? saldoConMedio(payments, value, totalConPagos)
+          : Math.max(total - paid, 0),
+      );
     setMethod(value);
   };
   const loadHistory = async () => {
@@ -6127,6 +6811,7 @@ function Sales({
     setPaymentAmount("");
     setCheckoutOpen(false);
     setCheckoutError("");
+    setAvisoOfertas("");
     setClientOperationId(crypto.randomUUID());
   };
   /**
@@ -6147,6 +6832,7 @@ function Sales({
       metodos: finalPayments.map((payment) => payment.method),
     });
     if (motivo) return reportPayment(motivo);
+    const ofertasEnvio = ofertasConPagos(finalPayments);
     const nombre = (productId: string) =>
       productoPorId(products, productId)?.name ?? "Producto";
     const occurredAt = ahoraSegunServidor().toISOString();
@@ -6165,7 +6851,7 @@ function Sales({
       cliente:
         customers.find((customer) => customer.id === customerId)?.name ??
         "Público general",
-      lineas: lines.map((line) => ({
+      lineas: lines.map((line, indice) => ({
         nombre: line.description ?? nombre(line.productId),
         cantidad: line.quantity,
         unitarioMinor: Number(
@@ -6174,10 +6860,20 @@ function Sales({
             productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
             0,
         ),
-        descuentoMinor: line.discountMinor,
+        // Descuento general repartido más el ahorro por ofertas.
+        descuentoMinor:
+          (cuerpo.items[indice]?.discountMinor ?? 0) +
+          (line.description
+            ? 0
+            : (ofertasEnvio.porProducto.get(line.productId)?.ahorroMinor ?? 0)),
       })),
       pagos: finalPayments,
       factura: documentType === "INVOICE",
+      ofertas: ofertasEnvio.aplicaciones.map((aplicacion) => ({
+        label: aplicacion.label,
+        name: aplicacion.name,
+        amountMinor: Number(aplicacion.discountMinor),
+      })),
     });
     const cuerpoGuardado = {
       ...cuerpo,
@@ -6274,14 +6970,40 @@ function Sales({
       return reportPayment(
         "Esperá a que se carguen los precios o actualizalos antes de cobrar.",
       );
+    // Ofertas con los pagos que se mandan (las por medio de pago dependen
+    // de ellos): es lo que la API recalcula.
+    const ofertasEnvio = ofertasConPagos(finalPayments);
+    const ahorroEnvio = (productId: string) =>
+      ofertasEnvio.porProducto.get(productId)?.ahorroMinor ?? 0;
+    const totalEnvio = subtotal - ofertasEnvio.totalMinor - discountMinor;
     try {
       if (
         finalPayments.reduce((sum, payment) => sum + payment.amountMinor, 0) <
-        total
+        totalEnvio
       )
         return reportPayment(
           "Agregá cobros hasta cubrir el total de la venta.",
         );
+      if (discountMinor > subtotal - offerSavings)
+        return reportPayment(
+          "Revisá el descuento general: con las ofertas supera el subtotal.",
+        );
+      // El descuento general se reparte sobre lo que queda después de las
+      // ofertas (el carrito pudo cambiar desde que se aplicó).
+      const lineasEnvio = discountMinor
+        ? distributeSaleDiscount(
+            lines,
+            discountMinor,
+            (line) =>
+              Number(
+                line.requestedUnitPriceMinor ??
+                  line.unitPriceMinor ??
+                  listPriceOf(line.productId),
+              ) *
+                line.quantity -
+              (line.description ? 0 : ahorroOferta(line.productId)),
+          )
+        : lines;
       setSubmitting(true);
       const cuerpo = {
         priceListId: salePriceListId || undefined,
@@ -6299,7 +7021,7 @@ function Sales({
         fiscalOptions: documentType === "INVOICE" ? fiscalOptions : undefined,
         clientOperationId,
         customerId: customerId || undefined,
-        items: lines.map((line) =>
+        items: lineasEnvio.map((line) =>
           line.description
             ? {
                 description: line.description,
@@ -6313,8 +7035,14 @@ function Sales({
                 packQuantity: Math.min(line.packQuantity ?? 0, line.quantity),
                 expectedUnitPriceMinor: productoPorId(products, line.productId)!
                   .prices[0]!.amountMinor,
+                // Ahorro por ofertas que ve la cajera: la API lo revalida.
+                expectedOfferDiscountMinor: String(ahorroEnvio(line.productId)),
               },
         ),
+        ...(ofertasEnvio.aplicaciones.length
+          ? { appliedOffers: ofertasParaEnviar(ofertasEnvio.aplicaciones) }
+          : {}),
+        ...(ofertasQuitadas.length ? { skippedOfferIds: ofertasQuitadas } : {}),
         payments: finalPayments.map((payment) => ({
           ...payment,
           cashSessionId: payment.method !== "ACCOUNT" ? session?.id : undefined,
@@ -6351,6 +7079,12 @@ function Sales({
       await loadHistory();
       done();
     } catch (cause) {
+      // Las ofertas cambiaron (empezó, venció o se modificó una): se
+      // actualizan y el carrito muestra el total nuevo para reconfirmar.
+      if (cause instanceof OfertasCambiaronError) {
+        setOfertasVersion((version) => version + 1);
+        setAhoraOfertas(new Date());
+      }
       // El mismo clientOperationId se conserva: reintentar no duplica la venta.
       reportPayment(
         cause instanceof Error
@@ -6366,6 +7100,7 @@ function Sales({
     sale: Sale,
     finalPayments: Receipt["payments"],
   ): Receipt {
+    const ofertasEnvio = ofertasConPagos(finalPayments);
     return {
       sale,
       customerName:
@@ -6383,10 +7118,14 @@ function Sales({
             productoPorId(products, line.productId)?.prices[0]?.amountMinor ??
             0,
         ),
-        discountMinor: line.discountMinor,
+        discountMinor:
+          line.discountMinor +
+          (line.description
+            ? 0
+            : (ofertasEnvio.porProducto.get(line.productId)?.ahorroMinor ?? 0)),
       })),
       subtotalMinor: subtotal,
-      discountMinor,
+      discountMinor: discountMinor + ofertasEnvio.totalMinor,
       payments: finalPayments,
     };
   }
@@ -6514,6 +7253,9 @@ function Sales({
         onContinue={() => {
           setCheckoutOpen(false);
           setResumeNeeded(false);
+          // Al reanudar se revalidan las ofertas (pudieron vencer o cambiar).
+          setOfertasVersion((version) => version + 1);
+          setAhoraOfertas(new Date());
         }}
         onDiscard={() => {
           setLines([]);
@@ -6548,6 +7290,7 @@ function Sales({
             organizationId,
             branchId,
           )}
+          actualizacion={history}
           products={products}
           customers={customers}
           operationReason={operationReason}
@@ -6687,19 +7430,14 @@ function Sales({
                 }}
               />
             </div>
-            <button
-              type="button"
-              aria-pressed={catalogInStockOnly}
-              onClick={() => {
-                setCatalogInStockOnly((current) => !current);
+            <SaleStockSwitch
+              checked={catalogInStockOnly}
+              onChange={(checked) => {
+                setCatalogInStockOnly(checked);
                 setProductId("");
                 focusProductSearch();
               }}
-              className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-sm font-medium ${catalogInStockOnly ? "border-teal-300 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-            >
-              {catalogInStockOnly && <Check size={15} />}
-              Con stock
-            </button>
+            />
           </div>
           <SaleCatalogTable
             token={token}
@@ -6708,6 +7446,22 @@ function Sales({
             rows={catalogRows.map((item) => ({
               product: item,
               ...productStock(item.id),
+              ...(() => {
+                const oferta = ofertasActivasDe(item)[0];
+                return oferta
+                  ? {
+                      offer: oferta.label,
+                      offerInfo: {
+                        nombre: oferta.nombre,
+                        lineas: oferta.combo
+                          ? oferta.combo.componentes.map(
+                              (item) => `${item.cantidad} × ${item.nombre}`,
+                            )
+                          : [oferta.texto],
+                      },
+                    }
+                  : {};
+              })(),
             }))}
             selectedId={selectedCatalogProduct?.id}
             hiddenCount={catalogMatches.length - catalogRows.length}
@@ -6739,12 +7493,19 @@ function Sales({
             onClear={clearCatalogSelection}
             onFinished={focusProductSearch}
             onInvalid={error}
+            ofertas={
+              selectedCatalogProduct
+                ? ofertasActivasDe(selectedCatalogProduct)
+                : []
+            }
+            onAddCombo={(componentes) => {
+              // Cada producto del combo con su cantidad; el stock lo revisa
+              // el mismo circuito de agregar.
+              for (const { productId, cantidad } of componentes)
+                if (!addProductToSale(productId, cantidad)) return;
+              clearCatalogSelection();
+            }}
           />
-          <p className="sale-shortcuts text-xs text-slate-500">
-            Doble clic o Enter agrega · <strong>F2</strong> buscar ·{" "}
-            <strong>+ / −</strong> última línea · <strong>Ctrl + Enter</strong>{" "}
-            cobrar
-          </p>
         </form>
       </section>
 
@@ -6752,6 +7513,46 @@ function Sales({
         lineCount={lines.length}
         unitCount={lines.reduce((sum, line) => sum + line.quantity, 0)}
         totalMinor={total}
+        offerSavingsMinor={offerSavings}
+        offerControl={
+          ofertasCarrito.aplicaciones.length || ofertasQuitadas.length ? (
+            <SaleOffersControl
+              aplicadas={ofertasCarrito.aplicaciones.map((aplicacion) => ({
+                id: aplicacion.offerId,
+                label: aplicacion.label,
+                nombre: aplicacion.name,
+                ahorroMinor: Number(aplicacion.discountMinor),
+              }))}
+              quitadas={ofertasVigentes
+                .filter((oferta) => ofertasQuitadas.includes(oferta.id))
+                .map((oferta) => ({
+                  id: oferta.id,
+                  label: etiquetaOferta(oferta),
+                  nombre: oferta.name,
+                }))}
+              onQuitar={(id) => cambiarOfertaQuitada(id, true)}
+              onAplicar={(id) => cambiarOfertaQuitada(id, false)}
+            />
+          ) : undefined
+        }
+        offerNotice={
+          <SaleCartOffers
+            aviso={avisoOfertas || undefined}
+            onCerrarAviso={() => setAvisoOfertas("")}
+            sugerencias={sugerenciasCarrito.filter(
+              (sugerencia) => !ofertasDescartadas.includes(sugerencia.id),
+            )}
+            onDescartar={(id) =>
+              setOfertasDescartadas((actuales) => [...actuales, id])
+            }
+            aplicadas={ofertasCarrito.aplicaciones.map((aplicacion) => ({
+              id: aplicacion.offerId,
+              label: aplicacion.label,
+              nombre: aplicacion.name,
+              ahorroMinor: Number(aplicacion.discountMinor),
+            }))}
+          />
+        }
         submitting={submitting}
         checkoutDisabled={!lines.length || submitting || !pricingReady}
         onCheckout={openCheckout}
@@ -6774,7 +7575,7 @@ function Sales({
         }
         discount={
           <SaleGeneralDiscount
-            subtotalMinor={subtotal}
+            subtotalMinor={subtotal - offerSavings}
             discountMinor={discountMinor}
             totalDiscountMinor={
               discountMinor +
@@ -6888,7 +7689,7 @@ function Sales({
                   return (
                     <article
                       key={line.productId}
-                      className={`sales-cart-row grid items-center gap-2.5 px-5 py-2.5 ${line.productId === lastAddedId ? "bg-teal-50" : ""}`}
+                      className={`sales-cart-row group grid items-center gap-2.5 px-5 py-2.5 ${line.productId === lastAddedId ? "bg-teal-50" : ""}`}
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <div className="shrink-0">
@@ -6923,6 +7724,72 @@ function Sales({
                                 title={saleProductDetail(product)}
                               >
                                 {saleProductDetail(product)}
+                              </p>
+                            )}
+                          {!line.description &&
+                            (ofertasCarrito.porProducto.get(line.productId)
+                              ?.labels.length ?? 0) > 0 && (
+                              <p className="flex flex-wrap gap-1">
+                                {ofertasCarrito.porProducto
+                                  .get(line.productId)!
+                                  .labels.map((label, posicion) => (
+                                    <span
+                                      key={label}
+                                      className="sale-offer-chip rounded-md bg-rose-50 text-[11px] font-bold text-rose-700"
+                                    >
+                                      {label}
+                                      {/* Discreto: la ✕ ocupa su lugar y se ve al pasar por la fila. */}
+                                      {posicion === 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            cambiarSinOfertas(
+                                              line.productId,
+                                              true,
+                                            )
+                                          }
+                                          aria-label="No aplicar la oferta en este producto"
+                                          title="No aplicar la oferta en este producto"
+                                          className="sale-offer-chip-skip"
+                                        >
+                                          <X size={11} aria-hidden />
+                                        </button>
+                                      )}
+                                    </span>
+                                  ))}
+                              </p>
+                            )}
+                          {!line.description && line.skipOffers && (
+                            <p className="flex flex-wrap gap-1">
+                              <span className="sale-offer-chip rounded-md bg-slate-100 text-[11px] font-bold text-slate-500">
+                                Sin oferta
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    cambiarSinOfertas(line.productId, false)
+                                  }
+                                  title="Volver a aplicar la oferta"
+                                  className="sale-offer-chip-restore"
+                                >
+                                  <span className="text-[11px] font-semibold">
+                                    Aplicar
+                                  </span>
+                                </button>
+                              </span>
+                            </p>
+                          )}
+                          {/* El precio manual reemplaza la oferta: se avisa. */}
+                          {!line.description &&
+                            line.requestedUnitPriceMinor !== undefined &&
+                            line.requestedUnitPriceMinor !==
+                              listPriceOf(line.productId) &&
+                            product &&
+                            ofertasActivasDe(product).length > 0 && (
+                              <p className="text-[11px] font-medium text-amber-700">
+                                Precio manual: no se aplica la oferta{" "}
+                                {ofertasActivasDe(product)
+                                  .map(({ label }) => label)
+                                  .join(", ")}
                               </p>
                             )}
                           <p className="flex items-center gap-2 text-xs text-slate-500">
@@ -7031,8 +7898,11 @@ function Sales({
                               return false;
                             }
                             try {
+                              // El precio manual reemplaza la oferta.
                               const nextTotal =
-                                total + (next - unitPrice) * line.quantity;
+                                total +
+                                (next - unitPrice) * line.quantity +
+                                ahorroOferta(line.productId);
                               const nextPayments = paymentsAfterDiscount(
                                 nextTotal,
                                 payments,
@@ -7058,11 +7928,25 @@ function Sales({
                         />
                       )}
                       <div className="text-right text-[15px] font-semibold tabular-nums">
+                        {!line.description && ahorroOferta(line.productId) ? (
+                          <p className="text-[11px] font-medium text-slate-400 line-through">
+                            {money(unitPrice * line.quantity)}
+                          </p>
+                        ) : null}
                         <p>
                           {money(
-                            unitPrice * line.quantity - line.discountMinor,
+                            unitPrice * line.quantity -
+                              line.discountMinor -
+                              (line.description
+                                ? 0
+                                : ahorroOferta(line.productId)),
                           )}
                         </p>
+                        {!line.description && ahorroOferta(line.productId) ? (
+                          <p className="text-[10px] font-medium text-rose-700">
+                            Ahorrás {money(ahorroOferta(line.productId))}
+                          </p>
+                        ) : null}
                         {line.discountMinor ? (
                           <p className="text-[10px] font-medium text-teal-700">
                             Dto. {money(line.discountMinor)}
@@ -7113,6 +7997,21 @@ function Sales({
           ].join(" · ")}
           subtotalMinor={subtotal}
           discountMinor={discountMinor}
+          offerSavingsMinor={offerSavings}
+          // Con ofertas por medio de pago el ahorro va y viene según el medio:
+          // la columna queda fija para que el total no se corra.
+          showOfferSavings={hayOfertaPorPago || ofertasBase.totalMinor > 0}
+          offers={ofertasCarrito.aplicaciones.map((aplicacion) => ({
+            id: aplicacion.offerId,
+            label: aplicacion.label,
+            nombre: aplicacion.name,
+            ahorroMinor: Number(aplicacion.discountMinor),
+            productos: productosDeAplicacion(
+              aplicacion.items,
+              (productId) =>
+                productoPorId(products, productId)?.name ?? "Producto",
+            ),
+          }))}
           totalMinor={total}
           paidMinor={paid}
           payments={groupedPayments}
@@ -7214,8 +8113,11 @@ function Sales({
         <SaleConfirmedDialog
           saleId={receipt.sale.id}
           totalMinor={Number(receipt.sale.totalMinor)}
+          savingsMinor={receipt.discountMinor}
           customerName={receipt.customerName}
           payments={receipt.payments}
+          storeName={storeName}
+          documentType={receipt.sale.documentType}
           aviso={
             receipt.ticketLocal && receipt.sale.documentType === "INVOICE"
               ? "Sin conexión: la factura C se emite sola en ARCA cuando vuelva internet. Ahora se imprime el comprobante provisorio."
@@ -7258,12 +8160,19 @@ function SalesHistory({
   onPrint,
   fiscalCapabilities,
   onInvoiced,
+  actualizacion,
 }: {
   token: string;
   organizationId: string;
   branchId: string;
-  /** Incluye las vendidas sin conexión que todavía no llegaron (SISTEMA-66). */
+  /**
+   * Copia local más las vendidas sin conexión que todavía no llegaron
+   * (SISTEMA-66). Con conexión la lista sale del servidor paginada
+   * (SISTEMA-104); esto aporta las pendientes y el respaldo sin internet.
+   */
   sales: VentaDelHistorial[];
+  /** Cambia cuando hay que volver a pedir el historial al servidor. */
+  actualizacion: unknown;
   products: CatalogProduct[];
   customers: Party[];
   operationReason: string;
@@ -7276,11 +8185,24 @@ function SalesHistory({
   fiscalCapabilities?: SaleFiscalCapabilities | null;
   onInvoiced: (sale: Sale) => void;
 }): ReactElement {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [status, setStatus] = useState<"" | Sale["status"]>("");
+  const [filtro, setFiltro] = useState<FiltroHistorialVentas>({});
+  const cambiarFiltro = (cambio: Partial<FiltroHistorialVentas>) => {
+    setFiltro((actual) => ({ ...actual, ...cambio }));
+    setPage(1);
+  };
+  const hayFiltros = Object.values(filtro).some(Boolean);
   const [selectedSaleId, setSelectedSaleId] = useState<string>();
   const [page, setPage] = useState(1);
+  const historial = useHistorialVentas({
+    token,
+    organizationId,
+    branchId,
+    filtro,
+    page,
+    respaldo: sales,
+    actualizacion,
+  });
+  const [exportando, setExportando] = useState(false);
   const detailDialog = useRef<HTMLDialogElement>(null);
   const actionPending = useRef(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -7299,26 +8221,25 @@ function SalesHistory({
       setActionBusy(false);
     }
   };
-  const filteredSales = sales.filter((sale) => {
-    const date = sale.completedAt?.slice(0, 10) ?? "";
-    return (
-      (!from || date >= from) &&
-      (!to || date <= to) &&
-      (!status || sale.status === status)
-    );
-  });
-  filteredSales.sort(
-    (a, b) =>
-      (b.completedAt ?? "").localeCompare(a.completedAt ?? "") ||
-      b.id.localeCompare(a.id),
+  const pageSales: VentaDelHistorial[] = historial.ventas;
+  // La venta abierta se conserva mientras se vuelve a pedir la página (por
+  // ejemplo, después de anularla).
+  const ultimaAbierta = useRef<VentaDelHistorial | undefined>(undefined);
+  const encontrada = selectedSaleId
+    ? pageSales.find((sale) => sale.id === selectedSaleId)
+    : undefined;
+  if (encontrada) ultimaAbierta.current = encontrada;
+  const selectedSale: VentaDelHistorial | undefined = selectedSaleId
+    ? (encontrada ??
+      (ultimaAbierta.current?.id === selectedSaleId
+        ? ultimaAbierta.current
+        : undefined))
+    : undefined;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(historial.total / VENTAS_POR_PAGINA),
   );
-  const selectedSale = sales.find((sale) => sale.id === selectedSaleId);
-  const totalPages = Math.max(1, Math.ceil(filteredSales.length / 10));
   const currentPage = Math.min(page, totalPages);
-  const pageSales = filteredSales.slice(
-    (currentPage - 1) * 10,
-    currentPage * 10,
-  );
   useEffect(() => {
     const dialog = detailDialog.current;
     if (selectedSaleId) dialog?.showModal();
@@ -7341,8 +8262,40 @@ function SalesHistory({
     );
     return labels.length ? [...new Set(labels)].join(" + ") : "Sin cobro";
   };
-  const exportCsv = () => {
-    const rows = filteredSales.map((sale) => {
+  // Exporta todas las ventas del filtro, no solo la página (SISTEMA-104).
+  const ventasParaExportar = async (): Promise<VentaDelHistorial[]> => {
+    if (historial.sinConexion) return filtrarHistorialLocal(sales, filtro);
+    const todas: VentaDelHistorial[] = filtrarHistorialLocal(
+      sales.filter((sale) => sale.porEnviar),
+      filtro,
+    );
+    for (let pagina = 1; pagina <= 200; pagina += 1) {
+      const resultado = await getSalesHistory(
+        token,
+        organizationId,
+        branchId,
+        filtro,
+        pagina,
+        100,
+      );
+      todas.push(...resultado.items);
+      if (pagina * 100 >= resultado.total) break;
+    }
+    return todas;
+  };
+  const exportCsv = async () => {
+    if (exportando) return;
+    setExportando(true);
+    let ventasCsv: VentaDelHistorial[];
+    try {
+      ventasCsv = await ventasParaExportar();
+    } catch {
+      setExportando(false);
+      setActionMessage("No se pudo exportar el historial. Probá de nuevo.");
+      return;
+    }
+    setExportando(false);
+    const rows = ventasCsv.map((sale) => {
       const numero = numeroDeVenta(sale);
       return [
         [
@@ -7354,10 +8307,17 @@ function SalesHistory({
           .join(" "),
         numero.interno,
         sale.completedAt
-          ? new Date(sale.completedAt).toLocaleString("es-AR")
+          ? new Date(sale.completedAt).toLocaleString("es-AR", {
+              hourCycle: "h23",
+            })
           : "",
         customerName(sale),
         money(sale.totalMinor),
+        (() => {
+          const descuento = descuentosDeVenta(sale.items);
+          const ahorro = descuento.ofertasMinor + descuento.descuentoMinor;
+          return ahorro ? `−${money(ahorro)} (${origenAhorro(descuento)})` : "";
+        })(),
         paymentName(sale),
         sale.porEnviar
           ? "Por enviar"
@@ -7373,6 +8333,7 @@ function SalesHistory({
         "Fecha",
         "Cliente",
         "Total",
+        "Ahorro",
         "Pago",
         "Estado",
       ],
@@ -7403,71 +8364,154 @@ function SalesHistory({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={exportCsv}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700"
+            onClick={() => void exportCsv()}
+            disabled={exportando}
+            className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-60"
           >
-            Exportar CSV
+            {exportando ? "Exportando…" : "Exportar CSV"}
           </button>
           <button
             type="button"
             onClick={onBack}
-            className="h-10 rounded-lg bg-[#31826a] px-4 text-sm font-semibold text-white"
+            className="h-10 rounded-lg bg-marca-550 px-4 text-sm font-semibold text-white"
           >
             Nueva venta
           </button>
         </div>
       </div>
       <section className="border bg-white p-4">
-        <div className="grid items-end gap-3 sm:grid-cols-3">
+        {/* Filtros del historial (SISTEMA-104): los aplica el servidor sobre
+            todas las ventas de la sucursal. */}
+        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <label className="text-xs font-medium text-slate-600">
             Desde
             <input
               type="date"
-              value={from}
-              onChange={(event) => {
-                setFrom(event.target.value);
-                setPage(1);
-              }}
-              className="mt-1 h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={filtro.from ?? ""}
+              max={filtro.to || undefined}
+              onChange={(event) =>
+                cambiarFiltro({ from: event.target.value || undefined })
+              }
+              className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
             />
           </label>
           <label className="text-xs font-medium text-slate-600">
             Hasta
             <input
               type="date"
-              value={to}
-              onChange={(event) => {
-                setTo(event.target.value);
-                setPage(1);
-              }}
-              className="mt-1 h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={filtro.to ?? ""}
+              min={filtro.from || undefined}
+              onChange={(event) =>
+                cambiarFiltro({ to: event.target.value || undefined })
+              }
+              className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
             />
           </label>
           <ProductFilterSelect
             label="Estado"
             icon={<ReceiptText size={18} />}
-            value={status}
+            value={filtro.status ?? ""}
             options={[
               { value: "", label: "Todos" },
               { value: "COMPLETED", label: "Confirmada" },
               { value: "CANCELLED", label: "Anulada" },
             ]}
-            onChange={(value) => {
-              setStatus(value as "" | Sale["status"]);
-              setPage(1);
-            }}
+            onChange={(value) =>
+              cambiarFiltro({
+                status: (value || undefined) as Sale["status"] | undefined,
+              })
+            }
           />
+          <ProductFilterSelect
+            label="Comprobante"
+            icon={<FileText size={18} />}
+            value={filtro.documentType ?? ""}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "INTERNAL", label: "Compr. interno" },
+              { value: "INVOICE", label: "Factura" },
+            ]}
+            onChange={(value) =>
+              cambiarFiltro({
+                documentType: (value || undefined) as
+                  FiltroHistorialVentas["documentType"] | undefined,
+              })
+            }
+          />
+          <ProductFilterSelect
+            label="Medio de pago"
+            icon={<Wallet size={18} />}
+            value={filtro.method ?? ""}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "CASH", label: "Efectivo" },
+              { value: "CARD", label: "Tarjeta" },
+              { value: "TRANSFER", label: "Transferencia" },
+              { value: "ACCOUNT", label: "Cuenta corriente" },
+            ]}
+            onChange={(value) =>
+              cambiarFiltro({
+                method: (value || undefined) as
+                  FiltroHistorialVentas["method"] | undefined,
+              })
+            }
+          />
+          <label className="text-xs font-medium text-slate-600">
+            Código interno
+            <span className="mt-1 flex h-12 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+              <Search size={16} aria-hidden className="text-teal-700" />
+              <input
+                type="search"
+                aria-label="Buscar por código interno"
+                placeholder="Ej. 90283CBC"
+                value={filtro.q ?? ""}
+                maxLength={36}
+                onChange={(event) =>
+                  cambiarFiltro({ q: event.target.value.trim() || undefined })
+                }
+                className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase text-slate-800 outline-none placeholder:font-sans placeholder:normal-case placeholder:text-slate-400"
+              />
+            </span>
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <p role="status">
+            {/* El total queda fijo al cambiar de página: solo se reemplaza
+                cuando llega la respuesta. */}
+            {historial.listo
+              ? `${historial.total} venta${historial.total === 1 ? "" : "s"}${hayFiltros ? " con estos filtros" : ""}`
+              : " "}
+            {historial.sinConexion
+              ? " · Sin conexión con el servidor: se muestran las ventas guardadas en esta PC."
+              : ""}
+          </p>
+          {hayFiltros && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltro({});
+                setPage(1);
+              }}
+              className="rounded-lg px-2 py-1 font-semibold text-teal-700 hover:bg-teal-50"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
       </section>
       <section className="overflow-hidden border bg-white">
-        <div className="overflow-x-auto">
+        <div
+          aria-busy={historial.cargando}
+          className={`overflow-x-auto transition-opacity ${historial.cargando && historial.listo ? "opacity-60" : ""}`}
+        >
           <table className="w-full min-w-210 text-left text-sm">
-            <thead className="bg-[#edf3f5] text-[10px] uppercase tracking-wide text-slate-500">
+            <thead className="bg-niebla-958 text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Fecha</th>
                 <th className="px-4 py-3">Cliente</th>
                 <th className="px-4 py-3">Total</th>
+                <th className="px-4 py-3">Ahorro</th>
                 <th className="px-4 py-3">Pago</th>
                 <th className="px-4 py-3">Estado</th>
               </tr>
@@ -7483,7 +8527,7 @@ function SalesHistory({
                       setActionMessage("");
                       setSelectedSaleId(sale.id);
                     }}
-                    className={`cursor-pointer hover:bg-[#f6faf9] ${selectedSaleId === sale.id ? "bg-[#eef9f5]" : ""}`}
+                    className={`cursor-pointer hover:bg-slate-50 ${selectedSaleId === sale.id ? "bg-marca-970" : ""}`}
                   >
                     <td className="px-4 py-3 text-xs">
                       <button
@@ -7497,20 +8541,24 @@ function SalesHistory({
                         }}
                         className="text-left"
                       >
-                        <span
-                          className={
-                            numero.texto === numero.interno
-                              ? "font-mono"
-                              : "font-semibold text-slate-700"
-                          }
-                        >
-                          {numero.texto}
-                        </span>
-                        {numero.texto !== numero.interno && (
-                          <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
-                            {numero.interno}
-                            {numero.prueba ? " · prueba" : ""}
+                        {/* Comprobante interno: tipo y número en una línea.
+                            Factura: número de ARCA y abajo el interno
+                            (SISTEMA-104). */}
+                        {numero.texto === numero.interno ? (
+                          <span className="font-semibold text-slate-700">
+                            Compr. interno{" "}
+                            <span className="font-mono">{numero.interno}</span>
                           </span>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-slate-700">
+                              {numero.texto}
+                            </span>
+                            <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
+                              {numero.interno}
+                              {numero.prueba ? " · prueba" : ""}
+                            </span>
+                          </>
                         )}
                         {numero.despues && (
                           <span className="mt-0.5 block text-[10px] font-medium text-amber-700">
@@ -7521,12 +8569,40 @@ function SalesHistory({
                     </td>
                     <td className="px-4 py-3">
                       {sale.completedAt
-                        ? new Date(sale.completedAt).toLocaleString("es-AR")
+                        ? new Date(sale.completedAt).toLocaleString("es-AR", {
+                            hourCycle: "h23",
+                          })
                         : "—"}
                     </td>
                     <td className="px-4 py-3">{customerName(sale)}</td>
                     <td className="px-4 py-3 font-semibold">
                       {money(sale.totalMinor)}
+                    </td>
+                    {/* Ahorro en su propia columna (SISTEMA-104): cuánto y
+                        si fue por oferta, descuento o ambos. */}
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const descuento = descuentosDeVenta(sale.items);
+                        const ahorro =
+                          descuento.ofertasMinor + descuento.descuentoMinor;
+                        if (!ahorro)
+                          return <span className="text-slate-300">—</span>;
+                        // Al pasar el mouse dice qué oferta o descuento fue.
+                        return (
+                          <TooltipFlotante
+                            label={`Ver el ahorro de la venta ${numero.interno}`}
+                            detenerClick={false}
+                            className="rounded-md px-1 font-semibold tabular-nums text-rose-700 hover:bg-rose-50"
+                            trigger={<>−{money(ahorro)}</>}
+                          >
+                            <AhorroDeVentaDetalle
+                              offers={sale.offers ?? []}
+                              ofertasMinor={descuento.ofertasMinor}
+                              descuentoMinor={descuento.descuentoMinor}
+                            />
+                          </TooltipFlotante>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">{paymentName(sale)}</td>
                     <td className="px-4 py-3">
@@ -7543,10 +8619,10 @@ function SalesHistory({
                   </tr>
                 );
               })}
-              {!filteredSales.length ? (
+              {!pageSales.length && !historial.cargando ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-10 text-center text-slate-500"
                   >
                     No hay ventas para los filtros seleccionados.
@@ -7558,7 +8634,7 @@ function SalesHistory({
         </div>
       </section>
       <Pagination
-        total={filteredSales.length}
+        total={historial.total}
         currentPage={currentPage}
         totalPages={totalPages}
         noun="ventas"
@@ -7572,7 +8648,7 @@ function SalesHistory({
           event.preventDefault();
           if (!actionPending.current) setSelectedSaleId(undefined);
         }}
-        className="m-auto w-[calc(100%-2rem)] max-w-5xl rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+        className="m-auto w-[calc(100%-2rem)] max-w-5xl rounded-2xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
       >
         <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-teal-50/60 p-5">
           <div>
@@ -7584,7 +8660,9 @@ function SalesHistory({
               <p className="mt-1 text-sm text-slate-500">
                 {customerName(selectedSale)} ·{" "}
                 {selectedSale.completedAt
-                  ? new Date(selectedSale.completedAt).toLocaleString("es-AR")
+                  ? new Date(selectedSale.completedAt).toLocaleString("es-AR", {
+                      hourCycle: "h23",
+                    })
                   : ""}
               </p>
             )}
@@ -7603,52 +8681,106 @@ function SalesHistory({
           {selectedSale ? (
             <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_290px]">
               <div>
-                <div className="divide-y divide-slate-100 rounded-lg border">
-                  <div className="grid grid-cols-[1fr_70px_110px] gap-3 bg-slate-50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {/* Renglones compactos y la lista con scroll propio: con
+                    muchos productos el pago y el total siguen a la vista. El
+                    detalle de la oferta se ve al pasar el mouse (SISTEMA-104). */}
+                <div className="overflow-hidden rounded-lg border">
+                  <div className="grid grid-cols-[minmax(0,1fr)_56px_150px] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                     <span>Producto</span>
-                    <span>Cant.</span>
+                    <span className="text-center">Cant.</span>
                     <span className="text-right">Total</span>
                   </div>
-                  {selectedSale.items.map((item) => {
-                    const product = productoPorId(products, item.productId);
-                    const lineTotal =
-                      Number(item.unitPriceMinor ?? 0) * item.quantity -
-                      Number(item.discountMinor ?? 0);
-                    return (
-                      <div
-                        key={item.id}
-                        className="grid grid-cols-[1fr_70px_110px] gap-3 px-4 py-3 text-sm"
-                      >
-                        <span>
-                          {item.description ??
-                            product?.name ??
-                            "Producto histórico"}
-                          {(() => {
-                            const barcode =
-                              product?.barcodes.find((code) => code.primary)
-                                ?.code ?? product?.barcodes[0]?.code;
-                            return barcode ? (
-                              <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
-                                {barcode}
-                              </span>
-                            ) : null;
-                          })()}
-                          {item.productId && item.lotId === null && (
-                            <span
-                              className="mt-1 block w-fit rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
-                              title="Se vendió sin conexión y, al sincronizar, no había stock para descontar. Revisalo en las notificaciones."
-                            >
-                              Sin stock al sincronizar
+                  <div className="max-h-[min(52dvh,440px)] divide-y divide-slate-100 overflow-y-auto">
+                    {selectedSale.items.map((item) => {
+                      const product = productoPorId(products, item.productId);
+                      const lineTotal =
+                        Number(item.unitPriceMinor ?? 0) * item.quantity -
+                        Number(item.discountMinor ?? 0);
+                      const descuento = descuentosDeRenglon(item);
+                      const ahorro =
+                        descuento.ofertasMinor + descuento.descuentoMinor;
+                      const barcode =
+                        product?.barcodes.find((code) => code.primary)?.code ??
+                        product?.barcodes[0]?.code;
+                      const nombre =
+                        item.description ??
+                        product?.name ??
+                        "Producto histórico";
+                      return (
+                        <div
+                          key={item.id}
+                          className="grid grid-cols-[minmax(0,1fr)_56px_150px] items-center gap-3 px-4 py-2 text-sm"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate" title={nombre}>
+                              {nombre}
                             </span>
-                          )}
-                        </span>
-                        <span>{item.quantity}</span>
-                        <span className="text-right font-medium">
-                          {money(lineTotal)}
-                        </span>
-                      </div>
-                    );
-                  })}
+                            {barcode ||
+                            (item.productId && item.lotId === null) ? (
+                              <span className="flex items-center gap-2">
+                                {barcode ? (
+                                  <span className="font-mono text-[11px] text-slate-400">
+                                    {barcode}
+                                  </span>
+                                ) : null}
+                                {item.productId && item.lotId === null && (
+                                  <span
+                                    className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                                    title="Se vendió sin conexión y, al sincronizar, no había stock para descontar. Revisalo en las notificaciones."
+                                  >
+                                    Sin stock al sincronizar
+                                  </span>
+                                )}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="text-center tabular-nums">
+                            {item.quantity}
+                          </span>
+                          <span className="flex items-center justify-end gap-2 text-right">
+                            {ahorro > 0 ? (
+                              <>
+                                <span className="text-[11px] text-slate-400 line-through tabular-nums">
+                                  {money(descuento.subtotalMinor)}
+                                </span>
+                                <span className="font-semibold tabular-nums">
+                                  {money(lineTotal)}
+                                </span>
+                                <TooltipFlotante
+                                  label={`Ver el descuento de ${nombre}`}
+                                  className="size-5 shrink-0 text-rose-700 hover:bg-rose-50"
+                                  trigger={
+                                    <BadgePercent
+                                      size={15}
+                                      aria-hidden="true"
+                                    />
+                                  }
+                                >
+                                  <DescuentoDeRenglonDetalle
+                                    ofertas={ofertasDeProducto(
+                                      selectedSale.offers ?? [],
+                                      item.productId,
+                                    )}
+                                    subtotalMinor={descuento.subtotalMinor}
+                                    ofertasMinor={descuento.ofertasMinor}
+                                    descuentoMinor={descuento.descuentoMinor}
+                                    totalMinor={lineTotal}
+                                  />
+                                </TooltipFlotante>
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-semibold tabular-nums">
+                                  {money(lineTotal)}
+                                </span>
+                                <span aria-hidden className="size-5 shrink-0" />
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 <SalePaymentSummary payments={selectedSale.payments} />
               </div>
@@ -7661,6 +8793,20 @@ function SalesHistory({
                       total={money(selectedSale.totalMinor)}
                       status={selectedSale.status}
                       documentType={selectedSale.documentType}
+                      desglose={desgloseVenta(selectedSale)}
+                      infoOfertas={
+                        selectedSale.offers?.length ? (
+                          <TooltipFlotante
+                            label="Ver qué ofertas se aplicaron"
+                            className="size-4 text-rose-700 hover:bg-rose-100"
+                            trigger={<Info size={13} aria-hidden="true" />}
+                          >
+                            <OfertasDeVentaDetalle
+                              offers={selectedSale.offers}
+                            />
+                          </TooltipFlotante>
+                        ) : undefined
+                      }
                     />
                     <p className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
                       Venta hecha sin conexión: está guardada en esta PC y se
@@ -7687,6 +8833,20 @@ function SalesHistory({
                       total={money(selectedSale.totalMinor)}
                       status={selectedSale.status}
                       documentType={selectedSale.documentType}
+                      desglose={desgloseVenta(selectedSale)}
+                      infoOfertas={
+                        selectedSale.offers?.length ? (
+                          <TooltipFlotante
+                            label="Ver qué ofertas se aplicaron"
+                            className="size-4 text-rose-700 hover:bg-rose-100"
+                            trigger={<Info size={13} aria-hidden="true" />}
+                          >
+                            <OfertasDeVentaDetalle
+                              offers={selectedSale.offers}
+                            />
+                          </TooltipFlotante>
+                        ) : undefined
+                      }
                     />
                     <div className="flex items-center gap-2">
                       <button
@@ -8228,8 +9388,11 @@ function Input({
   className,
   labelClassName,
   inputRef,
+  prefix,
 }: {
   label: string;
+  /** Signo delante del valor, ej. "$" en importes (SISTEMA-103). */
+  prefix?: string;
   disabled?: boolean;
   value: string;
   onChange: (value: string) => void;
@@ -8250,18 +9413,28 @@ function Input({
       }
     >
       {label}
-      <input
-        ref={inputRef}
-        disabled={disabled}
-        required={required}
-        type={type}
-        min={type === "number" && !allowNegative ? 0 : undefined}
-        step={type === "number" ? "any" : undefined}
-        placeholder={placeholder}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`mt-1 h-10 w-full border px-3 ${className ?? ""}`}
-      />
+      <span className="relative block">
+        {prefix && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 mt-0.5 -translate-y-1/2 text-sm font-medium text-slate-500"
+          >
+            {prefix}
+          </span>
+        )}
+        <input
+          ref={inputRef}
+          disabled={disabled}
+          required={required}
+          type={type}
+          min={type === "number" && !allowNegative ? 0 : undefined}
+          step={type === "number" ? "any" : undefined}
+          placeholder={placeholder}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={`mt-1 h-10 w-full border px-3 ${prefix ? "!pl-7" : ""} ${className ?? ""}`}
+        />
+      </span>
     </label>
   );
 }

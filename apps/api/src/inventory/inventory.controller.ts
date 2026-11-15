@@ -18,6 +18,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   Min,
   IsUUID,
   MinLength,
@@ -66,6 +67,15 @@ class AdjustStockDto {
   // null es Sin proveedor; sin el campo, no se indicó.
   @IsOptional() @IsUUID() supplierId?: string | null;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) unitCostMinor?: number;
+}
+/** Abrir cajas (SISTEMA-103). */
+class SplitStockDto {
+  @IsUUID() requestId!: string;
+  @IsUUID() lotId!: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(1000000) boxes!: number;
+  // Otra presentación que la del vínculo (ej. x100 en x20).
+  @IsOptional() @IsUUID() targetProductId?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(1000) factor?: number;
 }
 class EditLotDto {
   @ValidateIf((_object, value: unknown) => value !== undefined)
@@ -123,11 +133,19 @@ class EdicionLoteOfflineDto {
   @IsOptional() @IsString() @Matches(/^\d{1,14}$/) unitCostMinor?: string;
   @IsString() @MinLength(3) @MaxLength(300) reason!: string;
 }
+/** Abrir cajas sin conexión (SISTEMA-103). */
+class AperturaOfflineDto {
+  @ValidateNested() @Type(() => LoteOfflineDto) lote!: LoteOfflineDto;
+  @IsInt() @Min(1) @Max(1000000) boxes!: number;
+  @IsOptional() @IsUUID() targetProductId?: string;
+  @IsOptional() @IsInt() @Min(2) @Max(1000) factor?: number;
+}
 const CUERPO_INVENTARIO = {
   INGRESO: ReceiveStockDto,
   AJUSTE: AjusteOfflineDto,
   DEVOLUCION: DevolucionOfflineDto,
   EDICION_LOTE: EdicionLoteOfflineDto,
+  APERTURA: AperturaOfflineDto,
 } as const;
 class OfflineInventoryDto {
   @IsIn(Object.keys(CUERPO_INVENTARIO))
@@ -375,6 +393,21 @@ export class InventoryController {
       organizationId,
       branchId,
     });
+  }
+
+  @Post("splits")
+  split(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Body() body: SplitStockDto,
+  ) {
+    return this.inventory.split(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      body,
+    );
   }
 
   @Post("supplier-returns")

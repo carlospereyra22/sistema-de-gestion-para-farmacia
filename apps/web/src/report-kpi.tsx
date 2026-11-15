@@ -49,7 +49,7 @@ export function ReportKpiCard({
       className={`${reportCardClass} reportes-entrada flex gap-3 px-4 py-3.5`}
       style={{ "--orden": orden } as CSSProperties}
     >
-      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#e8faf5] text-[#087f70]">
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-marca-970 text-marca-535">
         {icon}
       </span>
       <div className="min-w-0 flex-1">

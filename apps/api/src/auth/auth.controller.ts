@@ -25,6 +25,7 @@ import {
 } from "./auth.dto";
 import { AuthService, type DatosDeSesion } from "./auth.service";
 import { JwtAccessGuard } from "./jwt-access.guard";
+import { LimiteDeLogin } from "./limite-login";
 import type { AuthenticatedRequest } from "./auth.types";
 
 /** Cookie de la sesión de farmacia. */
@@ -40,7 +41,10 @@ const cookieDe = (sesion?: "plataforma") =>
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly limite: LimiteDeLogin,
+  ) {}
 
   /**
    * La cookie dura lo mismo que el plazo de inactividad y se renueva con cada
@@ -87,11 +91,21 @@ export class AuthController {
     @Body() body: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.auth.login(
-      body.email,
-      body.password,
-      this.datosDeSesion(request, body.deviceId),
-    );
+    // Límite de intentos fallidos por correo (SISTEMA-106).
+    this.limite.comprobar(body.email);
+    let result: Awaited<ReturnType<AuthService["login"]>>;
+    try {
+      result = await this.auth.login(
+        body.email,
+        body.password,
+        this.datosDeSesion(request, body.deviceId),
+      );
+    } catch (error) {
+      if (error instanceof UnauthorizedException)
+        this.limite.registrarFallo(body.email);
+      throw error;
+    }
+    this.limite.registrarExito(body.email);
     // El superadmin va en su propia cookie: la de la farmacia no se toca.
     this.setRefreshCookie(
       response,

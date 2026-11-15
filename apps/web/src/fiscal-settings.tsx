@@ -366,7 +366,7 @@ export function InvoiceDesignPreview({
       <p className="mb-4 text-xs text-slate-500">
         Maqueta visual; no se envía a la impresora ni a ARCA.
       </p>
-      <div className="mx-auto max-w-[80mm] bg-white p-4 font-mono text-xs text-black shadow-sm">
+      <div className="tema-claro mx-auto max-w-[80mm] bg-white p-4 font-mono text-xs text-black shadow-sm">
         <p className="border-2 border-black p-2 text-center font-bold">
           MUESTRA · SIN VALIDEZ FISCAL
         </p>

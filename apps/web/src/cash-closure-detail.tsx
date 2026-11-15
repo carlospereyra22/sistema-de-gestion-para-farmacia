@@ -65,15 +65,19 @@ export function CashClosureContent({ detail }: { detail: ClosureDetail }) {
         <div>
           <dt className="text-xs text-slate-500">Apertura</dt>
           <dd className="mt-1">
-            {new Date(detail.openedAt).toLocaleString("es-AR")} ·{" "}
-            {detail.openedBy}
+            {new Date(detail.openedAt).toLocaleString("es-AR", {
+              hourCycle: "h23",
+            })}{" "}
+            · {detail.openedBy}
           </dd>
         </div>
         <div>
           <dt className="text-xs text-slate-500">Cierre</dt>
           <dd className="mt-1">
-            {new Date(detail.closedAt!).toLocaleString("es-AR")} ·{" "}
-            {detail.closedBy ?? "Responsable no registrado"}
+            {new Date(detail.closedAt!).toLocaleString("es-AR", {
+              hourCycle: "h23",
+            })}{" "}
+            · {detail.closedBy ?? "Responsable no registrado"}
           </dd>
         </div>
       </dl>
@@ -128,7 +132,9 @@ export function CashClosureContent({ detail }: { detail: ClosureDetail }) {
             {entries.map((entry) => (
               <tr key={entry.id} className="border-t border-slate-100">
                 <td className="whitespace-nowrap p-3 text-xs">
-                  {new Date(entry.date).toLocaleString("es-AR")}
+                  {new Date(entry.date).toLocaleString("es-AR", {
+                    hourCycle: "h23",
+                  })}
                 </td>
                 <td className="min-w-48 p-3">{entry.label}</td>
                 <td className="p-3 text-xs text-slate-500">{entry.actor}</td>

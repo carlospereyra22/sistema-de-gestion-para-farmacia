@@ -46,6 +46,8 @@ export function InventoryStockTable({
   onAdjust,
   onReceive,
   onReturn,
+  onSplit,
+  canSplit,
   footer,
 }: {
   rows: InventoryRow[];
@@ -57,6 +59,9 @@ export function InventoryStockTable({
   onAdjust: (lot: StockLot, supplierId?: string) => void;
   onReceive: (lot: StockLot, supplierId?: string) => void;
   onReturn: (lot: StockLot, supplierId?: string) => void;
+  /** Abrir cajas (SISTEMA-103): sólo productos vinculados con stock vendible. */
+  onSplit?: (lot: StockLot) => void;
+  canSplit?: (lot: StockLot) => boolean;
   footer?: ReactNode;
 }) {
   // Al buscar por lote el detalle arranca abierto: estar en toggled significa
@@ -169,6 +174,18 @@ export function InventoryStockTable({
                         lot={lot}
                         done={done}
                       />
+                      {onSplit &&
+                        lot.sellableQuantity > 0 &&
+                        (canSplit?.(lot) ?? true) && (
+                          <button
+                            type="button"
+                            aria-label={`Abrir cajas del lote ${lot.number} de ${row.name}`}
+                            onClick={() => onSplit(lot)}
+                            className={lotButton}
+                          >
+                            Abrir cajas
+                          </button>
+                        )}
                       {lotHasSupplierRows(lot) ? null : (
                         <>
                           <button

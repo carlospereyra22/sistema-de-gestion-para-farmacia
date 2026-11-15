@@ -95,6 +95,25 @@ it("avisa que la factura espera la caja si no hay una abierta", () => {
     />,
   );
   expect(sinCaja).toContain(
-    "Sin caja abierta: la factura se emite al incorporar el cobro a una",
+    "Sin caja abierta: se emite al incorporar el cobro a una caja",
   );
+});
+it("reserva siempre una línea de avisos para que el cobro no cambie de alto", () => {
+  const linea = (html: string) => html.match(/<p class="[^"]*h-4[^"]*"/g);
+  const interno = renderToStaticMarkup(
+    <SaleDocumentChoice value="INTERNAL" disabled={false} onChange={vi.fn()} />,
+  );
+  const factura = renderToStaticMarkup(
+    <SaleDocumentChoice
+      value="INVOICE"
+      disabled={false}
+      sinCaja
+      summary="Consumidor final · Factura C"
+      onChange={vi.fn()}
+    />,
+  );
+  expect(linea(interno)).toHaveLength(1);
+  expect(linea(factura)).toHaveLength(1);
+  expect(interno).toContain("No va a ARCA");
+  expect(factura.match(/<p[ >]/g)).toHaveLength(1);
 });

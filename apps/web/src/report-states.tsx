@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export const reportCardClass =
-  "rounded-xl border border-[#dce7ef] bg-white shadow-[0_3px_12px_rgb(25_56_74_/_3%)]";
+  "rounded-xl border border-niebla-913 bg-white shadow-[0_3px_12px_rgb(25_56_74_/_3%)]";
 
 /**
  * Icono de ayuda con tooltip del sistema (tarjeta blanca, como el del precio en
@@ -56,7 +56,7 @@ export function ReportHelp({
         tabIndex={0}
         aria-describedby={id}
         aria-label={title}
-        className="inline-flex cursor-help rounded-full text-slate-400 outline-none hover:text-[#087f70] focus-visible:text-[#087f70] focus-visible:ring-2 focus-visible:ring-teal-500/30"
+        className="inline-flex cursor-help rounded-full text-slate-400 outline-none hover:text-marca-535 focus-visible:text-marca-535 focus-visible:ring-2 focus-visible:ring-teal-500/30"
       >
         <Info size={13} aria-hidden />
       </span>
@@ -64,9 +64,9 @@ export function ReportHelp({
         id={id}
         role="tooltip"
         style={place}
-        className="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-2 w-64 max-w-[70vw] -translate-x-1/2 whitespace-normal break-words rounded-lg border border-[#d3e5e0] bg-white px-3 py-2 text-left text-[11px] font-normal leading-4 text-slate-600 opacity-0 shadow-[0_4px_12px_rgb(15_23_42_/_10%)] transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+        className="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-2 w-64 max-w-[70vw] -translate-x-1/2 whitespace-normal break-words rounded-lg border border-marca-907 bg-white px-3 py-2 text-left text-[11px] font-normal leading-4 text-slate-600 opacity-0 shadow-[0_4px_12px_rgb(15_23_42_/_10%)] transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
       >
-        <strong className="mb-0.5 block font-semibold text-[#0f766e]">
+        <strong className="mb-0.5 block font-semibold text-marca-511">
           {title}
         </strong>
         {text}
@@ -90,7 +90,7 @@ export function ReportEmptyState({
       role="status"
       className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center"
     >
-      <span className="grid size-10 place-items-center rounded-full bg-[#e8faf5] text-[#087f70]">
+      <span className="grid size-10 place-items-center rounded-full bg-marca-970 text-marca-535">
         {icon}
       </span>
       <p className="text-sm font-semibold text-slate-800">{title}</p>
@@ -122,7 +122,7 @@ export function ReportErrorState({
       <button
         type="button"
         onClick={onRetry}
-        className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#cce8de] bg-white px-3 text-sm font-semibold text-[#087f70] hover:bg-[#f2fbf8]"
+        className="inline-flex h-9 items-center gap-2 rounded-lg border border-marca-908 bg-white px-3 text-sm font-semibold text-marca-535 hover:bg-teal-50"
       >
         <RotateCcw size={15} aria-hidden />
         Reintentar

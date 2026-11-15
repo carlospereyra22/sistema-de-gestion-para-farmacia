@@ -218,6 +218,12 @@ export function textoAviso(issue: Pick<OfflineIssue, "kind" | "detail">): {
         }${Array.isArray(d.productos) && d.productos.length ? ` (${d.productos.map(String).join(", ")})` : ""}`,
       };
     case "AJUSTE_SUPERA_STOCK":
+      // Abrir cajas sin conexión (SISTEMA-103): otra PC vendió cajas.
+      if (d.tipo === "APERTURA")
+        return {
+          titulo: `Apertura mayor al stock: ${nombre}${d.lote ? ` · lote ${texto(d.lote)}` : ""}`,
+          detalle: `Se pidió abrir ${texto(d.pedido)} cajas y quedaban ${texto(d.registrado)}: se abrieron ${texto(d.registrado)} y ${texto(d.faltan)} no. Revisá el stock.`,
+        };
       return {
         titulo: `${d.tipo === "DEVOLUCION" ? "Devolución" : "Ajuste"} mayor al stock: ${nombre}${d.lote ? ` · lote ${texto(d.lote)}` : ""}`,
         detalle: `Se cargaron ${texto(d.pedido)} un. y el lote tenía ${texto(d.registrado)}: se registraron ${texto(d.registrado)} y quedaron ${texto(d.faltan)} sin registrar. Revisá el stock.`,

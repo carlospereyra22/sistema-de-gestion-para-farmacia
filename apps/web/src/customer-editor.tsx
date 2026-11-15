@@ -254,7 +254,7 @@ export function CustomerEditor({
         e.preventDefault();
         if (!gate.current) onClose();
       }}
-      className="m-auto w-[min(820px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto w-[min(820px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-xl backdrop:bg-velo/35"
     >
       <form
         className="flex max-h-[90dvh] flex-col"

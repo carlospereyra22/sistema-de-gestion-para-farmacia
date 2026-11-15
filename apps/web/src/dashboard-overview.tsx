@@ -36,14 +36,14 @@ const metricIcons: Record<DashboardMetricKey, LucideIcon> = {
 
 // Icono redondo de color suave, como las tarjetas de Reportes y Productos.
 const tones: Record<DashboardMetricTone, { wash: string; ink: string }> = {
-  teal: { wash: "#e8faf5", ink: "#087f70" },
-  blue: { wash: "#eaf3ff", ink: "#1d64d8" },
-  indigo: { wash: "#eef0ff", ink: "#4f46e5" },
-  emerald: { wash: "#e7f8ef", ink: "#04875a" },
-  slate: { wash: "#f1f5f9", ink: "#64748b" },
-  amber: { wash: "#fff4e0", ink: "#c26a06" },
-  rose: { wash: "#fff1f4", ink: "#e11d48" },
-  violet: { wash: "#f3effe", ink: "#7c5cd6" },
+  teal: { wash: "var(--color-marca-970)", ink: "var(--color-marca-535)" },
+  blue: { wash: "var(--color-azul-961)", ink: "var(--color-azul-531)" },
+  indigo: { wash: "var(--color-azul-961)", ink: "var(--color-azul-511)" },
+  emerald: { wash: "var(--color-verde-964)", ink: "var(--color-verde-551)" },
+  slate: { wash: "var(--color-niebla-973)", ink: "var(--color-niebla-554)" },
+  amber: { wash: "var(--color-ambar-965)", ink: "var(--color-ambar-613)" },
+  rose: { wash: "var(--color-rosa-970)", ink: "var(--color-rosa-586)" },
+  violet: { wash: "var(--color-violeta-960)", ink: "var(--color-violeta-569)" },
 };
 
 export function DashboardOverview({
@@ -192,7 +192,7 @@ export function DashboardInventoryAlerts({
               <button
                 type="button"
                 onClick={() => onNavigate("Inventario")}
-                className="group flex w-full items-center gap-3 rounded-xl border border-[#e8edf2] bg-white px-3 py-2.5 text-left transition-colors hover:border-teal-200 hover:bg-teal-50/40 focus-visible:outline-2 focus-visible:outline-teal-600"
+                className="group flex w-full items-center gap-3 rounded-xl border border-niebla-935 bg-white px-3 py-2.5 text-left transition-colors hover:border-teal-200 hover:bg-teal-50/40 focus-visible:outline-2 focus-visible:outline-teal-600"
               >
                 <span
                   className="grid size-9 shrink-0 place-items-center rounded-full"
@@ -212,7 +212,9 @@ export function DashboardInventoryAlerts({
                 </span>
                 <span
                   className="text-xl font-semibold tabular-nums"
-                  style={{ color: count ? color.ink : "#94a3b8" }}
+                  style={{
+                    color: count ? color.ink : "var(--color-niebla-711)",
+                  }}
                 >
                   {count.toLocaleString("es-AR")}
                 </span>

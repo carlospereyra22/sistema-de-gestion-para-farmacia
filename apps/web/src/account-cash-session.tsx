@@ -39,7 +39,7 @@ export function AccountCashSession({
         {sessions.map((session) => (
           <option key={session.id} value={session.id}>
             {session.label ??
-              `Caja · ${new Date(session.openedAt).toLocaleString("es-AR")}`}
+              `Caja · ${new Date(session.openedAt).toLocaleString("es-AR", { hourCycle: "h23" })}`}
           </option>
         ))}
       </select>

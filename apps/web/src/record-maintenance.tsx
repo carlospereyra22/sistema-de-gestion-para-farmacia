@@ -45,7 +45,7 @@ function MaintenanceDialog({
     <dialog
       ref={ref}
       aria-label={title}
-      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border bg-white p-6 text-left shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border bg-white p-6 text-left shadow-xl backdrop:bg-velo/35"
       onCancel={(event) => {
         event.preventDefault();
         if (!pending.current) close();
@@ -287,7 +287,7 @@ export function RegisterManager({
           if (pendingCreate.current || rulesDirty) event.preventDefault();
           else setOpen(false);
         }}
-        className="m-auto h-[min(720px,85dvh)] max-h-[85dvh] w-[calc(100%-2rem)] max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fbfc] p-4 shadow-xl backdrop:bg-slate-950/35 open:flex open:flex-col sm:p-6"
+        className="m-auto h-[min(720px,85dvh)] max-h-[85dvh] w-[calc(100%-2rem)] max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-xl backdrop:bg-velo/35 open:flex open:flex-col sm:p-6"
       >
         <header className="flex shrink-0 items-center justify-between gap-4">
           <h2 className="flex items-center gap-2 font-semibold">

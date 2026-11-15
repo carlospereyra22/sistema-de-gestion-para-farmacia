@@ -667,6 +667,10 @@ export type CatalogProduct = {
   priceDivisor?: number | null;
   priceMarkupBps?: number;
   priceBaseMinor?: string | null;
+  /** Abrir cajas (SISTEMA-103): en qué producto se abre y cuántas unidades trae. */
+  splitTargetProductId?: string | null;
+  splitFactor?: number | null;
+  priceManual?: boolean;
   image?: { updatedAt: string } | null;
   id: string;
   name: string;
@@ -1133,6 +1137,9 @@ async function createCatalogProductEnLinea(
     priceDivisor?: number | null;
     priceMarkupBps?: number;
     priceBaseMinor?: number | null;
+    splitTargetProductId?: string | null;
+    splitFactor?: number | null;
+    priceManual?: boolean;
     imageDataUrl?: string;
     name: string;
     barcode?: string;
@@ -1255,6 +1262,9 @@ async function updateCatalogProductEnLinea(
     priceDivisor?: number | null;
     priceMarkupBps?: number;
     priceBaseMinor?: number | null;
+    splitTargetProductId?: string | null;
+    splitFactor?: number | null;
+    priceManual?: boolean;
     imageDataUrl?: string | null;
     name: string;
     barcode: string;
@@ -2353,6 +2363,36 @@ async function adjustStockEnLinea(
     throw await responseError(response, "No se pudo ajustar el stock.");
 }
 
+/**
+ * Abrir cajas (SISTEMA-103): N cajas de un lote pasan al producto vinculado con
+ * el mismo lote y vencimiento. El mismo `requestId` no repite la apertura.
+ */
+async function splitBoxesEnLinea(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  input: {
+    requestId: string;
+    lotId: string;
+    boxes: number;
+    /** Otra presentación que la del vínculo (ej. x100 en x20). */
+    targetProductId?: string;
+    factor?: number;
+  },
+): Promise<{ id: string; boxes: number; units: number }> {
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/inventory/splits`,
+    { method: "POST", headers: authJson(token), body: JSON.stringify(input) },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudieron abrir las cajas.");
+  return response.json() as Promise<{
+    id: string;
+    boxes: number;
+    units: number;
+  }>;
+}
+
 async function createSupplierReturnEnLinea(
   token: string,
   organizationId: string,
@@ -3105,6 +3145,22 @@ export async function saveTicketHeader(
   return response.json();
 }
 
+/** Oferta aplicada en una venta ya registrada (SISTEMA-104). */
+export type OfertaDeVentaRegistrada = {
+  offerId: string;
+  name: string;
+  label: string;
+  type: string;
+  units: number;
+  discountMinor: string;
+  items: {
+    productId: string;
+    units: number;
+    grossMinor: string;
+    discountMinor: string;
+  }[];
+};
+
 export type Sale = {
   id: string;
   documentType?: "INTERNAL" | "INVOICE";
@@ -3124,11 +3180,15 @@ export type Sale = {
     quantity: number;
     unitPriceMinor?: string;
     discountMinor?: string;
+    /** Parte del descuento que viene de ofertas (SISTEMA-103). */
+    offerDiscountMinor?: string;
   }[];
   payments: {
     method: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
     amountMinor: string;
   }[];
+  /** Ofertas aplicadas; las trae el historial paginado (SISTEMA-104). */
+  offers?: OfertaDeVentaRegistrada[];
   /** Factura de producción de la venta (número de ARCA), si tiene. */
   fiscalDocuments?: {
     status: string;
@@ -3446,6 +3506,47 @@ export async function getSales(
   return (await response.json()) as Sale[];
 }
 
+/** Filtros del historial de ventas paginado en el servidor (SISTEMA-104). */
+export type FiltroHistorialVentas = {
+  from?: string;
+  to?: string;
+  status?: Sale["status"];
+  documentType?: "INTERNAL" | "INVOICE";
+  method?: Sale["payments"][number]["method"];
+  /** Comienzo del código interno. */
+  q?: string;
+};
+
+export type PaginaHistorialVentas = {
+  items: Sale[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export async function getSalesHistory(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  filtro: FiltroHistorialVentas,
+  page: number,
+  pageSize = 10,
+): Promise<PaginaHistorialVentas> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  for (const [clave, valor] of Object.entries(filtro))
+    if (valor) params.set(clave, String(valor));
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/history?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(response, "No se pudo cargar el historial.");
+  return (await response.json()) as PaginaHistorialVentas;
+}
+
 export async function createSale(
   token: string,
   organizationId: string,
@@ -3468,11 +3569,28 @@ export async function createSale(
       discountMinor?: number;
       expectedUnitPriceMinor?: string;
       requestedUnitPriceMinor?: number;
+      /** Ahorro por ofertas que vio la cajera (SISTEMA-103). */
+      expectedOfferDiscountMinor?: string;
+      /** La cajera eligió no aplicar ofertas a este producto. */
+      skipOffers?: boolean;
     }[];
     payments: {
       method: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
       amountMinor: number;
       cashSessionId?: string;
+    }[];
+    /** Sin conexión: ofertas que aplicó la PC (SISTEMA-103). */
+    /** Ofertas que la cajera quitó de esta venta. */
+    skippedOfferIds?: string[];
+    appliedOffers?: {
+      offerId: string;
+      version: number;
+      items: {
+        productId: string;
+        units: number;
+        grossMinor: string;
+        discountMinor: string;
+      }[];
     }[];
   },
 ): Promise<Sale> {
@@ -3480,10 +3598,30 @@ export async function createSale(
     `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales`,
     { method: "POST", headers: authJson(token), body: JSON.stringify(input) },
   );
+  if (response.status === 409) {
+    const result = (await response
+      .clone()
+      .json()
+      .catch(() => ({}))) as {
+      code?: string;
+      message?: string;
+    };
+    if (result.code === "OFERTAS_CAMBIARON")
+      throw new OfertasCambiaronError(
+        result.message ??
+          "Las ofertas de la venta cambiaron. Revisá el carrito y volvé a confirmar.",
+      );
+  }
   if (!response.ok)
     throw await responseError(response, "No se pudo completar la venta.");
   return (await response.json()) as Sale;
 }
+
+/**
+ * La API recalculó las ofertas al confirmar y no coinciden con las del
+ * carrito (una empezó, venció o cambió): hay que actualizarlas y reconfirmar.
+ */
+export class OfertasCambiaronError extends Error {}
 
 export async function getSaleFiscalCapabilities(
   token: string,
@@ -5160,8 +5298,10 @@ export async function getStock(
   // Nombre de un producto que todavía no tiene lotes en la sucursal.
   const sinLotes = pendientes.some(
     (op) =>
-      op.tipo === "INGRESO" &&
-      !stock.some((lote) => lote.productId === op.cuerpo.productId),
+      (op.tipo === "INGRESO" &&
+        !stock.some((lote) => lote.productId === op.cuerpo.productId)) ||
+      (op.tipo === "APERTURA" &&
+        !stock.some((lote) => lote.productId === op.cuerpo.targetProductId)),
   );
   const catalogo = sinLotes
     ? await getCatalogProducts(token, organizationId, branchId).catch(
@@ -5511,6 +5651,51 @@ export async function adjustStock(
         tipo: "AJUSTE",
         cuerpo: { ...cuerpo, lote: loteDeLaOperacion(lotId) },
       });
+    },
+  );
+}
+
+/**
+ * Abrir cajas (SISTEMA-103). Sin conexión queda en la PC: el stock local ya
+ * muestra la caja abierta y se manda sola al volver.
+ */
+export async function splitBoxes(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  input: {
+    requestId: string;
+    lotId: string;
+    boxes: number;
+    targetProductId: string;
+    factor: number;
+  },
+): Promise<{ boxes: number; units: number; enLaPc: boolean }> {
+  return conRespaldoEnLaPc<{ boxes: number; units: number; enLaPc: boolean }>(
+    token,
+    organizationId,
+    await inventarioEnEspera(organizationId, branchId, input.lotId, undefined),
+    async () => {
+      const hecho = await splitBoxesEnLinea(
+        token,
+        organizationId,
+        branchId,
+        input,
+      );
+      return { boxes: hecho.boxes, units: hecho.units, enLaPc: false };
+    },
+    async () => {
+      const { lotId, boxes, targetProductId, factor } = input;
+      await guardarOperacionInventario(organizationId, branchId, {
+        tipo: "APERTURA",
+        cuerpo: {
+          lote: loteDeLaOperacion(lotId),
+          boxes,
+          targetProductId,
+          factor,
+        },
+      });
+      return { boxes, units: boxes * factor, enLaPc: true };
     },
   );
 }

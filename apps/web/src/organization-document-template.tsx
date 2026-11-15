@@ -328,7 +328,7 @@ export function OrganizationDocumentTemplate({
               <button
                 type="button"
                 onClick={() => setFullPreview(true)}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#0f9b8e] bg-white px-4 py-2 text-sm font-semibold text-[#087f70] hover:bg-teal-50"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-marca-619 bg-white px-4 py-2 text-sm font-semibold text-marca-535 hover:bg-teal-50"
               >
                 <Maximize2 size={15} /> Ver en tamaño real · PDF
               </button>

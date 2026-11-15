@@ -39,7 +39,9 @@ export function CashPendingConfirmation({
       <p className="mt-3 text-xs text-slate-500">
         {row.sourceType === "SALE" ? "Venta" : "Recibo"}{" "}
         {row.sourceId.slice(0, 8)} ·{" "}
-        {new Date(row.collectedAt).toLocaleString("es-AR")}
+        {new Date(row.collectedAt).toLocaleString("es-AR", {
+          hourCycle: "h23",
+        })}
         {row.collectedBy ? ` · ${row.collectedBy}` : ""}
       </p>
       <footer className="mt-5 flex justify-end gap-3">

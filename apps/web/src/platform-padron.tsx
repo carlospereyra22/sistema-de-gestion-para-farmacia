@@ -141,7 +141,7 @@ export function PlatformPadron({
 
       {data && (
         <div className="grid gap-4 lg:grid-cols-3">
-          <article className="rounded-xl border border-[#dce7ef] bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
+          <article className="rounded-xl border border-niebla-913 bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
             <h3 className="flex items-center gap-2 font-semibold text-slate-800">
               <KeyRound size={17} className="text-teal-700" />
               1. Generar la solicitud
@@ -193,7 +193,7 @@ export function PlatformPadron({
             )}
           </article>
 
-          <article className="rounded-xl border border-[#dce7ef] bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
+          <article className="rounded-xl border border-niebla-913 bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
             <h3 className="flex items-center gap-2 font-semibold text-slate-800">
               <Upload size={17} className="text-teal-700" />
               2. Subirla a ARCA
@@ -225,7 +225,7 @@ export function PlatformPadron({
             )}
           </article>
 
-          <article className="rounded-xl border border-[#dce7ef] bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
+          <article className="rounded-xl border border-niebla-913 bg-white p-4 shadow-[0_3px_12px_rgb(25_56_74_/_3%)]">
             <h3 className="flex items-center gap-2 font-semibold text-slate-800">
               <FileCheck2 size={17} className="text-teal-700" />
               3. Cargar el certificado

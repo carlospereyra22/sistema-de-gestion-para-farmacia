@@ -17,3 +17,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/iniciar-pruebas.ps1 
 ```
 
 Para verificar el inicio sin abrir el navegador, usá `-NoBrowser` (sí puede iniciar los servidores). No es un instalador ni un lanzador de producción.
+
+## Probar la API en Docker
+
+Para probar la API en contenedores (SISTEMA-106) se usa **Iniciar Gestion - Docker.cmd** en lugar de este lanzador: los dos usan el puerto 3000, así que se usa uno u otro. Detener primero el que esté encendido. Ver `DOCKER.md`, "Uso diario en la PC".

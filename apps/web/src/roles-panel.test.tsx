@@ -69,8 +69,28 @@ describe("panel de roles", () => {
     // Con el formulario de rol nuevo abierto no se repite el botón Nuevo rol.
     expect(html).not.toContain("lucide-plus");
     expect(html).toContain("Ver rol");
-    expect(html).toContain("0 de 28 permisos");
+    expect(html).toContain("0 de 30 permisos");
     expect(html).toContain("Crear rol");
     expect(html).toContain('aria-label="Código del rol"');
+  });
+});
+
+describe("listado de roles con muchos", () => {
+  it("muestra 5 por página y el paginador", () => {
+    const roles = Array.from({ length: 6 }, (_, indice) =>
+      role(`ROL_${indice}`, [], { name: `Rol ${indice}` }),
+    );
+    const html = renderToStaticMarkup(
+      <RolesPanel
+        token="t"
+        organizationId="o"
+        roles={roles}
+        onDone={() => undefined}
+        onError={() => undefined}
+      />,
+    );
+    expect(html).toContain("Rol 4");
+    expect(html).not.toContain("Rol 5");
+    expect(html).toContain("6 roles · 5 por página");
   });
 });

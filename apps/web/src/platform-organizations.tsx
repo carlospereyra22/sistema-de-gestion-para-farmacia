@@ -96,7 +96,7 @@ export function PlatformOrganizationsTable({
               <span className="flex items-center gap-3">
                 <span
                   aria-hidden="true"
-                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#eef6f4] text-[#087f70]"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-marca-970 text-marca-535"
                 >
                   <Building2 size={16} />
                 </span>
@@ -253,7 +253,7 @@ export function PlatformOrganizations({
             placeholder="Buscar farmacia"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="h-11 w-full rounded-xl border border-[#dce7ef] bg-white pl-9 pr-3 text-sm shadow-[0_3px_12px_rgb(25_56_74_/_3%)] outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-50"
+            className="h-11 w-full rounded-xl border border-niebla-913 bg-white pl-9 pr-3 text-sm shadow-[0_3px_12px_rgb(25_56_74_/_3%)] outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-50"
           />
         </label>
         <ProductFilterSelect

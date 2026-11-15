@@ -263,6 +263,39 @@ describe("productos e inventario sin conexión (SISTEMA-79)", () => {
     ]);
   });
 
+  // Abrir cajas sin conexión (SISTEMA-103).
+  it("abrir cajas en la PC saca de la caja y suma al producto chico, mismo lote", async () => {
+    const caja: StockLot = { ...lote, unitCostMinor: "100000" };
+    await guardarOperacionInventario("o1", "b1", {
+      tipo: "APERTURA",
+      cuerpo: {
+        lote: loteDeLaOperacion("l1"),
+        boxes: 3,
+        targetProductId: "x10",
+        factor: 10,
+      },
+    });
+    const bandeja = await ventasDeLaPc();
+    const stock = stockConPendientes([caja], bandeja, "o1", "b1", (id) =>
+      id === "x10" ? "Buscapina x10" : undefined,
+    );
+    expect(stock.map((l) => [l.productId, l.number, l.quantity])).toEqual([
+      ["p1", "A1", 7],
+      ["x10", "A1", 30],
+    ]);
+    expect(stock[1]).toMatchObject({
+      productName: "Buscapina x10",
+      expiresAt: lote.expiresAt,
+      unitCostMinor: "10000",
+      sellableQuantity: 30,
+      porEnviar: true,
+    });
+    expect(loteConPendientes(bandeja, "o1", "b1", "l1")).toBe(true);
+    expect(bandeja.map(operacionInventarioTexto)).toEqual([
+      "Apertura de 3 cajas (+30 un.)",
+    ]);
+  });
+
   it("un lote nuevo de la PC tiene nombre, vencimiento y disponibilidad calculados", async () => {
     await guardarOperacionInventario("o1", "b1", {
       tipo: "INGRESO",

@@ -20,19 +20,19 @@ export function AccountDueOverview({
       status: "OVERDUE",
       label: "Saldo vencido",
       icon: AlertCircle,
-      color: "#be4563",
+      color: "var(--color-rosa-564)",
     },
     {
       status: "TODAY",
       label: "Vence hoy",
       icon: CalendarClock,
-      color: "#b77918",
+      color: "var(--color-ambar-626)",
     },
     {
       status: "UPCOMING",
       label: "Próximos vencimientos",
       icon: CalendarCheck,
-      color: "#2874a6",
+      color: "var(--color-azul-536)",
     },
     ...(!compact
       ? [
@@ -40,7 +40,7 @@ export function AccountDueOverview({
             status: "UNDATED",
             label: "Sin vencimiento",
             icon: InfinityIcon,
-            color: "#64748b",
+            color: "var(--color-niebla-554)",
           },
         ]
       : []),

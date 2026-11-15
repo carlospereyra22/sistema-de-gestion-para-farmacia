@@ -43,6 +43,9 @@ const labels: Record<string, string> = {
   SUPPLIER_RETURN: "Devolución a proveedor",
   DISTRIBUTION: "Salida por distribución",
   DISTRIBUTION_REVERSAL: "Reversión de distribución",
+  // Abrir cajas (SISTEMA-103).
+  STOCK_SPLIT_OUT: "Caja abierta",
+  STOCK_SPLIT_IN: "Ingreso por apertura de caja",
 };
 
 export function OperationHistory(props: {
@@ -146,7 +149,11 @@ function HistoryDialog({
             item.referenceType === "DISTRIBUTION" ||
             item.referenceType === "DISTRIBUTION_REVERSAL"
               ? item.referenceType
-              : item.type,
+              : item.referenceType === "STOCK_SPLIT"
+                ? item.quantity < 0
+                  ? "STOCK_SPLIT_OUT"
+                  : "STOCK_SPLIT_IN"
+                : item.type,
           detail: [
             `Lote: ${item.lotNumber ?? "Sin lote"}`,
             `Variación: ${item.quantity > 0 ? "+" : ""}${item.quantity} unidades`,
@@ -266,7 +273,7 @@ function HistoryDialog({
         outside.current = false;
       }}
       aria-labelledby="operation-history-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-4xl rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl outline-none backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-4xl rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl outline-none backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
     >
       <div className="flex h-[85dvh] flex-col overflow-hidden">
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-teal-50/60 px-6 py-5">
@@ -394,6 +401,7 @@ function HistoryDialog({
                       </span>
                       <span className="mt-1 block pl-5 text-xs text-slate-500">
                         {new Date(row.date).toLocaleString("es-AR", {
+                          hourCycle: "h23",
                           timeZone: "America/Argentina/Buenos_Aires",
                         })}
                         {row.amount !== undefined

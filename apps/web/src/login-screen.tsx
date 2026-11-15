@@ -45,7 +45,7 @@ const features = [
 ];
 
 const field =
-  "mt-1.5 h-11 w-full rounded-lg border border-[#dce7ef] bg-white px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-[#3d7f8a] focus:outline-none focus:ring-2 focus:ring-[#3d7f8a]/20";
+  "mt-1.5 h-11 w-full rounded-lg border border-niebla-913 bg-white px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-petroleo-558 focus:outline-none focus:ring-2 focus:ring-petroleo-558/20";
 
 /**
  * Pantalla de ingreso: panel con el mensaje del producto y tarjeta de acceso.
@@ -73,8 +73,8 @@ export function LoginScreen({
   const { enLinea } = useConectividad();
 
   return (
-    <main className="grid min-h-screen bg-[#f4f8fa] lg:grid-cols-[1.05fr_1fr]">
-      <section className="relative flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#3d7f8a] via-[#2c6470] to-[#233a42] px-6 py-6 text-white sm:px-10 lg:px-14 lg:py-12">
+    <main className="grid min-h-screen bg-fondo lg:grid-cols-[1.05fr_1fr]">
+      <section className="tema-claro relative flex flex-col justify-between overflow-hidden bg-gradient-to-br from-petroleo-558 via-petroleo-471 to-petroleo-333 px-6 py-6 text-white sm:px-10 lg:px-14 lg:py-12">
         {/* Textura: brillo difuso y cruz del logo como marca de agua. */}
         <div
           aria-hidden
@@ -137,12 +137,12 @@ export function LoginScreen({
         </ul>
       </section>
 
-      <section className="flex flex-col bg-[radial-gradient(#d3e1e6_1px,transparent_1px)] px-4 py-5 [background-size:22px_22px] sm:px-8">
+      <section className="flex flex-col bg-[radial-gradient(var(--color-niebla-900)_1px,transparent_1px)] px-4 py-5 [background-size:22px_22px] sm:px-8">
         <div className="flex min-h-9 justify-end">
           {landingUrl ? (
             <a
               href={landingUrl}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-white hover:text-[#2c7380]"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-white hover:text-petroleo-517"
             >
               <ArrowLeft size={15} aria-hidden />
               Volver al sitio
@@ -150,10 +150,10 @@ export function LoginScreen({
           ) : null}
         </div>
         <div className="flex flex-1 flex-col items-center justify-center py-8">
-          <div className="w-full max-w-sm rounded-2xl border border-[#dce7ef] bg-white p-7 shadow-[0_12px_40px_-20px_rgba(35,58,66,0.35)]">
+          <div className="w-full max-w-sm rounded-2xl border border-niebla-913 bg-white p-7 shadow-[0_12px_40px_-20px_rgba(35,58,66,0.35)]">
             {forgot ? (
               <div>
-                <span className="grid size-11 place-items-center rounded-full bg-[#eaf3f5] text-[#2c7380]">
+                <span className="grid size-11 place-items-center rounded-full bg-niebla-958 text-petroleo-517">
                   <KeyRound size={20} aria-hidden />
                 </span>
                 <h2 className="mt-4 text-xl font-bold text-slate-900">
@@ -173,7 +173,7 @@ export function LoginScreen({
                       desde{" "}
                       <a
                         href={`${landingUrl}#contacto`}
-                        className="font-semibold text-[#2c7380] underline-offset-2 hover:underline"
+                        className="font-semibold text-petroleo-517 underline-offset-2 hover:underline"
                       >
                         el sitio
                       </a>
@@ -184,7 +184,7 @@ export function LoginScreen({
                 <button
                   type="button"
                   onClick={() => setForgot(false)}
-                  className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#cfe2e6] text-sm font-semibold text-[#2c7380] hover:bg-[#f1f7f8]"
+                  className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-niebla-900 text-sm font-semibold text-petroleo-517 hover:bg-slate-100"
                 >
                   <ArrowLeft size={16} aria-hidden />
                   Volver a ingresar
@@ -197,7 +197,9 @@ export function LoginScreen({
                   void onSubmit(event).finally(() => setBusy(false));
                 }}
               >
-                <h2 className="text-2xl font-bold text-[#233a42]">Ingresar</h2>
+                <h2 className="text-2xl font-bold text-petroleo-333">
+                  Ingresar
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Accedé con tu usuario de la farmacia.
                 </p>
@@ -224,7 +226,7 @@ export function LoginScreen({
                     <button
                       type="button"
                       onClick={() => setForgot(true)}
-                      className="text-xs font-semibold text-[#2c7380] hover:underline"
+                      className="text-xs font-semibold text-petroleo-517 hover:underline"
                     >
                       ¿La olvidaste?
                     </button>
@@ -246,7 +248,7 @@ export function LoginScreen({
                       aria-label={
                         visible ? "Ocultar contraseña" : "Mostrar contraseña"
                       }
-                      className="absolute inset-y-0 right-0 mt-1.5 grid w-11 place-items-center text-slate-500 hover:text-[#2c7380]"
+                      className="absolute inset-y-0 right-0 mt-1.5 grid w-11 place-items-center text-slate-500 hover:text-petroleo-517"
                     >
                       {visible ? (
                         <EyeOff size={17} aria-hidden />
@@ -277,7 +279,7 @@ export function LoginScreen({
                 <button
                   type="submit"
                   disabled={busy}
-                  className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2c7380] text-sm font-semibold text-white shadow-sm hover:bg-[#245f6a] disabled:opacity-60"
+                  className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-petroleo-517 text-sm font-semibold text-white shadow-sm hover:bg-petroleo-452 disabled:opacity-60"
                 >
                   <LogIn size={16} aria-hidden />
                   {busy ? "Ingresando…" : "Ingresar"}
@@ -287,7 +289,7 @@ export function LoginScreen({
                     ¿Nueva farmacia?{" "}
                     <a
                       href={`${landingUrl}#contacto`}
-                      className="font-semibold text-[#2c7380] underline underline-offset-2"
+                      className="font-semibold text-petroleo-517 underline underline-offset-2"
                     >
                       Pedí una demo
                     </a>

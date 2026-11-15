@@ -240,7 +240,7 @@ function PaymentDialog({
                     aria-checked={elegido}
                     disabled={busy || Boolean(locked)}
                     onClick={() => setMethod(value)}
-                    className={`h-9 rounded-lg px-2 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "bg-white text-[#087f70] shadow-sm ring-1 ring-[#cce8de]" : "text-slate-600 hover:bg-white/70 hover:text-slate-800"}`}
+                    className={`h-9 rounded-lg px-2 text-sm font-medium transition-colors disabled:opacity-60 ${elegido ? "bg-white text-marca-535 shadow-sm ring-1 ring-marca-908" : "text-slate-600 hover:bg-white/70 hover:text-slate-800"}`}
                   >
                     {label}
                   </button>

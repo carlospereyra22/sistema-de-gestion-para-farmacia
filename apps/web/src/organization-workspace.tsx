@@ -589,7 +589,7 @@ function BranchConfirmation({
         event.preventDefault();
         onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 p-6 shadow-xl backdrop:bg-slate-900/30"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 p-6 shadow-xl backdrop:bg-velo/30"
     >
       <h2 id="branch-confirm-title" className="text-lg font-semibold">
         {label} sucursal

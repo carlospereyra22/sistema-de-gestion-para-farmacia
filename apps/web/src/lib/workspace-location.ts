@@ -5,6 +5,7 @@ const pages = {
   productos: "Productos",
   categorias: "Categorías y laboratorios",
   precios: "Listas de precios",
+  ofertas: "Ofertas",
   inventario: "Inventario",
   ventas: "Ventas",
   caja: "Caja",

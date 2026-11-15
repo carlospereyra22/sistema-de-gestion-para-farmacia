@@ -16,10 +16,17 @@ import {
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
 import type { EChartsCoreOption, ECElementEvent } from "echarts/core";
-import { reportChartTheme } from "./lib/report-chart-theme";
 import {
+  adaptarOpcionAlTema,
+  reportChartTheme,
+  reportChartThemeOscuro,
+} from "./lib/report-chart-theme";
+import { useTema } from "./use-tema";
+import {
+  ajusteDeTamano,
   MOVIMIENTO,
   opcionAnimada,
+  type MedidaGrafico,
   prefiereMenosMovimiento,
   type TipoAnimacionGrafico,
 } from "./lib/animacion-reportes";
@@ -39,6 +46,7 @@ echarts.use([
   SVGRenderer,
 ]);
 echarts.registerTheme("gestion", reportChartTheme);
+echarts.registerTheme("gestion-oscuro", reportChartThemeOscuro);
 
 /**
  * Grafico ECharts con el tema del sistema. Se importa con React.lazy para que
@@ -72,27 +80,39 @@ export default function ReportChart({
   const entrada = useRef(animarEntrada);
   const conTransicion = useRef(Boolean(animacion));
   conTransicion.current = Boolean(animacion) && !prefiereMenosMovimiento();
+  // ECharts fija el tema al crear el gráfico: al cambiarlo se vuelve a crear.
+  const tema = useTema();
 
   useEffect(() => {
     if (!container.current) return;
-    const instance = echarts.init(container.current, "gestion", {
-      renderer: "svg",
-    });
+    const instance = echarts.init(
+      container.current,
+      tema === "oscuro" ? "gestion-oscuro" : "gestion",
+      {
+        renderer: "svg",
+      },
+    );
     chart.current = instance;
     // ECharts corta cualquier animación en curso al hacer resize(), y el
     // ResizeObserver avisa una vez apenas empieza a observar: sin este control
     // la línea y las barras saltaban directo al final (SISTEMA-90). Sólo se
     // redimensiona si el tamaño cambió de verdad, y en Reportes con transición.
     const elemento = container.current;
-    let ancho = elemento.clientWidth;
-    let alto = elemento.clientHeight;
+    let medida: MedidaGrafico = {
+      ancho: elemento.clientWidth,
+      alto: elemento.clientHeight,
+      oculto: elemento.clientWidth === 0 || elemento.clientHeight === 0,
+    };
     const observer = new ResizeObserver(() => {
-      if (elemento.clientWidth === ancho && elemento.clientHeight === alto)
-        return;
-      ancho = elemento.clientWidth;
-      alto = elemento.clientHeight;
+      const ajuste = ajusteDeTamano(
+        medida,
+        elemento.clientWidth,
+        elemento.clientHeight,
+      );
+      medida = ajuste.medida;
+      if (ajuste.accion === "nada") return;
       instance.resize(
-        conTransicion.current
+        conTransicion.current && ajuste.accion === "animado"
           ? {
               animation: {
                 duration: MOVIMIENTO.graficoActualizacion,
@@ -109,7 +129,7 @@ export default function ReportChart({
       chart.current = null;
       dibujado.current = false;
     };
-  }, []);
+  }, [tema]);
 
   useEffect(() => {
     const instance = chart.current;
@@ -121,12 +141,13 @@ export default function ReportChart({
         : entrada.current
           ? "entrada"
           : "sin";
+    const opcion = adaptarOpcionAlTema(option, tema);
     instance.setOption(
-      animacion ? opcionAnimada(option, animacion, fase) : option,
+      animacion ? opcionAnimada(opcion, animacion, fase) : opcion,
       { notMerge: true },
     );
     dibujado.current = true;
-  }, [option, animacion]);
+  }, [option, animacion, tema]);
 
   useEffect(() => {
     const instance = chart.current;
@@ -135,7 +156,7 @@ export default function ReportChart({
     return () => {
       instance.off("click", onSelect);
     };
-  }, [onSelect]);
+  }, [onSelect, tema]);
 
   return (
     <div

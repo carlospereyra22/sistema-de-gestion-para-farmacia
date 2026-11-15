@@ -156,7 +156,7 @@ function ConfirmarEnvio({
         event.preventDefault();
         if (!pending.current) onClose();
       }}
-      className="m-auto max-h-[90dvh] w-[min(480px,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-800 shadow-xl backdrop:bg-slate-950/35"
+      className="m-auto max-h-[90dvh] w-[min(480px,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-slate-800 shadow-xl backdrop:bg-velo/35"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id={`${id}-titulo`} className="text-base font-semibold">

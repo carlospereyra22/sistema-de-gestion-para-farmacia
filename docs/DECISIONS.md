@@ -326,6 +326,7 @@
 
 - Al abrir Productos se preparan de forma idempotente las categorías iniciales (Medicamentos, Dermocosmética, Perfumería, Accesorios, Suplementos e Higiene). Elegir una referencia externa asigna Medicamentos; el operador puede cambiarla antes de guardar.
 - La unidad de venta se guarda por producto como caja, blíster o unidad. No se convierten cantidades entre presentaciones hasta definir una equivalencia comercial por producto.
+- 11/11/2026 (SISTEMA-103): la equivalencia comercial entre presentaciones se modela como **dos productos vinculados**: la caja (ej. x100) se abre en N unidades de otro producto del catálogo (blíster x10), con `Product.splitTargetProductId` y `splitFactor`. Se descartó contar el stock de un mismo producto en fracciones: cada presentación conserva su código, su precio del padrón y su stock. Abrir es una operación explícita (Inventario, Productos o al recibir la compra), nunca automática en la venta, y conserva lote y vencimiento. Ver [BOX_SPLIT.md](BOX_SPLIT.md).
 
 - Los cierres de caja conservan efectivo esperado, contado y diferencia calculados desde el fondo inicial, los cobros en efectivo y los movimientos manuales. El motivo de una diferencia permanece opcional por ahora; el historial y los reportes se consultan por rango, día y mes en horario de Argentina.
 - Los productos vinculados explícitamente a una referencia externa se revisan automáticamente a las 09:00 y 17:00 de Argentina (UTC-3). El proceso actualiza únicamente el precio de referencia sugerido y su fecha de comprobación; el precio comercial de venta sigue siendo una decisión manual.
@@ -352,6 +353,14 @@
 
 - Panel de plataforma atado a la pestaña (11/11/2026, SISTEMA-94, riesgo de seguridad alto): el código del panel ya no queda en la sesión del navegador, que comparten todas las pestañas. Al ingresarlo se entrega un token de plataforma que la web guarda sólo en memoria y manda en `X-Plataforma`. Vence a los 30 minutos sin uso y como máximo a las 8 horas, y la guardia lo exige del mismo usuario y sesión. La sesión del superadmin usa una cookie no persistente, con vencimiento a las 12 horas y a la hora sin uso. Ver `PLATFORM.md`. El usuario eligió la cookie separada (SISTEMA-100): el superadmin usa `gestion_plataforma`, así que entrar al panel no reemplaza la sesión de la farmacia en ese navegador. Ver `PLATFORM.md`.
 
+- 14/11/2026 (SISTEMA-106): escalabilidad y Docker. Decisiones del usuario: dejar lista la API en contenedores con procesos separados, apuntar a más de 100 farmacias y seguir por ahora en el servidor gratuito de Oracle, sabiendo que hoy hay una farmacia real. No se construye de más: se hace ahora lo barato hoy y caro con clientes (empaquetado, separación de procesos, límite de login, tope de conexiones, documentación) y el resto queda por etapas con su disparador en `ESCALABILIDAD.md`.
+  - Una sola imagen y varios roles (API x2, worker, migraciones), no microservicios. En la etapa 1 PostgreSQL y nginx quedan nativos y los contenedores usan la red del servidor: no cambian `DATABASE_URL`, el firewall ni la vuelta atrás a systemd.
+  - Límite de intentos de login sin dependencia nueva (se descartó `@nestjs/throttler` para no sumar un paquete ni tocar el lockfile): 8 fallos por correo en 5 minutos, en memoria de cada copia. Se cuenta por correo y no por IP porque detrás del proxy de Netlify todas las farmacias llegan con la misma IP. Riesgo aceptado: alguien que conozca un correo puede bloquearle los inicios nuevos durante 5 minutos (se eligió un bloqueo corto porque es un punto de venta); las sesiones abiertas no se cortan.
+  - La imagen incluye la CLI de Prisma (más pesada) para que la misma imagen aplique las migraciones, sin instalar nada en el servidor.
+  - Netlify se mantiene para la web; lo que se va a quitar es el proxy de la API, cuando haya dominio. La mudanza de dirección se hace una sola vez porque reinicia la app instalada y la copia sin conexión.
+  - Integraciones futuras con obras sociales, PAMI y recetas electrónicas: módulos del monolito con el patrón de Fiscal y reintentos en el worker; no se diseñaron todavía.
+  - Nada se aplicó en el servidor. El pase a Docker se hace primero en test y requiere autorización. Ver `DOCKER.md`.
+
 ## OPEN
 
 - Credential recovery policy for production.
@@ -372,3 +381,38 @@ El encabezado común de tickets se configura en Administración → Organizació
 La impresión de ventas y cobros se unifica en V21, con agente local Windows RAW ESC/POS en 127.0.0.1:17890 y vista previa compartida. El contrato transporta centavos y consume importes persistidos, sin recalcular precios ni modificar operaciones. Cada envío usa requestId y reserva persistente para impedir repeticiones accidentales. Ver [THERMAL_TICKETS.md](THERMAL_TICKETS.md).
 
 Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar y desde Historial. Los nuevos recibos guardan una instantánea inmutable en la auditoría transaccional existente, sin migración; reimprimir no modifica deuda ni caja. Incluyen importes efectivamente aplicados por artículo, no el total original de la venta. Para recibos anteriores sin instantánea no se inventa saldo histórico.
+
+# Ofertas (12/11/2026, SISTEMA-103)
+
+- Combinación: un renglón recibe como máximo una oferta, la de mayor ahorro para el cliente; sólo se suman si todas las que lo tocan son combinables, en orden de prioridad y sobre el precio ya ofertado. Se elige de a una oferta (mayor ahorro total; a igual ahorro, mayor prioridad y después la más antigua): es determinista aunque con grupos mixtos no siempre sea el óptimo global.
+- El precio especial de la cajera reemplaza la oferta (se avisa en el carrito). El descuento general va después, sobre el subtotal ya ofertado.
+- Los medicamentos con receta pueden tener oferta (decisión del usuario del 11/11/2026). Una oferta sobre una categoría incluye sus subcategorías.
+- El motor es un archivo puro idéntico en la API y en la web (un test lo compara), en lugar de un paquete compartido con lógica: `packages/contracts` sigue siendo sólo tipos. La API es la autoridad; la web lo usa para la vista previa y la venta sin conexión.
+- `SaleItem.discountMinor` sigue siendo el descuento total y `offerDiscountMinor` la parte de ofertas: factura C, notas de crédito, cuenta corriente y tickets no cambian su lógica. El ticket suma `offers`/`savingsMinor` sin cambiar el significado de `discountMinor`, para que un agente de impresión anterior imprima cuentas correctas.
+- Estados guardados mínimos (borrador, publicada, pausada, finalizada, archivada); programada, activa y vencida se calculan con la hora, sin cron.
+- Permisos nuevos `OFFER_READ` y `OFFER_MANAGE` (nombre alineado con los `*_READ`/`*_MANAGE` existentes).
+- Fuera de esta versión: condiciones por cliente puntual, y crear o editar ofertas sin conexión.
+- Por medio de pago (12/11/2026, decisión del usuario): es un tipo de oferta (`PAYMENT_METHOD`), no una condición sobre los otros tipos. Con pago mixto el descuento es proporcional a la parte pagada con esos medios; se puede elegir cuenta corriente. Va después de las demás ofertas y respeta «combinable». Dos ofertas por medio de pago no se suman: se aplica la de mayor ahorro (lo habitual es una sola). En el carrito sólo se sugiere; se aplica en el cobro y la API recalcula con los pagos. Ver OFFERS.md.
+- «Todos los productos» (12/11/2026): `Offer.allProducts` con exclusiones, para cualquier tipo salvo combos.
+- No combinables (12/11/2026, decisión del usuario «según combinable, pero gana la mejor»): si una oferta de toda la venta queda bloqueada por otra no combinable, el motor compara con el cálculo sin la que la bloquea y se queda con el de mayor ahorro total.
+- Por monto de compra (12/11/2026, pedido del usuario): tipo `SPEND_THRESHOLD`, mínimo medido sobre lo que entra en la oferta ya con las demás ofertas, % o pesos una vez por venta, después de las ofertas por producto y antes de las por medio de pago; va la de mayor ahorro y respeta «combinable».
+- La web no ofrece «Duplicar» (12/11/2026, pedido del usuario); el endpoint sigue.
+
+# Historial de ventas paginado en el servidor (13/11/2026, SISTEMA-104)
+
+- Problema: `GET sales` devuelve solo las últimas 200 ventas y la web filtraba y paginaba sobre esas. En una sucursal con 366 ventas, las 166 más viejas (por ejemplo, una del 17/10 que sí figuraba en el cierre de caja) no se podían ver, reimprimir, anular ni facturar desde el historial. Los datos nunca se perdieron.
+- `GET sales/history` filtra y pagina en el servidor sobre todas las ventas de la sucursal: `page`, `pageSize` (hasta 100), `from`/`to` (días civiles de Argentina, inclusive, sobre `completedAt`), `status`, `documentType`, `method` (alguno de los pagos) y `q` (comienzo del código interno, buscado como rango de uuid sobre la clave primaria). Devuelve `{ items, total, page, pageSize }` y cada venta trae sus ofertas aplicadas (`SaleOffer` con sus renglones). Orden: `completedAt` descendente (nulos al final) e id.
+- `GET sales` sigue igual (últimas 200) para el inicio, los avisos de facturas en espera y la copia local. El historial pide cada página; las ventas de la PC sin enviar van arriba de la primera página y, sin conexión, se filtra la copia local en la PC con las mismas reglas (`lib/historial-local.ts`). Exportar CSV recorre todas las páginas del filtro.
+- Como `GET sales`, el historial lleva `@AllowOwnerWhenBlocked`: el dueño sigue viendo sus ventas con la farmacia bloqueada.
+- No se agregó índice: alcanza el de `(organizationId, branchId, createdAt)` para acotar la sucursal. Si una sucursal llega a cientos de miles de ventas, evaluar un índice sobre `completedAt`.
+
+# Horas en formato de 24 h (13/11/2026, SISTEMA-104)
+
+- En `es-AR`, `toLocaleString` y `toLocaleTimeString` usan reloj de 12 h sin «a. m./p. m.»: una venta de las 20:14 se veía «08:14» y un cierre de caja parecía anterior a su apertura (00:31 se veía «12:31»). Toda fecha con hora lleva `hourCycle: "h23"` (37 lugares de la web y el agente de impresión). `lib/formato-hora.test.ts` falla si vuelve a aparecer una fecha con `es-AR` sin opciones.
+
+# Modo oscuro (13/11/2026, SISTEMA-105)
+
+- Pedido del usuario: switch claro/oscuro en el menú de la cuenta, recordado por navegador. Se guarda en `localStorage` de la PC (no en el usuario ni en la API): rige también en la pantalla de ingreso y no necesita migración. Por defecto, claro.
+- Se implementa redefiniendo las variables de color de Tailwind y las propias bajo `:root.dark`, en vez de agregar `dark:` en cada componente (más de 4.000 clases de color en ~300 archivos). La paleta oscura la genera `apps/web/scripts/generar-tema-oscuro.mjs` invirtiendo la luminosidad en OKLCH; así las pantallas nuevas quedan bien sin trabajo extra.
+- Los ~110 colores hex fijos de la web pasaron a tokens con nombre (`marca`, `petroleo`, `niebla`, `ambar`, `rosa`, `violeta`, `azul`, `verde` + luminosidad) o al color de Tailwind equivalente; se unificaron sólo los casi idénticos, el modo claro se ve igual. Un test impide volver a usar hex sueltos en clases.
+- Tickets, A4 y etiquetas se siguen viendo en papel blanco; la impresión no cambia (el bloque oscuro es sólo `@media screen`). Ver `MODO_OSCURO.md`.

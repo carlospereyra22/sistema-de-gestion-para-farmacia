@@ -40,6 +40,7 @@ export function CashStatusBar({
         <span>
           {session
             ? `Desde ${new Date(session.openedAt).toLocaleString("es-AR", {
+                hourCycle: "h23",
                 dateStyle: "short",
                 timeStyle: "short",
               })}${session.openedBy ? ` · Abrió ${session.openedBy}` : ""}`
@@ -158,10 +159,12 @@ export function CashTimeline({
                   <td className="whitespace-nowrap">
                     {session
                       ? new Date(row.date).toLocaleTimeString("es-AR", {
+                          hourCycle: "h23",
                           hour: "2-digit",
                           minute: "2-digit",
                         })
                       : new Date(row.date).toLocaleString("es-AR", {
+                          hourCycle: "h23",
                           dateStyle: "short",
                           timeStyle: "short",
                         })}

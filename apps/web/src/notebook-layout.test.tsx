@@ -25,7 +25,7 @@ it("places sales controls in the global header and reclaims the heading height",
   expect(source.match(/branchSelector=\{branchSelector\}/g)).toHaveLength(1);
   expect(source).not.toContain("{branchSelector}</");
   expect(source).toMatch(
-    /view !== "Ventas"\s*&&\s*view !== "Listas de precios"\s*&&\s*view !== "Caja"\s*&&\s*view !== "Cuentas corrientes"/,
+    /view !== "Ventas"\s*&&\s*view !== "Listas de precios"\s*&&\s*view !== "Ofertas"\s*&&\s*view !== "Caja"\s*&&\s*view !== "Cuentas corrientes"/,
   );
   expect(header).toContain("setAccountToolbarTarget");
   expect(header).toContain("<NotebookTabs");

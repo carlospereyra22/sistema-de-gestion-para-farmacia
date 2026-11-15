@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sistema de Gestión</title>
     <meta name="theme-color" content="#f4f8fa" />
+    <script>
+      // Modo oscuro antes de pintar, sin destello claro (ver src/lib/tema.ts).
+      try {
+        if (localStorage.getItem("gestion:tema") === "oscuro") {
+          document.documentElement.classList.add("dark");
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute("content", "#0b1115");
+        }
+      } catch {}
+    </script>
     <meta name="apple-mobile-web-app-title" content="Gestión" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/app-192.png" />

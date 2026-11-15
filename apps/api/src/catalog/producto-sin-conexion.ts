@@ -42,6 +42,9 @@ export type CuerpoAltaProducto = {
   saleUnit?: "BOX" | "BLISTER" | "UNIT";
   description?: string;
   prescriptionRequired?: boolean;
+  priceManual?: boolean;
+  splitTargetProductId?: string | null;
+  splitFactor?: number | null;
   equivalentBarcodes?: string[];
 };
 
@@ -72,6 +75,9 @@ export type CuerpoEdicionProducto = {
   saleUnit?: "BOX" | "BLISTER" | "UNIT";
   description?: string;
   prescriptionRequired?: boolean;
+  priceManual?: boolean;
+  splitTargetProductId?: string | null;
+  splitFactor?: number | null;
 };
 
 type Base = { clientOperationId: string; occurredAt: string; deviceId: string };
@@ -205,6 +211,9 @@ export const COLUMNAS_DEL_PRODUCTO = [
   "priceDivisor",
   "priceMarkupBps",
   "priceBaseMinor",
+  "splitTargetProductId",
+  "splitFactor",
+  "priceManual",
   "externalReferenceSource",
   "externalReferenceName",
   "externalReferencePresentation",

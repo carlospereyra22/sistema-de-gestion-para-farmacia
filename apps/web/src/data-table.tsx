@@ -46,7 +46,7 @@ export function DataTable({
           className={`w-full ${large ? "text-base" : "text-sm"} text-slate-700 ${minWidthClass}`}
         >
           <thead
-            className={`border-b border-slate-200 bg-[#f3f7f8] ${large ? "text-sm" : "text-xs"} font-semibold uppercase tracking-wide text-slate-500`}
+            className={`border-b border-slate-200 bg-niebla-973 ${large ? "text-sm" : "text-xs"} font-semibold uppercase tracking-wide text-slate-500`}
           >
             <tr>
               {columns.map((column, index) => (
@@ -85,7 +85,7 @@ export function DataTableRow({
 }) {
   return (
     <tr
-      className={`hover:bg-[#f6faf9] ${onToggle ? "cursor-pointer" : ""}`}
+      className={`hover:bg-slate-50 ${onToggle ? "cursor-pointer" : ""}`}
       onClick={
         onToggle
           ? (event) => {

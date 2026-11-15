@@ -73,7 +73,7 @@ function Modal({
         event.preventDefault();
         onClose();
       }}
-      className="m-auto max-h-[90dvh] w-[min(760px,calc(100%-2rem))] overflow-y-auto rounded-2xl border bg-white p-6 shadow-xl backdrop:bg-slate-950/40"
+      className="m-auto max-h-[90dvh] w-[min(760px,calc(100%-2rem))] overflow-y-auto rounded-2xl border bg-white p-6 shadow-xl backdrop:bg-velo/40"
     >
       <header className="mb-5 flex items-center justify-between">
         <h2 className="text-lg font-semibold">{title}</h2>
@@ -456,6 +456,7 @@ export function PriceListsWorkspace({
                       Última actualización{" "}
                       {list.updatedAt
                         ? new Date(list.updatedAt).toLocaleString("es-AR", {
+                            hourCycle: "h23",
                             dateStyle: "short",
                             timeStyle: "short",
                           })

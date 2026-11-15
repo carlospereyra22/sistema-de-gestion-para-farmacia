@@ -42,6 +42,9 @@ doble clic mientras hay una solicitud en curso. Ver `docs/BUSINESS_RULES.md`.
 ## UI y diseno responsive
 
 - Tailwind 4 + componentes estilo shadcn/ui (`components.json`), iconos `lucide-react`.
+- Colores: paleta de Tailwind o tokens de `src/tema.css` (`text-marca-535`,
+  `border-niebla-913`); nunca hex sueltos (`bg-[#e8faf5]`), que rompen el modo oscuro.
+  Velos de dialogos con `bg-velo/40`. Ver `docs/MODO_OSCURO.md`.
 - Respetar los cortes de `docs/WORKSPACE.md` (1800/1600/1440/1200/1024/768 px CSS),
   `workspace-split` para listado + formulario, sin scroll horizontal del documento.
 - Accesibilidad: `aria-label` en inputs y botones de icono; los tests lo verifican.

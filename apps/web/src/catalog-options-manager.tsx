@@ -259,7 +259,7 @@ function CategoryIconPicker({
       <dialog
         ref={dialog}
         aria-label={`Icono de ${name || "nueva categoría"}`}
-        className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-900/30"
+        className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-velo/30"
       >
         <h3 className="mb-4 font-semibold">Elegí un icono y un color</h3>
         <div

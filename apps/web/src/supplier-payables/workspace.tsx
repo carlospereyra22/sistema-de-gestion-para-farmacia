@@ -657,6 +657,7 @@ export function SupplierPayablesWorkspace({
           <p className="mt-5 text-sm text-slate-400">
             Registrada por {detail.createdByName} ·{" "}
             {new Date(detail.createdAt).toLocaleString("es-AR", {
+              hourCycle: "h23",
               timeZone: "America/Argentina/Buenos_Aires",
             })}
           </p>

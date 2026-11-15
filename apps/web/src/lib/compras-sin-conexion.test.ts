@@ -59,6 +59,43 @@ describe("compras sin conexión", () => {
     expect(ingresosDeCompra({ path: "", body: {} }, [])).toEqual([]);
   });
 
+  // Abrir cajas al recibir sin conexión (SISTEMA-103).
+  it("lo abierto al recibir entra al producto chico con el mismo lote", () => {
+    const apertura = (id: string) =>
+      id === "x100" ? { targetProductId: "x10", factor: 10 } : null;
+    expect(
+      ingresosDeCompra(
+        {
+          path: "/direct",
+          body: {
+            receipts: [
+              { productId: "x100", quantity: 3, lotNumber: "L1", openBoxes: 2 },
+            ],
+          },
+        },
+        [],
+        apertura,
+      ),
+    ).toEqual([
+      { productId: "x100", cantidad: 1, lote: "L1", vence: null },
+      { productId: "x10", cantidad: 20, lote: "L1", vence: null },
+    ]);
+    expect(
+      ingresosDeCompra(
+        {
+          path: "/p1/receipts/batch",
+          body: {
+            items: [
+              { itemId: "i1", quantity: 2, lotNumber: "L2", openBoxes: 2 },
+            ],
+          },
+        },
+        [{ id: "i1", productId: "x100" }],
+        apertura,
+      ),
+    ).toEqual([{ productId: "x10", cantidad: 20, lote: "L2", vence: null }]);
+  });
+
   it("guarda la recepción en la PC: suma stock y no toca caja ni historial de ventas", async () => {
     await guardarOperacionCompra(
       "o1",

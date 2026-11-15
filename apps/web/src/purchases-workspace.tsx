@@ -648,7 +648,16 @@ export function PurchasesWorkspace({
           branchId,
           solicitud.path,
           solicitud.body as Record<string, unknown>,
-          ingresosDeCompra(solicitud, currentItems),
+          ingresosDeCompra(solicitud, currentItems, (id) => {
+            // Abrir cajas al recibir (SISTEMA-103): el vínculo del producto.
+            const p = products.find((item) => item.id === id);
+            return p?.splitTargetProductId && p.splitFactor
+              ? {
+                  targetProductId: p.splitTargetProductId,
+                  factor: p.splitFactor,
+                }
+              : null;
+          }),
         );
       setDraft(undefined);
       sessionStorage.removeItem(storageKey);
@@ -1323,8 +1332,10 @@ export function PurchasesWorkspace({
                   className="mb-3 rounded-lg border p-3 text-sm"
                 >
                   <p className="font-medium">
-                    {new Date(r.createdAt).toLocaleString("es-AR")} ·{" "}
-                    {r.actorName}
+                    {new Date(r.createdAt).toLocaleString("es-AR", {
+                      hourCycle: "h23",
+                    })}{" "}
+                    · {r.actorName}
                   </p>
                   {r.notes && <p>{r.notes}</p>}
                   {r.items.map((i) => (
@@ -1350,8 +1361,10 @@ export function PurchasesWorkspace({
                   </p>
                   {detail.legacyMovements.map((m) => (
                     <p key={m.id}>
-                      {new Date(m.occurredAt).toLocaleString("es-AR")} ·{" "}
-                      {m.quantity} un. · Lote {m.lotNumber}
+                      {new Date(m.occurredAt).toLocaleString("es-AR", {
+                        hourCycle: "h23",
+                      })}{" "}
+                      · {m.quantity} un. · Lote {m.lotNumber}
                     </p>
                   ))}
                 </section>
@@ -1919,7 +1932,7 @@ function PurchaseDialog({
         e.preventDefault();
         close();
       }}
-      className={`m-auto ${confirmation ? "w-[min(440px,calc(100vw-2rem))]" : "w-[min(1080px,calc(100vw-2rem))]"} max-w-[calc(100vw-2rem)] max-h-[90dvh] overflow-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-950/35`}
+      className={`m-auto ${confirmation ? "w-[min(440px,calc(100vw-2rem))]" : "w-[min(1080px,calc(100vw-2rem))]"} max-w-[calc(100vw-2rem)] max-h-[90dvh] overflow-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-velo/35`}
     >
       {confirmation}
       <div hidden={Boolean(confirmation)}>

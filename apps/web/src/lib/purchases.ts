@@ -39,6 +39,8 @@ export type ReceiptDraft = {
   quantity: string;
   lotNumber: string;
   expiresAt: string;
+  /** Abrir cajas al recibir (SISTEMA-103): cuántas pasan al producto chico. */
+  openBoxes?: string;
 };
 export type PurchaseDetail = Purchase & {
   receipts: {
@@ -166,11 +168,21 @@ export function prepareReceiptLines(
     if (!items.some((i) => i.id === r.itemId))
       throw new Error("El artículo no pertenece a esta compra.");
     totals.set(r.itemId, (totals.get(r.itemId) ?? 0) + quantity);
+    const openBoxes = Number(r.openBoxes || 0);
+    if (
+      !Number.isSafeInteger(openBoxes) ||
+      openBoxes < 0 ||
+      openBoxes > quantity
+    )
+      throw new Error(
+        "Las cajas a abrir tienen que ser un entero entre 0 y lo que recibís.",
+      );
     return {
       itemId: r.itemId,
       quantity,
       lotNumber: r.lotNumber.trim(),
       expiresAt: r.expiresAt || undefined,
+      ...(openBoxes ? { openBoxes } : {}),
     };
   });
   if (items.some((i) => (totals.get(i.id) ?? 0) > purchasePending(i)))

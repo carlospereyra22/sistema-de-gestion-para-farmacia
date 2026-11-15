@@ -162,7 +162,11 @@ export function CashOrganizationTable({
                       {row.session
                         ? new Date(row.session.openedAt).toLocaleString(
                             "es-AR",
-                            { dateStyle: "short", timeStyle: "short" },
+                            {
+                              hourCycle: "h23",
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            },
                           )
                         : "—"}
                     </td>

@@ -11,7 +11,7 @@ import { reportCardClass } from "./report-states";
 export type PlatformTone = "teal" | "amber" | "rose" | "sky" | "slate";
 
 const iconTone: Record<PlatformTone, string> = {
-  teal: "bg-[#e8faf5] text-[#087f70]",
+  teal: "bg-marca-970 text-marca-535",
   amber: "bg-amber-50 text-amber-700",
   rose: "bg-rose-50 text-rose-700",
   sky: "bg-sky-50 text-sky-700",
@@ -35,7 +35,7 @@ export function PlatformPageHeader({
       <div className="flex min-w-0 items-start gap-3.5">
         <span
           aria-hidden="true"
-          className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#cce8de] bg-white text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_8%)]"
+          className="grid size-11 shrink-0 place-items-center rounded-xl border border-marca-908 bg-white text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_8%)]"
         >
           {icon}
         </span>
@@ -133,12 +133,12 @@ export function PlatformPanel({
 }) {
   return (
     <section className={`${reportCardClass} min-w-0 ${className}`}>
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e6eef3] px-4 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-niebla-935 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {icon && (
             <span
               aria-hidden="true"
-              className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#e8faf5] text-[#087f70]"
+              className="grid size-8 shrink-0 place-items-center rounded-lg bg-marca-970 text-marca-535"
             >
               {icon}
             </span>
@@ -171,7 +171,7 @@ export function PlatformLoading({ children }: { children: ReactNode }) {
       <LoaderCircle
         size={18}
         aria-hidden="true"
-        className="animate-spin text-[#087f70] motion-reduce:animate-none"
+        className="animate-spin text-marca-535 motion-reduce:animate-none"
       />
       {children}
     </p>
@@ -205,7 +205,7 @@ export function PlatformEmpty({
     <div className="flex flex-col items-center px-6 py-10 text-center">
       <span
         aria-hidden="true"
-        className="grid size-12 place-items-center rounded-full bg-[#eef6f4] text-[#087f70]"
+        className="grid size-12 place-items-center rounded-full bg-marca-970 text-marca-535"
       >
         {icon}
       </span>
@@ -239,17 +239,17 @@ export function PlatformHero({
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[#e3f7f0] via-[#f1fbf8] to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-marca-958 via-teal-50 to-transparent"
       />
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-[#d6f3ea]/60 blur-2xl"
+        className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-marca-941/60 blur-2xl"
       />
       <div className="relative flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <span
             aria-hidden="true"
-            className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#0a8a79] to-[#0b5a52] text-xl font-bold tracking-wide text-white shadow-[0_10px_24px_-12px_rgb(8_100_90_/_70%)] ring-4 ring-white"
+            className="tema-claro grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-marca-571 to-marca-422 text-xl font-bold tracking-wide text-white shadow-[0_10px_24px_-12px_rgb(8_100_90_/_70%)] ring-4 ring-white"
           >
             {monogram}
           </span>
@@ -263,7 +263,7 @@ export function PlatformHero({
             <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
               {chips.map(({ icon, text }) => (
                 <li key={text} className="inline-flex items-center gap-1.5">
-                  <span aria-hidden="true" className="text-[#087f70]">
+                  <span aria-hidden="true" className="text-marca-535">
                     {icon}
                   </span>
                   {text}
@@ -307,7 +307,7 @@ export function PlatformUsage({
         className="block h-1.5 w-16 overflow-hidden rounded-full bg-slate-100"
       >
         <span
-          className={`block h-full rounded-full ${lleno ? "bg-amber-500" : "bg-[#3fa392]"}`}
+          className={`block h-full rounded-full ${lleno ? "bg-amber-500" : "bg-marca-652"}`}
           style={{ width: `${Math.min(100, (used / quota) * 100)}%` }}
         />
       </span>

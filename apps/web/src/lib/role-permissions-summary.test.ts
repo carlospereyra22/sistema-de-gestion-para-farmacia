@@ -8,7 +8,7 @@ import {
 
 describe("resumen de permisos de un rol", () => {
   it("cuenta cada permiso una sola vez aunque esté en varios módulos", () => {
-    expect(rolePermissionCodes).toHaveLength(28);
+    expect(rolePermissionCodes).toHaveLength(30);
     expect(countRolePermissions(["CATALOG_MANAGE", "CATALOG_MANAGE"])).toBe(1);
     expect(countRolePermissions(["NO_EXISTE", "SALE_READ"])).toBe(1);
   });

@@ -32,7 +32,7 @@ export function ProductSaveErrorDialog({
       }}
       aria-labelledby={titleId}
       aria-describedby={messageId}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-velo/40 backdrop:backdrop-blur-sm"
     >
       <div className="p-6 sm:p-7">
         <div className="flex items-start justify-between gap-4">
@@ -71,7 +71,7 @@ export function ProductSaveErrorDialog({
         <button
           type="button"
           onClick={onClose}
-          className="w-full rounded-xl bg-[#31826a] px-4 py-3 text-sm font-semibold text-white hover:bg-[#276c58] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+          className="w-full rounded-xl bg-marca-550 px-4 py-3 text-sm font-semibold text-white hover:bg-marca-482 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
         >
           Volver al formulario
         </button>

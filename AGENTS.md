@@ -14,7 +14,7 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
 
 - `apps/api`: NestJS 11 REST bajo `/api/v1`, Prisma 6 + PostgreSQL 18, Jest.
   Un modulo por dominio en `src/` (accounts, auth, audit, cash, catalog, fiscal,
-  inventory, organizations, parties, printing, purchases, reports, roles, sales,
+  inventory, offers, organizations, parties, printing, purchases, reports, roles, sales,
   supplier-payables, transfers, users). Esquema en `prisma/schema.prisma`,
   migraciones en `prisma/migrations/`, integracion en `test/`.
   OpenAPI en `/api/docs`.
@@ -28,9 +28,15 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
   herramientas Python del catalogo externo.
 - `deploy/oracle/`: despliegue del backend en VPS Oracle (systemd + nginx). La web
   se sube manualmente a Netlify.
+- `deploy/docker/` y `apps/api/Dockerfile`: la API en contenedores, una imagen y
+  varios roles (API x2, worker de tareas programadas, migraciones). Ver
+  `docs/DOCKER.md`.
 
 Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
 `localhost:5173`, API `localhost:3000`, PostgreSQL nativo `gestion_dev`).
+Probar la API en Docker (dentro de WSL): `Iniciar Gestion - Docker.cmd` /
+`Detener Gestion - Docker.cmd` (`scripts/docker-local.ps1`); usa el mismo puerto
+3000, se usa uno u otro.
 
 ## Indice de documentacion (`docs/`)
 
@@ -41,17 +47,21 @@ Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
 - Caja: `CASH_SIMPLE_IMPLEMENTATION.md`, `CASH_WORKSPACE.md`, `CASH_IMPROVEMENTS_PLAN.md`.
 - Cuentas corrientes: `ACCOUNT_*.md`, `CUSTOMERS.md`, `CUSTOMER_BILLING.md`.
 - Catalogo: `PRODUCTS.md`, `MEDICINE_CATALOG.md`, `BRANCH_PRODUCT_LIFECYCLE.md`, `INVENTORY_SEARCH.md`,
-  `EXTERNAL_PRODUCT_CATALOG.md`, `DASHBOARD_MEDICINE_SEARCH.md`.
+  `EXTERNAL_PRODUCT_CATALOG.md`, `DASHBOARD_MEDICINE_SEARCH.md`, `BOX_SPLIT.md` (abrir cajas x100 en blísteres).
 - Compras y proveedores: `PURCHASES_V2.md`, `SUPPLIERS.md`, `SUPPLIER_PAYABLES.md`,
   `DISTRIBUTION.md`.
 - Fiscal: `FISCAL_BILLING.md`, `PRODUCTION_FISCAL_CHECKLIST.md`, `FISCAL_*.md`.
 - Impresion: `THERMAL_TICKETS.md`, `LOCAL_PRINT_AGENT.md`, `PRODUCTION_PRINTING.md`.
 - Reportes: `REPORTS_PLAN.md`, `REPORTS_INTERACTIVE_SPEC.md`.
+- Ofertas y promociones: `OFFERS.md`.
 - Landing comercial: `LANDING.md`.
 - Plataforma y cobro a farmacias: `PLATFORM.md`.
-- Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`.
+- Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`,
+  `MODO_OSCURO.md` (colores por tokens; nada de hex sueltos).
 - Modo sin internet: `OFFLINE.md`.
 - Rendimiento y volumen (catálogo por partes, mediciones): `RENDIMIENTO.md`.
+- Escalabilidad, Docker e instalacion: `ESCALABILIDAD.md` (diagnostico y etapas),
+  `DOCKER.md` (API en contenedores), `INSTALACION.md` (que instalar en cada ambiente).
 - Operacion: `INICIAR_PRUEBAS.md`, `PUBLICAR_PRODUCCION.md`,
   `LOCAL_PRODUCTION_PARITY.md`, `NETLIFY.md`, `PRODUCTION_BOOTSTRAP.md`.
 
@@ -61,16 +71,18 @@ Unica carpeta de skills del proyecto, para Codex y Claude Code. No crear copias 
 `.claude/skills/` ni en otro lugar. Antes de empezar una tarea, leer completo el
 `SKILL.md` que corresponda:
 
-| Tarea                                                    | Leer                                              |
-| -------------------------------------------------------- | ------------------------------------------------- |
-| Cambiar backend: endpoints, servicios, reglas de negocio | `.agents/skills/nueva-funcionalidad-api/SKILL.md` |
-| Cambiar frontend: pantallas, componentes, `lib/`         | `.agents/skills/nueva-funcionalidad-web/SKILL.md` |
-| Arreglar una vista con selectores o agregar uno          | `.agents/skills/selectores-web/SKILL.md`          |
-| Cambiar `schema.prisma` o crear migraciones              | `.agents/skills/migracion-prisma/SKILL.md`        |
-| Terminar cualquier cambio de codigo                      | `.agents/skills/cerrar-tarea/SKILL.md`            |
-| Ramas, commits, pull requests, merge o conflictos de git | `.agents/skills/git-equipo/SKILL.md`              |
-| Publicar en test/produccion, versiones (tags), hotfix    | `.agents/skills/publicar-ambientes/SKILL.md`      |
-| Crear o cargar tareas en Trello                          | `.agents/skills/crear-tareas-trello/SKILL.md`     |
+| Tarea                                                               | Leer                                              |
+| ------------------------------------------------------------------- | ------------------------------------------------- |
+| Cambiar backend: endpoints, servicios, reglas de negocio            | `.agents/skills/nueva-funcionalidad-api/SKILL.md` |
+| Cambiar frontend: pantallas, componentes, `lib/`                    | `.agents/skills/nueva-funcionalidad-web/SKILL.md` |
+| Arreglar una vista con selectores o agregar uno                     | `.agents/skills/selectores-web/SKILL.md`          |
+| Cambiar `schema.prisma` o crear migraciones                         | `.agents/skills/migracion-prisma/SKILL.md`        |
+| Terminar cualquier cambio de codigo                                 | `.agents/skills/cerrar-tarea/SKILL.md`            |
+| Ramas, commits, pull requests, merge o conflictos de git            | `.agents/skills/git-equipo/SKILL.md`              |
+| Publicar en test/produccion, versiones (tags), hotfix               | `.agents/skills/publicar-ambientes/SKILL.md`      |
+| Crear o cargar tareas en Trello                                     | `.agents/skills/crear-tareas-trello/SKILL.md`     |
+| Docker, roles de la API, tareas programadas, integraciones externas | `.agents/skills/docker-api/SKILL.md`              |
+| Instalar o reparar un ambiente (PC, Docker, servidor)               | `.agents/skills/instalar-ambiente/SKILL.md`       |
 
 Una skill nueva va en `.agents/skills/<nombre>/SKILL.md` (frontmatter `name` y
 `description`) y se agrega a esta tabla.

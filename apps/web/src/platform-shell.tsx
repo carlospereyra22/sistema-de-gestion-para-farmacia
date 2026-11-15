@@ -124,8 +124,8 @@ export default function PlatformShell({
 
   if (error)
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(#d3e1e6_1px,transparent_1px)] bg-[#f4f8fa] px-4 [background-size:22px_22px]">
-        <section className="w-full max-w-sm rounded-2xl border border-[#dce7ef] bg-white p-7 shadow-[0_12px_40px_-20px_rgba(35,58,66,0.35)]">
+      <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(var(--color-niebla-900)_1px,transparent_1px)] bg-fondo px-4 [background-size:22px_22px]">
+        <section className="w-full max-w-sm rounded-2xl border border-niebla-913 bg-white p-7 shadow-[0_12px_40px_-20px_rgba(35,58,66,0.35)]">
           <span className="grid size-11 place-items-center rounded-full bg-rose-50 text-rose-700">
             <AlertCircle size={20} aria-hidden="true" />
           </span>
@@ -138,7 +138,7 @@ export default function PlatformShell({
           <button
             type="button"
             onClick={onLogout}
-            className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#cfe2e6] text-sm font-semibold text-[#2c7380] hover:bg-[#f1f7f8]"
+            className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-niebla-900 text-sm font-semibold text-petroleo-517 hover:bg-slate-100"
           >
             <LogOut size={16} aria-hidden="true" />
             Cerrar sesión
@@ -206,7 +206,7 @@ function PanelVerificado({
   return (
     <main
       ref={sidebar.shell}
-      className="workspace-shell min-h-screen bg-[#f4f8fa] text-slate-900"
+      className="workspace-shell min-h-screen bg-fondo text-slate-900"
     >
       <header
         ref={sidebar.header}
@@ -236,7 +236,7 @@ function PanelVerificado({
         <div className="workspace-header-actions flex items-center gap-3">
           <span
             title="Entraste con contraseña y código de 6 dígitos"
-            className="hidden items-center gap-1.5 rounded-full border border-[#cce8de] bg-[#f1fbf7] px-3 py-1.5 text-xs font-semibold text-[#087f70] md:inline-flex"
+            className="hidden items-center gap-1.5 rounded-full border border-marca-908 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-marca-535 md:inline-flex"
           >
             <ShieldCheck size={14} aria-hidden="true" />
             Acceso verificado
@@ -291,7 +291,7 @@ function PanelVerificado({
         />
         <NavigationRail
           collapsed={!sidebar.expanded}
-          className="workspace-navigation border-r border-slate-200 bg-[#fcfefe] px-3 py-5"
+          className="workspace-navigation border-r border-slate-200 bg-niebla-996 px-3 py-5"
         >
           {grupos.map(({ titulo, secciones }, indice) => (
             <Fragment key={titulo}>
@@ -317,10 +317,10 @@ function PanelVerificado({
                         aria-label={nombre}
                         aria-current={activa ? "page" : undefined}
                         onClick={() => onSection(valor)}
-                        className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${activa ? "border-[#cce8de] bg-[#e9f8f3] font-semibold text-[#087f70] shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-[#f5f8fa] hover:text-slate-800"}`}
+                        className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${activa ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`}
                       >
                         <span
-                          className={`grid size-6 shrink-0 place-items-center rounded-md ${activa ? "bg-white text-[#087f70] shadow-sm" : "text-slate-500"}`}
+                          className={`grid size-6 shrink-0 place-items-center rounded-md ${activa ? "bg-white text-marca-535 shadow-sm" : "text-slate-500"}`}
                         >
                           <Icono className="size-4" />
                         </span>
@@ -333,7 +333,7 @@ function PanelVerificado({
           ))}
         </NavigationRail>
         <SoporteContext.Provider value={onEntrarComo}>
-          <section className="workspace-content min-w-0 bg-[#f4f8fa] p-4 lg:px-7 lg:py-5">
+          <section className="workspace-content min-w-0 bg-fondo p-4 lg:px-7 lg:py-5">
             <div
               key={section}
               className="panel-animado mx-auto w-full max-w-[1400px] pt-3"

@@ -68,7 +68,7 @@ export function ThermalTicketDialog({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="m-auto h-[90dvh] w-[min(95vw,540px)] max-w-none rounded-2xl border border-slate-200 p-0 shadow-2xl backdrop:bg-slate-950/40"
+      className="m-auto h-[90dvh] w-[min(95vw,540px)] max-w-none rounded-2xl border border-slate-200 p-0 shadow-2xl backdrop:bg-velo/40"
     >
       <div className="flex h-full flex-col">
         <header className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-teal-50/60 p-4">

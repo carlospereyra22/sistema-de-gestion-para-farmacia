@@ -213,7 +213,7 @@ export function accountStatementHtml(input: {
       : "Todas las ventas y cobros";
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Resumen de cuenta</title><style>
   ${accountStatementStyle}
-  </style></head><body><header class="compact-header"><div><strong>${escape(input.organization)}</strong><p class="muted">${escape(input.branch)}</p></div><div class="report-heading"><h1>Resumen de cuenta</h1><p>${period}</p><p class="muted">Emitido: ${escape(new Date(input.generatedAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" }))}</p></div></header>
+  </style></head><body><header class="compact-header"><div><strong>${escape(input.organization)}</strong><p class="muted">${escape(input.branch)}</p></div><div class="report-heading"><h1>Resumen de cuenta</h1><p>${period}</p><p class="muted">Emitido: ${escape(new Date(input.generatedAt).toLocaleString("es-AR", { hourCycle: "h23", timeZone: "America/Argentina/Buenos_Aires" }))}</p></div></header>
   ${customers
     .map((customer) => {
       const { opening, closing, movements } = accountStatementPeriod(

@@ -128,7 +128,7 @@ export function ImagePreview({
           onClose();
         pressedOutside.current = false;
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl outline-none backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl outline-none backdrop:bg-velo/40 backdrop:backdrop-blur-sm"
     >
       <div className="grid grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] items-center gap-2 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-white px-4 py-4">
         <span aria-hidden="true" />

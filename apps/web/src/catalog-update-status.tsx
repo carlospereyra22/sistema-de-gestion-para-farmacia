@@ -39,7 +39,7 @@ export function CatalogUpdateStatusView({
         <p className="font-semibold text-slate-800">Base de medicamentos</p>
         <p className="mt-1">
           {valid
-            ? `Última revisión: ${new Date(checked).toLocaleString("es-AR", { timeZone })}`
+            ? `Última revisión: ${new Date(checked).toLocaleString("es-AR", { hourCycle: "h23", timeZone })}`
             : "Sin revisión registrada"}
         </p>
         {status ? (

@@ -71,7 +71,7 @@ function TarjetaDelPlan({
     "Todos los módulos del sistema",
   ];
   return (
-    <aside className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0a8a79] via-[#087061] to-[#0b4f49] p-6 text-white shadow-[0_18px_40px_-24px_rgb(8_80_70_/_70%)]">
+    <aside className="tema-claro relative overflow-hidden rounded-2xl bg-gradient-to-br from-marca-571 via-marca-489 to-teal-900 p-6 text-white shadow-[0_18px_40px_-24px_rgb(8_80_70_/_70%)]">
       <span
         aria-hidden="true"
         className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-white/10 blur-3xl"
@@ -151,7 +151,7 @@ function FilaDePrecio({
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#e8faf5] text-[#087f70]"
+          className="grid size-10 shrink-0 place-items-center rounded-xl bg-marca-970 text-marca-535"
         >
           {icon}
         </span>
@@ -190,9 +190,9 @@ function Contador({
   onChange: (valor: number) => void;
 }) {
   const botonClase =
-    "grid size-8 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-white hover:text-[#087f70] disabled:opacity-40 disabled:hover:bg-transparent";
+    "grid size-8 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-white hover:text-marca-535 disabled:opacity-40 disabled:hover:bg-transparent";
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#e2ebf0] bg-white px-3 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-niebla-935 bg-white px-3 py-2">
       <span className="text-sm font-medium text-slate-700">{etiqueta}</span>
       <span className="flex items-center gap-1 rounded-lg bg-slate-50 p-0.5">
         <button
@@ -312,7 +312,7 @@ function PlanForm({
           icon={<Layers size={16} />}
           title="Precios de lista"
           description="Lo que paga una farmacia sin precio acordado."
-          bodyClassName="divide-y divide-[#edf2f6] px-5"
+          bodyClassName="divide-y divide-niebla-958 px-5"
         >
           <FilaDePrecio
             icon={<Building2 size={18} />}
@@ -359,7 +359,7 @@ function PlanForm({
               onChange={setUsuarios}
             />
           </div>
-          <div className="rounded-xl border border-[#d8ece5] bg-[#f4fbf8] p-4">
+          <div className="rounded-xl border border-marca-927 bg-marca-971 p-4">
             {abono.filas ? (
               <>
                 <dl className="space-y-1.5 text-sm">
@@ -375,7 +375,7 @@ function PlanForm({
                     </div>
                   ))}
                 </dl>
-                <p className="mt-3 flex items-end justify-between gap-3 border-t border-[#d8ece5] pt-3">
+                <p className="mt-3 flex items-end justify-between gap-3 border-t border-marca-927 pt-3">
                   <span>
                     <span className="block text-sm font-semibold text-slate-700">
                       Por mes
@@ -395,7 +395,7 @@ function PlanForm({
                       </span>
                     )}
                   </span>
-                  <span className="text-2xl font-bold tabular-nums tracking-tight text-[#087f70]">
+                  <span className="text-2xl font-bold tabular-nums tracking-tight text-marca-535">
                     {ars(abono.totalMinor)}
                   </span>
                 </p>

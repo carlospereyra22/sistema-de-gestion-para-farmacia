@@ -51,12 +51,12 @@ export function DashboardMiniChart({
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
             <stop
               offset="0%"
-              stopColor={color}
+              style={{ stopColor: color }}
               stopOpacity={bars ? 0.75 : 0.25}
             />
             <stop
               offset="100%"
-              stopColor={color}
+              style={{ stopColor: color }}
               stopOpacity={bars ? 0.18 : 0}
             />
           </linearGradient>
@@ -85,7 +85,7 @@ export function DashboardMiniChart({
             <path
               d={line}
               fill="none"
-              stroke={color}
+              style={{ stroke: color }}
               strokeWidth="1.6"
               strokeLinecap="round"
               strokeLinejoin="round"

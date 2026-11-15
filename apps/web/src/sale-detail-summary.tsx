@@ -5,6 +5,7 @@ import {
   Wallet,
   ReceiptText,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import type { Sale } from "./lib/api";
 
 const paymentLabels = {
@@ -57,10 +58,19 @@ export function SaleDetailTotal({
   total,
   status,
   documentType,
+  desglose,
+  infoOfertas,
 }: {
   total: string;
   status: Sale["status"];
   documentType: Sale["documentType"];
+  /**
+   * Con descuentos u ofertas: subtotal y lo que se descontó, para que el
+   * historial muestre si la venta tuvo descuento (SISTEMA-104).
+   */
+  desglose?: { subtotal: string; ofertas?: string; descuento?: string };
+  /** Ícono con el detalle de las ofertas, junto al ahorro (SISTEMA-104). */
+  infoOfertas?: ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">
@@ -81,6 +91,33 @@ export function SaleDetailTotal({
       <p className="mt-1 break-words text-2xl font-bold tracking-tight text-teal-900 tabular-nums">
         {total}
       </p>
+      {desglose && (desglose.ofertas || desglose.descuento) ? (
+        <dl className="mt-3 space-y-1 border-t border-teal-100 pt-3 text-xs">
+          <div className="flex justify-between gap-3 text-slate-600">
+            <dt>Subtotal</dt>
+            <dd className="tabular-nums">{desglose.subtotal}</dd>
+          </div>
+          {desglose.ofertas ? (
+            <div className="flex justify-between gap-3 text-rose-700">
+              <dt className="flex items-center gap-1">
+                Ahorro por ofertas
+                {infoOfertas}
+              </dt>
+              <dd className="font-semibold tabular-nums">
+                −{desglose.ofertas}
+              </dd>
+            </div>
+          ) : null}
+          {desglose.descuento ? (
+            <div className="flex justify-between gap-3 text-rose-700">
+              <dt>Descuento</dt>
+              <dd className="font-semibold tabular-nums">
+                −{desglose.descuento}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
     </div>
   );
 }

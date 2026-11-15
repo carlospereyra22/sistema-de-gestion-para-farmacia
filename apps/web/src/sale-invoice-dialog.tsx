@@ -111,7 +111,7 @@ export function SaleInvoiceDialog({
         event.preventDefault();
         onClose();
       }}
-      className="m-auto max-h-[95vh] w-[calc(100%-2rem)] max-w-md overflow-visible rounded-2xl border-0 bg-transparent p-0 backdrop:bg-slate-950/40"
+      className="m-auto max-h-[95vh] w-[calc(100%-2rem)] max-w-md overflow-visible rounded-2xl border-0 bg-transparent p-0 backdrop:bg-velo/40"
     >
       <section className="max-h-[95vh] w-full overflow-auto rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-center justify-between gap-4">

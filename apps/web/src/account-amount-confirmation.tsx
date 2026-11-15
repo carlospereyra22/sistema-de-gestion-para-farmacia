@@ -40,7 +40,7 @@ export function AccountAmountConfirmation({
         event.preventDefault();
         onCancel();
       }}
-      className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-900/30"
+      className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-velo/30"
     >
       <h3 id={id} className="text-base font-semibold text-slate-900">
         ¿Aplicar el nuevo saldo?

@@ -263,6 +263,20 @@ Decisión del usuario (09/11/2026): toda la cuenta corriente funciona sin conexi
 - Un cobro mixto conserva su desglose de medios de pago cuando después se le asignan artículos (también con conexión).
 - Migraciones `20261109120000_offline_accounts` y `20261109130000_offline_customer_update`: tipos de operación y de aviso.
 
+## Abrir cajas sin conexión (SISTEMA-103)
+
+Abrir cajas (ej. Buscapina x100 en blísteres x10) funciona sin internet:
+
+- desde Inventario y Productos, como operación de inventario `APERTURA`;
+- desde Compras, con «Abrir ya» en la recepción.
+
+La PC muestra enseguida la caja abierta y el producto chico con el mismo lote. Al volver se aplica una sola vez:
+
+- si faltan cajas, se abren hasta las que haya, con aviso;
+- en una recepción que no se puede abrir, la compra entra igual como caja.
+
+Ver `BOX_SPLIT.md`.
+
 ## Transferencias sin conexión (SISTEMA-71)
 
 Decisión del usuario (09/11/2026): sin conexión se puede enviar (preparar y despachar) y recibir sólo lo que ya estaba en tránsito cuando había internet. Reglas en `BUSINESS_RULES.md` (transferencias sin conexión).
@@ -403,3 +417,50 @@ cortar: cerrar la API, o DevTools → Network → Offline. Recargar: la app abre
 con los datos guardados y el aviso. Volver a levantar la API: en hasta 15
 segundos dice "Reconectando…" y vuelve a la normalidad. La copia y el service
 worker se ven en DevTools → Application.
+
+## Ofertas sin conexión (SISTEMA-103)
+
+- Las ofertas activas y programadas (`GET offers/vigentes`) quedan en la copia local; la precarga de Ventas las baja con conexión.
+- La venta sin conexión las aplica con el mismo motor de la API y manda el ahorro cobrado por renglón (`expectedOfferDiscountMinor`) y las ofertas aplicadas (`appliedOffers`). El ticket provisorio muestra cada oferta y el ahorro.
+- Al sincronizar se respeta lo cobrado. Si la oferta ya no correspondía a la hora de la venta (por ejemplo, se finalizó antes), queda el aviso `OFERTA_DISTINTA`; si se pasó el stock de oferta, `TOPE_OFERTA_SUPERADO`. Ver OFFERS.md.
+- Crear y editar ofertas necesita conexión.
+
+## Con la API en Docker y dos copias (SISTEMA-106)
+
+Revisado el 14/11/2026 al separar la API en procesos (`DOCKER.md`). La web, el
+service worker y la copia local no cambiaron; lo que sigue es cómo convive el
+modo sin internet con el servidor nuevo.
+
+- **Sincronizar con dos copias**: cada operación sin conexión se registra una
+  sola vez en PostgreSQL por su id (`OfflineOperation`, `clientOperationId`).
+  Un reintento puede caer en la otra copia y recibe el mismo resultado: la
+  exclusión está en la base, no en la memoria de un proceso.
+- **Claves de la PC y sesiones**: están en la base (`OfflineDeviceKey`,
+  `AuthSession`); cualquier copia las valida.
+- **Publicación con pausa** (hay migraciones): nginx responde 502 y la web pasa
+  a sin conexión, como con el servidor caído. Se sigue vendiendo y se
+  sincroniza al volver. **Publicación sin pausa**: se reinicia de a una copia y
+  la web no lo nota.
+- **nginx no reenvía ventas**: sólo pasa a la otra copia cuando no llegó a
+  conectar. Un pedido de escritura cortado a mitad vuelve como error y la web
+  lo reintenta con el mismo id. No agregar `non_idempotent` a
+  `proxy_next_upstream`.
+- **Hora**: la web sigue tomando la hora del encabezado `Date`. Las dos copias
+  están en el mismo servidor y comparten reloj. Si algún día hay más de un
+  servidor, todos tienen que sincronizar la hora (NTP) o la tolerancia de la
+  hora de las ventas sin conexión daría avisos falsos.
+- **Facturas de ventas sin conexión**: la web sigue pidiendo el envío a la API
+  al sincronizar; la cola que reintenta corre ahora en el `worker`. Si el
+  worker está detenido, las facturas quedan en espera, no se pierden.
+- **Límite de login**: al volver la conexión, quien entró sin internet con su
+  contraseña inicia su sesión real con **un** intento (no hay reintentos en
+  bucle). Si ese correo está bloqueado por 8 fallos, la web pide ingresar de
+  nuevo y hay que esperar hasta 5 minutos; las ventas pendientes quedan en la
+  PC y se envían después. Renovar una sesión abierta no pasa por el login y
+  nunca se bloquea.
+- **Cambio de dirección de la web** (dominio propio): la copia local, la app
+  instalada y las ventas sin enviar están atadas a la dirección. Sincronizar
+  todo antes y hacerlo una sola vez (`ESCALABILIDAD.md`).
+
+Sin verificar: `scripts/probar-sin-conexion.mjs` contra la API en contenedores.
+Correrlo en el pase a test, antes de producción.

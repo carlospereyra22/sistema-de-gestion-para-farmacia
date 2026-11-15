@@ -25,6 +25,7 @@ import type {
   OperacionCompraSinConexion,
 } from "./purchase-input";
 import { stockAvailability } from "../inventory/stock-availability";
+import { abrirCajasEnTx } from "../inventory/stock-split";
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const serializable = <T>(value: T): T =>
@@ -447,7 +448,11 @@ export class PurchasesService {
         line.quantity <= 0 ||
         !line.lotNumber.trim() ||
         line.lotNumber.length > 100 ||
-        (line.expiresAt && !Number.isFinite(line.expiresAt.valueOf()))
+        (line.expiresAt && !Number.isFinite(line.expiresAt.valueOf())) ||
+        (line.openBoxes !== undefined &&
+          (!Number.isSafeInteger(line.openBoxes) ||
+            line.openBoxes < 0 ||
+            line.openBoxes > line.quantity))
       )
         throw new BadRequestException(
           "Revisá artículo, cantidad, lote y vencimiento de cada fila.",
@@ -596,6 +601,51 @@ export class PurchasesService {
           movementId: movement.id,
         },
       });
+      // Abrir cajas al recibir (SISTEMA-103): la compra queda como caja, que es
+      // lo que facturó la droguería; el stock pasa al producto chico.
+      if (line.openBoxes)
+        try {
+          await abrirCajasEnTx(
+            tx,
+            { actorId, organizationId, branchId },
+            {
+              requestId: randomUUID(),
+              payloadHash: hash({ receiptId: receipt.id, lotId: lot.id }),
+              lotId: lot.id,
+              boxes: line.openBoxes,
+              purchaseReceiptId: receipt.id,
+              ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
+            },
+          );
+        } catch (error) {
+          // Hecha sin conexión: la recepción no se pierde por la apertura
+          // (ej. el lote del producto chico tiene otro vencimiento). Entra
+          // como caja y queda auditado; se abre después desde Inventario.
+          // Los rechazos de la apertura ocurren antes de escribir.
+          if (
+            !input.occurredAt ||
+            !(
+              error instanceof BadRequestException ||
+              error instanceof ConflictException
+            )
+          )
+            throw error;
+          await tx.auditLog.create({
+            data: {
+              actorId,
+              organizationId,
+              branchId,
+              entityType: "PRODUCT_LOT",
+              entityId: lot.id,
+              action: "STOCK_SPLIT_SKIPPED",
+              after: {
+                receiptId: receipt.id,
+                boxes: line.openBoxes,
+                motivo: error.message,
+              },
+            },
+          });
+        }
     }
     for (const [id, quantity] of totals)
       await tx.purchaseItem.update({

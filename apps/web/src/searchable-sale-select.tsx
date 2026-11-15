@@ -20,6 +20,8 @@ export function SearchableSaleSelect({
   floatingOptions = false,
   compact = false,
   placeholder,
+  maxResults,
+  initialOptions,
 }: {
   label: string;
   value: string;
@@ -31,6 +33,10 @@ export function SearchableSaleSelect({
   floatingOptions?: boolean;
   compact?: boolean;
   placeholder?: string;
+  /** Con listas enormes (todo el catálogo) se muestran sólo las primeras. */
+  maxResults?: number;
+  /** Lo que se ofrece antes de escribir (ej. sólo las sugerencias). */
+  initialOptions?: SearchOption[];
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -72,7 +78,10 @@ export function SearchableSaleSelect({
       window.removeEventListener("scroll", position, true);
     };
   }, [open, floatingOptions]);
-  const results = filterSearchOptions(options, query);
+  const results = filterSearchOptions(
+    !query.trim() && initialOptions ? initialOptions : options,
+    query,
+  ).slice(0, maxResults ?? Number.POSITIVE_INFINITY);
   const selected =
     options.find((option) => option.value === value)?.label ?? "";
   const choose = (option: SearchOption) => {

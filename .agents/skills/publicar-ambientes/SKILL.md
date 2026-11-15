@@ -149,6 +149,15 @@ Son codigo: viajan con el tag y se aplican en orden local -> test -> produccion.
 Nunca editar una migracion ya aplicada en cualquier ambiente (skill
 `migracion-prisma`). No ejecutar migraciones contra produccion fuera del publicador.
 
+## API en Docker (SISTEMA-106)
+
+La API puede correr en contenedores (dos copias, worker y migraciones) en lugar del
+servicio de systemd. Los archivos estan en `deploy/docker/` pero **ningun ambiente
+se paso todavia**: test y produccion siguen publicandose como dice la tabla de
+arriba. El pase, la publicacion con `deploy/docker/actualizar.sh` y la vuelta atras
+estan en `docs/DOCKER.md` y la skill `docker-api`. Orden obligatorio: primero test,
+despues produccion, con autorizacion y fuera del horario de cobros.
+
 ## Futuro
 
 1. **Renombrar "preprod" a "test"**: servicio, base, rol, ruta Nginx, sitio de

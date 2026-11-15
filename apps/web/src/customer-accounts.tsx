@@ -1111,6 +1111,7 @@ export function CustomerAccounts({
                                 <td className="px-3 py-2 whitespace-nowrap">
                                   {new Date(movement.createdAt).toLocaleString(
                                     "es-AR",
+                                    { hourCycle: "h23" },
                                   )}
                                 </td>
                                 <td className="px-3 py-2">
@@ -1288,7 +1289,7 @@ function PaymentConfirmedDialog({
       ref={dialog}
       onCancel={onClose}
       aria-labelledby="payment-confirmed-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl backdrop:bg-velo/35 backdrop:backdrop-blur-sm"
     >
       <div className="flex size-12 items-center justify-center rounded-full bg-teal-100 text-teal-700">
         <ShieldCheck size={25} />
@@ -1400,7 +1401,9 @@ function PurchaseDetail({
         </h4>
         <span className="text-xs text-slate-500">
           {detail.completedAt
-            ? new Date(detail.completedAt).toLocaleString("es-AR")
+            ? new Date(detail.completedAt).toLocaleString("es-AR", {
+                hourCycle: "h23",
+              })
             : ""}
           {detail.status === "CANCELLED" ? " · Anulada" : ""}
         </span>

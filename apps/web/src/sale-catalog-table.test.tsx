@@ -77,7 +77,7 @@ it("marks the selected row", () => {
   const html = render("p2");
   expect(html).toContain('id="catalogo-p2" aria-selected="true"');
   expect(html).toContain('id="catalogo-p1" aria-selected="false"');
-  expect(html).toContain("shadow-[inset_3px_0_0_#0d9488]");
+  expect(html).toContain("shadow-[inset_3px_0_0_var(--color-marca-600)]");
 });
 
 it("explains an empty search", () => {

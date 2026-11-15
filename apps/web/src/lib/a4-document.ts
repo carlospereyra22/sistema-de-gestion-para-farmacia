@@ -66,11 +66,25 @@ export function a4DocumentHtml(
         `<tr><td>${escape(item.name)}</td><td class="num">${item.quantity ?? ""}</td><td class="num">${item.unitPriceMinor ? money(item.unitPriceMinor) : ""}</td><td class="num">${money(item.amountMinor)}</td></tr>`,
     )
     .join("");
+  // Ofertas (SISTEMA-103): un renglón por oferta; el resto es "Descuento".
+  const offers = (ticket.offers ?? [])
+    .map(
+      (offer) =>
+        `<tr><th>Oferta ${escape(offer.label)} · ${escape(offer.name)}</th><td>- ${money(offer.amountMinor)}</td></tr>`,
+    )
+    .join("");
+  const otherDiscount =
+    BigInt(ticket.discountMinor ?? "0") -
+    BigInt(ticket.offerDiscountMinor ?? "0");
   const discount =
-    ticket.discountMinor && BigInt(ticket.discountMinor) > 0n
-      ? `<tr><th>Descuento</th><td>- ${money(ticket.discountMinor)}</td></tr>`
+    otherDiscount > 0n
+      ? `<tr><th>Descuento</th><td>- ${money(otherDiscount.toString())}</td></tr>`
       : "";
-  const totals = `<table class="totals">${ticket.subtotalMinor != null ? `<tr><th>Subtotal</th><td>${money(ticket.subtotalMinor)}</td></tr>` : ""}${discount}<tr class="grand"><th>Total</th><td>${money(ticket.totalMinor)}</td></tr></table>`;
+  const savings =
+    BigInt(ticket.savingsMinor ?? "0") > 0n
+      ? `<tr><th>Usted ahorró</th><td>${money(ticket.savingsMinor!)}</td></tr>`
+      : "";
+  const totals = `<table class="totals">${ticket.subtotalMinor != null ? `<tr><th>Subtotal</th><td>${money(ticket.subtotalMinor)}</td></tr>` : ""}${offers}${discount}<tr class="grand"><th>Total</th><td>${money(ticket.totalMinor)}</td></tr>${savings}</table>`;
   const payments = ticket.payments.length
     ? `<div class="payments"><h3>Forma de pago</h3>${ticket.payments.map((p) => `<p><span>${escape(paymentName(p.method))}</span><span>${money(p.amountMinor)}</span></p>`).join("")}${ticket.balanceAfterMinor != null ? `<p><span>Saldo pendiente</span><span>${money(ticket.balanceAfterMinor)}</span></p>` : ""}</div>`
     : "<div></div>";

@@ -66,3 +66,25 @@ describe("avisos de caja sin conexión", () => {
     ).toContain("egreso");
   });
 });
+
+describe("aviso de apertura sin conexión (SISTEMA-103)", () => {
+  it("explica cuántas cajas se abrieron", () => {
+    expect(
+      textoAviso({
+        kind: "AJUSTE_SUPERA_STOCK",
+        detail: {
+          nombre: "Buscapina x100",
+          lote: "L1",
+          tipo: "APERTURA",
+          pedido: 5,
+          registrado: 3,
+          faltan: 2,
+        },
+      }),
+    ).toEqual({
+      titulo: "Apertura mayor al stock: Buscapina x100 · lote L1",
+      detalle:
+        "Se pidió abrir 5 cajas y quedaban 3: se abrieron 3 y 2 no. Revisá el stock.",
+    });
+  });
+});

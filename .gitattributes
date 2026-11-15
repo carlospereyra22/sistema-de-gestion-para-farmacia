@@ -6,3 +6,9 @@ apps/api/prisma/migrations/20261106080000_split_purchase_payable_permissions/mig
 apps/api/prisma/migrations/20261107000000_subscription_model/migration.sql text eol=lf
 apps/api/prisma/migrations/20261107010000_subscription_billing/migration.sql text eol=lf
 apps/api/prisma/migrations/20261107020000_cost_read_permission/migration.sql text eol=lf
+deploy/docker/actualizar.sh text eol=lf
+deploy/docker/*.yaml text eol=lf
+deploy/docker/*.env text eol=lf
+deploy/docker/*.nginx text eol=lf
+apps/api/Dockerfile text eol=lf
+.dockerignore text eol=lf

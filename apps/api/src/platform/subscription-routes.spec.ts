@@ -68,6 +68,7 @@ const EXCEPTIONS = [
   `ALWAYS GET organizations/:organizationId/subscription/status`,
   `OWNER_WHEN_BLOCKED GET organizations/:organizationId/branches`,
   `OWNER_WHEN_BLOCKED GET ${sales}`,
+  `OWNER_WHEN_BLOCKED GET ${sales}/history`,
   `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/credits`,
   `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/credits/:documentId/settlement`,
   `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/invoice`,

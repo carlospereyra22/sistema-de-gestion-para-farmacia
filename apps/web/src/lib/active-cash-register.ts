@@ -125,6 +125,7 @@ export function cashSessionLabel(
     registers.find((register) => register.id === session.cashRegisterId)
       ?.name ?? "Caja";
   return `${name} · ${new Date(session.openedAt).toLocaleString("es-AR", {
+    hourCycle: "h23",
     dateStyle: "short",
     timeStyle: "short",
   })}`;

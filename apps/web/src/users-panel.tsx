@@ -28,6 +28,11 @@ import { StatusToast } from "./status-toast";
 import { field, primary, secondary } from "./supplier-payables/dialog";
 import { useFitToViewport } from "./use-fit-to-viewport";
 import { UserPasswordDialog } from "./user-password-dialog";
+import { usePage } from "./lib/use-page";
+import { Pagination } from "./pagination";
+
+/** Tarjetas por página en el listado (el bloque no crece sin fin). */
+export const USUARIOS_POR_PAGINA = 5;
 
 const minPasswordLength = 12;
 
@@ -281,6 +286,7 @@ export function UsersPanel({
       setBusy(false);
     }
   };
+  const pagina = usePage(users, USUARIOS_POR_PAGINA);
   return (
     <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(380px,0.85fr)]">
       {notice ? (
@@ -338,7 +344,7 @@ export function UsersPanel({
           )}
         </div>
         <div className="mt-5 space-y-3">
-          {users.map((item) => (
+          {pagina.visible.map((item) => (
             <UserCard
               key={item.user.id}
               item={item}
@@ -352,6 +358,20 @@ export function UsersPanel({
             </p>
           )}
         </div>
+        {users.length > USUARIOS_POR_PAGINA && (
+          <div className="mt-4">
+            <Pagination
+              compact
+              total={users.length}
+              currentPage={pagina.current}
+              totalPages={pagina.totalPages}
+              noun="usuarios"
+              label="Páginas de usuarios"
+              pageSize={USUARIOS_POR_PAGINA}
+              onChange={pagina.setPage}
+            />
+          </div>
+        )}
       </section>
       <form
         ref={panelRef}
