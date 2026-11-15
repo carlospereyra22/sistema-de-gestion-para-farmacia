@@ -71,11 +71,12 @@ describe("sesiones con vencimiento y rotación (HTTP, esquema aislado)", () => {
     expect(rotada).not.toBe(inicial);
     expect(primera.headers.get("set-cookie")).toMatch(/Max-Age=604800/);
 
-    // Dos pestañas renuevan casi a la vez con la misma clave: las dos andan,
-    // y sólo una trae cookie nueva (la otra usó la anterior dentro del margen).
+    // Dos pestañas renuevan casi a la vez con la misma clave: las dos andan
+    // y las dos quedan con la misma cookie nueva (SISTEMA-101).
     const [a, b] = await Promise.all([renovar(rotada), renovar(rotada)]);
     expect([a.status, b.status]).toEqual([200, 200]);
-    expect([cookieDe(a), cookieDe(b)].filter(Boolean)).toHaveLength(1);
+    expect(cookieDe(a)).toBeDefined();
+    expect(cookieDe(a)).toBe(cookieDe(b));
 
     // 24 h sin internet: vuelve y renueva sin pedir contraseña.
     const sesion = await db.authSession.findFirstOrThrow({
@@ -123,6 +124,26 @@ describe("sesiones con vencimiento y rotación (HTTP, esquema aislado)", () => {
     });
     expect(auditoria.entityId).toBe(sesion.id);
     expect(JSON.stringify(auditoria)).not.toContain(copiada.split(".")[1]!);
+  });
+
+  it("una respuesta perdida no corta la sesión: el reintento recupera la clave nueva (SISTEMA-101)", async () => {
+    const lia = await usuario("lia");
+    const { cookie: vieja } = await entrar(lia.email);
+    // La renovación llega al servidor, pero la respuesta se pierde: la PC se
+    // queda con la cookie vieja.
+    const perdida = await renovar(vieja);
+    expect(perdida.status).toBe(200);
+    const queDebiaLlegar = cookieDe(perdida)!;
+    // El reintento (a los 15 s) con la vieja recupera la misma cookie nueva.
+    const reintento = await renovar(vieja);
+    expect(reintento.status).toBe(200);
+    expect(cookieDe(reintento)).toBe(queDebiaLlegar);
+    // Pasado el margen, con la cookie recuperada la sesión sigue.
+    await db.authSession.updateMany({
+      where: { userId: lia.id },
+      data: { previousTokenValidUntil: new Date(Date.now() - 1000) },
+    });
+    expect((await renovar(queDebiaLlegar)).status).toBe(200);
   });
 
   it("las sesiones que había al publicar no se cortan", async () => {

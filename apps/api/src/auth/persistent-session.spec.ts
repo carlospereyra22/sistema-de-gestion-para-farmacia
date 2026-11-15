@@ -3,7 +3,7 @@ import { AuthService } from "./auth.service";
 import type { JwtService } from "@nestjs/jwt";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { EnvironmentService } from "../config/environment.service";
-import { GRACIA_ROTACION_MS } from "./sesion-vigencia";
+import { GRACIA_ROTACION_MS, claveSiguiente } from "./sesion-vigencia";
 
 // Hash de mentira y comprobable: "h:<secreto>".
 jest.mock("@node-rs/argon2", () => ({
@@ -87,6 +87,29 @@ describe("sesión persistente con rotación y vencimiento por inactividad", () =
     expect(vale).toBeGreaterThanOrEqual(GRACIA_ROTACION_MS - 1000);
     expect(vale).toBeLessThanOrEqual(GRACIA_ROTACION_MS + 1000);
     expect(data.lastUsedAt).toBeInstanceOf(Date);
+  });
+
+  it("con la anterior dentro del margen reenvía la misma clave nueva (SISTEMA-101)", async () => {
+    const siguiente = claveSiguiente("", ID, "anterior");
+    const { service, authSession } = setup(
+      sesion({ tokenHash: `h:${siguiente}` }),
+    );
+    const result = await service.refresh(clave("anterior"));
+    expect(result.refreshToken).toBe(clave(siguiente));
+    const { data } = authSession.update.mock.calls[0]![0] as {
+      data: Record<string, unknown>;
+    };
+    expect(data).not.toHaveProperty("tokenHash");
+  });
+
+  it("la clave nueva sale de la anterior con el secreto del servidor", () => {
+    expect(claveSiguiente("s1", ID, "x")).toBe(claveSiguiente("s1", ID, "x"));
+    expect(claveSiguiente("s1", ID, "x")).not.toBe(
+      claveSiguiente("s2", ID, "x"),
+    );
+    expect(claveSiguiente("s1", ID, "x")).not.toBe(
+      claveSiguiente("s1", ID, "y"),
+    );
   });
 
   it("con la anterior dentro del margen renueva sin rotar ni cambiar la cookie", async () => {
