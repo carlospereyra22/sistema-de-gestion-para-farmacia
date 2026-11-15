@@ -11,12 +11,20 @@ el otro Codex. Explicar con pasos concretos y comandos; el equipo esta aprendien
 
 ## Ciclo normal
 
-1. Partir de `main` actualizado:
+1. Partir de `main` actualizado, **despues de confirmar que no quedo ninguna rama
+   sin entrar a `main`**:
    ```bash
    git checkout main
    git pull
+   git fetch --prune origin
+   git branch -r --no-merged origin/main   # debe salir vacio
    git checkout -b feature/SISTEMA-<N>
    ```
+   Si el control lista alguna rama `feature/SISTEMA-*`, esa rama tiene commits que
+   nunca llegaron a `main` (paso con SISTEMA-101: el PR no se abrio y las ramas
+   siguientes salieron sin ese arreglo). Avisar al usuario antes de seguir: abrir o
+   mergear su PR, o confirmar que se descarta. Un agente hace este control siempre
+   que cree una rama nueva.
 2. Trabajar y commitear en la rama (commits chicos y con mensaje claro).
 3. Antes de subir, traer lo nuevo de `main` para detectar conflictos en tu PC:
    ```bash
@@ -29,7 +37,9 @@ el otro Codex. Explicar con pasos concretos y comandos; el equipo esta aprendien
 5. Abrir el Pull Request en GitHub (`base: main` <- `compare: feature/...`), o con
    `gh pr create --base main`. Describir que cambia y que no se pudo probar.
 6. El companero revisa ("Files changed") y aprueba o comenta.
-7. Merge desde GitHub ("Merge pull request"). Luego borrar la rama remota.
+7. Merge desde GitHub ("Merge pull request"). Luego borrar la rama remota. Una
+   tarea no esta terminada hasta que su PR esta mergeado: `git push` solo sube la
+   rama, no la mete en `main`.
 8. Ambos actualizan su `main` local con `git checkout main && git pull`.
 
 ## Reglas
