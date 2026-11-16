@@ -269,3 +269,13 @@ Nuevo y Editar producto comparten el popup de código interno y etiquetas. Gener
 - El estado vigente (programada, activa, vencida) se calcula con la fecha y la hora de Argentina. Una oferta usada nunca se borra: se finaliza o archiva. Alta, edición (antes y después), pausa, reanudación, finalización, duplicado y archivo quedan en auditoría.
 - Sin conexión, la PC aplica las ofertas guardadas; al sincronizar se respeta lo cobrado y, si la oferta ya no correspondía, queda el aviso "a revisar" OFERTA_DISTINTA (o TOPE_OFERTA_SUPERADO). Las ofertas se crean y editan sólo con conexión.
 - Crear, editar y cambiar el estado de ofertas requiere OFFER_MANAGE; verlas, OFFER_READ. Aplicarlas al vender no requiere permiso extra.
+
+## Catálogo online (15/11/2026, SISTEMA-107)
+
+- La farmacia publica sus productos en `/catalogo/<dirección>`. Se muestran los activos, no archivados en la sucursal del catálogo, con precio y **sin receta**: un medicamento bajo receta nunca aparece ni se puede pedir.
+- Un switch decide si se muestran los productos sin stock en esa sucursal; si se muestran, se pueden pedir y la farmacia confirma si los consigue. El cliente nunca ve cantidades ni costos.
+- Pide sólo un usuario del portal, que crea la farmacia y queda atado a un cliente activo; ve la lista de precios de ese cliente (o la del catálogo, con respaldo y Precio general, como en Ventas).
+- El precio y el total los calcula el servidor al recibir el pedido; si el cliente vio otro total, se le pide revisar el carrito.
+- Un pedido no pasa por caja ni por cuenta corriente, y no descuenta stock salvo que la farmacia prenda "Descontar stock al entregar": entonces al marcarlo entregado se descuenta de la sucursal (por vencimiento, sin lotes vencidos ni stock negativo; si falta algo no se entrega) y no se carga en Ventas. La farmacia lo confirma, lo rechaza (con motivo) o lo marca entregado; el cliente lo cancela sólo antes de que se confirme. Se vende después en Ventas.
+- Ofertas en el catálogo (15/11/2026): valen las de canal "Catálogo online" o "Ambos"; Ventas sólo aplica las de "Mostrador" o "Ambos". La oferta por medio de pago es sólo de mostrador. El tope total de una oferta es uno solo para mostrador y catálogo. El descuento del pedido lo calcula el servidor y queda fijo en el pedido.
+- El catálogo online es un módulo que habilita la plataforma por farmacia (apagado por defecto). Sin él no hay pantalla de catálogo, página pública ni ofertas de catálogo; apagarlo no borra pedidos, usuarios ni configuración.

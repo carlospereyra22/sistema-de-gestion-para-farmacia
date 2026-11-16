@@ -53,6 +53,30 @@ describe("formulario de ofertas", () => {
     });
   });
 
+  it("una oferta nueva es de mostrador y lleva el canal elegido", () => {
+    const base = {
+      ...formularioVacio(new Date("2026-11-10T12:00:00Z"), [producto]),
+      name: "Diez",
+      porcentaje: "10",
+    };
+    expect(armarEntrada(base)).toMatchObject({ channel: "POS" });
+    expect(armarEntrada({ ...base, canal: "CATALOG" })).toMatchObject({
+      channel: "CATALOG",
+    });
+  });
+
+  it("la oferta por medio de pago queda siempre en el mostrador", () => {
+    const entrada = armarEntrada({
+      ...formularioVacio(new Date("2026-11-10T12:00:00Z"), [producto]),
+      name: "Efectivo",
+      type: "PAYMENT_METHOD",
+      porcentaje: "10",
+      medios: ["CASH"],
+      canal: "BOTH",
+    });
+    expect(entrada).toMatchObject({ channel: "POS" });
+  });
+
   it("guía por pasos con mensajes claros", () => {
     const vacio = formularioVacio();
     expect(erroresPaso(vacio, "tipo")).toContain("nombre");

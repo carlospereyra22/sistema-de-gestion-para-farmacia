@@ -274,3 +274,17 @@ o «Todos los productos». Ej.: «comprando $100.000 o más, 10% menos».
 - Sumar varias ofertas por medio de pago en una misma venta.
 - Crear o editar ofertas sin conexión.
 - Reporte interactivo de ofertas en Reportes.
+
+## Canal: mostrador, catálogo online o ambos (SISTEMA-107)
+
+Cada oferta tiene **Dónde aplica** (`Offer.channel`): `POS` (mostrador, Ventas),
+`CATALOG` (sólo pedidos del catálogo online) o `BOTH`. Las ofertas que ya existían
+quedaron en `POS`: Ventas no cambia. `cargarOfertasMotor` filtra por canal y, sin
+indicarlo, pide mostrador; el catálogo pide `CATALOG`.
+
+- La oferta por medio de pago es sólo de mostrador (el catálogo no cobra): CHECK
+  `Offer_channel_payment` y validación.
+- El tope total es uno solo para los dos canales: `unidadesUsadas` suma ventas
+  completadas y pedidos del catálogo no cancelados ni rechazados.
+- En el editor, la tarjeta "Dónde aplica" está en el paso de vigencia; la lista
+  marca las que no son de mostrador.

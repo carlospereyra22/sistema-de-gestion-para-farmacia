@@ -47,6 +47,7 @@ import {
   TIPO_DESTINO_OFERTA,
 } from "./lib/ofertas-detalle";
 import { pesos, type EstadoOferta, type TipoOferta } from "./lib/ofertas-motor";
+import { ofertasVisibles } from "./lib/ofertas-canal";
 import { OfertaEditor } from "./oferta-editor";
 import { OfertaAccionDialog } from "./oferta-accion-dialog";
 import { BotonConAyuda } from "./boton-con-ayuda";
@@ -116,6 +117,7 @@ export function OfertasWorkspace({
   canSeeCosts,
   crearPara,
   onCrearParaUsado,
+  catalogoHabilitado = false,
   onError,
 }: {
   token: string;
@@ -128,6 +130,8 @@ export function OfertasWorkspace({
   /** "Crear oferta para este producto" desde Productos. */
   crearPara?: string;
   onCrearParaUsado?: () => void;
+  /** Con el módulo Catálogo online se elige dónde aplica la oferta. */
+  catalogoHabilitado?: boolean;
   onError: (mensaje: string) => void;
 }) {
   // Sin internet se ven las ofertas guardadas en la PC (Ventas las sigue
@@ -153,9 +157,12 @@ export function OfertasWorkspace({
       const todas = await getOfertas(token, organizationId, filtros);
       // Las archivadas salen del listado habitual: se ven filtrando por estado.
       setOfertas(
-        filtros.estado
-          ? todas
-          : todas.filter((oferta) => oferta.estado !== "ARCHIVADA"),
+        ofertasVisibles(
+          filtros.estado
+            ? todas
+            : todas.filter((oferta) => oferta.estado !== "ARCHIVADA"),
+          catalogoHabilitado,
+        ),
       );
     } catch (cause) {
       // Sin conexión y sin copia de esta búsqueda: lo explica el aviso.
@@ -169,7 +176,7 @@ export function OfertasWorkspace({
     } finally {
       setCargando(false);
     }
-  }, [token, organizationId, filtros, onError]);
+  }, [token, organizationId, filtros, onError, catalogoHabilitado]);
   useEffect(() => {
     const espera = window.setTimeout(() => void cargar(), filtros.q ? 250 : 0);
     return () => window.clearTimeout(espera);
@@ -366,6 +373,15 @@ export function OfertasWorkspace({
                         ?.titulo
                     }
                   </span>
+                  {catalogoHabilitado &&
+                  oferta.channel &&
+                  oferta.channel !== "POS" ? (
+                    <span className="mt-1 inline-block rounded-md bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-700">
+                      {oferta.channel === "CATALOG"
+                        ? "Sólo catálogo online"
+                        : "Mostrador y catálogo"}
+                    </span>
+                  ) : null}
                 </td>
                 <td
                   className="max-w-56 truncate px-3 py-2.5"
@@ -466,6 +482,7 @@ export function OfertasWorkspace({
           products={products}
           branches={branches}
           costos={costos}
+          catalogoHabilitado={catalogoHabilitado}
           onClose={() => setEditor(undefined)}
           onSaved={(guardada) => {
             setEditor(undefined);

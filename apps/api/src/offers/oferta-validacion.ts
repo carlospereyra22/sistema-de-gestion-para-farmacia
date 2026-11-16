@@ -6,6 +6,9 @@ import type {
   TipoProductoOferta,
 } from "./ofertas-motor";
 
+/** Mostrador (Ventas), catálogo online o ambos (SISTEMA-107). */
+export type CanalOferta = "POS" | "CATALOG" | "BOTH";
+
 export type OfertaEntrada = {
   name: string;
   type: TipoOferta;
@@ -29,6 +32,8 @@ export type OfertaEntrada = {
   nthUnit?: number | null;
   bundlePriceMinor?: string | null;
   paymentMethods?: MedioPago[] | null;
+  /** Dónde vale (SISTEMA-107). Sin dato, mostrador. */
+  channel?: CanalOferta | null;
   allProducts?: boolean | null;
   minPurchaseMinor?: string | null;
   tiers?:
@@ -70,6 +75,7 @@ export type OfertaNormalizada = {
     nthUnit: number | null;
     bundlePriceMinor: bigint | null;
     paymentMethods: MedioPago[];
+    channel: CanalOferta;
     allProducts: boolean;
     minPurchaseMinor: bigint | null;
   };
@@ -177,6 +183,7 @@ export function validarOferta(entrada: OfertaEntrada): OfertaNormalizada {
     nthUnit: null,
     bundlePriceMinor: null,
     paymentMethods: [],
+    channel: entrada.channel ?? "POS",
     allProducts: Boolean(entrada.allProducts),
     minPurchaseMinor: null,
   };
@@ -257,6 +264,11 @@ export function validarOferta(entrada: OfertaEntrada): OfertaNormalizada {
       const medios = [...new Set(entrada.paymentMethods ?? [])];
       if (!medios.length) error("Elegí al menos un medio de pago.");
       datos.paymentMethods = medios;
+      // En el catálogo no se cobra: no hay medio de pago que mirar.
+      if (datos.channel !== "POS")
+        error(
+          "La oferta por medio de pago vale sólo en el mostrador: el catálogo no cobra.",
+        );
       // El descuento es sobre lo cobrado, no por unidad: no lleva topes.
       if (datos.maxUnitsPerSale !== null || datos.maxUnitsTotal !== null)
         error("Las ofertas por medio de pago no llevan tope de unidades.");

@@ -97,6 +97,7 @@ export class PlatformOrganizationsService {
         id: true,
         name: true,
         createdAt: true,
+        catalogEnabled: true,
         subscription: { include: subscriptionInclude },
         // Para el selector de Soporte: farmacia o sucursal (SISTEMA-89).
         branches: {
@@ -128,6 +129,8 @@ export class PlatformOrganizationsService {
         id: true,
         name: true,
         createdAt: true,
+        // Módulos aparte (SISTEMA-107): el switch del detalle lo muestra.
+        catalogEnabled: true,
         subscription: { include: subscriptionInclude },
         branches: {
           where: { deletedAt: null },
@@ -455,6 +458,44 @@ export class PlatformOrganizationsService {
         },
       });
       return subscriptionView(after, new Date());
+    });
+  }
+
+  /**
+   * Módulos que se contratan aparte (SISTEMA-107). Hoy, el catálogo online:
+   * apagado, la farmacia no ve la pantalla, su página pública no se ofrece y no
+   * puede crear ofertas para el catálogo. No borra nada de lo cargado.
+   */
+  async updateModules(
+    actorId: string,
+    organizationId: string,
+    input: { catalogEnabled: boolean },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id=${organizationId}::uuid FOR UPDATE`;
+      const before = await tx.organization.findUnique({
+        where: { id: organizationId },
+        select: { catalogEnabled: true },
+      });
+      if (!before) throw new NotFoundException("Farmacia no encontrada.");
+      const after = await tx.organization.update({
+        where: { id: organizationId },
+        data: { catalogEnabled: input.catalogEnabled },
+        select: { catalogEnabled: true },
+      });
+      if (before.catalogEnabled !== after.catalogEnabled)
+        await recordPlatformAudit(tx, {
+          actorId,
+          action: after.catalogEnabled
+            ? "PLATFORM_CATALOG_ENABLED"
+            : "PLATFORM_CATALOG_DISABLED",
+          entityType: "Organization",
+          entityId: organizationId,
+          organizationId,
+          before,
+          after,
+        });
+      return after;
     });
   }
 

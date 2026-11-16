@@ -19,6 +19,11 @@ export class EnvironmentService {
     return this.config.get("CORS_ORIGIN", { infer: true });
   }
 
+  /** Sitio del catálogo online: sólo puede llamar a /catalogo/... */
+  get catalogoOrigin(): string {
+    return this.config.get("CATALOGO_ORIGIN", { infer: true });
+  }
+
   get databaseUrl(): string | undefined {
     return this.config.get("DATABASE_URL", { infer: true });
   }

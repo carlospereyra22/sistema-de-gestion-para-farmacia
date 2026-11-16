@@ -4,8 +4,9 @@
   "private": true,
   "packageManager": "pnpm@11.0.0",
   "scripts": {
-    "dev": "pnpm --parallel --filter @gestion/api --filter @gestion/web dev",
+    "dev": "pnpm --parallel --filter @gestion/api --filter @gestion/web --filter @gestion/catalogo dev",
     "dev:landing": "pnpm --filter @gestion/landing dev",
+    "dev:catalogo": "pnpm --filter @gestion/catalogo dev",
     "dev:api": "pnpm --filter @gestion/api dev",
     "dev:web": "pnpm --filter @gestion/web dev",
     "build": "pnpm -r build",

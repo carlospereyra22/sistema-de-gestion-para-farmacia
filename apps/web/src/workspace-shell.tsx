@@ -80,6 +80,7 @@ import {
 import { ResumeSaleDialog } from "./resume-sale-dialog";
 import { PriceListsWorkspace } from "./price-lists-workspace";
 import { OfertasWorkspace } from "./ofertas-workspace";
+import { CatalogoOnlineWorkspace } from "./catalogo-online-workspace";
 import { ProductOffersCard } from "./product-offers-card";
 import { getOfertasVigentes } from "./lib/ofertas-api";
 import {
@@ -379,6 +380,7 @@ import {
   ShieldCheck,
   Tags,
   BadgePercent,
+  Store,
   Info,
   Trash2,
   Users,
@@ -449,6 +451,7 @@ import {
 const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Inicio", icon: LayoutDashboard },
   { name: "Ventas", icon: ShoppingCart },
+  { name: "Catálogo online", icon: Store },
   { name: "Productos", icon: Package },
   { name: "Categorías y laboratorios", icon: Shapes },
   { name: "Listas de precios", icon: Tags },
@@ -531,6 +534,7 @@ export function WorkspaceShell({
   accessToken,
   organizationId,
   permissionCodes,
+  catalogoHabilitado = false,
   onLogout,
 }: {
   email: string;
@@ -539,15 +543,19 @@ export function WorkspaceShell({
   accessToken?: string;
   organizationId?: string;
   permissionCodes: readonly string[];
+  /** La farmacia tiene el módulo Catálogo online (SISTEMA-107). */
+  catalogoHabilitado?: boolean;
   onLogout: () => void;
 }): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const sidebar = useWorkspaceSidebar();
   const location = readWorkspaceLocation(searchParams);
   // Una pantalla sin permiso se reemplaza por Inicio, también si llega por la dirección.
-  const view = canOpenView(location.view, permissionCodes)
-    ? location.view
-    : "Inicio";
+  // Catálogo online es un módulo aparte: sin él la pantalla no existe.
+  const puedeVer = (nombre: View) =>
+    canOpenView(nombre, permissionCodes) &&
+    (nombre !== "Catálogo online" || catalogoHabilitado);
+  const view = puedeVer(location.view) ? location.view : "Inicio";
   const { administrationTab, organizationTab, salesScreen } = location;
   useLayoutEffect(() => {
     const previous = window.history.scrollRestoration;
@@ -1106,7 +1114,7 @@ export function WorkspaceShell({
     >
       <header
         ref={sidebar.header}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Catálogo online" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
         <div className="flex items-center gap-3">
           <SidebarToggle
@@ -1128,6 +1136,7 @@ export function WorkspaceShell({
           {(view === "Compras" ||
             view === "Listas de precios" ||
             view === "Ofertas" ||
+            view === "Catálogo online" ||
             view === "Clientes" ||
             view === "Proveedores" ||
             view === "Inventario" ||
@@ -1150,6 +1159,8 @@ export function WorkspaceShell({
                 <Tags size={22} aria-hidden />
               ) : view === "Ofertas" ? (
                 <BadgePercent size={22} aria-hidden />
+              ) : view === "Catálogo online" ? (
+                <Store size={22} aria-hidden />
               ) : view === "Clientes" ? (
                 <ContactRound size={22} aria-hidden />
               ) : view === "Inventario" ? (
@@ -1319,7 +1330,7 @@ export function WorkspaceShell({
           </p>
           <nav aria-label="Operación de farmacia" className="space-y-1">
             {views
-              .filter(({ name }) => canOpenView(name, permissionCodes))
+              .filter(({ name }) => puedeVer(name))
               .map(({ name, icon: Icon }) => {
                 const active = view === name;
                 return (
@@ -1409,6 +1420,7 @@ export function WorkspaceShell({
           {view !== "Ventas" &&
             view !== "Listas de precios" &&
             view !== "Ofertas" &&
+            view !== "Catálogo online" &&
             view !== "Caja" &&
             view !== "Cuentas corrientes" &&
             view !== "Cuentas por pagar" &&
@@ -1511,6 +1523,18 @@ export function WorkspaceShell({
               error={setMessage}
             />
           ) : null}
+          {ready && view === "Catálogo online" ? (
+            <CatalogoOnlineWorkspace
+              key={`catalogo:${organizationId}`}
+              token={accessToken!}
+              organizationId={organizationId!}
+              branches={branches}
+              canSeeOrders={permissionCodes.includes("SALE_READ")}
+              canManageOrders={permissionCodes.includes("SALE_MANAGE")}
+              canConfigure={permissionCodes.includes("ORGANIZATION_MANAGE")}
+              onError={setMessage}
+            />
+          ) : null}
           {ready && view === "Ofertas" ? (
             <OfertasWorkspace
               key={`ofertas:${organizationId}`}
@@ -1523,6 +1547,7 @@ export function WorkspaceShell({
               canSeeCosts={permissionCodes.includes("COST_READ")}
               crearPara={ofertaParaProducto}
               onCrearParaUsado={limpiarOfertaParaProducto}
+              catalogoHabilitado={catalogoHabilitado}
               onError={setMessage}
             />
           ) : null}

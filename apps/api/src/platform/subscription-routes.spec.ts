@@ -53,8 +53,18 @@ async function routes(): Promise<Route[]> {
   return found;
 }
 
-/** Rutas sin farmacia: el corte no las alcanza, a propósito. */
-const GLOBAL_PREFIXES = ["auth/", "health", "platform/", "print-gateway/"];
+/**
+ * Rutas sin farmacia: el corte no las alcanza, a propósito. El catálogo público
+ * (SISTEMA-107) va por dirección pública y aplica el corte él mismo: sólo se ofrece
+ * con acceso completo.
+ */
+const GLOBAL_PREFIXES = [
+  "auth/",
+  "health",
+  "platform/",
+  "print-gateway/",
+  "catalogo/",
+];
 
 const sales = "organizations/:organizationId/branches/:branchId/sales";
 const cash = "organizations/:organizationId/branches/:branchId/cash";

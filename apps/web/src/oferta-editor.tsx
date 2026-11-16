@@ -118,6 +118,7 @@ export function OfertaEditor({
   products,
   branches,
   costos,
+  catalogoHabilitado = false,
   onClose,
   onSaved,
 }: {
@@ -130,6 +131,8 @@ export function OfertaEditor({
   branches: { id: string; name: string }[];
   /** Costo de la última recepción por producto (sólo con permiso de costos). */
   costos?: Map<string, number>;
+  /** Módulo Catálogo online: habilita elegir dónde aplica la oferta. */
+  catalogoHabilitado?: boolean;
   onClose: () => void;
   onSaved: (oferta: DetalleOferta) => void;
 }) {
@@ -733,6 +736,7 @@ export function OfertaEditor({
                   cambiar={cambiar}
                   branches={branches}
                   listas={listas}
+                  catalogoHabilitado={catalogoHabilitado}
                 />
               )}
               {paso === "resumen" && (
@@ -1559,16 +1563,74 @@ function VigenciaOferta({
   cambiar,
   branches,
   listas,
+  catalogoHabilitado,
 }: {
   formulario: FormularioOferta;
   cambiar: (parcial: Partial<FormularioOferta>) => void;
   branches: { id: string; name: string }[];
   listas: PriceList[];
+  catalogoHabilitado: boolean;
 }) {
   const campoFecha =
     "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-50";
+  const porMedio = formulario.type === "PAYMENT_METHOD";
+  const canales: {
+    valor: FormularioOferta["canal"];
+    titulo: string;
+    ayuda: string;
+  }[] = [
+    { valor: "POS", titulo: "Mostrador", ayuda: "Sólo en Ventas" },
+    {
+      valor: "CATALOG",
+      titulo: "Catálogo online",
+      ayuda: "Sólo en los pedidos del catálogo",
+    },
+    { valor: "BOTH", titulo: "Ambos", ayuda: "En Ventas y en el catálogo" },
+  ];
   return (
     <div className="space-y-4">
+      {/* Sin el módulo Catálogo online, Ofertas no nombra al catálogo: la
+          oferta conserva el canal que tenía y se edita como de mostrador. */}
+      {catalogoHabilitado ? (
+        <Tarjeta titulo="Dónde aplica">
+          <div
+            role="radiogroup"
+            aria-label="Dónde aplica"
+            className="grid gap-2 sm:grid-cols-3"
+          >
+            {canales.map(({ valor, titulo, ayuda }) => {
+              const elegido = (porMedio ? "POS" : formulario.canal) === valor;
+              const deshabilitado = porMedio && valor !== "POS";
+              return (
+                <button
+                  key={valor}
+                  type="button"
+                  role="radio"
+                  aria-checked={elegido}
+                  disabled={deshabilitado}
+                  onClick={() => cambiar({ canal: valor })}
+                  className={`rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    elegido
+                      ? "border-teal-300 bg-teal-50 ring-1 ring-teal-200"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="block text-sm font-medium text-slate-800">
+                    {titulo}
+                  </span>
+                  <span className="block text-xs text-slate-500">{ayuda}</span>
+                </button>
+              );
+            })}
+          </div>
+          {porMedio ? (
+            <p className="mt-2 text-xs text-slate-500">
+              La oferta por medio de pago vale sólo en el mostrador: el catálogo
+              no cobra.
+            </p>
+          ) : null}
+        </Tarjeta>
+      ) : null}
       <Tarjeta titulo="Cuándo">
         <div className="grid gap-3 sm:grid-cols-2">
           <Campo etiqueta="Desde">

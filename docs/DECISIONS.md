@@ -2,6 +2,24 @@
 
 ## DECIDED
 
+- 15/11/2026 (SISTEMA-107): el catálogo online (con sus ofertas) es un módulo aparte
+  que el superadmin habilita por farmacia desde el panel de plataforma; no viene por
+  defecto (pedido del usuario). Apagarlo oculta y bloquea, no borra.
+- 15/11/2026 (SISTEMA-107): ofertas en el catálogo online con el mismo motor de Ofertas
+  y un canal por oferta (mostrador, catálogo o ambos), en lugar de un sistema aparte. Las
+  existentes quedan en mostrador y Ventas no cambia. La de medio de pago es sólo de
+  mostrador; el tope total es compartido entre canales. El servidor calcula precios y
+  descuentos del carrito y del pedido. Ver `OFFERS.md` y `CATALOGO_ONLINE.md`.
+- 15/11/2026 (SISTEMA-107): catálogo online (pedido del usuario). Sitio público
+  aparte, `apps/catalogo` (`<sitio del catálogo>/<slug>`, su propio sitio de Netlify), para
+  que el link que recibe el cliente no lleve a la gestión ni cargue su código; la API sólo
+  acepta ese origen en `/api/v1/catalogo/...` (`CATALOGO_ORIGIN`) y su proxy sólo reenvía esas rutas,
+  con usuarios del portal atados a un cliente y sesión propia en la base (no `User`). Los
+  medicamentos bajo receta no se publican. El pedido no mueve stock, caja ni cuenta
+  corriente: la farmacia lo confirma y lo vende después en Ventas. Sin permisos nuevos:
+  configurar y dar usuarios pide `ORGANIZATION_MANAGE`; ver pedidos `SALE_READ` y
+  resolverlos `SALE_MANAGE`. Un switch decide si se muestran los productos sin stock de la
+  sucursal elegida. Ver `CATALOGO_ONLINE.md`.
 - 11/11/2026 (SISTEMA-90): al cambiar un filtro, el Resumen de Reportes conserva lo que se
   ve (atenuado, con "Actualizando…") hasta que llega la respuesta, en vez de volver al
   esqueleto; así números y gráficos pasan de lo anterior a lo nuevo. Reemplaza lo de

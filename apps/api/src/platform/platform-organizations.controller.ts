@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import { Type } from "class-transformer";
 import {
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsIn,
@@ -99,6 +100,10 @@ class PlanPricesDto {
   @IsString() @Matches(MINOR) extraBranchMinor!: string;
 }
 
+class ModulesDto {
+  @IsBoolean() catalogEnabled!: boolean;
+}
+
 @Controller("platform")
 @UseGuards(PlatformAdminGuard)
 export class PlatformOrganizationsController {
@@ -160,6 +165,16 @@ export class PlatformOrganizationsController {
     @Body() body: SubscriptionDto,
   ) {
     return this.organizations.updateSubscription(request.auth!.sub, id, body);
+  }
+
+  /** Módulos aparte del abono (SISTEMA-107): hoy, el catálogo online. */
+  @Patch("organizations/:id/modules")
+  updateModules(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: ModulesDto,
+  ) {
+    return this.organizations.updateModules(request.auth!.sub, id, body);
   }
 
   @Get("payments")

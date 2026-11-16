@@ -14,7 +14,7 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
 
 - `apps/api`: NestJS 11 REST bajo `/api/v1`, Prisma 6 + PostgreSQL 18, Jest.
   Un modulo por dominio en `src/` (accounts, auth, audit, cash, catalog, fiscal,
-  inventory, offers, organizations, parties, printing, purchases, reports, roles, sales,
+  catalogo-online, inventory, offers, organizations, parties, printing, purchases, reports, roles, sales,
   supplier-payables, transfers, users). Esquema en `prisma/schema.prisma`,
   migraciones en `prisma/migrations/`, integracion en `test/`.
   OpenAPI en `/api/docs`.
@@ -23,6 +23,8 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
   shell principal `src/workspace-shell.tsx`.
 - `apps/landing`: sitio comercial publico (React + Vite + Tailwind), sitio de
   Netlify propio. Ver `docs/LANDING.md`.
+- `apps/catalogo`: catalogo online publico de cada farmacia (React + Vite +
+  Tailwind), sitio aparte de la gestion. Ver `docs/CATALOGO_ONLINE.md`.
 - `packages/contracts`: solo tipos compartidos, sin logica.
 - `scripts/`: agente de impresion termica (Node, ESC/POS), lanzadores PowerShell,
   herramientas Python del catalogo externo.
@@ -54,6 +56,7 @@ Probar la API en Docker (dentro de WSL): `Iniciar Gestion - Docker.cmd` /
 - Impresion: `THERMAL_TICKETS.md`, `LOCAL_PRINT_AGENT.md`, `PRODUCTION_PRINTING.md`.
 - Reportes: `REPORTS_PLAN.md`, `REPORTS_INTERACTIVE_SPEC.md`.
 - Ofertas y promociones: `OFFERS.md`.
+- Catálogo online (página pública y pedidos de clientes): `CATALOGO_ONLINE.md`.
 - Landing comercial: `LANDING.md`.
 - Plataforma y cobro a farmacias: `PLATFORM.md`.
 - Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`,

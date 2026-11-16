@@ -4,6 +4,8 @@ const environmentSchema = z.object({
   HOST: z.string().ip().default("127.0.0.1"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   CORS_ORIGIN: z.string().url().default("http://localhost:5173"),
+  // Sitio del catálogo online (SISTEMA-107): sólo llega a /api/v1/catalogo/...
+  CATALOGO_ORIGIN: z.string().url().default("http://localhost:5175"),
   DATABASE_URL: z.string().url().optional(),
   JWT_ACCESS_SECRET: z.string().min(32).optional(),
   // Días sin uso hasta que vence la sesión (SISTEMA-93). Nunca menos de 3
