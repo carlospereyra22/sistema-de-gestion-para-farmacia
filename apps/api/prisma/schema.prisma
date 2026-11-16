@@ -83,6 +83,7 @@ model PrintJob {
 }
 
 model Organization {
+  catalogSettings CatalogSettings?
   productionConfigurations FiscalProductionConfiguration[]
   fiscalDocuments FiscalDocument[]
   fiscalTrials FiscalTrial[]
@@ -97,6 +98,8 @@ model Organization {
   id              String             @id @default(uuid()) @db.Uuid
   name            String
   active          Boolean            @default(true)
+  /// Módulo Catálogo online (SISTEMA-107): lo habilita el panel de plataforma.
+  catalogEnabled  Boolean            @default(false)
   createdAt       DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
   branches        Branch[]
@@ -225,6 +228,7 @@ model Laboratory {
 }
 
 model Product {
+  catalogOrderItems CatalogOrderItem[]
   brand          String?         @db.VarChar(120)
   isMedication   Boolean         @default(false)
   id             String          @id @default(uuid()) @db.Uuid
@@ -618,6 +622,7 @@ model ProductImage {
 }
 
 model PriceList {
+  catalogSettings CatalogSettings[] @relation("CatalogSettingsPriceList")
   id             String       @id @default(uuid()) @db.Uuid
   organizationId String       @db.Uuid
   name           String
@@ -651,6 +656,8 @@ model ProductPrice {
 }
 
 model Branch {
+  catalogOrders CatalogOrder[] @relation("CatalogOrderBranch")
+  catalogSettings CatalogSettings[] @relation("CatalogSettingsBranch")
   offerBranches OfferBranch[]
   offlineOperations OfflineOperation[]
   offlineSyncIssues OfflineSyncIssue[]
@@ -1060,6 +1067,8 @@ model PurchaseReceiptItem {
 }
 
 model Customer {
+  catalogOrders CatalogOrder[]
+  catalogPortalUsers CatalogPortalUser[]
   notes String? @db.VarChar(1000)
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -1551,6 +1560,13 @@ enum OfferType {
   SPEND_THRESHOLD
 }
 
+/// Dónde vale la oferta (SISTEMA-107): mostrador (Ventas), catálogo online o ambos.
+enum OfferChannel {
+  POS
+  CATALOG
+  BOTH
+}
+
 enum OfferStatus {
   DRAFT
   PUBLISHED
@@ -1604,6 +1620,8 @@ model Offer {
   minPurchaseMinor BigInt?
   /// Medios de pago que dan el descuento (sólo PAYMENT_METHOD; vacío en los demás tipos).
   paymentMethods PaymentMethod[] @default([])
+  /// Dónde vale: las existentes quedan en mostrador y Ventas no cambia.
+  channel OfferChannel @default(POS)
   version Int @default(1)
   createdById String @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -1616,6 +1634,7 @@ model Offer {
   branches OfferBranch[]
   priceLists OfferPriceList[]
   sales SaleOffer[]
+  catalogOrders CatalogOrderOffer[]
 
   @@unique([id, organizationId])
   @@index([organizationId, status])
@@ -1713,5 +1732,183 @@ model SaleOfferItem {
   saleOffer SaleOffer @relation(fields: [saleOfferId], references: [id], onDelete: Restrict)
 
   @@index([saleOfferId])
+  @@index([productId])
+}
+
+// Catálogo online (SISTEMA-107): página pública de la farmacia con sus
+// productos, usuarios del portal atados a un cliente y pedidos que la farmacia
+// confirma. Un pedido no mueve stock ni caja: se vende después en Ventas.
+enum CatalogOrderStatus {
+  RECEIVED
+  CONFIRMED
+  REJECTED
+  DELIVERED
+  CANCELLED
+}
+
+enum CatalogDelivery {
+  PICKUP
+  DELIVERY
+}
+
+/// Configuración del catálogo online: una por organización.
+model CatalogSettings {
+  organizationId String @id @db.Uuid
+  /// Dirección pública: /catalogo/<slug>. Única entre todas las farmacias.
+  slug String @unique @db.VarChar(60)
+  /// Sucursal de la que sale el stock y a la que llegan los pedidos.
+  branchId String @db.Uuid
+  published Boolean @default(false)
+  displayName String @db.VarChar(80)
+  /// Sólo los usuarios del portal ven el catálogo.
+  requireLogin Boolean @default(false)
+  /// Precios visibles sin iniciar sesión.
+  showPricesPublic Boolean @default(true)
+  /// Mostrar los productos sin stock en la sucursal.
+  showOutOfStock Boolean @default(false)
+  /// Lista para quien no inició sesión o cuyo cliente no tiene lista; null = Precio general.
+  priceListId String? @db.Uuid
+  pickupEnabled Boolean @default(true)
+  deliveryEnabled Boolean @default(false)
+  /// Al marcar un pedido entregado se descuenta su stock (sin pasar por caja).
+  deductStockOnDelivery Boolean @default(false)
+  /// Último número de pedido entregado (correlativo por organización).
+  lastOrderNumber Int @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch Branch @relation("CatalogSettingsBranch", fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  priceList PriceList? @relation("CatalogSettingsPriceList", fields: [priceListId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@index([branchId])
+}
+
+/// Usuario del portal: un cliente de la farmacia que entra al catálogo a pedir.
+/// No es un usuario del sistema ni tiene acceso a la gestión.
+model CatalogPortalUser {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  customerId String @db.Uuid
+  name String @db.VarChar(120)
+  email String @db.VarChar(254)
+  passwordHash String
+  active Boolean @default(true)
+  lastLoginAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  sessions CatalogPortalSession[]
+  orders CatalogOrder[]
+
+  @@unique([organizationId, email])
+  @@unique([id, organizationId])
+  @@index([customerId])
+}
+
+/// Sesión del portal (cookie propia). Se guarda en la base para que valga en
+/// todas las copias de la API y se pueda cortar al desactivar al usuario.
+model CatalogPortalSession {
+  id String @id @default(uuid()) @db.Uuid
+  portalUserId String @db.Uuid
+  /// sha256 del secreto de la cookie (secreto aleatorio de 48 bytes).
+  tokenHash String @db.VarChar(64)
+  expiresAt DateTime @db.Timestamptz(6)
+  revokedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  portalUser CatalogPortalUser @relation(fields: [portalUserId], references: [id], onDelete: Restrict)
+
+  @@index([portalUserId, revokedAt])
+}
+
+model CatalogOrder {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  branchId String @db.Uuid
+  number Int
+  customerId String @db.Uuid
+  portalUserId String @db.Uuid
+  status CatalogOrderStatus @default(RECEIVED)
+  delivery CatalogDelivery
+  deliveryAddress String? @db.VarChar(200)
+  notes String? @db.VarChar(500)
+  priceListId String @db.Uuid
+  totalMinor BigInt
+  /// Reintento del mismo pedido: mismo id y mismo contenido devuelven el original.
+  requestId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  decidedAt DateTime? @db.Timestamptz(6)
+  decidedById String? @db.Uuid
+  decisionNote String? @db.VarChar(300)
+  deliveredAt DateTime? @db.Timestamptz(6)
+  /// Cuándo se descontó su stock al entregarlo (null: no se descontó).
+  stockDeductedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  branch Branch @relation("CatalogOrderBranch", fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  portalUser CatalogPortalUser @relation(fields: [portalUserId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  items CatalogOrderItem[]
+  offers CatalogOrderOffer[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, number])
+  @@unique([organizationId, requestId])
+  @@index([organizationId, status, createdAt])
+  @@index([portalUserId, createdAt])
+}
+
+model CatalogOrderItem {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  productId String @db.Uuid
+  /// Nombre y precio del momento del pedido.
+  productName String @db.VarChar(200)
+  quantity Int
+  /// Precio de lista por unidad; el total ya resta el descuento de ofertas.
+  unitPriceMinor BigInt
+  /// Descuento de ofertas del renglón (SISTEMA-107).
+  discountMinor BigInt @default(0)
+  totalMinor BigInt
+  order CatalogOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+/// Foto de cada oferta aplicada a un pedido del catálogo, como SaleOffer en Ventas.
+model CatalogOrderOffer {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  orderId String @db.Uuid
+  offerId String @db.Uuid
+  offerVersion Int
+  name String @db.VarChar(120)
+  label String @db.VarChar(60)
+  type OfferType
+  /// Parámetros de la oferta al pedir, escritos por el servidor.
+  parameters Json
+  units Int
+  discountMinor BigInt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  order CatalogOrder @relation(fields: [orderId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  offer Offer @relation(fields: [offerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  items CatalogOrderOfferItem[]
+
+  @@index([organizationId, offerId, createdAt])
+  @@index([orderId])
+}
+
+model CatalogOrderOfferItem {
+  id String @id @default(uuid()) @db.Uuid
+  orderOfferId String @db.Uuid
+  productId String @db.Uuid
+  units Int
+  /// Importe de lista de esas unidades, antes de la oferta.
+  grossMinor BigInt
+  discountMinor BigInt
+  orderOffer CatalogOrderOffer @relation(fields: [orderOfferId], references: [id], onDelete: Restrict)
+
+  @@index([orderOfferId])
   @@index([productId])
 }

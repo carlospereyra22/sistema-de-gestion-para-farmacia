@@ -19,6 +19,9 @@ export type DestinoOfertaVista = {
   quantity: number | null;
 };
 
+/** Dónde vale una oferta (SISTEMA-107). */
+export type CanalOferta = "POS" | "CATALOG" | "BOTH";
+
 /** Oferta como la devuelve el listado y el detalle (SISTEMA-103). */
 export type Oferta = {
   id: string;
@@ -52,6 +55,8 @@ export type Oferta = {
   bundlePriceMinor: string | null;
   /** Medios que dan el descuento (sólo ofertas por medio de pago). */
   paymentMethods?: MedioPago[];
+  /** Dónde vale: mostrador (Ventas), catálogo online o ambos. */
+  channel?: CanalOferta;
   /** Todos los productos, con las exclusiones de `targets`. */
   allProducts?: boolean;
   /** Monto mínimo de compra (sólo ofertas por monto de compra). */
@@ -119,6 +124,7 @@ export type OfertaEntrada = {
   nthUnit?: number | null;
   bundlePriceMinor?: string | null;
   paymentMethods?: MedioPago[];
+  channel?: CanalOferta;
   allProducts?: boolean;
   minPurchaseMinor?: string | null;
   tiers?: {

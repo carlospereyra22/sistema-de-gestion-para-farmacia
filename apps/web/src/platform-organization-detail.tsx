@@ -49,6 +49,7 @@ import { MoneyInput } from "./money-input";
 import { OperationConfirmDialog } from "./operation-confirm-dialog";
 import { PlatformBillingSection } from "./platform-billing";
 import { PlatformCredentialsDialog } from "./platform-credentials-dialog";
+import { PlatformModulos } from "./platform-modulos";
 import { PlatformMoneyConfirm } from "./platform-money-confirm";
 import {
   PlatformError,
@@ -675,6 +676,16 @@ export function PlatformOrganizationDetail({
           }}
         />
       )}
+      <PlatformModulos
+        token={token}
+        organizationId={organizationId}
+        catalogEnabled={Boolean(data.catalogEnabled)}
+        onChanged={(message) => {
+          setNotice(message);
+          reload();
+        }}
+        onError={setNotice}
+      />
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 space-y-5">
           <PlatformPanel

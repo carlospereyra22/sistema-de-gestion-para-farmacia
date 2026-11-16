@@ -51,7 +51,7 @@ try {
     }
     Write-Host 'Sistema de Gestion - Entorno local de pruebas' -ForegroundColor Cyan
     if ($Stop) {
-        foreach ($component in @('web', 'api')) {
+        foreach ($component in @('web', 'api', 'catalogo')) {
             $statePath = Join-Path $logDirectory "$component-process.json"
             if (-not (Test-Path -LiteralPath $statePath)) { continue }
             $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -104,6 +104,7 @@ try {
     $env:HOST = '127.0.0.1'
     $env:PORT = '3000'
     $env:CORS_ORIGIN = $webUrl
+    $env:CATALOGO_ORIGIN = 'http://localhost:5175'
     $env:VITE_API_URL = 'http://localhost:3000/api/v1'
     # Local tests must never reach ARCA production, even with inherited flags.
     $env:FISCAL_LOCAL_TESTING = 'true'
@@ -117,6 +118,10 @@ try {
     if (-not $webReady -and -not (Test-Port 5173)) {
         Write-Host 'Iniciando interfaz...'
         $startedProcesses += Start-DevelopmentProcess 'web' '--filter @gestion/web dev --host 127.0.0.1 --port 5173 --strictPort'
+    }
+    # Catalogo online (SISTEMA-107): sitio aparte que ven los clientes.
+    if (-not (Test-Port 5175)) {
+        Start-DevelopmentProcess 'catalogo' '--filter @gestion/catalogo dev --host 127.0.0.1 --port 5175 --strictPort' | Out-Null
     }
     Write-Host 'Esperando a la app y a la base. El primer inicio puede tardar un minuto...'
     $deadline = [DateTime]::UtcNow.AddSeconds(120)

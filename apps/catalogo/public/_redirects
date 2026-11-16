@@ -1,0 +1,2 @@
+/api/v1/catalogo/* https://163.176.241.51/api/v1/catalogo/:splat 200!
+/* /index.html 200

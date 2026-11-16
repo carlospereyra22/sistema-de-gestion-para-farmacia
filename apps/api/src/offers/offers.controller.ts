@@ -172,6 +172,11 @@ class OfferDto {
   @ArrayMaxSize(5)
   @IsIn(MEDIOS_PAGO, { each: true })
   paymentMethods?: MedioPago[] | null;
+  @IsOptional() @IsIn(["POS", "CATALOG", "BOTH"]) channel?:
+    | "POS"
+    | "CATALOG"
+    | "BOTH"
+    | null;
   @IsOptional() @IsBoolean() allProducts?: boolean;
   @IsOptional() @IsString() @Matches(IMPORTE) minPurchaseMinor?: string | null;
   @IsOptional()

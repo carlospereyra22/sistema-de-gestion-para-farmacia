@@ -351,7 +351,12 @@ export type CurrentUserProfile = {
     organizationId: string;
     displayName?: string | null;
     roles?: { role: { permissions: { permission: { code: string } }[] } }[];
-    organization?: { name: string; ticketHeader?: { name?: string } | null };
+    organization?: {
+      name: string;
+      ticketHeader?: { name?: string } | null;
+      /** Módulo Catálogo online (SISTEMA-107), lo habilita la plataforma. */
+      catalogEnabled?: boolean;
+    };
   }[];
 };
 export async function getCurrentUser(

@@ -5,6 +5,10 @@ import * as cookieParser from "cookie-parser";
 import helmet from "helmet";
 
 import { AppModule } from "./app.module";
+import { origenesPermitidos } from "./config/cors";
+import type { CorsOptions } from "@nestjs/common/interfaces/external/cors-options.interface";
+
+type CorsListo = (error: Error | null, opciones: CorsOptions) => void;
 import { ApiExceptionFilter } from "./common/http/api-exception.filter";
 import { requestIdMiddleware } from "./common/http/request-id.middleware";
 import { errorDeValidacion } from "./common/http/mensajes-validacion";
@@ -21,11 +25,17 @@ async function bootstrap(): Promise<void> {
   app.use(helmet());
   // Date se expone para que la web tome la hora del servidor (ventas sin
   // conexión, SISTEMA-64) también cuando la API está en otro origen.
-  app.enableCors({
-    origin: environment.corsOrigin,
-    credentials: true,
-    exposedHeaders: ["Date"],
-  });
+  // El sitio del catálogo online sólo puede llamar a sus rutas (SISTEMA-107).
+  app.enableCors((request: { url?: string }, listo: CorsListo) =>
+    listo(null, {
+      origin: origenesPermitidos(request.url ?? "", {
+        gestion: environment.corsOrigin,
+        catalogo: environment.catalogoOrigin,
+      }),
+      credentials: true,
+      exposedHeaders: ["Date"],
+    }),
+  );
   app.use(cookieParser());
   app.use(requestIdMiddleware);
   app.useGlobalFilters(new ApiExceptionFilter());

@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Catálogo online (SISTEMA-107): sitio público aparte de la gestión. Usa la
+   paleta de Tailwind (teal y slate) igual que la gestión. Pensado primero para
+   el celular. */
+@theme {
+  --font-sans: "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Filas que se deslizan con el dedo (categorías) sin barra visible. */
+.sin-barra {
+  scrollbar-width: none;
+}
+.sin-barra::-webkit-scrollbar {
+  display: none;
+}
+
+/* Espacio para la barra inferior del celular y el borde del iPhone. */
+.pie-seguro {
+  padding-bottom: env(safe-area-inset-bottom);
+}

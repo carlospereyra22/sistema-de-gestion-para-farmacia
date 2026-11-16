@@ -165,6 +165,7 @@ export function App(): ReactElement {
   const [user, setUser] = useState<string>();
   const [accountName, setAccountName] = useState<string>();
   const [organizationName, setOrganizationName] = useState<string>();
+  const [catalogoHabilitado, setCatalogoHabilitado] = useState(false);
   const [accessToken, setAccessToken] = useState<string>();
   const [organizationId, setOrganizationId] = useState<string>();
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -302,6 +303,7 @@ export function App(): ReactElement {
       membership?.organization?.ticketHeader?.name ||
         membership?.organization?.name,
     );
+    setCatalogoHabilitado(Boolean(membership?.organization?.catalogEnabled));
     setAccessToken(token);
     setOrganizationId(profile.organizations[0]?.organizationId);
   };
@@ -822,6 +824,7 @@ export function App(): ReactElement {
             accessToken={accessToken}
             organizationId={organizationId}
             permissionCodes={permissionCodes}
+            catalogoHabilitado={catalogoHabilitado}
             onLogout={endSession}
           />
         </SubscriptionGate>

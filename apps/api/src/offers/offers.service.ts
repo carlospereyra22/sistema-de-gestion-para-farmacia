@@ -272,6 +272,7 @@ export class OffersService {
   ) {
     await this.exigir(actorId, organizationId, ["OFFER_MANAGE"]);
     const normalizada = validarOferta(entrada);
+    await this.exigirCanal(organizationId, normalizada.datos.channel);
     const id = await this.prisma.$transaction(async (tx) => {
       await this.validarReferencias(tx, organizationId, normalizada);
       const creada = await tx.offer.create({
@@ -308,6 +309,12 @@ export class OffersService {
     await this.prisma.$transaction(async (tx) => {
       await this.bloquear(tx, offerId);
       const anterior = await this.buscar(tx, organizationId, offerId);
+      // Sin el módulo, la oferta conserva el canal que ya tenía.
+      await this.exigirCanal(
+        organizationId,
+        normalizada.datos.channel,
+        anterior.channel,
+      );
       if (anterior.updatedAt.toISOString() !== entrada.expectedUpdatedAt)
         throw new ConflictException(
           "Otra persona cambió esta oferta. Actualizá y volvé a intentarlo.",
@@ -418,6 +425,7 @@ export class OffersService {
           nthUnit: original.nthUnit,
           bundlePriceMinor: original.bundlePriceMinor,
           paymentMethods: original.paymentMethods,
+          channel: original.channel,
           allProducts: original.allProducts,
           minPurchaseMinor: original.minPurchaseMinor,
         },
@@ -533,6 +541,7 @@ export class OffersService {
       nthUnit: oferta.nthUnit,
       bundlePriceMinor: oferta.bundlePriceMinor?.toString() ?? null,
       paymentMethods: oferta.paymentMethods,
+      channel: oferta.channel,
       allProducts: oferta.allProducts,
       minPurchaseMinor: oferta.minPurchaseMinor?.toString() ?? null,
       tiers: motor.tiers.map((tier) => ({
@@ -778,6 +787,23 @@ export class OffersService {
     );
   }
 
+  /** Las ofertas del catálogo piden el módulo habilitado (SISTEMA-107). */
+  private async exigirCanal(
+    organizationId: string,
+    canal: string,
+    canalAnterior?: string,
+  ) {
+    if (canal === "POS" || canal === canalAnterior) return;
+    const organizacion = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { catalogEnabled: true },
+    });
+    if (!organizacion?.catalogEnabled)
+      throw new BadRequestException(
+        "Esta farmacia no tiene el catálogo online: la oferta sólo puede ser de mostrador.",
+      );
+  }
+
   private async exigir(
     actorId: string,
     organizationId: string,
@@ -840,6 +866,7 @@ function foto(oferta: OfertaConRelaciones): Prisma.InputJsonObject {
     nthUnit: oferta.nthUnit,
     bundlePriceMinor: oferta.bundlePriceMinor?.toString() ?? null,
     paymentMethods: oferta.paymentMethods,
+    channel: oferta.channel,
     allProducts: oferta.allProducts,
     minPurchaseMinor: oferta.minPurchaseMinor?.toString() ?? null,
     tiers: oferta.tiers.map((tier) => ({

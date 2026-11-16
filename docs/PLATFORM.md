@@ -376,3 +376,10 @@ Producción solo tiene Farmacia Juncos y no se le puede afectar nada:
 Facturar el abono desde el sistema, mail, recuperación autónoma de clave, pago en autoservicio,
 segundo factor para usuarios de farmacia, selector de varias
 farmacias, demos gratis y asistente de primer uso.
+
+## Módulos aparte del abono (SISTEMA-107)
+
+En el detalle de cada farmacia, el panel **Módulos** prende o apaga funciones que se
+contratan aparte. Hoy: **Catálogo online** (`Organization.catalogEnabled`, apagado
+por defecto). Cambiarlo queda en la auditoría de plataforma y no borra datos. Ver
+`CATALOGO_ONLINE.md`.

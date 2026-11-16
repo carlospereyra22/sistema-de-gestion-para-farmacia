@@ -44,24 +44,48 @@ export async function arbolCategorias(
   };
 }
 
-/** Unidades ya vendidas con cada oferta (ventas no anuladas). */
+/**
+ * Unidades ya usadas con cada oferta: ventas no anuladas y pedidos del
+ * catálogo vigentes (no cancelados ni rechazados). El tope es uno solo para
+ * mostrador y catálogo (SISTEMA-107): es la misma mercadería.
+ */
 export async function unidadesUsadas(
   cliente: Cliente,
   organizationId: string,
   offerIds: readonly string[],
 ): Promise<Map<string, number>> {
   if (!offerIds.length) return new Map();
-  const filas = await cliente.saleOffer.groupBy({
-    by: ["offerId"],
-    where: {
-      organizationId,
-      offerId: { in: [...offerIds] },
-      sale: { status: "COMPLETED" },
-    },
-    _sum: { units: true },
-  });
-  return new Map(filas.map((fila) => [fila.offerId, fila._sum.units ?? 0]));
+  const [ventas, pedidos] = await Promise.all([
+    cliente.saleOffer.groupBy({
+      by: ["offerId"],
+      where: {
+        organizationId,
+        offerId: { in: [...offerIds] },
+        sale: { status: "COMPLETED" },
+      },
+      _sum: { units: true },
+    }),
+    cliente.catalogOrderOffer.groupBy({
+      by: ["offerId"],
+      where: {
+        organizationId,
+        offerId: { in: [...offerIds] },
+        order: { status: { notIn: ["CANCELLED", "REJECTED"] } },
+      },
+      _sum: { units: true },
+    }),
+  ]);
+  const usadas = new Map<string, number>();
+  for (const fila of [...ventas, ...pedidos])
+    usadas.set(
+      fila.offerId,
+      (usadas.get(fila.offerId) ?? 0) + (fila._sum.units ?? 0),
+    );
+  return usadas;
 }
+
+/** Dónde se usan las ofertas: Ventas (mostrador) o el catálogo online. */
+export type CanalOfertas = "POS" | "CATALOG";
 
 export function ofertaMotor(
   oferta: OfertaConRelaciones,
@@ -134,12 +158,14 @@ export function ofertaMotor(
 export async function cargarOfertasMotor(
   cliente: Cliente,
   organizationId: string,
-  opciones: { desde: Date; bloquear?: boolean },
+  opciones: { desde: Date; bloquear?: boolean; canal?: CanalOfertas },
 ): Promise<OfertaMotor[]> {
   const ofertas = await cliente.offer.findMany({
     where: {
       organizationId,
       status: "PUBLISHED",
+      // Sin canal, mostrador: Ventas sigue viendo exactamente lo mismo.
+      channel: { in: [opciones.canal ?? "POS", "BOTH"] },
       OR: [{ endsAt: null }, { endsAt: { gt: opciones.desde } }],
     },
     include: incluirOferta,

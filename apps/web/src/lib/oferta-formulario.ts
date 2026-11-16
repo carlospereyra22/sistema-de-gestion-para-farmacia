@@ -1,4 +1,4 @@
-import type { Oferta, OfertaEntrada } from "./ofertas-api";
+import type { CanalOferta, Oferta, OfertaEntrada } from "./ofertas-api";
 import {
   calcularOfertas,
   etiquetaOferta,
@@ -144,6 +144,8 @@ export type FormularioOferta = {
   topeTotal: string;
   prioridad: string;
   combinable: boolean;
+  /** Dónde vale (SISTEMA-107): mostrador, catálogo online o ambos. */
+  canal: CanalOferta;
 };
 
 const ARGENTINA_MS = 3 * 60 * 60 * 1000;
@@ -235,6 +237,7 @@ export function formularioVacio(
     topeTotal: "",
     prioridad: "0",
     combinable: false,
+    canal: "POS",
   };
 }
 
@@ -286,6 +289,7 @@ export function formularioDesdeOferta(oferta: Oferta): FormularioOferta {
     topeTotal: oferta.maxUnitsTotal ? String(oferta.maxUnitsTotal) : "",
     prioridad: String(oferta.priority),
     combinable: oferta.combinable,
+    canal: oferta.channel ?? "POS",
   };
 }
 
@@ -343,6 +347,8 @@ export function armarEntrada(
     combinable: formulario.combinable,
     startsAt: "",
     productKind: formulario.productKind,
+    // La oferta por medio de pago es sólo de mostrador: el catálogo no cobra.
+    channel: formulario.type === "PAYMENT_METHOD" ? "POS" : formulario.canal,
     branchIds: formulario.sucursales,
     priceListIds: formulario.listas,
     allProducts: todos,
