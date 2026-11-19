@@ -59,3 +59,47 @@ it("no deja cerrar mientras haya ventas sin conexión por enviar", () => {
   );
   expect(html).toMatch(/<input[^>]*disabled[^>]*placeholder="0,00"/);
 });
+
+it("ofrece el efectivo esperado sin completarlo solo", () => {
+  const html = renderToStaticMarkup(
+    <CashCloseForm
+      session={session}
+      token="test"
+      organizationId="org"
+      branchId="branch"
+      onClosed={() => {}}
+    />,
+  );
+  // El conteo arranca vacío: el esperado sólo se usa si el cajero lo toca.
+  expect(html).toContain('value=""');
+  // La moneda lleva un espacio duro entre "$" y el número.
+  expect(html).toMatch(/Efectivo esperado <strong>\$\s16\.000,00<\/strong>/);
+  expect(html).toMatch(
+    /aria-label="Contaste lo mismo que el efectivo esperado: \$\s16\.000,00"/,
+  );
+  expect(html).toContain(">Coincide</button>");
+});
+
+it("el importe que completa Coincide se lee igual que el esperado", async () => {
+  const { formatAmountTyping } = await import("./lib/amount-typing");
+  const { lotCostInput } = await import("./lib/lot-cost");
+  const { typedCashMinor } = await import("./lib/cash-count");
+  for (const minor of ["11503960", "0", "5", "123456789"])
+    expect(typedCashMinor(formatAmountTyping(lotCostInput(minor)))).toBe(
+      Number(minor),
+    );
+});
+
+it("con ventas sin enviar no ofrece usar el esperado", () => {
+  const html = renderToStaticMarkup(
+    <CashCloseForm
+      session={session}
+      token="test"
+      organizationId="org"
+      branchId="branch"
+      ventasSinEnviar={1}
+      onClosed={() => {}}
+    />,
+  );
+  expect(html).not.toContain(">Coincide</button>");
+});

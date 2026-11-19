@@ -71,8 +71,16 @@ necesita conexión.
   recarga sola.
 - **Detectar sin conexión** (`lib/conectividad.ts`): error de red, tiempo
   agotado, 502/503/504 o una página de error HTML de un proxy. Un error propio
-  de la API (400, 403, 409…) no es falta de conexión. Sin conexión se pregunta
-  a `/health` cada 15 segundos.
+  de la API (400, 403, 409…) no es falta de conexión, tampoco un 502 en JSON.
+  **Antes de pasar a sin conexión se confirma con `/health`** (SISTEMA-109,
+  19/11/2026): si la API responde, falló sólo ese pedido (AlfaBeta, el padrón,
+  ARCA o el catálogo externo caídos, o un pedido lento) y la app sigue en
+  línea; la pantalla muestra el mensaje de ese pedido ("No se pudo consultar
+  AlfaBeta", "El servidor tardó demasiado en responder"). Recién si `/health`
+  tampoco responde (5 s) pasa a sin conexión. La respuesta buena se recuerda
+  10 s y los pedidos simultáneos comparten la consulta. Antes, el 19/11/2026,
+  un cambio en la página de AlfaBeta dejaba toda la app "Sin conexión" en cada
+  búsqueda. Sin conexión se pregunta a `/health` cada 15 segundos.
 - **Copia local** (`lib/cache-local.ts`, IndexedDB): `apiFetch` guarda las
   respuestas de sucursales, productos, listas y precios efectivos, packs,
   clientes, stock, caja, cuentas corrientes, opciones fiscales, estado de la

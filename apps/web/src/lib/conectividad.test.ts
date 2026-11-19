@@ -19,8 +19,14 @@ describe("conectividad", () => {
   });
 
   it("el proxy sin servidor (502/503/504) es falla de conexión", () => {
-    for (const status of [502, 503, 504])
+    expect(esFallaDeConexion(respuesta(502, "text/html"))).toBe(true);
+    for (const status of [503, 504])
       expect(esFallaDeConexion(respuesta(status))).toBe(true);
+  });
+
+  it("un 502 de la API por un servicio de afuera no es falta de conexión", () => {
+    // AlfaBeta caído o con otro formato: la API responde 502 con su mensaje.
+    expect(esFallaDeConexion(respuesta(502))).toBe(false);
   });
 
   it("una página de error HTML de un proxy es falla de conexión", () => {

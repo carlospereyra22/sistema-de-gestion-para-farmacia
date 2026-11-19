@@ -8,7 +8,7 @@
 
 ## Etapa implementada: conteo y seguridad del cierre
 
-- Formulario integrado en Cierre pendiente, sin modal, con efectivo contado vacío, diferencia y motivo obligatorio si no coincide. Confirmación adicional si hay faltante/sobrante. No crea movimientos ficticios.
+- Formulario integrado en Cierre pendiente, sin modal, con efectivo contado vacío, diferencia y motivo obligatorio si no coincide. Debajo del campo se ofrece el efectivo esperado con el botón "Coincide" (SISTEMA-109, 19/11/2026): completa el contado con el esperado sólo si el cajero lo toca; nunca se completa solo, para que el arqueo siga siendo a ciegas. Confirmación adicional si hay faltante/sobrante. No crea movimientos ficticios.
 - Backend vuelve a calcular el efectivo con el circuito existente y exige motivo. El cliente envía el saldo esperado mostrado: se rechaza si cambió mientras se contaba.
 - Cierre y escritores de caja (venta, cancelación, cobro de cuenta corriente, devolución fiscal y movimiento manual) toman el mismo bloqueo de fila antes de comprobar la sesión. El cierre valida la sesión dentro de la transacción, evitando cierres repetidos.
 - Apertura auditada. Movimientos manuales admiten un UUID de solicitud opcional, usado como ID del movimiento existente: reintentar la misma solicitud no crea otra fila/auditoría; reutilizarla con otro contenido se rechaza. El frontend conserva ese UUID ante error mientras el contenido no cambie y bloquea doble clic durante el envío. Clientes anteriores sin UUID conservan compatibilidad.

@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   Injectable,
+  Logger,
 } from "@nestjs/common";
 import { ConsultationCache } from "./consultation-cache";
 
@@ -83,7 +84,12 @@ export function parseAlfaBetaSearch(html: string): AlfaBetaMatch[] {
     .split(/(?=<form\b[^>]*name=["']pr\d+["'])/i)
     .filter((block) => /^<form\b[^>]*name=["']pr\d+["']/i.test(block));
   for (const block of blocks) {
-    const id = /action=["']([^"']+)["']/i.exec(block)?.[1] ?? "";
+    // AlfaBeta pasó de "sertal.html" a "/precio/sertal.html" (19/11/2026):
+    // se acepta la ruta propia del sitio, nunca otro dominio.
+    const id = (/action=["']([^"']+)["']/i.exec(block)?.[1] ?? "").replace(
+      /^(?:https:\/\/www\.alfabeta\.net)?\/precio\//,
+      "",
+    );
     const name = plain(
       /<a\b[^>]*class=["']rprod["'][^>]*>([\s\S]*?)<\/a>/i.exec(block)?.[1] ??
         "",
@@ -142,6 +148,9 @@ export function parseAlfaBetaDetail(html: string) {
 
 @Injectable()
 export class AlfaBetaService {
+  // Queda en el registro de la API cuándo y por qué falló AlfaBeta: si cambia
+  // su página (como el 19/11/2026) se ve acá antes que en las farmacias.
+  private readonly logger = new Logger("AlfaBeta");
   private readonly searches = new ConsultationCache<AlfaBetaMatch[]>();
   private readonly details = new ConsultationCache<
     ReturnType<typeof parseAlfaBetaDetail>
@@ -157,17 +166,15 @@ export class AlfaBetaService {
     // This also reuses the same cached list for Actron, Actron 400 and Actron 600.
     const anchor = terms.find((term) => /^[a-z]{2,}$/.test(term)) ?? terms[0]!;
     const matches = await this.searches.get(anchor, async () =>
-      parseAlfaBetaSearch(
-        await this.request("srv", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            patron: anchor,
-            src: "prs",
-            mde: "pat",
-          }).toString(),
-        }),
-      ),
+      this.leer(`búsqueda "${anchor}"`, parseAlfaBetaSearch, "srv", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          patron: anchor,
+          src: "prs",
+          mde: "pat",
+        }).toString(),
+      }),
     );
     return filterAlfaBetaMatches(matches, query).slice(0, 30);
   }
@@ -176,7 +183,7 @@ export class AlfaBetaService {
     if (!safeId.test(id))
       throw new BadRequestException("Identificador de medicamento inválido.");
     return this.details.get(id, async () =>
-      parseAlfaBetaDetail(await this.request(id)),
+      this.leer(`ficha ${id}`, parseAlfaBetaDetail, id),
     );
   }
 
@@ -185,7 +192,24 @@ export class AlfaBetaService {
     const path = url.startsWith(base) ? url.slice(base.length) : "";
     if (!safePage.test(path))
       throw new BadRequestException("Link de AlfaBeta inválido.");
-    return parseAlfaBetaDetail(await this.request(path));
+    return this.leer(`página ${path}`, parseAlfaBetaDetail, path);
+  }
+
+  // Pide y lee una página; si falla, lo deja en el registro con el motivo.
+  private async leer<T>(
+    que: string,
+    leerHtml: (html: string) => T,
+    path: string,
+    init: RequestInit = {},
+  ): Promise<T> {
+    try {
+      return leerHtml(await this.request(path, init));
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo leer AlfaBeta (${que}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
 
   private async request(path: string, init: RequestInit = {}): Promise<string> {

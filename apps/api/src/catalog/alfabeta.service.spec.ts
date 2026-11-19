@@ -17,6 +17,17 @@ describe("AlfaBeta read-only consultation", () => {
       },
     ]);
   });
+  it("acepta los links nuevos de AlfaBeta con la ruta /precio/", () => {
+    const html = `<form name="pr0" action="/precio/sertal.html" method="post"></form><a class="rprod">SERTAL</a><a class="rlab">Roemmers</a><form name="pr1" action="https://www.alfabeta.net/precio/sertal-perlas.html"></form><a class="rprod">SERTAL PERLAS</a><a class="rlab">Roemmers</a><form name="pr2" action="https://evil.test/precio/x.html"></form><a class="rprod">Otro</a><form name="pr3" action="/otra/y.html"></form><a class="rprod">Otro</a>`;
+    expect(parseAlfaBetaSearch(html)).toEqual([
+      { id: "sertal.html", name: "SERTAL", laboratory: "Roemmers" },
+      {
+        id: "sertal-perlas.html",
+        name: "SERTAL PERLAS",
+        laboratory: "Roemmers",
+      },
+    ]);
+  });
   it("does not confuse format failures with no matches", () => {
     expect(parseAlfaBetaSearch("<b>0</b> coincidencias")).toEqual([]);
     expect(
