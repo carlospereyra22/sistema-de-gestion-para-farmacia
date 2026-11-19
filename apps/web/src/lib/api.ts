@@ -3763,7 +3763,11 @@ async function responseError(
   response: Response,
   fallback: string,
 ): Promise<Error> {
-  const result = (await response.json()) as { message?: string | string[] };
+  // Una página de error de un proxy (HTML) no es JSON: se usa el mensaje
+  // propio en vez de "Failed to execute 'json'…" (SISTEMA-109).
+  const result = (await response.json().catch(() => ({}))) as {
+    message?: string | string[];
+  };
   return new Error(
     Array.isArray(result.message)
       ? result.message.join(", ")

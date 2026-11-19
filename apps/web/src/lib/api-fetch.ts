@@ -10,6 +10,7 @@ import {
   esFallaDeConexion,
   marcarEnLinea,
   marcarSinConexion,
+  servidorResponde,
 } from "./conectividad";
 
 /**
@@ -64,6 +65,19 @@ function trabajaSinConexion(init?: RequestInit) {
     new Headers(init?.headers).get("authorization") ===
     `Bearer ${TOKEN_SIN_CONEXION}`
   );
+}
+
+/**
+ * Falló un pedido pero la API está viva (SISTEMA-109): por ejemplo, un
+ * servicio de afuera tardó demasiado. No es un corte: la app sigue en línea.
+ */
+export class PedidoNoCompletadoError extends Error {
+  constructor(
+    message = "El servidor tardó demasiado en responder. Probá de nuevo.",
+  ) {
+    super(message);
+    this.name = "PedidoNoCompletadoError";
+  }
 }
 
 /** Errores de `fetch` que significan "no se pudo llegar al servidor". */
@@ -128,6 +142,14 @@ export async function apiFetch(
     if (metodo === "GET" && response.ok)
       void guardarRespuesta(url, response).catch(() => {});
     return response;
+  }
+  // Antes de declarar "Sin conexión" se confirma con /health: si la API
+  // responde, falló sólo este pedido (AlfaBeta, ARCA, el padrón caídos o un
+  // pedido lento) y el resto del sistema sigue en línea con su mensaje.
+  if (!sinConexion && (await servidorResponde())) {
+    marcarEnLinea();
+    if (response) return response;
+    throw new PedidoNoCompletadoError();
   }
   if (!sinConexion) marcarSinConexion();
   else if (!trabajaSinConexion(init) && metodo !== "GET")

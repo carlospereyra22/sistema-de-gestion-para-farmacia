@@ -476,3 +476,9 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   por kilo para los jarabes, gotas y suspensiones más comunes, tomada de la ficha
   oficial pediátrica, con un cálculo de ml por peso que respeta los topes por toma y
   por día. Ver `PRODUCTS.md`.
+
+- **Cierre de caja: el esperado se ofrece, no se precarga (SISTEMA-109, 19/11/2026).**
+  Decisión del usuario: el efectivo contado sigue arrancando vacío (arqueo a ciegas,
+  para que un faltante no quede oculto si se confirma sin contar), pero debajo se
+  muestra el efectivo esperado con el botón "Coincide", que lo completa con un clic,
+  igual que "Usar" en el fondo inicial.

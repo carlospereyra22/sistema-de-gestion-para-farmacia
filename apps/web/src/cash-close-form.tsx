@@ -8,6 +8,8 @@ import { typedCashMinor } from "./lib/cash-count";
 import { CashDialog } from "./cash-dialog";
 import { MoneyInput } from "./money-input";
 import { guardarOperacionCaja } from "./lib/caja-sin-conexion";
+import { formatAmountTyping } from "./lib/amount-typing";
+import { lotCostInput } from "./lib/lot-cost";
 
 const money = (minor: number) =>
   (minor / 100).toLocaleString("es-AR", { style: "currency", currency: "ARS" });
@@ -155,6 +157,28 @@ export function CashCloseForm({
           </div>
         </div>
       </div>
+      {/* El conteo sigue siendo a ciegas: el esperado se ofrece, pero sólo se
+          usa si el cajero lo toca, después de contar (SISTEMA-109). */}
+      {counted === "" &&
+        !busy &&
+        !disabled &&
+        Number.isSafeInteger(expected) &&
+        expected >= 0 && (
+          <div className="cash-opening-suggestion">
+            <span>
+              Efectivo esperado <strong>{money(expected)}</strong>
+            </span>
+            <button
+              type="button"
+              aria-label={`Contaste lo mismo que el efectivo esperado: ${money(expected)}`}
+              onClick={() =>
+                setCounted(formatAmountTyping(lotCostInput(String(expected))))
+              }
+            >
+              Coincide
+            </button>
+          </div>
+        )}
       <label className="mt-3 block text-xs">
         Motivo de diferencia
         <input
