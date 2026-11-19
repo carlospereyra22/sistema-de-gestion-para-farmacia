@@ -2,6 +2,13 @@
 @import "./tema.css";
 @import "./tema-oscuro.css";
 
+/* El lugar de la barra de desplazamiento queda siempre reservado: al pasar de
+   una pantalla sin desplazamiento (Ventas) a una larga (Productos) el contenido
+   no se corre hacia la izquierda. */
+html {
+  scrollbar-gutter: stable;
+}
+
 .cash-workspace {
   display: flex;
   flex-direction: column;
@@ -2015,4 +2022,12 @@ textarea:focus {
   .panel-animado > * > :nth-child(n + 5) {
     animation-delay: 280ms;
   }
+}
+
+/* Filas que se deslizan sin mostrar la barrita de scroll (Preventa, SISTEMA-108). */
+.sin-barra {
+  scrollbar-width: none;
+}
+.sin-barra::-webkit-scrollbar {
+  display: none;
 }

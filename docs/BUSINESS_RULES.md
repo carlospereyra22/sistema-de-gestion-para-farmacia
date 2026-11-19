@@ -279,3 +279,15 @@ Nuevo y Editar producto comparten el popup de código interno y etiquetas. Gener
 - Un pedido no pasa por caja ni por cuenta corriente, y no descuenta stock salvo que la farmacia prenda "Descontar stock al entregar": entonces al marcarlo entregado se descuenta de la sucursal (por vencimiento, sin lotes vencidos ni stock negativo; si falta algo no se entrega) y no se carga en Ventas. La farmacia lo confirma, lo rechaza (con motivo) o lo marca entregado; el cliente lo cancela sólo antes de que se confirme. Se vende después en Ventas.
 - Ofertas en el catálogo (15/11/2026): valen las de canal "Catálogo online" o "Ambos"; Ventas sólo aplica las de "Mostrador" o "Ambos". La oferta por medio de pago es sólo de mostrador. El tope total de una oferta es uno solo para mostrador y catálogo. El descuento del pedido lo calcula el servidor y queda fijo en el pedido.
 - El catálogo online es un módulo que habilita la plataforma por farmacia (apagado por defecto). Sin él no hay pantalla de catálogo, página pública ni ofertas de catálogo; apagarlo no borra pedidos, usuarios ni configuración.
+
+## Preventa (17/11/2026, SISTEMA-108)
+
+- Módulo que habilita la plataforma por farmacia (apagado por defecto). Al prenderlo se crean los roles Preventista y Repartidor si no existían. Apagarlo oculta y bloquea, no borra.
+- Permisos nuevos: `PREVENTA_SELL` (tomar pedidos y ver los propios), `PREVENTA_DELIVER` (repartir y cobrar) y `PREVENTA_MANAGE` (ver todo, configurar, asignar y pagar comisiones; lo reciben los roles con `ORGANIZATION_MANAGE`).
+- El servidor pone precios, ofertas de mostrador y totales del pedido. El preventista puede bajar el precio de un producto sólo si la farmacia lo habilita y nunca por encima de la lista. Sólo se ofrecen productos activos, no archivados en la sucursal y sin receta.
+- Estados: pendiente, en reparto, entregado y cancelado (con motivo). Sólo se edita pendiente. "No se pudo entregar" lo vuelve a pendiente con nota.
+- La entrega hace lo que diga la configuración: sólo registrarla, descontar stock (por vencimiento, sin stock negativo; si falta algo no se entrega) o registrar la venta. Como venta: mismas reglas que Ventas; lo cobrado queda en Cobros pendientes de Caja (aunque la sucursal exija caja abierta) para que el repartidor lo rinda y lo que falta va a la cuenta corriente (sin cuenta corriente hay que pagar el total). El precio es el del pedido salvo que la lista haya bajado. Reintentar la entrega no duplica la venta.
+- Nunca se registra un cobro mayor a lo que falta pagar. Con la entrega como venta, el saldo se cobra en Cuentas corrientes.
+- Comisión = total del pedido entregado × porcentaje (del pedido si se puso a mano; si no, el del preventista hasta que se paga). Al pagarla el porcentaje queda fijo. Pagar comisiones no mueve la caja.
+- Un pedido tomado sin señal espera en el teléfono y se manda solo; su total es estimado hasta que el servidor lo recalcula.
+- Ver `PREVENTA.md`.

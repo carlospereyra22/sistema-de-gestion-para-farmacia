@@ -14,7 +14,7 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
 
 - `apps/api`: NestJS 11 REST bajo `/api/v1`, Prisma 6 + PostgreSQL 18, Jest.
   Un modulo por dominio en `src/` (accounts, auth, audit, cash, catalog, fiscal,
-  catalogo-online, inventory, offers, organizations, parties, printing, purchases, reports, roles, sales,
+  catalogo-online, inventory, offers, organizations, parties, preventa, printing, purchases, reports, roles, sales,
   supplier-payables, transfers, users). Esquema en `prisma/schema.prisma`,
   migraciones en `prisma/migrations/`, integracion en `test/`.
   OpenAPI en `/api/docs`.
@@ -57,6 +57,7 @@ Probar la API en Docker (dentro de WSL): `Iniciar Gestion - Docker.cmd` /
 - Reportes: `REPORTS_PLAN.md`, `REPORTS_INTERACTIVE_SPEC.md`.
 - Ofertas y promociones: `OFFERS.md`.
 - Catálogo online (página pública y pedidos de clientes): `CATALOGO_ONLINE.md`.
+- Preventa (preventistas, reparto, cobros y comisiones): `PREVENTA.md`.
 - Landing comercial: `LANDING.md`.
 - Plataforma y cobro a farmacias: `PLATFORM.md`.
 - Interfaz: `WORKSPACE.md`, `DASHBOARD_OVERVIEW.md`, `NOTIFICATIONS.md`,

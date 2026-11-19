@@ -356,6 +356,8 @@ export type CurrentUserProfile = {
       ticketHeader?: { name?: string } | null;
       /** Módulo Catálogo online (SISTEMA-107), lo habilita la plataforma. */
       catalogEnabled?: boolean;
+      /** Módulo Preventa (SISTEMA-108), lo habilita la plataforma. */
+      preventaEnabled?: boolean;
     };
   }[];
 };

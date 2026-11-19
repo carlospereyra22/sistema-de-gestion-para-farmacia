@@ -40,6 +40,7 @@ export function AccountMenu({
   branchSelector,
   accessToken,
   placeIcon,
+  extraItems,
   onLogout,
 }: {
   email: string;
@@ -50,6 +51,8 @@ export function AccountMenu({
   accessToken?: string;
   /** Ícono de la línea de ubicación; por defecto, el de la sucursal. */
   placeIcon?: ReactNode;
+  /** Accesos propios de la farmacia arriba del menú (ej.: Preventa celular). */
+  extraItems?: (cerrar: () => void) => ReactNode;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -181,6 +184,7 @@ export function AccountMenu({
             </div>
           </div>
           <div className="p-2">
+            {extraItems?.(() => setOpen(false))}
             <TemaSwitch tema={tema} onChange={cambiarTema} />
             <InstallMenuButton
               onDone={() => setOpen(false)}

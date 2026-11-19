@@ -56,3 +56,25 @@ it("does not allow adding a product without sellable stock", () => {
   expect(html).toContain("Sin stock vendible");
   expect(addButton(html)).toContain('disabled=""');
 });
+
+it("avisa cuántas unidades del producto ya están en la venta", () => {
+  const html = renderToStaticMarkup(
+    <SaleProductDetail
+      token="t"
+      organizationId="o"
+      product={omeprazol}
+      available={41}
+      quantity={1}
+      enVenta={2}
+      junto={<span>pastillas</span>}
+      onQuantityChange={() => {}}
+      onAdd={() => {}}
+      onClear={() => {}}
+      onFinished={() => {}}
+      onInvalid={() => {}}
+    />,
+  );
+  expect(html).toContain("· 2 en la venta");
+  expect(html).toContain("pastillas");
+  expect(render(omeprazol, 41)).not.toContain("en la venta");
+});

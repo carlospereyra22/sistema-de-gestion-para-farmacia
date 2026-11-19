@@ -434,3 +434,45 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
 - Se implementa redefiniendo las variables de color de Tailwind y las propias bajo `:root.dark`, en vez de agregar `dark:` en cada componente (más de 4.000 clases de color en ~300 archivos). La paleta oscura la genera `apps/web/scripts/generar-tema-oscuro.mjs` invirtiendo la luminosidad en OKLCH; así las pantallas nuevas quedan bien sin trabajo extra.
 - Los ~110 colores hex fijos de la web pasaron a tokens con nombre (`marca`, `petroleo`, `niebla`, `ambar`, `rosa`, `violeta`, `azul`, `verde` + luminosidad) o al color de Tailwind equivalente; se unificaron sólo los casi idénticos, el modo claro se ve igual. Un test impide volver a usar hex sueltos en clases.
 - Tickets, A4 y etiquetas se siguen viendo en papel blanco; la impresión no cambia (el bloque oscuro es sólo `@media screen`). Ver `MODO_OSCURO.md`.
+- 17/11/2026 (SISTEMA-108): preventa como módulo por farmacia (como el catálogo), dentro
+  de la web de la gestión (no un sitio aparte): misma sesión, permisos y modo sin
+  internet, con una versión celular a pantalla completa para quien sólo vende o reparte.
+  La entrega es configurable por la farmacia (sólo registrar, descontar stock o
+  registrar la venta), pedido del usuario. La venta la registra Ventas
+  (`completeFromModule`, sin pedir `SALE_MANAGE` porque la preventa verifica sus propios
+  permisos) y su cobro queda siempre en Cobros pendientes: el repartidor no tiene caja.
+  Tres permisos nuevos (`PREVENTA_SELL`, `PREVENTA_DELIVER`, `PREVENTA_MANAGE`) y los
+  roles Preventista y Repartidor al habilitar el módulo. El preventista da de alta
+  clientes básicos desde la preventa (escribe en `Customer`). Ofertas: las de mostrador,
+  con el mismo motor. Mapa con Leaflet + OpenStreetMap (dependencia nueva de la web,
+  carga diferida). Ver `PREVENTA.md`.
+
+- **Ficha del medicamento con dosis orientativa generada con IA (SISTEMA-108,
+  18/11/2026).** El padrón oficial trae acción terapéutica y vía, pero no posología
+  ni link al prospecto. Por pedido del usuario, uso y dosis habitual de adultos se
+  generan con IA por principio activo (no por presentación), se guardan en
+  `MedicineActiveGuide` con `dosageSource = "ia"`. La tarjeta no muestra una
+  leyenda de la fuente, por pedido del usuario. Cambia el criterio anterior del buscador
+  de Inicio de no mostrar información terapéutica. Ver `PRODUCTS.md`.
+
+- **Dosis de marcas desde AlfaBeta, acotada (SISTEMA-108, 19/11/2026).** Decisión del
+  usuario: para las marcas que el padrón no escribe con dosis ("ACTRON cáps."), se
+  lee la composición de la ficha pública de AlfaBeta, **solo para las marcas que
+  alguna farmacia tiene cargadas como producto**, una consulta cada 2 segundos y a
+  pedido (`catalogo-medicamentos dosis-marcas`), no en la corrida diaria. Se guarda
+  solo el dato de la dosis (`MedicineCatalogItem.doseText`, `doseSource =
+"alfabeta"`), nunca el texto. Se acepta únicamente si el nombre de la ficha es
+  exactamente el de la marca y la composición describe la misma forma de la
+  presentación; ante cualquier duda no se guarda nada. Es una excepción acotada a la
+  regla de no descargar masivamente AlfaBeta (`DASHBOARD_MEDICINE_SEARCH.md`).
+- **Verificación de las dosis orientativas contra fichas oficiales (19/11/2026).**
+  Los intervalos se cruzaron con la sección 4.2 (Posología) de las fichas técnicas
+  de CIMA (AEMPS), mediante su API pública; las diferencias reales se corrigieron.
+
+- **Dosis por forma y calculadora para chicos (SISTEMA-108, 19/11/2026).** La dosis
+  guardada por principio activo no se muestra en una presentación de otra forma
+  (ampolla, gel, colirio con la dosis de los comprimidos): se muestra la parte de su
+  forma o se remite al prospecto. Por pedido del usuario se agregó la dosis infantil
+  por kilo para los jarabes, gotas y suspensiones más comunes, tomada de la ficha
+  oficial pediátrica, con un cálculo de ml por peso que respeta los topes por toma y
+  por día. Ver `PRODUCTS.md`.

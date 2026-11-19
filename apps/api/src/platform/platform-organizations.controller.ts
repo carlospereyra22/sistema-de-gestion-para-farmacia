@@ -101,7 +101,8 @@ class PlanPricesDto {
 }
 
 class ModulesDto {
-  @IsBoolean() catalogEnabled!: boolean;
+  @IsOptional() @IsBoolean() catalogEnabled?: boolean;
+  @IsOptional() @IsBoolean() preventaEnabled?: boolean;
 }
 
 @Controller("platform")
@@ -167,7 +168,7 @@ export class PlatformOrganizationsController {
     return this.organizations.updateSubscription(request.auth!.sub, id, body);
   }
 
-  /** Módulos aparte del abono (SISTEMA-107): hoy, el catálogo online. */
+  /** Módulos aparte del abono: catálogo online (SISTEMA-107) y preventa (SISTEMA-108). */
   @Patch("organizations/:id/modules")
   updateModules(
     @Req() request: AuthenticatedRequest,

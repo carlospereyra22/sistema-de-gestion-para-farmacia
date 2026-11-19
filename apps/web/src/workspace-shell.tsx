@@ -81,7 +81,15 @@ import { ResumeSaleDialog } from "./resume-sale-dialog";
 import { PriceListsWorkspace } from "./price-lists-workspace";
 import { OfertasWorkspace } from "./ofertas-workspace";
 import { CatalogoOnlineWorkspace } from "./catalogo-online-workspace";
+import { PreventaWorkspace } from "./preventa-workspace";
 import { ProductOffersCard } from "./product-offers-card";
+import { FichaMedicamento } from "./ficha-medicamento";
+import { ProspectoPastilla } from "./prospecto-venta";
+import {
+  EquivalentesPastilla,
+  EquivalentesSeccion,
+} from "./equivalentes-medicamento";
+import { consultaEquivalentes } from "./lib/equivalentes";
 import { getOfertasVigentes } from "./lib/ofertas-api";
 import {
   detalleOfertaVenta,
@@ -381,6 +389,8 @@ import {
   Tags,
   BadgePercent,
   Store,
+  Route,
+  Smartphone,
   Info,
   Trash2,
   Users,
@@ -448,10 +458,19 @@ import {
   salePriceListOptions,
 } from "./lib/price-list-selection";
 
+// Anchos mínimos de la tabla de Productos desde 1600 px (ver su uso).
+const ANCHO_GRANDE = {
+  laboratorio: "min-[1600px]:w-40",
+  importe: "min-[1600px]:w-32",
+  lote: "min-[1600px]:w-[8.5rem]",
+  estado: "min-[1600px]:w-[6.75rem]",
+};
+
 const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Inicio", icon: LayoutDashboard },
   { name: "Ventas", icon: ShoppingCart },
   { name: "Catálogo online", icon: Store },
+  { name: "Preventa", icon: Route },
   { name: "Productos", icon: Package },
   { name: "Categorías y laboratorios", icon: Shapes },
   { name: "Listas de precios", icon: Tags },
@@ -535,6 +554,9 @@ export function WorkspaceShell({
   organizationId,
   permissionCodes,
   catalogoHabilitado = false,
+  preventaHabilitada = false,
+  onAbrirPreventaMovil,
+  volverAPreventaSiempre = false,
   onLogout,
 }: {
   email: string;
@@ -545,16 +567,27 @@ export function WorkspaceShell({
   permissionCodes: readonly string[];
   /** La farmacia tiene el módulo Catálogo online (SISTEMA-107). */
   catalogoHabilitado?: boolean;
+  /** La farmacia tiene el módulo Preventa (SISTEMA-108). */
+  preventaHabilitada?: boolean;
+  /** Abre la preventa a pantalla completa (versión celular). */
+  onAbrirPreventaMovil?: () => void;
+  /** Quien trabaja en la preventa ve "Volver a Preventa" en cualquier tamaño. */
+  volverAPreventaSiempre?: boolean;
   onLogout: () => void;
 }): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const sidebar = useWorkspaceSidebar();
   const location = readWorkspaceLocation(searchParams);
   // Una pantalla sin permiso se reemplaza por Inicio, también si llega por la dirección.
-  // Catálogo online es un módulo aparte: sin él la pantalla no existe.
+  // Catálogo online y Preventa son módulos aparte: sin ellos la pantalla no existe.
   const puedeVer = (nombre: View) =>
     canOpenView(nombre, permissionCodes) &&
-    (nombre !== "Catálogo online" || catalogoHabilitado);
+    (nombre !== "Catálogo online" || catalogoHabilitado) &&
+    (nombre !== "Preventa" || preventaHabilitada);
+  const abrirPreventa =
+    preventaHabilitada && puedeVer("Preventa")
+      ? onAbrirPreventaMovil
+      : undefined;
   const view = puedeVer(location.view) ? location.view : "Inicio";
   const { administrationTab, organizationTab, salesScreen } = location;
   useLayoutEffect(() => {
@@ -1114,7 +1147,7 @@ export function WorkspaceShell({
     >
       <header
         ref={sidebar.header}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Catálogo online" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Catálogo online" || view === "Preventa" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
         <div className="flex items-center gap-3">
           <SidebarToggle
@@ -1137,6 +1170,7 @@ export function WorkspaceShell({
             view === "Listas de precios" ||
             view === "Ofertas" ||
             view === "Catálogo online" ||
+            view === "Preventa" ||
             view === "Clientes" ||
             view === "Proveedores" ||
             view === "Inventario" ||
@@ -1161,6 +1195,8 @@ export function WorkspaceShell({
                 <BadgePercent size={22} aria-hidden />
               ) : view === "Catálogo online" ? (
                 <Store size={22} aria-hidden />
+              ) : view === "Preventa" ? (
+                <Route size={22} aria-hidden />
               ) : view === "Clientes" ? (
                 <ContactRound size={22} aria-hidden />
               ) : view === "Inventario" ? (
@@ -1308,9 +1344,36 @@ export function WorkspaceShell({
               if (pendingSale) setPendingSaleConfirmation({ action: "logout" });
               else onLogout();
             }}
+            extraItems={
+              abrirPreventa
+                ? (cerrar) => (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cerrar();
+                        abrirPreventa();
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-teal-700 outline-none hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-600"
+                    >
+                      <Smartphone size={17} aria-hidden />
+                      Preventa (versión celular)
+                    </button>
+                  )
+                : undefined
+            }
           />
         </div>
       </header>
+      {abrirPreventa ? (
+        // En el celular, volver a la preventa a un toque (SISTEMA-108).
+        <button
+          type="button"
+          onClick={abrirPreventa}
+          className={`fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-teal-800 ${volverAPreventaSiempre ? "" : "md:hidden"}`}
+        >
+          <Smartphone size={18} aria-hidden /> Volver a Preventa
+        </button>
+      ) : null}
       <div
         data-sidebar={sidebar.expanded ? "expanded" : "collapsed"}
         className="workspace-layout grid min-h-[calc(100vh-5.125rem)] grid-cols-[252px_minmax(0,1fr)]"
@@ -1421,6 +1484,7 @@ export function WorkspaceShell({
             view !== "Listas de precios" &&
             view !== "Ofertas" &&
             view !== "Catálogo online" &&
+            view !== "Preventa" &&
             view !== "Caja" &&
             view !== "Cuentas corrientes" &&
             view !== "Cuentas por pagar" &&
@@ -1533,6 +1597,16 @@ export function WorkspaceShell({
               canManageOrders={permissionCodes.includes("SALE_MANAGE")}
               canConfigure={permissionCodes.includes("ORGANIZATION_MANAGE")}
               onError={setMessage}
+            />
+          ) : null}
+          {ready && view === "Preventa" ? (
+            <PreventaWorkspace
+              key={`preventa:${organizationId}`}
+              token={accessToken!}
+              organizationId={organizationId!}
+              branches={branches}
+              movil={false}
+              onAbrirMovil={onAbrirPreventaMovil}
             />
           ) : null}
           {ready && view === "Ofertas" ? (
@@ -1998,6 +2072,7 @@ function Home({
             key={organizationId}
             token={token}
             organizationId={organizationId}
+            branchId={branchId}
           />
         </div>
         <DashboardOverview
@@ -3412,14 +3487,20 @@ function Products({
               minWidthClass="min-w-265"
               columns={[
                 { label: "Foto", className: "w-20" },
+                // En pantallas grandes las columnas que cambian según los
+                // datos (costo, precio, lote, estado, laboratorio) tienen un
+                // ancho mínimo que cubre los valores habituales: Producto
+                // ocupa el resto y no se corre al cambiar de página ni cuando
+                // terminan de llegar los costos.
                 { label: "Producto" },
                 { label: "Código de barras" },
-                { label: "Laboratorio" },
+                { label: "Laboratorio", className: ANCHO_GRANDE.laboratorio },
                 ...(canSeeCosts
                   ? [
                       {
                         label: "Costo",
                         align: "right" as const,
+                        className: ANCHO_GRANDE.importe,
                         hint: {
                           title: "Costo",
                           text: "Lo que se pagó en la última recepción del producto, sea del lote que sea.",
@@ -3430,8 +3511,9 @@ function Products({
                 {
                   label: `VNT (${selectedPriceList?.name ?? "Público"})`,
                   align: "right",
+                  className: ANCHO_GRANDE.importe,
                 },
-                { label: "Lote", className: "w-px" },
+                { label: "Lote", className: `w-px ${ANCHO_GRANDE.lote}` },
                 {
                   label: "Vendibles",
                   className: "w-px",
@@ -3441,7 +3523,7 @@ function Products({
                   },
                 },
                 { label: "Próx. venc." },
-                { label: "Estado" },
+                { label: "Estado", className: ANCHO_GRANDE.estado },
                 ...(canManage
                   ? [{ label: "Acciones", align: "center" as const }]
                   : []),
@@ -4801,6 +4883,38 @@ function Products({
                       />
                     </div>
                   </section>
+                  {isMedication && (
+                    <FichaMedicamento
+                      token={token}
+                      organizationId={organizationId}
+                      productoId={editingProduct?.id}
+                      nombre={name}
+                      principioActivo={activeIngredient}
+                      presentacion={presentation}
+                      concentracion={concentration}
+                      forma={pharmaceuticalForm}
+                      laboratorio={
+                        options?.laboratories.find(
+                          (item) => item.id === laboratoryId,
+                        )?.name ?? suggestedLaboratoryName
+                      }
+                      codigos={[
+                        barcode,
+                        ...(editingProduct?.barcodes.map((item) => item.code) ??
+                          []),
+                      ]}
+                      nota={description}
+                      onNota={setDescription}
+                    />
+                  )}
+                  {isMedication && editingProduct && (
+                    <EquivalentesSeccion
+                      token={token}
+                      organizationId={organizationId}
+                      branchId={branchId}
+                      consulta={consultaEquivalentes(editingProduct)}
+                    />
+                  )}
                   {/* Observaciones (SISTEMA-103): se guardan en la base (marca,
                       categoría y fuente de la referencia) pero no se muestran
                       en el editor; el formulario las conserva sin cambios. */}
@@ -5766,6 +5880,9 @@ function Sales({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [lastAddedId, setLastAddedId] = useState("");
+  // Último producto agregado: queda a la vista en el cuadro de abajo hasta
+  // que se elija otro o se limpie.
+  const [ultimoEnCuadroId, setUltimoEnCuadroId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [lines, setLines] = useState<
     {
@@ -6347,12 +6464,32 @@ function Sales({
     packSale && selectedCatalogProduct?.id === packSale.product.id
       ? packSale.factor
       : detailQuantity;
+  // Lo que muestra el cuadro: lo elegido, o si no hay nada elegido ni se
+  // está buscando, el último producto agregado que sigue en la venta.
+  const productoEnCuadro =
+    selectedCatalogProduct ??
+    (!searchTerm &&
+    lines.some(
+      (line) => line.productId === ultimoEnCuadroId && !line.description,
+    )
+      ? productoPorId(products, ultimoEnCuadroId)
+      : undefined);
   const focusProductSearch = () =>
     window.requestAnimationFrame(() => productSearchRef.current?.focus());
   const selectCatalogProduct = (id: string | undefined) => {
     if (!id) return;
     setProductId(id);
     setDetailQuantity(1);
+  };
+  // Elegir un equivalente o tocar un producto de la venta: el buscador pasa a
+  // ese producto (con sus otras presentaciones) y queda marcado en la lista.
+  const mostrarEnBuscador = (id: string) => {
+    const producto = productoPorId(products, id);
+    if (!producto) return;
+    setProductQuery(producto.name);
+    setCatalogCategoryId("");
+    selectCatalogProduct(id);
+    focusProductSearch();
   };
   const clearCatalogSelection = () => {
     setProductId("");
@@ -6419,6 +6556,7 @@ function Sales({
       );
     });
     setLastAddedId(selectedProductId);
+    setUltimoEnCuadroId(selectedProductId);
     return true;
   };
   const scanIntoSale = (code: string) => {
@@ -7421,6 +7559,8 @@ function Sales({
                   }
                   if (event.key === "Escape") {
                     event.preventDefault();
+                    // Sin nada elegido, Esc también saca el último agregado.
+                    if (!selectedCatalogProduct) setUltimoEnCuadroId("");
                     clearCatalogSelection();
                     return;
                   }
@@ -7499,29 +7639,52 @@ function Sales({
           <SaleProductDetail
             token={token}
             organizationId={organizationId}
-            product={selectedCatalogProduct}
-            available={
-              selectedCatalogProduct ? available(selectedCatalogProduct.id) : 0
-            }
+            product={productoEnCuadro}
+            available={productoEnCuadro ? available(productoEnCuadro.id) : 0}
             quantity={saleDetailQuantity}
             onQuantityChange={(quantity) => {
               setDetailQuantity(quantity);
               focusProductSearch();
             }}
             onAdd={() => {
-              if (selectedCatalogProduct)
-                addCatalogProduct(
-                  selectedCatalogProduct.id,
-                  saleDetailQuantity,
-                );
+              if (productoEnCuadro)
+                addCatalogProduct(productoEnCuadro.id, saleDetailQuantity);
             }}
-            onClear={clearCatalogSelection}
+            onClear={() => {
+              setUltimoEnCuadroId("");
+              clearCatalogSelection();
+            }}
+            enVenta={
+              lines.find((line) => line.productId === productoEnCuadro?.id)
+                ?.quantity ?? 0
+            }
             onFinished={focusProductSearch}
             onInvalid={error}
-            ofertas={
-              selectedCatalogProduct
-                ? ofertasActivasDe(selectedCatalogProduct)
-                : []
+            ofertas={productoEnCuadro ? ofertasActivasDe(productoEnCuadro) : []}
+            junto={
+              productoEnCuadro?.isMedication ? (
+                <>
+                  <ProspectoPastilla
+                    token={token}
+                    organizationId={organizationId}
+                    producto={productoEnCuadro}
+                  />
+                  <EquivalentesPastilla
+                    token={token}
+                    organizationId={organizationId}
+                    branchId={branchId}
+                    nombre={productoEnCuadro.name}
+                    actual={{
+                      presentacion: productoEnCuadro.presentation,
+                      laboratorio: productoEnCuadro.laboratory?.name,
+                      precioMinor: productoEnCuadro.prices[0]?.amountMinor,
+                      disponibles: available(productoEnCuadro.id),
+                    }}
+                    consulta={consultaEquivalentes(productoEnCuadro)}
+                    onElegir={mostrarEnBuscador}
+                  />
+                </>
+              ) : null
             }
             onAddCombo={(componentes) => {
               // Cada producto del combo con su cantidad; el stock lo revisa
@@ -7714,7 +7877,7 @@ function Sales({
                   return (
                     <article
                       key={line.productId}
-                      className={`sales-cart-row group grid items-center gap-2.5 px-5 py-2.5 ${line.productId === lastAddedId ? "bg-teal-50" : ""}`}
+                      className={`sales-cart-row group grid items-center gap-2.5 px-5 py-2.5 ${line.productId === (productoEnCuadro?.id ?? lastAddedId) ? "bg-teal-50" : ""}`}
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <div className="shrink-0">
@@ -7734,12 +7897,25 @@ function Sales({
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p
-                            className="sales-cart-product-name text-[15px] font-semibold"
-                            title={line.description ?? product?.name}
-                          >
-                            {line.description ?? product?.name}
-                          </p>
+                          {line.description || !product ? (
+                            <p
+                              className="sales-cart-product-name text-[15px] font-semibold"
+                              title={line.description ?? product?.name}
+                            >
+                              {line.description ?? product?.name}
+                            </p>
+                          ) : (
+                            // Tocar el nombre lo vuelve a mostrar en el cuadro
+                            // de abajo (prospecto, equivalentes, ofertas).
+                            <button
+                              type="button"
+                              title={`Ver ${product.name}`}
+                              onClick={() => mostrarEnBuscador(product.id)}
+                              className="sales-cart-product-name max-w-full text-left text-[15px] font-semibold hover:text-teal-700"
+                            >
+                              {product.name}
+                            </button>
+                          )}
                           {/* La presentación distingue productos de nombre parecido. */}
                           {!line.description &&
                             product &&

@@ -46,6 +46,23 @@ class MedicinePackQueryDto {
   codes?: string;
 }
 
+class FichaTerapeuticaQueryDto {
+  @IsString() @MinLength(2) @MaxLength(120) q!: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{8,14}(,\d{8,14}){0,19}$/)
+  codigos?: string;
+
+  @IsOptional() @IsString() @MaxLength(200) principioActivo?: string;
+
+  // Forma y presentación del producto: la dosis que se muestra es la de esa
+  // forma (la ampolla no lleva la dosis de los comprimidos).
+  @IsOptional() @IsString() @MaxLength(120) forma?: string;
+
+  @IsOptional() @IsString() @MaxLength(120) presentacion?: string;
+}
+
 class MedicinePackDto {
   @IsString() @Matches(/^\d{8,14}$/) baseBarcode!: string;
   @IsInt() @Min(2) @Max(1000) factor!: number;
@@ -179,6 +196,39 @@ export class MedicineReferenceController {
       baseBarcode: body.baseBarcode,
       factor: body.factor,
     });
+  }
+
+  // Acción terapéutica y vía del padrón oficial (SISTEMA-108).
+  @Get("ficha")
+  async ficha(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Query() query: FichaTerapeuticaQueryDto,
+  ) {
+    await this.catalog.assertPermission(
+      request.auth!.sub,
+      organizationId,
+      "CATALOG_READ",
+    );
+    const codigos = query.codigos ? query.codigos.split(",") : [];
+    // Primero la guía guardada por principio activo; el padrón en vivo queda
+    // para lo que no se pudo vincular.
+    const producto = { forma: query.forma, presentacion: query.presentacion };
+    const guia = await this.medicineCatalog.guiaDe(
+      query.principioActivo,
+      codigos,
+      query.q,
+      producto,
+    );
+    if (guia) return { guia, ficha: null };
+    const ficha = await this.references.fichaTerapeutica(query.q, codigos);
+    const guiaPadron = ficha
+      ? await this.medicineCatalog.guiaDe(ficha.principioActivo, [], "", {
+          forma: ficha.formaFarmaceutica || query.forma,
+          presentacion: ficha.presentacion || query.presentacion,
+        })
+      : null;
+    return { guia: guiaPadron, ficha };
   }
 
   @Get("alfabeta")

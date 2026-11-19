@@ -1,3 +1,10 @@
+import { DOSIS_PEDIATRICAS } from "./dosis-pediatricas";
+import {
+  categoriaDeForma,
+  dosisParaForma,
+  esCombinacionConGuiaSimple,
+  viaParaForma,
+} from "./dosis-por-forma";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 
@@ -20,6 +27,20 @@ import {
   type SourceRow,
 } from "./medicine-catalog";
 import { gtinOf, snapshotKey } from "./medicine-reference-snapshot";
+import { DOSIS_ORIENTATIVAS } from "./guias-dosis.data";
+import {
+  dosisParaPresentacion,
+  leerFichaAlfaBeta,
+  mismoNombre,
+  slugAlfaBeta,
+} from "./dosis-marcas";
+import { dosisDe } from "./equivalentes";
+import { sinEquivalencia } from "./equivalentes.service";
+import {
+  claveGuia,
+  guiasDesdePadron,
+  vinculosPadron,
+} from "./guias-principio-activo";
 import type { MedicineReference } from "./medicine-reference.service";
 
 const REMEDIES_URL = "https://preciosderemedios.com.ar/result/";
@@ -370,6 +391,12 @@ export class MedicineCatalogService {
         where: { id: { in: plan.delisted } },
         data: { officialDelisted: true },
       });
+    // Las guías no deben frenar la actualización de precios.
+    await this.actualizarGuias(payload).catch((cause: unknown) =>
+      this.logger.warn(
+        `No se pudieron actualizar las guías por principio activo: ${cause instanceof Error ? cause.message : "error desconocido"}`,
+      ),
+    );
     return { updated: plan.updates.length, delisted: plan.delisted.length };
   }
 
@@ -651,6 +678,308 @@ export class MedicineCatalogService {
           "sourceRowKey" text, "troquel" text, "officialDelisted" boolean)
         WHERE item."id" = row."id"`;
     }
+  }
+
+  // Guías por principio activo (SISTEMA-108): acción y vía del padrón ya
+  // descargado, más uso y dosis orientativos del archivo versionado.
+  async actualizarGuias(payload: unknown[]) {
+    const guias = guiasDesdePadron(payload, DOSIS_ORIENTATIVAS);
+    for (let start = 0; start < guias.length; start += WRITE_CHUNK) {
+      const chunk = JSON.stringify(
+        guias
+          .slice(start, start + WRITE_CHUNK)
+          .map((guia) => ({ id: randomUUID(), ...guia })),
+      );
+      await this.prisma.$executeRaw`
+        INSERT INTO "MedicineActiveGuide" ("id", "activeKey", "activeIngredient",
+          "therapeuticAction", "route", "usage", "dosage", "dosageSource",
+          "updatedAt")
+        SELECT row."id", row."activeKey", row."activeIngredient",
+          row."therapeuticAction", row."route", row."usage", row."dosage",
+          row."dosageSource", now()
+        FROM jsonb_to_recordset(${chunk}::jsonb) AS row(
+          "id" uuid, "activeKey" text, "activeIngredient" text,
+          "therapeuticAction" text, "route" text, "usage" text, "dosage" text,
+          "dosageSource" text)
+        ON CONFLICT ("activeKey") DO UPDATE SET
+          "activeIngredient" = EXCLUDED."activeIngredient",
+          "therapeuticAction" = EXCLUDED."therapeuticAction",
+          "route" = EXCLUDED."route",
+          "usage" = EXCLUDED."usage",
+          "dosage" = EXCLUDED."dosage",
+          "dosageSource" = EXCLUDED."dosageSource",
+          "updatedAt" = now()`;
+    }
+    // Cada medicamento de la base queda vinculado al principio activo del
+    // padrón: por CLAVE y, lo que no la tenga, por código.
+    const vinculos = vinculosPadron(payload);
+    for (
+      let start = 0;
+      start < vinculos.porClave.length;
+      start += WRITE_CHUNK
+    ) {
+      const chunk = JSON.stringify(
+        vinculos.porClave.slice(start, start + WRITE_CHUNK),
+      );
+      await this.prisma.$executeRaw`
+        UPDATE "MedicineCatalogItem" AS item SET "guideKey" = row."activeKey",
+          "therapeuticAction" = row."therapeuticAction"
+        FROM jsonb_to_recordset(${chunk}::jsonb) AS row(
+          "externalKey" text, "activeKey" text, "therapeuticAction" text)
+        WHERE item."externalKey" = row."externalKey"
+          AND (item."guideKey" IS DISTINCT FROM row."activeKey"
+            OR item."therapeuticAction" IS DISTINCT FROM row."therapeuticAction")`;
+    }
+    for (
+      let start = 0;
+      start < vinculos.porCodigo.length;
+      start += WRITE_CHUNK
+    ) {
+      const chunk = JSON.stringify(
+        vinculos.porCodigo.slice(start, start + WRITE_CHUNK),
+      );
+      await this.prisma.$executeRaw`
+        UPDATE "MedicineCatalogItem" AS item SET "guideKey" = row."activeKey"
+        FROM jsonb_to_recordset(${chunk}::jsonb) AS row(
+          "codigo" text, "activeKey" text),
+          "MedicineCatalogBarcode" AS code
+        WHERE code."itemId" = item."id"
+          AND ltrim(code."barcode", '0') = row."codigo"
+          AND item."guideKey" = ''`;
+    }
+    const [vinculados] = await this.prisma.$queryRaw<{ total: number }[]>`
+      SELECT count(*)::int AS total FROM "MedicineCatalogItem"
+      WHERE "guideKey" <> ''`;
+    return {
+      guias: guias.length,
+      conDosis: guias.filter((guia) => guia.dosage).length,
+      medicamentosVinculados: vinculados?.total ?? 0,
+    };
+  }
+
+  // Dosis de las marcas que el padrón no escribe (SISTEMA-108), solo para las
+  // que alguna farmacia tiene cargadas como producto: se lee la composición de
+  // la ficha pública de AlfaBeta, una consulta cada 2 segundos, y se guarda
+  // solo cuando el nombre de la ficha es exactamente el de la marca y la
+  // composición no es ambigua. Decisión en docs/DECISIONS.md.
+  async completarDosisDeMarcas(registro: (mensaje: string) => void = () => {}) {
+    const filas = await this.prisma.$queryRaw<
+      { id: string; name: string; presentation: string; guideKey: string }[]
+    >`
+      SELECT DISTINCT i."id", i."name", i."presentation", i."guideKey"
+      FROM "MedicineCatalogItem" i
+      JOIN "MedicineCatalogBarcode" b ON b."itemId" = i."id"
+      JOIN "ProductBarcode" pb ON ltrim(pb."code", '0') = ltrim(b."barcode", '0')
+      JOIN "Product" p ON p."id" = pb."productId" AND p."active"
+      WHERE i."guideKey" <> '' AND i."doseText" = '' AND NOT i."officialDelisted"`;
+    const grupos = new Map<
+      string,
+      {
+        nombre: string;
+        componentes: number;
+        items: { id: string; presentation: string }[];
+      }
+    >();
+    for (const fila of filas) {
+      if (sinEquivalencia(fila.guideKey)) continue;
+      if (/asoc\.|^vit\.\+|minerales|^vitaminas/.test(fila.guideKey)) continue;
+      if (dosisDe(fila.name, fila.presentation)) continue;
+      const clave = slugAlfaBeta(fila.name);
+      const grupo = grupos.get(clave) ?? {
+        nombre: fila.name,
+        componentes: fila.guideKey.split("+").length,
+        items: [],
+      };
+      grupo.items.push({ id: fila.id, presentation: fila.presentation });
+      grupos.set(clave, grupo);
+    }
+    const resumen = {
+      marcas: grupos.size,
+      sinFicha: 0,
+      dudosas: 0,
+      completadas: 0,
+    };
+    if (!grupos.size) return resumen;
+    const mapa = await fetch("https://www.alfabeta.net/sitemap.xml", {
+      signal: AbortSignal.timeout(60_000),
+    }).then((respuesta) => (respuesta.ok ? respuesta.text() : ""));
+    const fichas = new Set(
+      [...mapa.matchAll(/\/medicamento\/([^/<]+)\.vademecum/g)].map(
+        (m) => m[1],
+      ),
+    );
+    for (const [slug, grupo] of grupos) {
+      if (!fichas.has(slug)) {
+        resumen.sinFicha++;
+        continue;
+      }
+      await new Promise((listo) => setTimeout(listo, 2_000));
+      const html = await fetch(
+        `https://www.alfabeta.net/medicamento/${slug}.vademecum`,
+        { signal: AbortSignal.timeout(20_000), redirect: "manual" },
+      )
+        .then((respuesta) => (respuesta.ok ? respuesta.text() : ""))
+        .catch(() => "");
+      const ficha = leerFichaAlfaBeta(html);
+      if (!mismoNombre(ficha.titulo, grupo.nombre)) {
+        resumen.dudosas++;
+        registro(
+          `otra ficha: ${grupo.nombre} → ${ficha.titulo || "sin ficha"}`,
+        );
+        continue;
+      }
+      // Una por presentación: la dosis va solo a la de la misma forma.
+      for (const item of grupo.items) {
+        const dosis = dosisParaPresentacion(
+          ficha.composicion,
+          grupo.componentes,
+          item.presentation,
+        );
+        if (!dosis) {
+          resumen.dudosas++;
+          registro(`sin dosis segura: ${grupo.nombre} ${item.presentation}`);
+          continue;
+        }
+        await this.prisma.medicineCatalogItem.update({
+          where: { id: item.id },
+          data: { doseText: dosis, doseSource: "alfabeta" },
+        });
+        resumen.completadas++;
+        registro(`${grupo.nombre} ${item.presentation}: ${dosis}`);
+      }
+    }
+    return resumen;
+  }
+
+  // Guía de un producto. Primero por el principio activo del padrón vinculado a
+  // sus códigos (el texto de otras fuentes puede estar mal); después por el
+  // principio activo cargado en el producto; después por el de la base y, si
+  // nada coincide, por el nombre exacto en la base cuando no es ambiguo.
+  async guiaDe(
+    principioActivo: string | undefined,
+    codigos: string[],
+    nombre?: string,
+    // Forma del producto: la dosis que se muestra es la de esa forma.
+    producto: { forma?: string; presentacion?: string } = {},
+  ) {
+    const encontrada = await this.guiaPorCodigoOPrincipio(
+      principioActivo,
+      codigos,
+      producto,
+    );
+    // "BUSCAPINA COMPOSITUM" con la guía de una sola droga (otra fuente le
+    // pone solo "dipirona"): esa dosis no es la de la combinación.
+    const guia =
+      encontrada && esCombinacionConGuiaSimple(nombre ?? "", encontrada)
+        ? {
+            ...encontrada,
+            dosage: "",
+            dosageOtherForm: true,
+            pediatric: null,
+          }
+        : encontrada;
+    if (guia || !nombre?.trim()) return guia;
+    const mismos = await this.prisma.medicineCatalogItem.findMany({
+      where: {
+        name: { equals: nombre.trim(), mode: "insensitive" },
+        guideKey: { not: "" },
+      },
+      select: { guideKey: true },
+      take: 20,
+    });
+    const claves = new Set(mismos.map((item) => item.guideKey));
+    const [clave] = claves;
+    return claves.size === 1 && clave
+      ? this.guiaPorCodigoOPrincipio(clave, [], producto)
+      : null;
+  }
+
+  private async guiaPorCodigoOPrincipio(
+    principioActivo: string | undefined,
+    codigos: string[],
+    producto: { forma?: string; presentacion?: string },
+  ) {
+    const gtins = codigos
+      .map((code) => gtinOf(code))
+      .filter((gtin): gtin is string => !!gtin);
+    const filas = codigos.length
+      ? await this.prisma.medicineCatalogBarcode.findMany({
+          where: {
+            OR: [{ barcode: { in: codigos } }, { gtin: { in: gtins } }],
+          },
+          select: {
+            item: {
+              select: {
+                guideKey: true,
+                activeIngredient: true,
+                therapeuticAction: true,
+                doseText: true,
+                pharmaceuticalForm: true,
+                presentation: true,
+              },
+            },
+          },
+          take: 20,
+        })
+      : [];
+    // Dosis o concentración de esta presentación ("500 mg", "50 mg/ml"),
+    // solo si todos sus códigos dicen lo mismo.
+    const dosisPropias = new Set(
+      filas.map((fila) => fila.item.doseText).filter(Boolean),
+    );
+    const presentationDose =
+      dosisPropias.size === 1 ? ([...dosisPropias][0] ?? "") : "";
+    // Forma de la presentación: la de la base por código si no hay dudas; si
+    // no, la cargada en el producto.
+    const categoriasBase = new Set(
+      filas.map((fila) =>
+        categoriaDeForma(fila.item.pharmaceuticalForm, fila.item.presentation),
+      ),
+    );
+    const [categoriaBase] = categoriasBase;
+    const categoria =
+      categoriasBase.size === 1 && categoriaBase
+        ? categoriaBase
+        : categoriaDeForma(producto.forma, producto.presentacion);
+    const candidatas = [
+      ...filas.map((fila) => fila.item.guideKey),
+      claveGuia(principioActivo ?? ""),
+      ...filas.map((fila) => claveGuia(fila.item.activeIngredient)),
+    ].filter((clave, index, todas) => clave && todas.indexOf(clave) === index);
+    for (const clave of candidatas) {
+      const guia = await this.prisma.medicineActiveGuide.findUnique({
+        where: { activeKey: clave },
+        select: {
+          activeIngredient: true,
+          therapeuticAction: true,
+          route: true,
+          usage: true,
+          dosage: true,
+          dosageSource: true,
+        },
+      });
+      if (!guia) continue;
+      // La acción de esta presentación, si se conoce, manda sobre la más
+      // frecuente del principio activo (Aspirinetas: antiagregante).
+      const propia = filas.find(
+        (fila) => fila.item.guideKey === clave && fila.item.therapeuticAction,
+      )?.item.therapeuticAction;
+      const deLaForma = dosisParaForma(guia.dosage, guia.route, categoria);
+      return {
+        ...guia,
+        dosage: deLaForma.dosis,
+        // La dosis guardada es de otra forma (ampolla, gel…): se remite al
+        // prospecto en vez de mostrar la de los comprimidos.
+        dosageOtherForm: deLaForma.otraForma,
+        route: viaParaForma(guia.route, categoria),
+        // Jarabes, gotas y suspensiones: dosis infantil por kilo, si hay.
+        pediatric:
+          categoria === "liquido" ? (DOSIS_PEDIATRICAS[clave] ?? null) : null,
+        therapeuticAction: propia || guia.therapeuticAction,
+        presentationDose,
+      };
+    }
+    return null;
   }
 
   // Carga inicial. Solo agrega lo que falta: repetirla no pisa los precios que

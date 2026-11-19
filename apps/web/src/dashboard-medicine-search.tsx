@@ -1,3 +1,4 @@
+import { EquivalentesDesplegable } from "./equivalentes-medicamento";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronDown, Database, LoaderCircle, Search } from "lucide-react";
 import { ProductFilterSelect } from "./product-filter-select";
@@ -23,8 +24,14 @@ import {
 
 export function MedicineSearchResults({
   results,
+  token,
+  organizationId,
+  branchId,
 }: {
   results: MedicineReference[];
+  token?: string;
+  organizationId?: string;
+  branchId?: string;
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
@@ -88,6 +95,19 @@ export function MedicineSearchResults({
                   </details>
                 </MedicinePresentationRow>
               ))}
+              {token && organizationId && (
+                <EquivalentesDesplegable
+                  token={token}
+                  organizationId={organizationId}
+                  branchId={branchId}
+                  consulta={{
+                    codigos: group.items.map((item) => item.barcode),
+                    principioActivo: group.items[0]?.activeIngredient,
+                    nombre: group.name,
+                    presentacion: group.items[0]?.presentation,
+                  }}
+                />
+              )}
             </div>
           </div>
         </details>
@@ -102,9 +122,11 @@ type Fuente = MedicineReference["source"] | "alfabeta" | "pc";
 export function DashboardMedicineSearch({
   token,
   organizationId,
+  branchId,
 }: {
   token: string;
   organizationId: string;
+  branchId?: string;
 }) {
   const [query, setQuery] = useState("");
   // "pc": nuestra base de medicamentos guardada en la PC (SISTEMA-86).
@@ -342,7 +364,14 @@ export function DashboardMedicineSearch({
             .
           </p>
         )}
-        {results.length > 0 && <MedicineSearchResults results={results} />}
+        {results.length > 0 && (
+          <MedicineSearchResults
+            results={results}
+            token={token}
+            organizationId={organizationId}
+            branchId={branchId}
+          />
+        )}
         {source === "alfabeta" && alfaResults.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
             {alfaResults.map((item, index) => (
@@ -353,6 +382,7 @@ export function DashboardMedicineSearch({
                 item={item}
                 token={token}
                 organizationId={organizationId}
+                branchId={branchId}
               />
             ))}
           </div>

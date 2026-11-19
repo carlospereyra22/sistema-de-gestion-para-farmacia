@@ -10,5 +10,6 @@ import { FiscalModule } from "../fiscal/fiscal.module";
   imports: [AuthModule, AuditModule, FiscalModule],
   controllers: [SalesController],
   providers: [SalesService],
+  exports: [SalesService],
 })
 export class SalesModule {}

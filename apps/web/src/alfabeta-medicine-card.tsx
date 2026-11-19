@@ -1,3 +1,4 @@
+import { EquivalentesDesplegable } from "./equivalentes-medicamento";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Pill } from "lucide-react";
 import {
@@ -19,7 +20,10 @@ export function AlfaBetaMedicineCard({
   prefetch = false,
   compact = false,
   onSelect,
+  branchId,
 }: {
+  /** Sucursal para mostrar equivalentes con su stock (SISTEMA-108). */
+  branchId?: string;
   item: AlfaBetaMatch;
   token: string;
   organizationId: string;
@@ -228,6 +232,15 @@ export function AlfaBetaMedicineCard({
               {detail.presentations.map((presentation, index) => (
                 <MedicinePresentationRow key={index} {...presentation} />
               ))}
+              <EquivalentesDesplegable
+                token={token}
+                organizationId={organizationId}
+                branchId={branchId}
+                consulta={{
+                  nombre: detail.name,
+                  presentacion: detail.presentations[0]?.presentation,
+                }}
+              />
             </div>
           ) : (
             <div className="divide-y divide-slate-100">

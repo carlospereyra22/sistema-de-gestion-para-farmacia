@@ -10,6 +10,7 @@ import {
   NotebookTabs,
   Package,
   ReceiptText,
+  Route,
   Shapes,
   ShoppingCart,
   Tags,
@@ -82,6 +83,20 @@ const permissionModules: readonly PermissionModule[] = [
     ],
     description:
       "Aplicar una oferta al vender no necesita permiso: se aplica sola.",
+  },
+  {
+    title: "Preventa",
+    icon: Route,
+    permissions: [
+      { code: "PREVENTA_SELL", label: "Tomar pedidos (preventista)" },
+      { code: "PREVENTA_DELIVER", label: "Repartir y cobrar pedidos" },
+      {
+        code: "PREVENTA_MANAGE",
+        label: "Ver todo, configurar, asignar reparto y pagar comisiones",
+      },
+    ],
+    description:
+      "Sólo aparece si la farmacia tiene el módulo Preventa. Cada uno ve sus pedidos; administrar ve todos.",
   },
   {
     title: "Inventario",

@@ -8,9 +8,12 @@ import type { CatalogImportRecord } from "./catalog/medicine-catalog.service";
 //   pnpm --filter @gestion/api catalogo-medicamentos estado
 //   pnpm --filter @gestion/api catalogo-medicamentos importar <archivo.jsonl>
 //   pnpm --filter @gestion/api catalogo-medicamentos actualizar
+//   pnpm --filter @gestion/api catalogo-medicamentos guias
 // `actualizar` lee Precios de Remedios y AlfaBeta sin tocar productos.
+// `guias` carga las guías por principio activo (SISTEMA-108).
+// `dosis-marcas` completa la dosis de las marcas cargadas sin dosis escrita.
 const USO =
-  "Uso: catalogo-medicamentos <estado | importar <archivo.jsonl> | actualizar>";
+  "Uso: catalogo-medicamentos <estado | importar <archivo.jsonl> | actualizar | guias | dosis-marcas>";
 
 async function main(): Promise<void> {
   // Sin temporizador: este proceso sólo ejecuta el comando y termina.
@@ -46,6 +49,28 @@ async function main(): Promise<void> {
         const result = await service.refreshLinkedSources();
         logger.log(
           `${JSON.stringify(result)} en ${Math.round((Date.now() - started) / 1000)} s`,
+        );
+        break;
+      }
+      // Guías por principio activo (SISTEMA-108): descarga el padrón y carga
+      // acción, vía y las dosis orientativas del archivo versionado.
+      case "guias": {
+        const { MedicineReferenceService } =
+          await import("./catalog/medicine-reference.service");
+        const { payload } = await app
+          .get(MedicineReferenceService)
+          .downloadOfficialData();
+        logger.log(JSON.stringify(await service.actualizarGuias(payload)));
+        break;
+      }
+      // Dosis de las marcas cargadas que el padrón no escribe (SISTEMA-108).
+      case "dosis-marcas": {
+        logger.log(
+          JSON.stringify(
+            await service.completarDosisDeMarcas((mensaje) =>
+              logger.log(mensaje),
+            ),
+          ),
         );
         break;
       }

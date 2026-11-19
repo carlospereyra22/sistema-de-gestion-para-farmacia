@@ -18,6 +18,14 @@ Fase 2 incorpora `Category`, `Laboratory`, `Product`, `ProductBarcode`, `PriceLi
 
 `20261106030000_supplier_return_optional_supplier` (SISTEMA-36): `SupplierReturn.supplierId` admite nulo para devolver stock sin proveedor. `20261106040000_inventory_movement_supplier`: `InventoryMovement.supplierId` guarda el proveedor de cada carga (nulo: sin proveedor), completado desde las recepciones de Compras. Las unidades por proveedor de un lote se calculan desde esas cargas y `SupplierReturn`; no se guardan aparte.
 
+`20261119120000_dosis_por_marca` (SISTEMA-108): `MedicineCatalogItem.doseText` y `doseSource`, dosis de la marca cuando el padrón no la escribe, con su fuente.
+
+`20261118140000_accion_por_presentacion` (SISTEMA-108): `MedicineCatalogItem.therapeuticAction`, acción terapéutica de cada presentación según el padrón.
+
+`20261118130000_guia_en_base_medicamentos` (SISTEMA-108): `MedicineCatalogItem.guideKey`, principio activo del padrón vinculado por CLAVE o código, para buscar la guía sin depender del texto de otras fuentes.
+
+`20261118120000_guia_principio_activo` (SISTEMA-108): `MedicineActiveGuide`, compartida (sin `organizationId`), una fila por principio activo normalizado (`activeKey` único) con acción terapéutica y vía del padrón, y uso y dosis orientativos (`dosageSource = "ia"`). Ver PRODUCTS.md.
+
 `20261106000000_medicine_catalog_pending` (SISTEMA-35): `MedicineCatalogPending` guarda los productos sin precio ni link hasta conseguirlos. No es referencia: ninguna búsqueda ni corrida de precios la lee, y un producto sale de ahí cuando entra a `MedicineCatalogItem`.
 
 `20261105033000_medicine_catalog_pack` (SISTEMA-26): `MedicineCatalogPack` guarda el código de un exhibidor de droguería, el código base y el factor (2 a 1000), con CHECK de que no sean el mismo código. Solo crea la tabla.
@@ -83,3 +91,5 @@ Transferencias, devoluciones, ajustes explícitos, balances materializados, audi
 `20261115140000_catalogo_ofertas` (SISTEMA-107): enum `OfferChannel` (`POS`, `CATALOG`, `BOTH`) y `Offer.channel` (por defecto `POS`, CHECK `Offer_channel_payment`: medio de pago sólo `POS`). `CatalogOrderItem.discountMinor` (por defecto 0; el CHECK `CatalogOrderItem_amounts` pasa a total = precio × cantidad − descuento, con descuento entre 0 y el bruto). `CatalogOrder` suma único `(id, organizationId)`. `CatalogOrderOffer` y `CatalogOrderOfferItem`: foto de cada oferta aplicada a un pedido, como `SaleOffer`/`SaleOfferItem`. Aditiva.
 
 `20261115150000_catalogo_modulo` (SISTEMA-107): `Organization.catalogEnabled` (falso por defecto). El catálogo online es un módulo que habilita el panel de plataforma. Aditiva.
+
+`20261117120000_preventa` (SISTEMA-108): preventa. `Organization.preventaEnabled` (falso por defecto). `PreventaSettings` (una por organización: sucursal con FK compuesta, efecto de la entrega enum `PreventaDeliveryEffect` `NONE`/`STOCK`/`SALE`, switches del preventista, pie del comprobante, `lastOrderNumber`). `PreventaSeller` (comisión por defecto del preventista en centésimos de punto, CHECK 0–10000, único por organización y usuario). `PreventaCustomer` (por cliente: preventista de la cartera, dirección, referencia, teléfono, latitud/longitud con CHECK de las dos o ninguna, días de visita como máscara 0–127). `PreventaOrder` (número único por organización, cliente, preventista, lista usada, estado enum `PreventaOrderStatus`, total, cobrado, `requestId` único + huella, repartidor, entrega con su efecto, venta y stock, cancelación, comisión y pago de comisión). `PreventaOrderItem` (precio de lista y del pedido, CHECK precio ≤ lista, descuento de ofertas y total). `PreventaOrderOffer`/`PreventaOrderOfferItem` (foto de ofertas, como `CatalogOrderOffer`; cuentan para el tope total). `PreventaPayment` (cobros del pedido, `requestId` único, CHECK importe > 0). `PreventaCommissionPayment` (pago de comisiones que agrupa pedidos). Permisos `PREVENTA_SELL`, `PREVENTA_DELIVER` y `PREVENTA_MANAGE` (este último a los roles con `ORGANIZATION_MANAGE`). Aditiva. Ver PREVENTA.md.

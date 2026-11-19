@@ -7,7 +7,10 @@ import { hash } from "@node-rs/argon2";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 
-import { provisionOrganizationGraph } from "../organizations/organization-provisioning";
+import {
+  crearRolesPreventa,
+  provisionOrganizationGraph,
+} from "../organizations/organization-provisioning";
 import { PrismaService } from "../prisma/prisma.service";
 import { generateBranchCode } from "../organizations/branch-code";
 import { recordPlatformAudit } from "./platform-audit";
@@ -98,6 +101,7 @@ export class PlatformOrganizationsService {
         name: true,
         createdAt: true,
         catalogEnabled: true,
+        preventaEnabled: true,
         subscription: { include: subscriptionInclude },
         // Para el selector de Soporte: farmacia o sucursal (SISTEMA-89).
         branches: {
@@ -131,6 +135,7 @@ export class PlatformOrganizationsService {
         createdAt: true,
         // Módulos aparte (SISTEMA-107): el switch del detalle lo muestra.
         catalogEnabled: true,
+        preventaEnabled: true,
         subscription: { include: subscriptionInclude },
         branches: {
           where: { deletedAt: null },
@@ -462,26 +467,33 @@ export class PlatformOrganizationsService {
   }
 
   /**
-   * Módulos que se contratan aparte (SISTEMA-107). Hoy, el catálogo online:
-   * apagado, la farmacia no ve la pantalla, su página pública no se ofrece y no
-   * puede crear ofertas para el catálogo. No borra nada de lo cargado.
+   * Módulos que se contratan aparte: catálogo online (SISTEMA-107) y preventa
+   * (SISTEMA-108). Apagado, la farmacia no ve la pantalla y la API responde
+   * 403; no se borra nada de lo cargado.
    */
   async updateModules(
     actorId: string,
     organizationId: string,
-    input: { catalogEnabled: boolean },
+    input: { catalogEnabled?: boolean; preventaEnabled?: boolean },
   ) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Organization" WHERE id=${organizationId}::uuid FOR UPDATE`;
       const before = await tx.organization.findUnique({
         where: { id: organizationId },
-        select: { catalogEnabled: true },
+        select: { catalogEnabled: true, preventaEnabled: true },
       });
       if (!before) throw new NotFoundException("Farmacia no encontrada.");
       const after = await tx.organization.update({
         where: { id: organizationId },
-        data: { catalogEnabled: input.catalogEnabled },
-        select: { catalogEnabled: true },
+        data: {
+          ...(input.catalogEnabled !== undefined
+            ? { catalogEnabled: input.catalogEnabled }
+            : {}),
+          ...(input.preventaEnabled !== undefined
+            ? { preventaEnabled: input.preventaEnabled }
+            : {}),
+        },
+        select: { catalogEnabled: true, preventaEnabled: true },
       });
       if (before.catalogEnabled !== after.catalogEnabled)
         await recordPlatformAudit(tx, {
@@ -492,9 +504,27 @@ export class PlatformOrganizationsService {
           entityType: "Organization",
           entityId: organizationId,
           organizationId,
-          before,
-          after,
+          before: { catalogEnabled: before.catalogEnabled },
+          after: { catalogEnabled: after.catalogEnabled },
         });
+      if (before.preventaEnabled !== after.preventaEnabled) {
+        // Preventa (SISTEMA-108): al prenderla quedan listos los roles
+        // Preventista y Repartidor (si la farmacia no los tenía).
+        const rolesCreados = after.preventaEnabled
+          ? await crearRolesPreventa(tx, organizationId)
+          : [];
+        await recordPlatformAudit(tx, {
+          actorId,
+          action: after.preventaEnabled
+            ? "PLATFORM_PREVENTA_ENABLED"
+            : "PLATFORM_PREVENTA_DISABLED",
+          entityType: "Organization",
+          entityId: organizationId,
+          organizationId,
+          before: { preventaEnabled: before.preventaEnabled },
+          after: { preventaEnabled: after.preventaEnabled, rolesCreados },
+        });
+      }
       return after;
     });
   }
