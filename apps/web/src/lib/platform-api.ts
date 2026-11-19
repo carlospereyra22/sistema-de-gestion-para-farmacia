@@ -133,6 +133,8 @@ export type PlatformOrganizationDetail = {
   createdAt: string;
   /** Módulo Catálogo online habilitado (SISTEMA-107). */
   catalogEnabled?: boolean;
+  /** Módulo Preventa habilitado (SISTEMA-108). */
+  preventaEnabled?: boolean;
   billing: PlatformBilling;
   subscription: PlatformSubscription | null;
   branches: { id: string; name: string; code: string; active: boolean }[];
@@ -332,13 +334,13 @@ export const updatePlatformSubscription = (
     "PATCH",
   );
 
-/** Prende o apaga los módulos aparte del abono (SISTEMA-107). */
+/** Prende o apaga los módulos aparte del abono (SISTEMA-107 y SISTEMA-108). */
 export const updatePlatformModules = (
   token: string,
   organizationId: string,
-  input: { catalogEnabled: boolean },
+  input: { catalogEnabled?: boolean; preventaEnabled?: boolean },
 ) =>
-  platformRequest<{ catalogEnabled: boolean }>(
+  platformRequest<{ catalogEnabled: boolean; preventaEnabled: boolean }>(
     token,
     `/organizations/${organizationId}/modules`,
     input,

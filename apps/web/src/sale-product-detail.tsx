@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   BadgePercent,
   ChevronLeft,
@@ -7,6 +7,7 @@ import {
   Minus,
   Package,
   Plus,
+  ScanBarcode,
 } from "lucide-react";
 import type { DetalleOfertaVenta } from "./lib/ofertas-carrito";
 import type { CatalogProduct } from "./lib/api";
@@ -32,7 +33,13 @@ export function SaleProductDetail({
   onInvalid,
   ofertas = [],
   onAddCombo,
+  junto,
+  enVenta = 0,
 }: {
+  /** Unidades de este producto que ya están en la venta. */
+  enVenta?: number;
+  /** Acceso chico junto al nombre (equivalentes, SISTEMA-108). */
+  junto?: ReactNode;
   /**
    * Ofertas vigentes del producto (SISTEMA-103). Si tiene, el bloque muestra
    * primero la oferta y se puede volver a la cara con la foto.
@@ -59,8 +66,19 @@ export function SaleProductDetail({
   }>({ vista: "oferta", indice: 0 });
   if (!product)
     return (
-      <div className="sale-product-detail flex h-[108px] shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-4 text-center text-sm text-slate-500">
-        Elegí un producto de la lista o escaneá un código.
+      <div className="sale-product-detail flex h-[108px] shrink-0 items-center justify-center gap-3 rounded-xl border border-dashed border-slate-200 bg-white px-4 text-sm text-slate-500">
+        <span className="rounded-xl bg-slate-50 p-2.5 text-slate-400">
+          <ScanBarcode size={22} aria-hidden />
+        </span>
+        <span className="flex flex-col">
+          <span className="font-medium text-slate-600">
+            Elegí un producto de la lista o escaneá un código.
+          </span>
+          <span className="text-xs text-slate-400">
+            Acá queda el último que agregues. Tocá un producto de la venta para
+            volver a verlo.
+          </span>
+        </span>
       </div>
     );
   const price = product.prices[0]?.amountMinor;
@@ -245,17 +263,6 @@ export function SaleProductDetail({
           title={product.name}
         >
           {product.name}
-          {ofertas.map((item, indice) => (
-            <button
-              key={item.id}
-              type="button"
-              title={`Ver la oferta ${item.nombre}`}
-              onClick={() => verCara("oferta", indice)}
-              className="ml-2 rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
-            >
-              {item.label}
-            </button>
-          ))}
         </p>
         <p className="truncate text-xs text-slate-500">
           {[
@@ -265,6 +272,12 @@ export function SaleProductDetail({
           ]
             .filter(Boolean)
             .join(" · ")}
+          {enVenta > 0 && (
+            <span className="font-semibold text-teal-700">
+              {" "}
+              · {enVenta} en la venta
+            </span>
+          )}
         </p>
         <div className="mt-1.5 flex items-center gap-3">
           <span className="whitespace-nowrap text-lg font-bold tabular-nums text-teal-800">
@@ -298,6 +311,21 @@ export function SaleProductDetail({
               <Plus size={15} />
             </button>
           </div>
+          {/* Ofertas, prospecto y equivalentes van abajo: el nombre usa todo el ancho. */}
+          <span className="flex min-w-0 items-center gap-1.5 overflow-hidden [&>button]:ml-0 [&>button]:shrink-0">
+            {ofertas.map((item, indice) => (
+              <button
+                key={item.id}
+                type="button"
+                title={`Ver la oferta ${item.nombre}`}
+                onClick={() => verCara("oferta", indice)}
+                className="rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+              >
+                {item.label}
+              </button>
+            ))}
+            {junto}
+          </span>
         </div>
       </div>
       <div className="flex shrink-0 flex-col gap-1.5">

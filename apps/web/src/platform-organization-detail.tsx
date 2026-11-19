@@ -680,6 +680,7 @@ export function PlatformOrganizationDetail({
         token={token}
         organizationId={organizationId}
         catalogEnabled={Boolean(data.catalogEnabled)}
+        preventaEnabled={Boolean(data.preventaEnabled)}
         onChanged={(message) => {
           setNotice(message);
           reload();

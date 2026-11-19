@@ -13,6 +13,8 @@ import { MedicineReferenceController } from "./medicine-reference.controller";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
 import { ExternalCatalogController } from "./external-catalog.controller";
+import { EquivalentesController } from "./equivalentes.controller";
+import { EquivalentesService } from "./equivalentes.service";
 
 @Module({
   imports: [AuthModule, AuditModule],
@@ -21,6 +23,7 @@ import { ExternalCatalogController } from "./external-catalog.controller";
     MedicineReferenceController,
     ExternalCatalogController,
     CatalogOfflineController,
+    EquivalentesController,
   ],
   providers: [
     ExternalCatalogService,
@@ -31,6 +34,7 @@ import { ExternalCatalogController } from "./external-catalog.controller";
     MedicineReferenceService,
     MedicineCatalogService,
     CatalogPriceRefreshService,
+    EquivalentesService,
   ],
 })
 export class CatalogModule {}

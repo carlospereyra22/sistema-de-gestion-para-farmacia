@@ -1,0 +1,1076 @@
+// Dosis orientativas, tanda 2 (SISTEMA-108). Ver guias-dosis.data.ts.
+import { tanda, type FilaDosis } from "./guias-dosis";
+
+const ESP = "la dosis la indica el médico especialista.";
+const HOSP = "Uso hospitalario: lo aplica el equipo de salud";
+
+const FILAS: FilaDosis[] = [
+  [
+    "producto cosmético",
+    "Cuidado de piel o cabello (dermocosmético).",
+    "Aplicar cada 12-24 h según el envase.",
+  ],
+  [
+    "accesorio",
+    "Accesorio de farmacia (cepillos, hilo dental, sacaleches y similares).",
+    "Uso cada 8-12 h o cuando haga falta, según el producto.",
+  ],
+  [
+    "protector solar",
+    "Protección solar.",
+    "Aplicar 30 min antes de exponerse y renovar cada 2 h y después de mojarse.",
+  ],
+  [
+    "soluc.parent/fisiol/glucos/otras",
+    "Soluciones (diálisis, suero, limpieza de lentes y otras).",
+    "Según el uso: lentes, cada 24 h al guardarlos; parenterales, cada vez que lo indique el equipo de salud.",
+  ],
+  [
+    "pendiente",
+    "Golosina o producto sin clasificar.",
+    "Consumo ocasional, cada 4-6 h como máximo según el envase.",
+  ],
+  [
+    "tiras reactivas",
+    "Tiras para test (embarazo, glucemia u otros).",
+    "Test de embarazo: dosis única con la primera orina. Glucemia: cada 6-24 h según indique el médico.",
+  ],
+  [
+    "dispositivo para aplic.insulina",
+    "Lapicera para aplicar insulina.",
+    "Cada aplicación de insulina, cada 8-24 h según el esquema indicado.",
+  ],
+  [
+    "poliaminopropilbiguanida+asoc.",
+    "Limpieza y conservación de lentes de contacto o heridas.",
+    "Lentes: cada 24 h al sacarlos, dejar en remojo al menos 6 h.",
+  ],
+  [
+    "bevacizumab",
+    "Tratamiento oncológico.",
+    `Infusión en el hospital cada 14-21 días; ${ESP}`,
+  ],
+  [
+    "bortezomib",
+    "Tratamiento oncológico (mieloma múltiple).",
+    `Inyección en el hospital cada 72-96 h (2 veces por semana) en ciclos; ${ESP}`,
+  ],
+  [
+    "caléndula+asoc.",
+    "Piel irritada, paspaduras y cicatrización.",
+    "Aplicar cada 8-12 h.",
+  ],
+  [
+    "cynara+boldo+asoc.",
+    "Digestión pesada y molestias del hígado.",
+    "Cada 8 h antes de las comidas, según envase.",
+  ],
+  [
+    "deferasirox",
+    "Exceso de hierro por transfusiones.",
+    `Cada 24 h en ayunas; ${ESP}`,
+  ],
+  [
+    "factor viii coagulación recomb.",
+    "Hemofilia A.",
+    `Inyección cada 48-72 h como prevención o ante sangrados; ${ESP}`,
+  ],
+  [
+    "hierro,sulfato",
+    "Anemia por falta de hierro.",
+    "Cada 24 h (o cada 12 h si lo indica el médico), lejos del té, café y lácteos. Niños: según peso.",
+  ],
+  ["letrozol", "Cáncer de mama hormonodependiente.", "2,5 mg cada 24 h."],
+  [
+    "levonorgestrel+etinilestradiol",
+    "Anticonceptivo oral.",
+    "1 comprimido cada 24 h a la misma hora, según el esquema del envase.",
+  ],
+  [
+    "melatonina",
+    "Dificultad para dormir y desfase horario.",
+    "1-3 mg cada 24 h, 30-60 min antes de acostarse.",
+  ],
+  [
+    "meropenem",
+    "Infecciones bacterianas graves.",
+    `${HOSP}, cada 8 h por vía endovenosa.`,
+  ],
+  [
+    "ondansetrón",
+    "Náuseas y vómitos.",
+    "Comprimidos: 8 mg cada 12 h, hasta 5 días (por quimioterapia, la primera 1-2 h antes). Inyectable: 4-8 mg IV lenta o IM cada 8-12 h.",
+  ],
+  [
+    "progesterona",
+    "Reemplazo hormonal y sostén del embarazo.",
+    "Cada 12-24 h (oral a la noche o vaginal), según indicación médica.",
+  ],
+  [
+    "propofol",
+    "Anestesia general.",
+    `${HOSP}, en infusión continua durante el procedimiento.`,
+  ],
+  [
+    "salicílico,ác.",
+    "Caspa, descamación, verrugas o acné.",
+    "Champú: cada 48-72 h. Loción o gel: cada 12-24 h.",
+  ],
+  [
+    "sodio,picosulfato",
+    "Constipación.",
+    "Cada 24 h a la noche (5-10 mg o 10-20 gotas).",
+  ],
+  [
+    "vaselina líquida",
+    "Constipación (lubricante intestinal).",
+    "1-2 cucharadas cada 24 h a la noche, lejos de las comidas; no usar mucho tiempo.",
+  ],
+  [
+    "zoledrónico,ác.",
+    "Osteoporosis y metástasis óseas.",
+    "Osteoporosis: infusión cada 365 días (1 por año). Oncología: cada 21-28 días, según el especialista.",
+  ],
+  ["adapaleno+benzoílo,peróxido", "Acné.", "Capa fina cada 24 h a la noche."],
+  [
+    "ampicilina",
+    "Infecciones bacterianas.",
+    "500 mg-1 g cada 6 h, 7-10 días. Inyectable: uso médico u hospitalario, cada 4-6 h según la infección.",
+  ],
+  [
+    "cannabidiol+asoc.",
+    "Hidratación y cuidado de la piel.",
+    "Aplicar cada 8-12 h.",
+  ],
+  [
+    "ceftriaxona",
+    "Infecciones bacterianas.",
+    "1-2 g cada 24 h inyectable (IM o EV), según indicación médica.",
+  ],
+  [
+    "clorhexidina",
+    "Antiséptico bucal o de la piel.",
+    "Enjuague o gel bucal: cada 12 h. Pastillas: 1 cada 2-3 h (máx. 8 por día). Piel: cada 12-24 h.",
+  ],
+  [
+    "colágeno tipo ii+asoc.",
+    "Suplemento para articulaciones.",
+    "1 toma cada 24 h.",
+  ],
+  [
+    "ergotamina+cafeína+asoc.",
+    "Crisis de migraña.",
+    "1-2 comprimidos al inicio y 1 más cada 30 min si hace falta (máx. 6 cada 24 h y 10 por semana).",
+  ],
+  [
+    "fsh",
+    "Tratamiento de fertilidad.",
+    `Inyección cada 24 h durante el ciclo; ${ESP}`,
+  ],
+  [
+    "furosemida",
+    "Edemas, presión alta e insuficiencia cardíaca.",
+    "20-40 mg cada 24 h a la mañana (o cada 12 h), según indicación. Inyectable: 20-40 mg IV lenta o IM; se puede repetir a las 2 h según la respuesta. La aplica un profesional.",
+  ],
+  [
+    "glimepiride+metformina",
+    "Diabetes tipo 2.",
+    "1 comprimido cada 12-24 h con las comidas.",
+  ],
+  [
+    "hedera helix",
+    "Tos con flema.",
+    "Cada 8 h, según envase (adultos 5-7,5 ml de jarabe).",
+  ],
+  [
+    "itraconazol",
+    "Infecciones por hongos (uñas, piel, vaginales).",
+    "100-200 mg cada 24 h con comida; uñas: pulsos de 200 mg cada 12 h una semana por mes.",
+  ],
+  [
+    "ketorolac trometamina",
+    "Dolor agudo e inflamación (oral u ocular).",
+    "Oral: 10 mg cada 4-6 h (máx. 40 mg/día, 5 días). Colirio: 1 gota cada 6-8 h (3-4 veces por día). Inyectable: 10-30 mg IM o IV cada 4-6 h (máx. 90 mg/día, 2 días).",
+  ],
+  ["norfloxacina", "Infecciones urinarias.", "400 mg cada 12 h, 3-10 días."],
+  [
+    "otilonio,bromuro",
+    "Colon irritable y cólicos intestinales.",
+    "40 mg cada 8-12 h antes de las comidas.",
+  ],
+  [
+    "proteínas de suero de leche",
+    "Suplemento de proteínas.",
+    "1 medida cada 24 h (o cada 12 h en deportistas).",
+  ],
+  ["sodio,fluoruro", "Prevención de caries.", "Cepillado cada 8-12 h."],
+  [
+    "vit.b12",
+    "Déficit de vitamina B12.",
+    "Oral: cada 24 h. Inyectable: cada 24-72 h al inicio y luego cada 30 días, según indicación.",
+  ],
+  [
+    "vit.e+asoc.",
+    "Antioxidante; cuidado de piel y mucosas.",
+    "Oral: cada 24 h. Tópico: cada 8-12 h.",
+  ],
+  [
+    "zolpidem",
+    "Insomnio.",
+    "5-10 mg cada 24 h, justo antes de acostarse; máx. 4 semanas.",
+  ],
+  [
+    "betametasona (acet.y fosf.disod)",
+    "Corticoide inyectable: inflamación y alergias.",
+    "Una inyección; se repite cada 7-21 días si lo indica el médico.",
+  ],
+  ["bromazepam", "Ansiedad.", "1,5-3 mg cada 8-12 h. No suspender de golpe."],
+  [
+    "candesartán cilexetil",
+    "Presión alta e insuficiencia cardíaca.",
+    "8-32 mg cada 24 h.",
+  ],
+  [
+    "carbamazepina",
+    "Epilepsia, neuralgia del trigémino y bipolaridad.",
+    "Cada 8-12 h (o cada 12 h la de liberación prolongada); se ajusta según indicación.",
+  ],
+  [
+    "colágeno+vit.e+asoc.",
+    "Suplemento para piel y articulaciones.",
+    "1 toma cada 24 h.",
+  ],
+  [
+    "condroitín,sulfato+glucosamina",
+    "Artrosis (cuidado del cartílago).",
+    "Cada 8-24 h según envase, por 3 meses o más.",
+  ],
+  ["creatina", "Suplemento deportivo.", "3-5 g cada 24 h."],
+  [
+    "dutasteride+tamsulosina",
+    "Agrandamiento benigno de la próstata.",
+    "1 cápsula cada 24 h, 30 min después de la misma comida.",
+  ],
+  [
+    "econazol,nitrato",
+    "Hongos de la piel y vaginales.",
+    "Crema: cada 12-24 h. Óvulo: cada 24 h a la noche.",
+  ],
+  [
+    "eltrombopag",
+    "Plaquetas bajas (trombocitopenia).",
+    `Cada 24 h, lejos de lácteos y antiácidos; ${ESP}`,
+  ],
+  [
+    "everolimus",
+    "Tratamiento oncológico y trasplantes.",
+    `Cada 24 h (oncología) o cada 12 h (trasplante); ${ESP}`,
+  ],
+  [
+    "fenofíbrico,ác.",
+    "Triglicéridos y colesterol altos.",
+    "1 cápsula cada 24 h.",
+  ],
+  [
+    "gentamicina",
+    "Infecciones bacterianas de piel u ojos.",
+    "Crema: cada 8-12 h. Colirio: 1-2 gotas cada 4 h. Inyectable: cada 24 h, uso médico.",
+  ],
+  [
+    "ginkgo biloba+asoc.",
+    "Memoria y circulación.",
+    "Cada 12-24 h con las comidas.",
+  ],
+  [
+    "glicerina+asoc.",
+    "Lubricante ocular o íntimo.",
+    "Gotas: cada 4-8 h o cuando haga falta. Gel: en cada uso.",
+  ],
+  [
+    "gliclazida",
+    "Diabetes tipo 2.",
+    "Liberación prolongada: 30-120 mg cada 24 h con el desayuno. Común: 80 mg cada 12-24 h.",
+  ],
+  [
+    "loratadina+betametasona",
+    "Alergia con inflamación intensa.",
+    "1 comprimido cada 12-24 h, solo por pocos días.",
+  ],
+  [
+    "meloxicam+pridinol",
+    "Dolor con contractura muscular.",
+    "1 comprimido cada 24 h con comida.",
+  ],
+  [
+    "miel+asoc.",
+    "Garganta irritada o cuidado capilar, según el producto.",
+    "Pastillas: cada 3-4 h. Capilar: según envase, cada 72 h.",
+  ],
+  ["ponatinib", "Tratamiento oncológico (leucemia).", `Cada 24 h; ${ESP}`],
+  [
+    "simeticona",
+    "Gases y distensión abdominal.",
+    "40-125 mg cada 6-8 h después de las comidas. Bebés: gotas antes de cada toma.",
+  ],
+  [
+    "sodio,cloruro+asoc.",
+    "Rehidratación o lavado nasal.",
+    "Sales: tomar a sorbos cada 1-2 h según pérdidas. Nasal: cada 4-8 h.",
+  ],
+  [
+    "surfactante pulmonar",
+    "Prematuros con dificultad respiratoria.",
+    `${HOSP} (neonatología), cada 6-12 h si hace falta.`,
+  ],
+  [
+    "tofacitinib",
+    "Artritis reumatoidea y colitis ulcerosa.",
+    "5 mg cada 12 h (o 11 mg cada 24 h la prolongada), según el especialista.",
+  ],
+  [
+    "valeriana+asoc.",
+    "Nerviosismo y dificultad para dormir.",
+    "Cada 8-12 h, o cada 24 h 1 h antes de dormir.",
+  ],
+  [
+    "vit.b,complejo",
+    "Déficit de vitaminas B, neuritis y cansancio.",
+    "1 toma cada 24 h. Inyectable: cada 24-72 h según indicación.",
+  ],
+  [
+    "zinc,óxido+asoc.",
+    "Paspaduras y protección de la piel.",
+    "Aplicar en cada cambio de pañal o cada 6-8 h.",
+  ],
+  [
+    "aceite de chía",
+    "Suplemento de omega 3.",
+    "1-2 cápsulas cada 24 h con comida.",
+  ],
+  [
+    "aceite de pescado",
+    "Suplemento de omega 3.",
+    "1-2 cápsulas cada 24 h con comida.",
+  ],
+  [
+    "alendronato",
+    "Osteoporosis.",
+    "70 mg cada 7 días en ayunas con un vaso de agua; no acostarse por 30 min.",
+  ],
+  ["ambrisentan", "Hipertensión pulmonar.", `5-10 mg cada 24 h; ${ESP}`],
+  [
+    "arginina",
+    "Lubricante íntimo o suplemento.",
+    "Gel: en cada uso. Oral: cada 12-24 h.",
+  ],
+  ["benzoílo,peróxido", "Acné.", "Aplicar cada 12-24 h; empezar cada 24 h."],
+  [
+    "calcio,carbonato+asoc.",
+    "Acidez o suplemento de calcio.",
+    "Antiácido: 1-2 comprimidos cada 4-6 h si hace falta. Calcio: cada 12-24 h con comida.",
+  ],
+  [
+    "calcio,citrato+vit.d3",
+    "Suplemento de calcio y vitamina D.",
+    "1 comprimido cada 12-24 h.",
+  ],
+  [
+    "carboximetilcelulosa sódica",
+    "Lágrimas artificiales (ojo seco).",
+    "1-2 gotas cada 4-6 h o cuando haga falta.",
+  ],
+  [
+    "carfilzomib",
+    "Tratamiento oncológico (mieloma múltiple).",
+    `Infusión en el hospital cada 7 días (a veces 2 días seguidos) en ciclos de 28 días; ${ESP}`,
+  ],
+  [
+    "centella asiática+asoc.",
+    "Celulitis, estrías y circulación.",
+    "Oral: cada 12-24 h. Crema: cada 12 h.",
+  ],
+  [
+    "dabigatrán",
+    "Anticoagulante: prevención de trombosis y ACV.",
+    "150 mg cada 12 h (110 mg cada 12 h según edad o riñón).",
+  ],
+  [
+    "desloratadina+betametasona",
+    "Alergia con inflamación intensa.",
+    "Cada 12-24 h, solo por pocos días.",
+  ],
+  [
+    "dexketoprofeno",
+    "Dolor agudo e inflamación.",
+    "25 mg cada 8 h (máx. 75 mg/día). Gel: cada 6-8 h. Inyectable: 50 mg IM o IV cada 8-12 h (máx. 150 mg/día, 2 días).",
+  ],
+  [
+    "dorzolamida+timolol",
+    "Glaucoma (presión ocular alta).",
+    "1 gota en cada ojo cada 12 h.",
+  ],
+  [
+    "doxiciclina",
+    "Infecciones bacterianas y acné.",
+    "100 mg cada 12 h el primer día y luego cada 24 h, con agua y sin acostarse.",
+  ],
+  [
+    "erlotinib",
+    "Tratamiento oncológico (pulmón, páncreas).",
+    `Cada 24 h en ayunas; ${ESP}`,
+  ],
+  ["eszopiclona", "Insomnio.", "1-3 mg cada 24 h, justo antes de acostarse."],
+  [
+    "ezetimibe+simvastatin",
+    "Colesterol alto.",
+    "1 comprimido cada 24 h a la noche.",
+  ],
+  [
+    "glucosamina",
+    "Artrosis (cuidado del cartílago).",
+    "1.500 mg cada 24 h (sobre o comprimidos). Inyectable: 1 ampolla IM cada 48 h (3 por semana) por 4-6 semanas.",
+  ],
+  [
+    "irinotecan",
+    "Tratamiento oncológico (colon).",
+    `Infusión en el hospital cada 14-21 días; ${ESP}`,
+  ],
+  [
+    "itopride",
+    "Digestión lenta e hinchazón.",
+    "50 mg cada 8 h antes de las comidas.",
+  ],
+  [
+    "levonorgestrel",
+    "Anticoncepción de emergencia.",
+    "1,5 mg dosis única lo antes posible (hasta 72 h después de la relación).",
+  ],
+  [
+    "lisado bacteriano",
+    "Prevención de infecciones respiratorias.",
+    "1 cápsula cada 24 h en ayunas, 10 días por mes durante 3 meses.",
+  ],
+  ["minociclina", "Acné e infecciones bacterianas.", "50-100 mg cada 12-24 h."],
+  [
+    "modafinilo",
+    "Somnolencia excesiva (narcolepsia).",
+    "100-200 mg cada 24 h a la mañana.",
+  ],
+  [
+    "mupirocina",
+    "Infecciones bacterianas de la piel (impétigo).",
+    "Aplicar cada 8 h, 5-10 días. Pomada nasal: en cada fosa cada 8-12 h, 5 días.",
+  ],
+  [
+    "omeprazol+sodio,bicarbonato",
+    "Acidez, reflujo y úlcera.",
+    "Cada 24 h en ayunas.",
+  ],
+  [
+    "oxibutinina",
+    "Vejiga hiperactiva e incontinencia.",
+    "5 mg cada 8-12 h (o cada 24 h la prolongada).",
+  ],
+  ["pantenol+asoc.", "Cuidado e hidratación de la piel.", "Aplicar cada 12 h."],
+  [
+    "promestriene",
+    "Sequedad vaginal (menopausia).",
+    "1 óvulo o aplicación cada 24 h por 20 días, luego según indicación.",
+  ],
+  [
+    "rituximab",
+    "Tratamiento oncológico y enfermedades autoinmunes.",
+    `Infusión en el hospital cada 7-21 días o cada 6 meses según el caso; ${ESP}`,
+  ],
+  [
+    "salicílico,ác.+glicólico,ác.",
+    "Piel grasa y con acné.",
+    "Lavar o aplicar cada 12-24 h.",
+  ],
+  ["vit.c+vit.d+zinc", "Refuerzo de defensas.", "1 toma cada 24 h."],
+  [
+    "albendazol",
+    "Parásitos intestinales.",
+    "400 mg dosis única (repetir a los 14 días si hace falta); otras parasitosis: cada 12-24 h según indicación.",
+  ],
+  [
+    "ambroxol",
+    "Tos con flema.",
+    "30 mg cada 8-12 h (o 75 mg prolongado cada 24 h).",
+  ],
+  [
+    "arándano,ext.+asoc.",
+    "Prevención de infecciones urinarias.",
+    "1 cápsula cada 12-24 h.",
+  ],
+  ["bicalutamida", "Cáncer de próstata.", "50 mg cada 24 h."],
+  [
+    "clozapina",
+    "Esquizofrenia resistente.",
+    `Cada 12-24 h con controles de sangre obligatorios; ${ESP}`,
+  ],
+  [
+    "copolímero vinílico",
+    "Adhesivo para prótesis dentales.",
+    "Aplicar cada 12-24 h al colocar la prótesis.",
+  ],
+  [
+    "doxorubicina",
+    "Tratamiento oncológico.",
+    `Infusión en el hospital cada 21 días; ${ESP}`,
+  ],
+  [
+    "etinilestradiol+gestodeno",
+    "Anticonceptivo oral.",
+    "1 comprimido cada 24 h a la misma hora, según el esquema del envase.",
+  ],
+  [
+    "factor viii",
+    "Hemofilia A.",
+    `Inyección cada 48-72 h como prevención o ante sangrados; ${ESP}`,
+  ],
+  [
+    "fentanilo",
+    "Dolor intenso crónico.",
+    "Parche: se cambia cada 72 h. Inyectable: uso hospitalario (anestesia o dolor), lo aplica el equipo de salud. Sublingual: para el dolor irruptivo, según indicación médica. Dosis según indicación médica (receta oficial).",
+  ],
+  [
+    "filgrastim",
+    "Defensas bajas por quimioterapia.",
+    `Inyección cada 24 h por varios días; ${ESP}`,
+  ],
+  ["fingolimod", "Esclerosis múltiple.", `0,5 mg cada 24 h; ${ESP}`],
+  [
+    "fulvestrant",
+    "Cáncer de mama.",
+    `500 mg cada 14 días el primer mes y luego cada 28 días; ${ESP}`,
+  ],
+  [
+    "glicólico,ác.",
+    "Renovación de la piel (arrugas, manchas).",
+    "Aplicar cada 24 h a la noche.",
+  ],
+  [
+    "gramicidina+neomicina+asoc.",
+    "Dolor e infección de garganta.",
+    "1 pastilla cada 2-3 h dejándola disolver (máx. según envase).",
+  ],
+  [
+    "hidroxipropilmetilcelulosa",
+    "Lágrimas artificiales (ojo seco).",
+    "1-2 gotas cada 4-6 h o cuando haga falta.",
+  ],
+  [
+    "hierro,polimaltosato",
+    "Anemia por falta de hierro.",
+    "Cada 24 h con o después de comer. Niños: gotas según peso.",
+  ],
+  [
+    "isoflavonas de soja+asoc.",
+    "Síntomas de la menopausia.",
+    "1 toma cada 24 h.",
+  ],
+  [
+    "labetalol",
+    "Presión alta (también en el embarazo).",
+    "100-400 mg cada 12 h; inyectable: uso médico.",
+  ],
+  ["macitentan", "Hipertensión pulmonar.", `10 mg cada 24 h; ${ESP}`],
+  [
+    "medidor de glucosa",
+    "Control de glucemia.",
+    "Medir cada 6-24 h según indique el médico.",
+  ],
+  [
+    "paliperidona",
+    "Esquizofrenia.",
+    "Oral: cada 24 h a la mañana. Inyectable: cada 30 días (o cada 3 meses), según el especialista.",
+  ],
+  [
+    "paracetamol+clorfeniramina+asoc.",
+    "Resfrío con congestión y estornudos.",
+    "Cada 6-8 h según envase (máx. 4 g de paracetamol por día). Da sueño.",
+  ],
+  [
+    "proteínas de suero",
+    "Suplemento de proteínas.",
+    "1 medida cada 24 h (o cada 12 h en deportistas).",
+  ],
+  [
+    "proteínas+grasas+carbohid.",
+    "Complemento nutricional.",
+    "1 toma cada 8-24 h, según indique el médico o nutricionista.",
+  ],
+  [
+    "spirulina+asoc.",
+    "Suplemento dietario.",
+    "1 toma cada 12-24 h antes de las comidas.",
+  ],
+  [
+    "vancomicina",
+    "Infecciones bacterianas graves.",
+    `${HOSP}, cada 8-12 h por vía endovenosa (oral cada 6 h para colitis).`,
+  ],
+  ["amlodipina+benazepril", "Presión alta.", "1 cápsula cada 24 h."],
+  [
+    "arnica montana+asoc.",
+    "Golpes, moretones y dolores musculares.",
+    "Aplicar cada 6-8 h.",
+  ],
+  [
+    "baclofeno",
+    "Espasticidad (rigidez muscular).",
+    "5-20 mg cada 8 h; se aumenta de a poco.",
+  ],
+  [
+    "betacaroteno+asoc.",
+    "Preparación de la piel para el sol.",
+    "1 toma cada 24 h desde 2-4 semanas antes de la exposición.",
+  ],
+  ["bisacodilo", "Constipación.", "5-10 mg cada 24 h a la noche."],
+  [
+    "brexpiprazol",
+    "Esquizofrenia y depresión (complemento).",
+    "Cada 24 h; se ajusta según indicación médica.",
+  ],
+  [
+    "bupivacaína",
+    "Anestesia local o regional.",
+    `${HOSP}, dosis única por procedimiento.`,
+  ],
+  [
+    "buprenorfina",
+    "Dolor crónico moderado a intenso.",
+    "Parche: se cambia cada 7 días (o cada 72-96 h según el parche).",
+  ],
+  ["cefepime", "Infecciones bacterianas graves.", `${HOSP}, cada 8-12 h.`],
+  [
+    "cisplatino",
+    "Tratamiento oncológico.",
+    `Infusión en el hospital cada 21 días; ${ESP}`,
+  ],
+  [
+    "cladribina",
+    "Esclerosis múltiple y leucemia.",
+    `Comprimidos: cada 24 h unos pocos días por año; ${ESP}`,
+  ],
+  [
+    "dehidrocólico,ác.+asoc.",
+    "Digestión pesada.",
+    "1 comprimido cada 8 h después de las comidas.",
+  ],
+  [
+    "dexametasona+neomicina+asoc.",
+    "Congestión e infección nasal u ocular.",
+    "Gotas cada 6-8 h, no más de 7 días. Colirio: 1-2 gotas cada 4-6 h.",
+  ],
+  [
+    "dimenhidrinato",
+    "Mareo en viajes, náuseas y vértigo.",
+    "50-100 mg cada 4-6 h (máx. 400 mg/día); para viajes, 30 min antes.",
+  ],
+  [
+    "dimetil fumarato",
+    "Esclerosis múltiple.",
+    "240 mg cada 12 h con comida (se empieza con 120 mg).",
+  ],
+  [
+    "etanercept",
+    "Artritis reumatoidea, psoriasis y otras.",
+    "Inyección de 50 mg cada 7 días (o 25 mg cada 72-96 h).",
+  ],
+  [
+    "extractos vegetales+asoc.",
+    "Relajación o alivio muscular, según el producto.",
+    "Aplicar u tomar cada 8-12 h según envase.",
+  ],
+  ["ezetimibe", "Colesterol alto.", "10 mg cada 24 h."],
+  [
+    "fenitoína",
+    "Epilepsia.",
+    "Cada 8-24 h según indicación médica (habitual 300 mg/día).",
+  ],
+  [
+    "galantamina",
+    "Enfermedad de Alzheimer.",
+    "Cada 12 h con comida (o cada 24 h la prolongada); se ajusta.",
+  ],
+  [
+    "garcinia cambogia+asoc.",
+    "Suplemento para el control del peso.",
+    "Cada 8-12 h antes de las comidas, según envase.",
+  ],
+  ["ginseng+asoc.", "Cansancio y energía.", "1 toma cada 24 h a la mañana."],
+  [
+    "glibenclamida",
+    "Diabetes tipo 2.",
+    "2,5-5 mg cada 12-24 h antes de las comidas.",
+  ],
+  ["hierbas medicinales", "Remedio herbario.", "Cada 8-12 h según el envase."],
+  ["hierro+vit.b12+fólico,ác.", "Anemia.", "1 toma cada 24 h."],
+  [
+    "ibuprofeno+clorzoxazona",
+    "Dolor con contractura muscular.",
+    "1 comprimido cada 8 h con comida.",
+  ],
+  [
+    "latanoprost",
+    "Glaucoma (presión ocular alta).",
+    "1 gota en cada ojo cada 24 h a la noche.",
+  ],
+  [
+    "memantine+donepecilo",
+    "Enfermedad de Alzheimer.",
+    "1 cápsula cada 24 h a la noche.",
+  ],
+  [
+    "miconazol",
+    "Hongos de piel, boca o vagina.",
+    "Crema: cada 12 h. Gel bucal: cada 6 h. Óvulo: cada 24 h a la noche.",
+  ],
+  ["mirabegrón", "Vejiga hiperactiva.", "25-50 mg cada 24 h."],
+  ["nalbufina", "Dolor moderado a intenso.", `${HOSP}, cada 3-6 h.`],
+  [
+    "niacinamida",
+    "Cuidado de la piel (manchas, poros).",
+    "Aplicar cada 12-24 h.",
+  ],
+  [
+    "orlistat",
+    "Obesidad.",
+    "60-120 mg con cada comida principal (cada 8 h), o se omite si no se come.",
+  ],
+  ["oxcarbazepina", "Epilepsia.", "300-600 mg cada 12 h; se ajusta."],
+  [
+    "permetrina",
+    "Piojos y sarna.",
+    "Piojos: dosis única, repetir a los 7 días. Sarna: dejar actuar 8-12 h y repetir a los 7 días.",
+  ],
+  ["poloxamer", "Limpieza de lentes de contacto.", "Cada 24 h al sacarlos."],
+  [
+    "remifentanilo",
+    "Analgesia durante anestesia.",
+    `${HOSP}, en infusión continua.`,
+  ],
+  ["riociguat", "Hipertensión pulmonar.", `Cada 8 h; se ajusta; ${ESP}`],
+  [
+    "sumatriptán",
+    "Crisis de migraña.",
+    "50-100 mg al inicio; se puede repetir a las 2 h (máx. 200 mg cada 24 h). Inyectable: 6 mg subcutánea; se puede repetir a la 1 h (máx. 12 mg cada 24 h).",
+  ],
+  ["telmisartán+amlodipina", "Presión alta.", "1 comprimido cada 24 h."],
+  [
+    "tetrahidrozolina",
+    "Ojos rojos e irritados.",
+    "1-2 gotas cada 6-8 h, no más de 3 días.",
+  ],
+  [
+    "timolol,maleato",
+    "Glaucoma (presión ocular alta).",
+    "1 gota cada 12 h (o cada 24 h el gel).",
+  ],
+  ["tretinoína", "Acné y arrugas.", "Capa fina cada 24 h a la noche."],
+  [
+    "trimebutina+simeticona",
+    "Colon irritable con gases.",
+    "1 comprimido cada 8 h antes de las comidas.",
+  ],
+  ["vit.e", "Suplemento antioxidante.", "1 cápsula cada 24 h."],
+  [
+    "voriconazol",
+    "Infecciones graves por hongos.",
+    "200 mg cada 12 h, 1 h antes o después de comer (dosis de carga mayor).",
+  ],
+  [
+    "acetilsalicílico,ác.+asoc.",
+    "Resaca, dolor de cabeza y malestar.",
+    "1 dosis cada 6-8 h si hace falta (máx. 4 por día).",
+  ],
+  [
+    "adalimumab",
+    "Artritis, psoriasis, Crohn y otras enfermedades autoinmunes.",
+    "Inyección de 40 mg cada 14 días (o cada 7 días según el caso).",
+  ],
+  [
+    "alcohol etílico",
+    "Antiséptico de manos y piel.",
+    "Aplicar cada vez que haga falta (cada 1-2 h en uso frecuente).",
+  ],
+  [
+    "amiodarona",
+    "Arritmias.",
+    "200 mg cada 24 h luego de la carga inicial; según indicación del cardiólogo.",
+  ],
+  [
+    "bosutinib",
+    "Tratamiento oncológico (leucemia).",
+    `Cada 24 h con comida; ${ESP}`,
+  ],
+  [
+    "calamina+difenhidramina",
+    "Picazón, picaduras y varicela.",
+    "Aplicar cada 6-8 h.",
+  ],
+  [
+    "cannabidiol",
+    "Epilepsias refractarias (uso médico).",
+    `Cada 12 h; se ajusta; ${ESP}`,
+  ],
+  ["cariprazina", "Esquizofrenia y trastorno bipolar.", "1,5-6 mg cada 24 h."],
+  [
+    "cartílago de tiburón+asoc.",
+    "Suplemento para articulaciones.",
+    "Cada 8-12 h con las comidas, según envase.",
+  ],
+  [
+    "ciclofosfamida",
+    "Tratamiento oncológico y autoinmune.",
+    `Infusión cada 21-28 días u oral cada 24 h según el esquema; ${ESP}`,
+  ],
+  [
+    "cinacalcet",
+    "Paratiroides hiperactiva (calcio alto).",
+    "30-180 mg cada 24 h con comida.",
+  ],
+  [
+    "cinitaprida",
+    "Digestión lenta y reflujo.",
+    "1 mg cada 8 h, 15 min antes de las comidas.",
+  ],
+  [
+    "ciproterona",
+    "Exceso de hormonas masculinas o cáncer de próstata.",
+    "Cada 8-24 h según indicación médica.",
+  ],
+  [
+    "clindamicina+ketoconazol",
+    "Infecciones vaginales mixtas.",
+    "1 óvulo cada 24 h a la noche, 3-7 días.",
+  ],
+  [
+    "colistina metansulfonato",
+    "Infecciones bacterianas graves.",
+    `${HOSP}, cada 8-12 h.`,
+  ],
+  [
+    "dapagliflozina+metformina,clorh.",
+    "Diabetes tipo 2.",
+    "1 comprimido cada 12 h con las comidas (la de liberación prolongada XR, cada 24 h con la cena).",
+  ],
+  ["darifenacina", "Vejiga hiperactiva.", "7,5-15 mg cada 24 h."],
+  [
+    "desmopresina acetato",
+    "Enuresis nocturna y diabetes insípida.",
+    "Cada 24 h antes de dormir (o cada 8-12 h en diabetes insípida), según indicación.",
+  ],
+  [
+    "drospirenona",
+    "Anticonceptivo sin estrógenos.",
+    "1 comprimido cada 24 h a la misma hora, sin pausa.",
+  ],
+  [
+    "enzimas digestivas",
+    "Mala digestión por falta de enzimas del páncreas.",
+    "Con cada comida (cada 4-6 h) y colaciones; dosis según indicación.",
+  ],
+  ["fampridina", "Esclerosis múltiple (marcha).", "10 mg cada 12 h en ayunas."],
+  [
+    "fsh+lh",
+    "Tratamiento de fertilidad.",
+    `Inyección cada 24 h durante el ciclo; ${ESP}`,
+  ],
+  [
+    "fórm.etapa 4",
+    "Leche infantil de crecimiento (desde 2 años).",
+    "1 taza cada 8-12 h.",
+  ],
+  [
+    "fórm.para prematuros",
+    "Leche para bebés prematuros.",
+    "Tomas cada 2-3 h según indique el neonatólogo.",
+  ],
+  [
+    "gemfibrozil",
+    "Triglicéridos altos.",
+    "600 mg cada 12 h, 30 min antes de las comidas.",
+  ],
+  [
+    "glicerina",
+    "Constipación (supositorio) o hidratación.",
+    "Supositorio: 1 cada 24 h si hace falta. Gotas oftálmicas: 1-2 gotas cada 4-8 h o cuando haga falta.",
+  ],
+  [
+    "ibuprofeno+cafeína",
+    "Dolor y dolor de cabeza.",
+    "1 comprimido cada 6-8 h con comida (máx. 3 por día).",
+  ],
+  [
+    "imipenem+cilastatín",
+    "Infecciones bacterianas graves.",
+    `${HOSP}, cada 6-8 h.`,
+  ],
+  [
+    "imiquimod",
+    "Verrugas genitales y lesiones de piel.",
+    "Crema 5%: cada 48-72 h (3 veces por semana) a la noche. Crema 3,75%: cada 24 h a la noche, en ciclos de 2 semanas.",
+  ],
+  [
+    "lenvatinib",
+    "Tratamiento oncológico (tiroides, riñón, hígado).",
+    `Cada 24 h; ${ESP}`,
+  ],
+  [
+    "levodopa+carbidopa+entacapone",
+    "Parkinson.",
+    "1 comprimido cada 3-6 h según el esquema indicado.",
+  ],
+  [
+    "levomepromazina",
+    "Psicosis, agitación y dolor.",
+    "Cada 8-24 h según indicación médica.",
+  ],
+  ["limeciclina", "Acné e infecciones bacterianas.", "300 mg cada 12-24 h."],
+  ["nebivolol+hidroclorotiazida", "Presión alta.", "1 comprimido cada 24 h."],
+  [
+    "neomicina+asoc.",
+    "Olor de pies o infecciones leves de piel.",
+    "Aplicar cada 12-24 h.",
+  ],
+  [
+    "nicotina",
+    "Dejar de fumar.",
+    "Parche: cada 24 h. Chicle o pastilla: 1 cada 1-2 h cuando aparecen las ganas (máx. según envase).",
+  ],
+  [
+    "penicilina g benzatínica",
+    "Infecciones (sífilis, faringitis, fiebre reumática).",
+    "Inyección IM: dosis única o cada 21-28 días como prevención, según indicación.",
+  ],
+  ["pioglitazona", "Diabetes tipo 2.", "15-45 mg cada 24 h."],
+  [
+    "prucalopride",
+    "Constipación crónica.",
+    "2 mg cada 24 h (1 mg en mayores de 65).",
+  ],
+  [
+    "repaglinida",
+    "Diabetes tipo 2.",
+    "0,5-4 mg antes de cada comida principal (cada 6-8 h).",
+  ],
+  ["tamoxifeno", "Cáncer de mama.", "20 mg cada 24 h."],
+  ["teriflunomida", "Esclerosis múltiple.", "14 mg cada 24 h."],
+  [
+    "vinorelbine",
+    "Tratamiento oncológico.",
+    `Infusión cada 7 días u oral según el esquema; ${ESP}`,
+  ],
+  ["vit.a+vit.e+urea", "Piel seca.", "Aplicar cada 12-24 h."],
+  ["vit.b,complejo+asoc.", "Suplemento de vitaminas B.", "1 toma cada 24 h."],
+  ["vit.c+asoc.", "Suplemento de vitamina C.", "1 toma cada 24 h."],
+  [
+    "vit.d",
+    "Déficit de vitamina D.",
+    "Gotas cada 24 h, o dosis mayores cada 7-30 días según indicación.",
+  ],
+  [
+    "ácidos grasos+asoc.",
+    "Higiene e hidratación de la piel.",
+    "Usar cada 12-24 h.",
+  ],
+  [
+    "aceite de citronela",
+    "Repelente de insectos.",
+    "Aplicar cada 2-4 h mientras haya exposición.",
+  ],
+  [
+    "aceite de pescado+asoc.",
+    "Suplemento de omega 3.",
+    "1-2 cápsulas cada 24 h con comida.",
+  ],
+  ["alantoína+asoc.", "Cuidado e higiene de la piel.", "Aplicar cada 12 h."],
+  [
+    "alcohol etílico+asoc.",
+    "Antiséptico de manos.",
+    "Aplicar cada vez que haga falta (cada 1-2 h en uso frecuente).",
+  ],
+  [
+    "alverina+simeticona",
+    "Colon irritable con gases.",
+    "1 cápsula cada 8-12 h antes de las comidas.",
+  ],
+  [
+    "amoxicilina+ambroxol",
+    "Infecciones respiratorias con flema.",
+    "Cada 8-12 h según presentación, 7-10 días.",
+  ],
+  [
+    "antígenos virus influenza",
+    "Vacuna antigripal.",
+    "Una dosis cada 365 días (1 por año, antes del invierno).",
+  ],
+  [
+    "atracurio,besilato",
+    "Relajante muscular en anestesia.",
+    `${HOSP}, en infusión continua o dosis repetidas durante el procedimiento.`,
+  ],
+  [
+    "bario,sulfato",
+    "Contraste para estudios radiológicos.",
+    "Dosis única antes del estudio, según las indicaciones del servicio de imágenes.",
+  ],
+  [
+    "betametasona+gentamicina+asoc.",
+    "Infección e inflamación de la piel.",
+    "Aplicar cada 12 h, hasta 2 semanas.",
+  ],
+  ["bisoprolol+hidroclorotiazida", "Presión alta.", "1 comprimido cada 24 h."],
+  [
+    "cabazitaxel",
+    "Tratamiento oncológico (próstata).",
+    `Infusión en el hospital cada 21 días; ${ESP}`,
+  ],
+  [
+    "calcio,alginato",
+    "Apósito para heridas con exudado.",
+    "Cambiar cada 24-72 h según la herida.",
+  ],
+  [
+    "calcio,carbonato+vit.d3",
+    "Suplemento de calcio y vitamina D.",
+    "1 comprimido cada 12-24 h con comida.",
+  ],
+  [
+    "cefazolina",
+    "Infecciones bacterianas y profilaxis quirúrgica.",
+    `${HOSP}, cada 8 h.`,
+  ],
+  [
+    "ciprofloxacina+hidrocortisona",
+    "Otitis externa.",
+    "3 gotas en el oído cada 12 h, 7 días.",
+  ],
+  [
+    "citicolina",
+    "Memoria y recuperación neurológica.",
+    "500-1.000 mg cada 12-24 h. Inyectable: 500-1.000 mg IM o IV cada 12-24 h.",
+  ],
+  ["colágeno", "Suplemento para piel y articulaciones.", "1 toma cada 24 h."],
+  [
+    "dextrosa",
+    "Aporte de glucosa (suero o polvo).",
+    "Hipoglucemia: 15-20 g por boca y repetir cada 15 min si hace falta. Suero: según indicación médica.",
+  ],
+  ["dimeticona", "Piojos.", "Dosis única y repetir a los 7 días."],
+  [
+    "fenobarbital",
+    "Epilepsia.",
+    "Cada 24 h a la noche (o cada 12 h), según indicación médica.",
+  ],
+  [
+    "fluorouracilo",
+    "Tratamiento oncológico o lesiones de piel (crema).",
+    `Crema: cada 12 h por 2-4 semanas. Inyectable: ${ESP}`,
+  ],
+];
+
+export const DOSIS_TANDA_2 = tanda(FILAS);

@@ -101,6 +101,17 @@ type SaleInput = {
   skippedOfferIds?: string[];
 };
 
+/** Venta pedida por otro módulo: siempre comprobante interno y con clave de reintento. */
+export type ModuleSaleInput = Omit<
+  SaleInput,
+  | "fiscalEnvironment"
+  | "confirmProduction"
+  | "fiscalOptions"
+  | "documentType"
+  | "confirmHomologation"
+  | "appliedOffers"
+> & { clientOperationId: string };
+
 export type OfflineSaleInput = SaleInput & {
   clientOperationId: string;
   occurredAt: string;
@@ -1016,6 +1027,52 @@ export class SalesService {
     offline?: OfflineSaleContext,
   ) {
     await this.assert(actorId, organizationId, "SALE_MANAGE");
+    return this.registrarVenta(
+      actorId,
+      organizationId,
+      branchId,
+      input,
+      offline,
+    );
+  }
+
+  /**
+   * Venta que registra otro módulo con su propio permiso ya verificado
+   * (Preventa, SISTEMA-108: el repartidor entrega sin tener Ventas). Mismas
+   * reglas que una venta del mostrador: precios, stock, caja y crédito.
+   */
+  async completeFromModule(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    input: ModuleSaleInput,
+  ) {
+    // Lo cobra quien entrega, lejos de una caja: el cobro queda siempre en
+    // Cobros pendientes hasta que se rinde (decisión SISTEMA-108).
+    return this.registrarVenta(
+      actorId,
+      organizationId,
+      branchId,
+      {
+        ...input,
+        payments: input.payments.map(({ method, amountMinor }) => ({
+          method,
+          amountMinor,
+        })),
+      },
+      undefined,
+      { cobroSinCaja: true },
+    );
+  }
+
+  private async registrarVenta(
+    actorId: string,
+    organizationId: string,
+    branchId: string,
+    input: SaleInput,
+    offline?: OfflineSaleContext,
+    opciones?: { cobroSinCaja?: boolean },
+  ) {
     const isProduction = input.fiscalEnvironment === "PRODUCTION";
     if (
       input.documentType === "INVOICE" &&
@@ -1661,7 +1718,7 @@ export class SalesService {
           let collectionSessionId = collectionSessions[0];
           // Sin conexión la venta ya se cobró: la regla de exigir caja abierta
           // no la frena; sin caja el cobro queda pendiente de asignar.
-          if (!offline)
+          if (!offline && !opciones?.cobroSinCaja)
             await assertCollectionSession(
               tx,
               branchId,

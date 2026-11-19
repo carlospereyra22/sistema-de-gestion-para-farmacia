@@ -44,6 +44,9 @@ describe("permisos por módulo", () => {
         "PAYABLE_READ",
         "PAYABLE_MANAGE",
         "PAYABLE_PAY",
+        "PREVENTA_SELL",
+        "PREVENTA_DELIVER",
+        "PREVENTA_MANAGE",
       ]),
     );
   });

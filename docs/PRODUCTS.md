@@ -186,3 +186,122 @@ Las droguerías a veces entregan un medicamento importado idéntico al nacional 
 JsBarcode genera Code 128 localmente sin servicios externos. Vista previa e impresión HTML/SVG aislada en iframe, textos escapados, de 1 a 210 copias. A4 vertical, margen 10 mm, etiquetas recortables de 62 × 36 mm, tres columnas y siete filas (21 por hoja). No corresponde a una plantilla comercial de papel autoadhesivo. Incluye nombre, unidad guardada y código legible, sin precio. El código no es EAN/GTIN ni reemplaza identificación sanitaria.
 
 Imprimir al 100%, sin ajustar escala y sin encabezados/pies del navegador. Probar primero una etiqueta con el lector real. Las pruebas automáticas verifican generación estable, reutilización, permisos, aislamiento, colisión, escape HTML, Code 128 y paginado. La impresión física y lectura óptica requieren validación en el equipo del usuario. No se despliega producción automáticamente.
+
+## Ficha del medicamento (SISTEMA-108)
+
+En el editor de un medicamento, debajo de Detalles farmacéuticos, la tarjeta
+"Ficha del medicamento" muestra **para qué sirve**, **cada cuánto se suele tomar**,
+vía y principio activo (`GET catalog/medicine-references/ficha?q=&codigos=&principioActivo=`,
+permiso `CATALOG_READ`). Se consulta sola al abrir un producto guardado.
+
+- **Guía por principio activo** (`MedicineActiveGuide`, compartida): una fila por
+  principio activo del padrón (unas 2.100). Acción terapéutica y vía son las más
+  frecuentes entre sus presentaciones vigentes. Uso y dosis habitual de adultos
+  salen de `apps/api/src/catalog/guias-dosis.data.ts`: un resumen orientativo
+  generado con IA (`dosageSource = "ia"`). En pantalla no se muestra una leyenda de la fuente (pedido del usuario). Los oncológicos
+  y de especialista dicen que la dosis la indica el médico.
+- Cada medicamento de la base guarda el principio activo del padrón en
+  `MedicineCatalogItem.guideKey`, vinculado por CLAVE o, si viene de otra fuente,
+  por código. La guía se busca primero por ese vínculo (el `activeIngredient` de
+  otras fuentes puede estar mal o abreviado distinto: Alikal figuraba como sulfato
+  de magnesio), después por el principio activo del producto y por último por el
+  texto de la base. Sin guía, se consulta el padrón en vivo.
+- Se carga con `pnpm --filter @gestion/api catalogo-medicamentos guias` y se
+  refresca sola en cada corrida del padrón (09:00 y 17:00). Para sumar o corregir
+  dosis se edita el archivo de datos y se vuelve a correr el comando.
+- Cobertura (18/11/2026): los 2.122 principios activos del padrón tienen uso y
+  dosis, repartidos en `guias-dosis.data.ts` y `guias-dosis-2.data.ts` a
+  `guias-dosis-8.data.ts`. Toda dosis se expresa con intervalo ("cada 8 h"; semanal,
+  mensual o anual en días; "dosis única"), y un test lo obliga. Oncológicos y de
+  especialista dan el intervalo y aclaran que la dosis la indica el especialista.
+- Si no hay coincidencia por código ni principio activo, se busca el nombre exacto
+  del producto en la base de medicamentos (solo si todas las coincidencias dan el
+  mismo principio activo).
+- "Buscar prospecto" abre una búsqueda web (el padrón no publica el link), e
+  "Indicaciones de la farmacia" (campo `description` del producto) es una nota libre
+  de cada farmacia.
+
+## Equivalentes y productos relacionados (SISTEMA-108)
+
+`GET organizations/:org/branches/:branch/catalog/equivalentes` (permiso
+`CATALOG_READ` y acceso a la sucursal) devuelve, desde la base de medicamentos:
+
+- **Equivalentes**: misma droga del padrón (`guideKey`), misma forma y misma dosis.
+  - Dosis: de la presentación o el nombre, con todos los componentes ("320/25 mg"
+    ≠ "160/25 mg"), en mg o mg/ml para comparar ("1 g" = "1000 mg", "2%" =
+    "100 mg/5 ml", "5 g/100 g" = "5%"), pegada al texto ("50mgcomp", "Ped.250 mg"),
+    sin unidad al principio ("500 comp.") o como número del nombre ("SINDOL 600",
+    "AMLODICORD 5"; nunca el envase: "x20", "4 x 4").
+  - Si al elegido le falta la dosis, se toma de otras presentaciones con el mismo
+    nombre **y la misma forma**, cuando todas dicen lo mismo.
+  - Sin dosis escrita: dos presentaciones se dan por iguales solo si en esa forma la
+    droga casi nunca la escribe (dipirona en comprimidos) y el nombre no marca otra
+    potencia ("FORTE", "PLUS", "DUO", "PED.", proporciones "14:1"…). Si no, van a
+    **Para confirmar** (plegado), con el aviso de la fila.
+- **Otros con la misma droga**: otra concentración o forma, sin "Mejor $/u" ni
+  porcentaje (no se comparan precios entre dosis distintas).
+- Fórmulas abiertas ("+asoc.", multivitamínicos, minerales): no hay equivalentes,
+  solo **Productos relacionados**. Categorías que no son una droga (cosméticos,
+  accesorios, protectores solares, alimentos, fórmulas infantiles): sin alternativas.
+- Marcas sin dosis en el padrón: si alguna farmacia la tiene cargada, `pnpm --filter
+@gestion/api catalogo-medicamentos dosis-marcas` toma la dosis de la composición de
+  la ficha de AlfaBeta (mismo nombre exacto y misma forma; si no, nada) y la guarda en
+  `doseText`. Las equivalencias la usan como si estuviera escrita.
+- Orden: por precio por unidad, como Previta. Stock: vendible de la sucursal (sin
+  lotes vencidos), igual que en Ventas.
+
+El medicamento se identifica por sus códigos; si no, por nombre y presentación
+(comparada sin espacios ni puntos, para AlfaBeta) o por la droga de ese nombre. El
+principio activo del padrón manda sobre el cargado en el producto. Cada fila marca si
+la farmacia ya tiene el producto (precio de "Precio general" y stock de la sucursal).
+Precio por unidad: "comp. x 20" → 20; "a. x 25 x 2 ml" → 25 ampollas; jarabes y cremas no se cuentan. Hasta 30 por grupo.
+
+Dónde se ve: Ventas (una pastilla junto al nombre del producto elegido, solo si hay
+alternativas; abre un panel y permite elegir uno propio con stock, sin cambiar la
+caja del producto), Productos (debajo de la Ficha del medicamento) e Inicio (botón
+"Ver equivalentes" al desplegar un medicamento; consulta solo al pedirlo).
+
+En Ventas, junto a esa pastilla, "Prospecto" abre la Ficha (para qué sirve, cada
+cuánto se toma, vía, condición de venta), las indicaciones de la farmacia y el link
+para buscar el prospecto completo; se consulta al abrirla. El cuadro del producto
+mantiene a la vista el último agregado (con "N en la venta") hasta que se elija
+otro, se escriba una búsqueda o se limpie (Limpiar, o Esc sin nada elegido). Tocar
+el nombre de un producto del carrito, o elegir un equivalente, pone ese producto en el
+buscador (con sus otras presentaciones, la elegida marcada) y en el cuadro; Enter con
+la búsqueda vacía nunca vuelve a agregar el último solo.
+
+Jarabes, gotas y suspensiones: la Ficha muestra la concentración ("50 mg/ml") y pasa
+la toma de adultos a ml ("500 mg-1 g" → "10-20 ml por toma"). La concentración sale
+del campo Concentración del producto, de la base (`doseText` "50 mg/ml" leído de
+AlfaBeta) o del nombre ("IBUPIRAC 2%"); si no se conoce, no se calcula. Con fichas
+de AlfaBeta que describen varias formas, cada presentación toma solo la parte de su
+forma ("Solución oral (gotas): Cada 100 ml…" → 500 mg/ml para las gotas); "5.000 mg"
+se lee como cinco mil.
+
+Dosis según la forma (`dosis-por-forma.ts`): la guía es por principio activo, pero
+cada presentación muestra solo la parte de su forma. La forma sale del padrón por
+código o del producto (con la presentación aclarando "crema vag.", "spray nasal",
+"colirio", sobres). La dosis puede tener partes con etiqueta ("Inyectable: …",
+"Gel: …", "Colirio: …", "Óvulo: …", "Supositorio: …"); la parte sin etiqueta vale
+para la vía del padrón (oral → comprimidos, jarabes, pastillas). Si no hay parte
+para esa forma (ampolla con dosis oral, gel con dosis de comprimidos), la Ficha
+dice "La dosis de esta presentación está en el prospecto" y la vía pasa a ser la de
+la forma. Las etiquetas que son indicaciones ("Candidiasis vaginal:", "Niños:") no
+cortan. Una marca combinada por el nombre (COMPUESTO, COMPOSITUM, DUO, PLUS) con la
+guía de una sola droga tampoco muestra dosis. Las dosis por forma de los
+inyectables, colirios, geles, óvulos y supositorios más comunes se verificaron
+contra la ficha técnica oficial (CIMA) de esa forma.
+
+Dosis para chicos (`dosis-pediatricas.ts`): en jarabes, gotas y suspensiones de
+dipirona, paracetamol, ibuprofeno, amoxicilina, cefalexina, cefadroxilo,
+cefuroxima, cefixima, azitromicina, claritromicina, eritromicina, metoclopramida y
+domperidona, la Ficha muestra los mg/kg de la ficha oficial pediátrica y calcula con
+el peso los ml por toma (con la concentración de la presentación), con los topes por
+toma y por día. Desde 40 kg remite a la dosis de adultos. Sin concentración muestra
+los mg y pide cargarla. Las combinaciones ("400/57 mg/5 ml") no se pasan a ml.
+
+La dosis de la Ficha es la habitual de adultos; en presentaciones líquidas o
+pediátricas (jarabe, gotas, suspensión, "PED.") se avisa que en niños va según el
+peso. La Ficha muestra la acción terapéutica de la presentación
+(`MedicineCatalogItem.therapeuticAction`, por CLAVE del padrón) cuando se conoce:
+Aspirinetas → antiagregante plaquetario.

@@ -12,6 +12,7 @@ const viewPermissions: Partial<Record<WorkspaceView, readonly string[]>> = {
   "Listas de precios": ["CATALOG_MANAGE"],
   Ofertas: ["OFFER_READ"],
   "Catálogo online": ["SALE_READ", "ORGANIZATION_MANAGE"],
+  Preventa: ["PREVENTA_SELL", "PREVENTA_DELIVER", "PREVENTA_MANAGE"],
   Inventario: ["INVENTORY_READ"],
   Caja: ["CASH_READ"],
   Compras: ["PURCHASE_READ", "PURCHASE_RECEIVE"],

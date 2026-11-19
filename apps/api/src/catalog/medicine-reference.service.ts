@@ -8,6 +8,10 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ConsultationCache } from "./consultation-cache";
 import { canonicalGtin } from "./external-gtin";
 import {
+  elegirFichaTerapeutica,
+  type FichaTerapeutica,
+} from "./ficha-terapeutica";
+import {
   referenceFromSnapshot,
   snapshotKey,
 } from "./medicine-reference-snapshot";
@@ -345,8 +349,39 @@ export class MedicineReferenceService {
   };
   private barcodeLoading?: Promise<Map<string, MedicineReference[]>>;
   private snapshotState?: { fresh: boolean; checkedAt: number };
+  private readonly fichas = new ConsultationCache<FichaTerapeutica | null>(
+    30 * 60_000,
+    200,
+  );
 
   constructor(@Optional() private readonly prisma?: PrismaService) {}
+
+  // Acción terapéutica y vía del padrón oficial para un producto
+  // (SISTEMA-108). Consulta por nombre y elige la fila por código o nombre
+  // exacto; prueba hasta tres variantes del nombre.
+  fichaTerapeutica(
+    nombre: string,
+    codigos: string[],
+  ): Promise<FichaTerapeutica | null> {
+    const clave = `${normalized(nombre)}|${[...codigos].sort().join(",")}`;
+    return this.fichas.get(clave, async () => {
+      for (const consulta of buildMedicineSearchQueries(nombre).slice(0, 3)) {
+        const payload = await this.requestJson<unknown>(OFFICIAL_MEDICINE_URL, {
+          method: "POST",
+          headers: {
+            Accept: "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            Origin: "https://www.argentina.gob.ar",
+          },
+          body: JSON.stringify({ searchdata: consulta }),
+        });
+        if (!Array.isArray(payload)) continue;
+        const ficha = elegirFichaTerapeutica(payload, { nombre, codigos });
+        if (ficha) return ficha;
+      }
+      return null;
+    });
+  }
 
   // ¿Hay una copia local reciente del padrón? Se consulta como mucho una vez
   // por minuto para no sumar una consulta a cada tecla.

@@ -32,6 +32,9 @@ export const organizationPermissions = [
   ["REPORT_READ", "Read operational reports"],
   ["REPORT_PROFIT_READ", "Ver costos y ganancias en reportes"],
   ["REPORT_EXPORT", "Exportar reportes"],
+  ["PREVENTA_SELL", "Tomar pedidos de preventa"],
+  ["PREVENTA_DELIVER", "Repartir pedidos de preventa"],
+  ["PREVENTA_MANAGE", "Administrar la preventa"],
 ] as const;
 
 const initialRoles = [
@@ -125,4 +128,63 @@ export async function provisionOrganizationGraph(
     data: { membershipId: membership.id, roleId: ownerRole.id },
   });
   return { organization, branch, owner };
+}
+
+/**
+ * Roles de la preventa (SISTEMA-108). Se crean al habilitar el módulo, si la
+ * farmacia todavía no tiene uno con ese código; el dueño los puede cambiar
+ * desde Administración. El preventista consulta productos, ofertas, clientes y
+ * sus saldos; el repartidor sólo ve lo que tiene que entregar.
+ */
+export const rolesPreventa = [
+  {
+    code: "PREVENTISTA",
+    name: "Preventista",
+    description: "Toma pedidos en la calle desde el celular.",
+    permissions: [
+      "PREVENTA_SELL",
+      "CATALOG_READ",
+      "OFFER_READ",
+      "PARTY_READ",
+      "ACCOUNT_READ",
+    ],
+  },
+  {
+    code: "REPARTIDOR",
+    name: "Repartidor",
+    description: "Entrega los pedidos de preventa y registra lo que cobró.",
+    permissions: ["PREVENTA_DELIVER", "PARTY_READ"],
+  },
+] as const;
+
+/** Crea los roles de preventa que falten. Devuelve los códigos creados. */
+export async function crearRolesPreventa(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+): Promise<string[]> {
+  const creados: string[] = [];
+  for (const rol of rolesPreventa) {
+    const existente = await tx.role.findUnique({
+      where: { organizationId_code: { organizationId, code: rol.code } },
+      select: { id: true },
+    });
+    if (existente) continue;
+    const permisos = await tx.permission.findMany({
+      where: { code: { in: [...rol.permissions] } },
+      select: { id: true },
+    });
+    await tx.role.create({
+      data: {
+        organizationId,
+        code: rol.code,
+        name: rol.name,
+        description: rol.description,
+        permissions: {
+          create: permisos.map(({ id }) => ({ permissionId: id })),
+        },
+      },
+    });
+    creados.push(rol.code);
+  }
+  return creados;
 }

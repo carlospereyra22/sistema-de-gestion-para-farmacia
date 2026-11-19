@@ -23,3 +23,22 @@ describe("módulos de una farmacia en el panel de plataforma", () => {
     ).toContain('aria-checked="true"');
   });
 });
+
+describe("preventa en el panel de plataforma", () => {
+  it("tiene su propio switch, independiente del catálogo", () => {
+    const html = renderToStaticMarkup(
+      <PlatformModulos
+        token="t"
+        organizationId="o"
+        catalogEnabled={false}
+        preventaEnabled
+        onChanged={() => undefined}
+        onError={() => undefined}
+      />,
+    );
+    expect(html).toContain("Preventa");
+    expect(html).toContain('aria-label="Preventa"');
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(1);
+    expect(html.match(/role="switch"/g)).toHaveLength(2);
+  });
+});

@@ -49,6 +49,13 @@ import {
   type CatalogProduct,
 } from "./lib/api";
 import { WorkspaceShell } from "./workspace-shell";
+import { PreventaApp } from "./preventa-app";
+import {
+  abrePreventaMovil,
+  guardarModoPreventa,
+  leerModoPreventa,
+  type ModoPreventa,
+} from "./lib/preventa-modo";
 
 const PlatformShell = lazy(() => import("./platform-shell"));
 import { LoginScreen } from "./login-screen";
@@ -166,6 +173,16 @@ export function App(): ReactElement {
   const [accountName, setAccountName] = useState<string>();
   const [organizationName, setOrganizationName] = useState<string>();
   const [catalogoHabilitado, setCatalogoHabilitado] = useState(false);
+  // Preventa (SISTEMA-108): módulo aparte y, para quien sólo vende o
+  // reparte, la versión celular a pantalla completa.
+  const [preventaHabilitada, setPreventaHabilitada] = useState(false);
+  const [modoPreventa, setModoPreventa] = useState<ModoPreventa | null>(
+    leerModoPreventa,
+  );
+  const elegirModoPreventa = (modo: ModoPreventa) => {
+    guardarModoPreventa(modo);
+    setModoPreventa(modo);
+  };
   const [accessToken, setAccessToken] = useState<string>();
   const [organizationId, setOrganizationId] = useState<string>();
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -304,6 +321,7 @@ export function App(): ReactElement {
         membership?.organization?.name,
     );
     setCatalogoHabilitado(Boolean(membership?.organization?.catalogEnabled));
+    setPreventaHabilitada(Boolean(membership?.organization?.preventaEnabled));
     setAccessToken(token);
     setOrganizationId(profile.organizations[0]?.organizationId);
   };
@@ -817,16 +835,39 @@ export function App(): ReactElement {
           email={user}
           onLogout={endSession}
         >
-          <WorkspaceShell
-            email={user}
-            displayName={accountName}
-            organizationName={organizationName}
-            accessToken={accessToken}
-            organizationId={organizationId}
-            permissionCodes={permissionCodes}
-            catalogoHabilitado={catalogoHabilitado}
-            onLogout={endSession}
-          />
+          {accessToken &&
+          organizationId &&
+          abrePreventaMovil({
+            habilitada: preventaHabilitada,
+            permisos: permissionCodes,
+            preferencia: modoPreventa,
+          }) ? (
+            <PreventaApp
+              token={accessToken}
+              organizationId={organizationId}
+              organizationName={organizationName}
+              onIrAGestion={() => elegirModoPreventa("gestion")}
+              onLogout={endSession}
+            />
+          ) : (
+            <WorkspaceShell
+              email={user}
+              displayName={accountName}
+              organizationName={organizationName}
+              accessToken={accessToken}
+              organizationId={organizationId}
+              permissionCodes={permissionCodes}
+              catalogoHabilitado={catalogoHabilitado}
+              preventaHabilitada={preventaHabilitada}
+              onAbrirPreventaMovil={() => elegirModoPreventa("movil")}
+              volverAPreventaSiempre={abrePreventaMovil({
+                habilitada: preventaHabilitada,
+                permisos: permissionCodes,
+                preferencia: null,
+              })}
+              onLogout={endSession}
+            />
+          )}
         </SubscriptionGate>
       </ProductImageSession>,
     );

@@ -357,12 +357,15 @@ describe("farmacias desde el panel por HTTP (esquema aislado)", () => {
 
       const text = await response.text();
       const body = JSON.parse(text) as Record<string, unknown>;
+      // Los módulos contratados (catálogo, preventa) son datos comerciales.
       expect(Object.keys(body).sort()).toEqual([
         "billing",
         "branches",
+        "catalogEnabled",
         "createdAt",
         "id",
         "name",
+        "preventaEnabled",
         "roles",
         "subscription",
         "users",

@@ -55,7 +55,7 @@ export async function unidadesUsadas(
   offerIds: readonly string[],
 ): Promise<Map<string, number>> {
   if (!offerIds.length) return new Map();
-  const [ventas, pedidos] = await Promise.all([
+  const [ventas, pedidos, preventa] = await Promise.all([
     cliente.saleOffer.groupBy({
       by: ["offerId"],
       where: {
@@ -74,9 +74,21 @@ export async function unidadesUsadas(
       },
       _sum: { units: true },
     }),
+    // Pedidos de preventa (SISTEMA-108): al entregarlos como venta, la venta
+    // no repite la oferta (lleva el descuento del pedido), así que no se
+    // cuentan dos veces.
+    cliente.preventaOrderOffer.groupBy({
+      by: ["offerId"],
+      where: {
+        organizationId,
+        offerId: { in: [...offerIds] },
+        order: { status: { not: "CANCELLED" } },
+      },
+      _sum: { units: true },
+    }),
   ]);
   const usadas = new Map<string, number>();
-  for (const fila of [...ventas, ...pedidos])
+  for (const fila of [...ventas, ...pedidos, ...preventa])
     usadas.set(
       fila.offerId,
       (usadas.get(fila.offerId) ?? 0) + (fila._sum.units ?? 0),

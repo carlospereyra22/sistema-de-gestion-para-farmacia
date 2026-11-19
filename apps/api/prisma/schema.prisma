@@ -83,6 +83,7 @@ model PrintJob {
 }
 
 model Organization {
+  preventaSettings PreventaSettings?
   catalogSettings CatalogSettings?
   productionConfigurations FiscalProductionConfiguration[]
   fiscalDocuments FiscalDocument[]
@@ -100,6 +101,8 @@ model Organization {
   active          Boolean            @default(true)
   /// Módulo Catálogo online (SISTEMA-107): lo habilita el panel de plataforma.
   catalogEnabled  Boolean            @default(false)
+  /// Módulo Preventa (SISTEMA-108): lo habilita el panel de plataforma.
+  preventaEnabled Boolean            @default(false)
   createdAt       DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
   branches        Branch[]
@@ -228,6 +231,7 @@ model Laboratory {
 }
 
 model Product {
+  preventaOrderItems PreventaOrderItem[]
   catalogOrderItems CatalogOrderItem[]
   brand          String?         @db.VarChar(120)
   isMedication   Boolean         @default(false)
@@ -377,6 +381,15 @@ model MedicineCatalogItem {
   searchText         String                   @default("")
   priceUpdatedAt     DateTime                 @default(now()) @db.Timestamptz(6)
   priceCheckedAt     DateTime?                @db.Timestamptz(6)
+  // Principio activo según el padrón (`MedicineActiveGuide.activeKey`), por
+  // CLAVE o código (SISTEMA-108). `activeIngredient` puede venir de otra fuente.
+  guideKey           String                   @default("") @db.VarChar(200)
+  // Acción terapéutica de esta presentación según el padrón (SISTEMA-108).
+  therapeuticAction  String                   @default("")
+  // Dosis de la marca cuando el padrón no la escribe ("400 mg"), tomada de la
+  // composición publicada (`doseSource`: "alfabeta"). SISTEMA-108.
+  doseText           String                   @default("") @db.VarChar(60)
+  doseSource         String                   @default("") @db.VarChar(20)
   createdAt          DateTime                 @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime                 @updatedAt @db.Timestamptz(6)
   barcodes           MedicineCatalogBarcode[]
@@ -397,6 +410,24 @@ model MedicineCatalogBarcode {
   @@unique([itemId, barcode])
   @@index([gtin])
   @@index([barcode])
+}
+
+// Guía por principio activo (SISTEMA-108), compartida por todas las
+// organizaciones. Acción terapéutica y vía salen del padrón oficial; uso y
+// dosis habitual son un resumen orientativo generado con IA (`dosageSource`).
+model MedicineActiveGuide {
+  id                String   @id @default(uuid()) @db.Uuid
+  // Principio activo normalizado: minúsculas, sin tildes ni espacios dobles.
+  activeKey         String   @unique @db.VarChar(200)
+  activeIngredient  String
+  therapeuticAction String   @default("")
+  route             String   @default("")
+  usage             String   @default("")
+  dosage            String   @default("")
+  // "ia" mientras no lo revise un farmacéutico.
+  dosageSource      String   @default("") @db.VarChar(20)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
 }
 
 // Producto sin precio ni link confiable (SISTEMA-35). Se guarda hasta conseguirlo:
@@ -656,6 +687,8 @@ model ProductPrice {
 }
 
 model Branch {
+  preventaOrders PreventaOrder[] @relation("PreventaOrderBranch")
+  preventaSettings PreventaSettings[] @relation("PreventaSettingsBranch")
   catalogOrders CatalogOrder[] @relation("CatalogOrderBranch")
   catalogSettings CatalogSettings[] @relation("CatalogSettingsBranch")
   offerBranches OfferBranch[]
@@ -706,6 +739,10 @@ model FiscalPoint {
 }
 
 model User {
+  preventaSeller PreventaSeller[]
+  preventaOrdersSold PreventaOrder[] @relation("PreventaOrderSeller")
+  preventaOrdersDelivering PreventaOrder[] @relation("PreventaOrderDeliverer")
+  preventaCustomers PreventaCustomer[]
   supplierPayableInvoices SupplierPayableInvoice[]
   id            String             @id @default(uuid()) @db.Uuid
   email         String             @unique
@@ -1067,6 +1104,8 @@ model PurchaseReceiptItem {
 }
 
 model Customer {
+  preventaOrders PreventaOrder[]
+  preventaProfile PreventaCustomer?
   catalogOrders CatalogOrder[]
   catalogPortalUsers CatalogPortalUser[]
   notes String? @db.VarChar(1000)
@@ -1588,6 +1627,7 @@ enum OfferTargetKind {
 }
 
 model Offer {
+  preventaOrderOffers PreventaOrderOffer[]
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
   name String @db.VarChar(120)
@@ -1911,4 +1951,224 @@ model CatalogOrderOfferItem {
 
   @@index([orderOfferId])
   @@index([productId])
+}
+
+// ── Preventa (SISTEMA-108) ─────────────────────────────────────────────────
+// Pedidos que toma el preventista en la calle y entrega el repartidor. Módulo
+// aparte: Organization.preventaEnabled. Ver docs/PREVENTA.md.
+
+enum PreventaOrderStatus {
+  PENDING
+  IN_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+/// Qué hace la entrega de un pedido: nada, descontar stock o registrar la venta.
+enum PreventaDeliveryEffect {
+  NONE
+  STOCK
+  SALE
+}
+
+model PreventaSettings {
+  organizationId String @id @db.Uuid
+  /// Sucursal de la que sale el stock y en la que se registran las ventas.
+  branchId String @db.Uuid
+  deliveryEffect PreventaDeliveryEffect @default(NONE)
+  /// El preventista puede bajar el precio de un producto (nunca subirlo).
+  sellerCanChangePrice Boolean @default(false)
+  /// El preventista ve todos los clientes; apagado, sólo los de su cartera.
+  sellerSeesAllCustomers Boolean @default(true)
+  /// El preventista ve cuánto stock hay.
+  showStock Boolean @default(true)
+  /// Se pueden pedir productos sin stock (la farmacia los consigue).
+  allowOutOfStock Boolean @default(true)
+  /// Las ofertas de mostrador también valen en preventa.
+  applyOffers Boolean @default(true)
+  /// Texto al pie del comprobante que se comparte.
+  receiptNote String? @db.VarChar(300)
+  /// Último número de pedido (correlativo por organización).
+  lastOrderNumber Int @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch Branch @relation("PreventaSettingsBranch", fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@index([branchId])
+}
+
+/// Datos de un preventista en la farmacia: su comisión por defecto.
+model PreventaSeller {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId String @db.Uuid
+  /// Comisión por defecto en centésimos de punto (250 = 2,5 %).
+  commissionRateBps Int @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, userId])
+}
+
+/// Datos del cliente para la preventa: cartera, dirección de entrega, mapa y visitas.
+model PreventaCustomer {
+  customerId String @id @db.Uuid
+  organizationId String @db.Uuid
+  /// Preventista de su cartera (null: de nadie en particular).
+  sellerId String? @db.Uuid
+  address String? @db.VarChar(200)
+  reference String? @db.VarChar(300)
+  phone String? @db.VarChar(40)
+  latitude Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  /// Días de visita: bit 0 = domingo ... bit 6 = sábado. 0 = sin días fijos.
+  visitDays Int @default(0)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  seller User? @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, sellerId])
+}
+
+model PreventaOrder {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  branchId String @db.Uuid
+  number Int
+  customerId String @db.Uuid
+  sellerId String @db.Uuid
+  priceListId String @db.Uuid
+  status PreventaOrderStatus @default(PENDING)
+  notes String? @db.VarChar(500)
+  /// Dirección de entrega al tomar el pedido.
+  deliveryAddress String? @db.VarChar(200)
+  totalMinor BigInt
+  /// Reintento del mismo pedido (también sin señal): mismo id y contenido devuelven el original.
+  requestId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  /// Repartidor asignado (al pasar a reparto).
+  delivererId String? @db.Uuid
+  assignedAt DateTime? @db.Timestamptz(6)
+  /// Último intento de entrega fallido ("no estaba", "cerrado").
+  deliveryNote String? @db.VarChar(300)
+  deliveredAt DateTime? @db.Timestamptz(6)
+  deliveredById String? @db.Uuid
+  /// Qué hizo la entrega (según la configuración de ese momento).
+  deliveryEffect PreventaDeliveryEffect?
+  /// Venta registrada al entregarlo (efecto SALE).
+  saleId String? @db.Uuid
+  stockDeductedAt DateTime? @db.Timestamptz(6)
+  /// Cobrado del pedido (suma de PreventaPayment).
+  paidMinor BigInt @default(0)
+  cancelledAt DateTime? @db.Timestamptz(6)
+  cancelledById String? @db.Uuid
+  cancelReason String? @db.VarChar(300)
+  /// Comisión del pedido; null = la del preventista (hasta que se paga).
+  commissionRateBps Int?
+  commissionPaymentId String? @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  branch Branch @relation("PreventaOrderBranch", fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  seller User @relation("PreventaOrderSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  deliverer User? @relation("PreventaOrderDeliverer", fields: [delivererId], references: [id], onDelete: Restrict)
+  commissionPayment PreventaCommissionPayment? @relation(fields: [commissionPaymentId], references: [id], onDelete: Restrict)
+  items PreventaOrderItem[]
+  offers PreventaOrderOffer[]
+  payments PreventaPayment[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, number])
+  @@unique([organizationId, requestId])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, sellerId, createdAt])
+  @@index([organizationId, delivererId, status])
+}
+
+model PreventaOrderItem {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  productId String @db.Uuid
+  productName String @db.VarChar(200)
+  quantity Int
+  /// Precio de lista al tomar el pedido.
+  listUnitPriceMinor BigInt
+  /// Precio por unidad del pedido (el de lista o el que bajó el preventista).
+  unitPriceMinor BigInt
+  /// Descuento de ofertas del renglón.
+  discountMinor BigInt @default(0)
+  totalMinor BigInt
+  order PreventaOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model PreventaOrderOffer {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  orderId String @db.Uuid
+  offerId String @db.Uuid
+  offerVersion Int
+  name String @db.VarChar(120)
+  label String @db.VarChar(60)
+  type OfferType
+  parameters Json
+  units Int
+  discountMinor BigInt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  order PreventaOrder @relation(fields: [orderId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  offer Offer @relation(fields: [offerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  items PreventaOrderOfferItem[]
+
+  @@index([organizationId, offerId, createdAt])
+  @@index([orderId])
+}
+
+model PreventaOrderOfferItem {
+  id String @id @default(uuid()) @db.Uuid
+  orderOfferId String @db.Uuid
+  productId String @db.Uuid
+  units Int
+  grossMinor BigInt
+  discountMinor BigInt
+  orderOffer PreventaOrderOffer @relation(fields: [orderOfferId], references: [id], onDelete: Restrict)
+
+  @@index([orderOfferId])
+}
+
+/// Cobro de un pedido de preventa (al entregarlo o después).
+model PreventaPayment {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  orderId String @db.Uuid
+  method PaymentMethod
+  amountMinor BigInt
+  actorId String @db.Uuid
+  requestId String @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  order PreventaOrder @relation(fields: [orderId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, requestId])
+  @@index([orderId])
+}
+
+/// Pago de comisiones a un preventista: agrupa los pedidos que liquida.
+model PreventaCommissionPayment {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  sellerId String @db.Uuid
+  amountMinor BigInt
+  orderCount Int
+  note String? @db.VarChar(300)
+  actorId String @db.Uuid
+  requestId String @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  orders PreventaOrder[]
+
+  @@unique([organizationId, requestId])
+  @@index([organizationId, sellerId, createdAt])
 }
