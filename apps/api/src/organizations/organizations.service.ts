@@ -313,7 +313,11 @@ export class OrganizationsService {
           entityType: "ORGANIZATION",
           entityId: organizationId,
           action: "TICKET_HEADER_UPDATED",
-          after: { ...data },
+          // La imagen del logo no va entera a la auditoría: sólo que hay.
+          after: {
+            ...data,
+            ...(data.logoImage ? { logoImage: "(imagen del logo)" } : {}),
+          },
         },
       });
       return data;

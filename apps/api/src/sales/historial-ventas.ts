@@ -13,14 +13,20 @@ export type FiltroHistorialVentas = {
   method?: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
   /** Comienzo del código interno (los primeros caracteres del id). */
   q?: string;
+  /** Cliente de la venta; SIN_CLIENTE: público general (SISTEMA-110). */
+  customerId?: string;
 };
+
+/** Valor del filtro de cliente para las ventas a público general. */
+export const SIN_CLIENTE = "SIN_CLIENTE";
 
 export const TAMANIO_PAGINA_HISTORIAL = 10;
 export const MAXIMO_PAGINA_HISTORIAL = 100;
 
 // Argentina no tiene horario de verano: el día civil empieza a las 03:00 UTC.
-const inicioDelDia = (fecha: string) => new Date(`${fecha}T00:00:00-03:00`);
-const diaSiguiente = (fecha: string) =>
+export const inicioDelDia = (fecha: string) =>
+  new Date(`${fecha}T00:00:00-03:00`);
+export const diaSiguiente = (fecha: string) =>
   new Date(inicioDelDia(fecha).getTime() + 24 * 60 * 60 * 1000);
 
 /**
@@ -61,6 +67,9 @@ export function whereHistorialVentas(
   if (filtro.status) where.status = filtro.status;
   if (filtro.documentType) where.documentType = filtro.documentType;
   if (filtro.method) where.payments = { some: { method: filtro.method } };
+  if (filtro.customerId)
+    where.customerId =
+      filtro.customerId === SIN_CLIENTE ? null : filtro.customerId;
   if (filtro.q) {
     const rango = rangoDeCodigo(filtro.q);
     // Un código que no puede existir no trae nada (en vez de ignorarse).

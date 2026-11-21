@@ -127,6 +127,13 @@ import {
   type EffectivePrices,
 } from "./lib/price-lists-api";
 import { AccountMenu } from "./account-menu";
+import { BotonEncabezado } from "./boton-encabezado";
+import { Boton } from "./boton";
+import { IconoImagen } from "./icono-imagen";
+import {
+  ICONOS_COLOR_PRUEBA,
+  ICONOS_MENU_LATERAL,
+} from "./lib/iconos-menu-lateral";
 import { CashRegisterIcon } from "./cash-register-icon";
 import { AccountBranchSelector } from "./account-branch-selector";
 import { OrganizationWorkspace } from "./organization-workspace";
@@ -180,7 +187,10 @@ import { VENTAS_SINCRONIZADAS } from "./lib/sincronizacion-ventas";
 import { lotesConPendientes, lotesSinEnviar } from "./lib/compras-sin-conexion";
 import { lotesParaTransferir } from "./lib/transferencias-sin-conexion";
 import { useSincronizarVentas } from "./lib/use-sincronizar-ventas";
-import { SaleCreditActions } from "./sale-credit-actions";
+import { NotaCreditoBoton } from "./nota-credito-dialogo";
+import { NotasCreditoHistorial } from "./notas-credito-historial";
+import { SelectorFecha } from "./selector-fecha";
+import { opcionesClientes } from "./lib/nota-credito";
 import { SaleDetailTotal, SalePaymentSummary } from "./sale-detail-summary";
 import {
   AhorroDeVentaDetalle,
@@ -356,7 +366,12 @@ import { AlfaBetaMedicineCard } from "./alfabeta-medicine-card";
 import { distributeSaleDiscount } from "./lib/sale-discount";
 import { prepareAccountPayment } from "./lib/account-payment";
 import { withStockAvailability } from "./lib/stock-availability";
-import type { CSSProperties, FormEvent, ReactElement } from "react";
+import type {
+  ComponentType,
+  CSSProperties,
+  FormEvent,
+  ReactElement,
+} from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -367,6 +382,7 @@ import {
   ReceiptText,
   FileText,
   Wallet,
+  UserRound,
   Boxes,
   Check,
   LayoutDashboard,
@@ -378,6 +394,7 @@ import {
   CreditCard,
   HeartPulse,
   History,
+  FileDown,
   Minus,
   Package,
   Plus,
@@ -385,7 +402,6 @@ import {
   Search,
   Save,
   ShoppingCart,
-  ShieldCheck,
   Tags,
   BadgePercent,
   Store,
@@ -394,7 +410,7 @@ import {
   Info,
   Trash2,
   Users,
-  Settings,
+  Building2,
   Truck,
 } from "lucide-react";
 
@@ -402,7 +418,6 @@ import {
   createCatalogProduct,
   createSale,
   cancelSale,
-  createCustomerReturn,
   createTransfer,
   createSupplierReturn,
   adjustStock,
@@ -466,7 +481,12 @@ const ANCHO_GRANDE = {
   estado: "min-[1600px]:w-[6.75rem]",
 };
 
-const views: { name: View; icon: typeof HeartPulse }[] = [
+// Menú lateral: las secciones con ícono propio (src/assets/iconos/menu-lateral)
+// usan esa imagen; las demás, el de la librería (SISTEMA-110).
+const views: {
+  name: View;
+  icon: ComponentType<{ className?: string }>;
+}[] = [
   { name: "Inicio", icon: LayoutDashboard },
   { name: "Ventas", icon: ShoppingCart },
   { name: "Catálogo online", icon: Store },
@@ -485,6 +505,8 @@ const views: { name: View; icon: typeof HeartPulse }[] = [
   { name: "Cuentas por pagar", icon: ReceiptText },
   { name: "Proveedores", icon: Truck },
 ];
+const iconoPropio = (name: View): string | undefined =>
+  (ICONOS_MENU_LATERAL as Partial<Record<View, string>>)[name];
 const money = (minor: string | number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(
     Number(minor) / 100,
@@ -576,7 +598,7 @@ export function WorkspaceShell({
   onLogout: () => void;
 }): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
-  const sidebar = useWorkspaceSidebar();
+  const sidebar = useWorkspaceSidebar(email);
   const location = readWorkspaceLocation(searchParams);
   // Una pantalla sin permiso se reemplaza por Inicio, también si llega por la dirección.
   // Catálogo online y Preventa son módulos aparte: sin ellos la pantalla no existe.
@@ -1139,7 +1161,14 @@ export function WorkspaceShell({
       ? view === "Organización"
       : view === "Administración" && administrationTab === tab;
   const administrationButtonClass = (tab: "users" | "roles" | "branches") =>
-    `flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${administrationActive(tab) ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`;
+    `flex min-h-11 w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${administrationActive(tab) ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`;
+  // Ícono del título de arriba: el mismo que la sección activa del menú.
+  const imagenTitulo =
+    view === "Administración"
+      ? ICONOS_MENU_LATERAL[
+          administrationTab === "roles" ? "Roles y permisos" : "Usuarios"
+        ]
+      : iconoPropio(view);
   return (
     <main
       ref={sidebar.shell}
@@ -1147,24 +1176,30 @@ export function WorkspaceShell({
     >
       <header
         ref={sidebar.header}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Catálogo online" || view === "Preventa" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        data-sidebar={sidebar.expanded ? "expanded" : "collapsed"}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Catálogo online" || view === "Preventa" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" || view === "Organización" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
-        <div className="flex items-center gap-3">
-          <SidebarToggle
-            expanded={sidebar.expanded}
-            onToggle={() => sidebar.setExpanded((value) => !value)}
-          />
-          <OrganizationLogo
-            token={accessToken}
-            organizationId={organizationId}
-            revision={logoRevision}
-          />
-          <div className="workspace-brand-text">
-            <p className="font-semibold">Sistema de Gestión</p>
-            <p className="text-xs text-slate-500">
-              {branches.find((item) => item.id === branchId)?.name ??
-                "Cargando…"}
-            </p>
+        <div className="flex h-full items-center gap-3">
+          {/* La marca es la parte de arriba del menú lateral: mismo ancho y
+              fondo; contraído queda sólo el logo (SISTEMA-110). */}
+          <div className="workspace-header-brand">
+            <OrganizationLogo
+              token={accessToken}
+              organizationId={organizationId}
+              revision={logoRevision}
+            />
+            <div className="workspace-brand-text">
+              <p className="font-semibold">Sistema de Gestión</p>
+              <p className="text-xs text-slate-500">
+                {branches.find((item) => item.id === branchId)?.name ??
+                  "Cargando…"}
+              </p>
+            </div>
+            <SidebarToggle
+              enLaMarca
+              expanded={sidebar.expanded}
+              onToggle={sidebar.alternar}
+            />
           </div>
           {(view === "Compras" ||
             view === "Listas de precios" ||
@@ -1183,9 +1218,14 @@ export function WorkspaceShell({
             view === "Categorías y laboratorios" ||
             view === "Transferencias" ||
             view === "Reportes" ||
-            view === "Administración") && (
+            view === "Administración" ||
+            view === "Organización") && (
             <h1 className="workspace-sales-title">
-              {view === "Compras" ? (
+              {/* El título lleva el mismo ícono propio que la sección en el
+                  menú lateral; lucide sólo donde no hay imagen (Preventa). */}
+              {imagenTitulo ? (
+                <IconoImagen url={imagenTitulo} className="size-7" />
+              ) : view === "Compras" ? (
                 <ShoppingCart size={22} aria-hidden />
               ) : view === "Proveedores" ? (
                 <Truck size={22} aria-hidden />
@@ -1219,10 +1259,14 @@ export function WorkspaceShell({
                 <ArrowLeftRight size={22} aria-hidden />
               ) : view === "Administración" ? (
                 <Users size={22} aria-hidden />
+              ) : view === "Organización" ? (
+                <Building2 size={22} aria-hidden />
               ) : (
                 <CashRegisterIcon size={22} />
               )}
-              {view}
+              {view === "Ventas" && salesScreen === "history"
+                ? "Historial de ventas"
+                : view}
             </h1>
           )}
         </div>
@@ -1295,14 +1339,12 @@ export function WorkspaceShell({
                 onChange={chooseRegister}
               />
               {salesScreen === "pos" ? (
-                <button
-                  type="button"
+                <BotonEncabezado
                   onClick={() => setSalesScreen("history")}
-                  className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-teal-700 shadow-sm hover:border-teal-300 hover:bg-teal-50"
-                >
-                  <History size={16} />
-                  Historial
-                </button>
+                  icono={<History size={17} aria-hidden />}
+                  sobre="Ventas"
+                  titulo="Historial"
+                />
               ) : null}
             </div>
           )}
@@ -1395,6 +1437,9 @@ export function WorkspaceShell({
             {views
               .filter(({ name }) => puedeVer(name))
               .map(({ name, icon: Icon }) => {
+                const imagen = iconoPropio(name);
+                // Prueba local de íconos a color (sólo en desarrollo).
+                const color = ICONOS_COLOR_PRUEBA[name];
                 const active = view === name;
                 return (
                   <button
@@ -1402,12 +1447,28 @@ export function WorkspaceShell({
                     aria-label={name}
                     onClick={() => setPage(name)}
                     aria-current={active ? "page" : undefined}
-                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`}
+                    // Con ícono propio (28 px, 4 px más ancho) el espacio al texto baja
+                    // de 12 a 8 px: el nombre queda donde estaba.
+                    className={`flex min-h-11 w-full items-center ${color || imagen ? "gap-2" : "gap-3"} rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`}
                   >
                     <span
-                      className={`grid size-6 shrink-0 place-items-center rounded-md ${active ? "bg-white text-marca-535 shadow-sm" : "text-slate-500"}`}
+                      // Íconos propios en 28 px con margen negativo arriba y
+                      // abajo, así el renglón no crece.
+                      className={`grid ${color || imagen ? "-my-0.5 size-7" : "size-6"} shrink-0 place-items-center rounded-md ${active ? "bg-white text-marca-535 shadow-sm" : "text-slate-500"}`}
                     >
-                      <Icon className="size-4" />
+                      {/* Los propios tienen más detalle: un poco más grandes. */}
+                      {color ? (
+                        <img
+                          src={color}
+                          alt=""
+                          aria-hidden="true"
+                          className="size-7 object-contain"
+                        />
+                      ) : imagen ? (
+                        <IconoImagen url={imagen} className="size-7" />
+                      ) : (
+                        <Icon className="size-4" />
+                      )}
                     </span>
                     <span>{name}</span>
                   </button>
@@ -1431,8 +1492,11 @@ export function WorkspaceShell({
                 }
                 className={administrationButtonClass("users")}
               >
-                <span className="grid size-6 shrink-0 place-items-center text-current">
-                  <Users className="size-4" />
+                <span className="-my-0.5 grid size-7 shrink-0 place-items-center text-current">
+                  <IconoImagen
+                    url={ICONOS_MENU_LATERAL["Usuarios"]}
+                    className="size-7"
+                  />
                 </span>
                 <span>Usuarios</span>
               </button>
@@ -1447,8 +1511,11 @@ export function WorkspaceShell({
                 }
                 className={administrationButtonClass("roles")}
               >
-                <span className="grid size-6 shrink-0 place-items-center text-current">
-                  <ShieldCheck className="size-4" />
+                <span className="-my-0.5 grid size-7 shrink-0 place-items-center text-current">
+                  <IconoImagen
+                    url={ICONOS_MENU_LATERAL["Roles y permisos"]}
+                    className="size-7"
+                  />
                 </span>
                 <span>Roles y permisos</span>
               </button>
@@ -1463,8 +1530,11 @@ export function WorkspaceShell({
                 }
                 className={administrationButtonClass("branches")}
               >
-                <span className="grid size-6 shrink-0 place-items-center text-current">
-                  <Settings className="size-4" />
+                <span className="-my-0.5 grid size-7 shrink-0 place-items-center text-current">
+                  <IconoImagen
+                    url={ICONOS_MENU_LATERAL["Organización"]}
+                    className="size-7"
+                  />
                 </span>
                 <span>Organización</span>
               </button>
@@ -1497,7 +1567,8 @@ export function WorkspaceShell({
             view !== "Compras" &&
             view !== "Transferencias" &&
             view !== "Reportes" &&
-            view !== "Administración" && (
+            view !== "Administración" &&
+            view !== "Organización" && (
               <div className="workspace-page-heading flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
@@ -6940,30 +7011,6 @@ function Sales({
         : "No se pudo anular la venta.";
     }
   };
-  const returnAll = async (sale: Sale) => {
-    if (!sale.items.some((item) => item.productId))
-      return "Esta venta sólo contiene conceptos, sin devolución física. Para revertir el cobro utilizá Anular.";
-    if (operationReason.trim().length < 3)
-      return "Indicá un motivo de al menos 3 caracteres.";
-    try {
-      await createCustomerReturn(token, organizationId, branchId, sale.id, {
-        reason: operationReason,
-        items: sale.items
-          .filter((item) => item.productId)
-          .map((item) => ({
-            saleItemId: item.id,
-            quantity: item.quantity,
-          })),
-      });
-      setOperationReason("");
-      await loadHistory();
-      return "Devolución registrada correctamente.";
-    } catch (cause) {
-      return cause instanceof Error
-        ? cause.message
-        : "No se pudo registrar la devolución.";
-    }
-  };
   const limpiarVenta = () => {
     setLines([]);
     resetSaleParties();
@@ -7460,7 +7507,7 @@ function Sales({
           onReasonChange={setOperationReason}
           onBack={() => onSalesScreenChange("pos")}
           onCancel={cancel}
-          onReturn={returnAll}
+          onCreditNote={() => void loadHistory()}
           onPrint={(sale) =>
             sale.ticketLocal
               ? setTicketSinConexion(sale.ticketLocal)
@@ -8357,7 +8404,7 @@ function SalesHistory({
   onReasonChange,
   onBack,
   onCancel,
-  onReturn,
+  onCreditNote,
   onPrint,
   fiscalCapabilities,
   onInvoiced,
@@ -8380,13 +8427,16 @@ function SalesHistory({
   onReasonChange: (value: string) => void;
   onBack: () => void;
   onCancel: (sale: Sale) => Promise<string>;
-  onReturn: (sale: Sale) => Promise<string>;
+  /** Se hizo una nota de crédito: hay que refrescar el historial. */
+  onCreditNote: () => void;
   onPrint: (sale: VentaDelHistorial) => void;
   /** Para "Enviar a ARCA" un comprobante interno (SISTEMA-65). */
   fiscalCapabilities?: SaleFiscalCapabilities | null;
   onInvoiced: (sale: Sale) => void;
 }): ReactElement {
   const [filtro, setFiltro] = useState<FiltroHistorialVentas>({});
+  // Secciones del historial, como en Administración (SISTEMA-110).
+  const [seccion, setSeccion] = useState<"ventas" | "notas">("ventas");
   const cambiarFiltro = (cambio: Partial<FiltroHistorialVentas>) => {
     setFiltro((actual) => ({ ...actual, ...cambio }));
     setPage(1);
@@ -8554,294 +8604,338 @@ function SalesHistory({
     URL.revokeObjectURL(url);
   };
   return (
-    <div className="mt-8 space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Historial de ventas</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Consultá, filtrá y revisá las operaciones de la sucursal.
-          </p>
+    <div className="mt-4 space-y-4">
+      {/* El título "Historial de ventas" está en la barra de arriba: acá
+          las secciones y las acciones. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          role="tablist"
+          aria-label="Secciones del historial"
+          className="flex gap-1 rounded-xl border border-slate-200 bg-white px-2 shadow-sm"
+        >
+          {(
+            [
+              ["ventas", "Ventas"],
+              ["notas", "Notas de crédito"],
+            ] as const
+          ).map(([clave, texto]) => (
+            <button
+              key={clave}
+              type="button"
+              role="tab"
+              aria-selected={seccion === clave}
+              onClick={() => setSeccion(clave)}
+              className={`border-b-2 px-4 py-3 text-sm transition-colors ${seccion === clave ? "border-teal-700 font-semibold text-teal-800" : "border-transparent text-slate-600 hover:text-teal-800"}`}
+            >
+              {texto}
+            </button>
+          ))}
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => void exportCsv()}
-            disabled={exportando}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-60"
-          >
-            {exportando ? "Exportando…" : "Exportar CSV"}
-          </button>
-          <button
-            type="button"
+          {seccion === "ventas" && (
+            <Boton
+              icono={<FileDown size={15} aria-hidden />}
+              onClick={() => void exportCsv()}
+              disabled={exportando}
+            >
+              {exportando ? "Exportando…" : "Exportar CSV"}
+            </Boton>
+          )}
+          <Boton
+            variante="primario"
+            icono={<Plus size={15} aria-hidden />}
             onClick={onBack}
-            className="h-10 rounded-lg bg-marca-550 px-4 text-sm font-semibold text-white"
           >
             Nueva venta
-          </button>
+          </Boton>
         </div>
       </div>
-      <section className="border bg-white p-4">
-        {/* Filtros del historial (SISTEMA-104): los aplica el servidor sobre
+      {seccion === "notas" ? (
+        <NotasCreditoHistorial
+          token={token}
+          organizationId={organizationId}
+          branchId={branchId}
+          clientes={opcionesClientes(customers)}
+        />
+      ) : (
+        <>
+          <section className="border bg-white p-4">
+            {/* Filtros del historial (SISTEMA-104): los aplica el servidor sobre
             todas las ventas de la sucursal. */}
-        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <label className="text-xs font-medium text-slate-600">
-            Desde
-            <input
-              type="date"
-              value={filtro.from ?? ""}
-              max={filtro.to || undefined}
-              onChange={(event) =>
-                cambiarFiltro({ from: event.target.value || undefined })
-              }
-              className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
-            />
-          </label>
-          <label className="text-xs font-medium text-slate-600">
-            Hasta
-            <input
-              type="date"
-              value={filtro.to ?? ""}
-              min={filtro.from || undefined}
-              onChange={(event) =>
-                cambiarFiltro({ to: event.target.value || undefined })
-              }
-              className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
-            />
-          </label>
-          <ProductFilterSelect
-            label="Estado"
-            icon={<ReceiptText size={18} />}
-            value={filtro.status ?? ""}
-            options={[
-              { value: "", label: "Todos" },
-              { value: "COMPLETED", label: "Confirmada" },
-              { value: "CANCELLED", label: "Anulada" },
-            ]}
-            onChange={(value) =>
-              cambiarFiltro({
-                status: (value || undefined) as Sale["status"] | undefined,
-              })
-            }
-          />
-          <ProductFilterSelect
-            label="Comprobante"
-            icon={<FileText size={18} />}
-            value={filtro.documentType ?? ""}
-            options={[
-              { value: "", label: "Todos" },
-              { value: "INTERNAL", label: "Compr. interno" },
-              { value: "INVOICE", label: "Factura" },
-            ]}
-            onChange={(value) =>
-              cambiarFiltro({
-                documentType: (value || undefined) as
-                  FiltroHistorialVentas["documentType"] | undefined,
-              })
-            }
-          />
-          <ProductFilterSelect
-            label="Medio de pago"
-            icon={<Wallet size={18} />}
-            value={filtro.method ?? ""}
-            options={[
-              { value: "", label: "Todos" },
-              { value: "CASH", label: "Efectivo" },
-              { value: "CARD", label: "Tarjeta" },
-              { value: "TRANSFER", label: "Transferencia" },
-              { value: "ACCOUNT", label: "Cuenta corriente" },
-            ]}
-            onChange={(value) =>
-              cambiarFiltro({
-                method: (value || undefined) as
-                  FiltroHistorialVentas["method"] | undefined,
-              })
-            }
-          />
-          <label className="text-xs font-medium text-slate-600">
-            Código interno
-            <span className="mt-1 flex h-12 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
-              <Search size={16} aria-hidden className="text-teal-700" />
-              <input
-                type="search"
-                aria-label="Buscar por código interno"
-                placeholder="Ej. 90283CBC"
-                value={filtro.q ?? ""}
-                maxLength={36}
-                onChange={(event) =>
-                  cambiarFiltro({ q: event.target.value.trim() || undefined })
+            <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+              <SelectorFecha
+                label="Desde"
+                value={filtro.from ?? ""}
+                max={filtro.to || undefined}
+                vacio="Cualquier fecha"
+                onChange={(valor) =>
+                  cambiarFiltro({ from: valor || undefined })
                 }
-                className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase text-slate-800 outline-none placeholder:font-sans placeholder:normal-case placeholder:text-slate-400"
               />
-            </span>
-          </label>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-          <p role="status">
-            {/* El total queda fijo al cambiar de página: solo se reemplaza
+              <SelectorFecha
+                label="Hasta"
+                value={filtro.to ?? ""}
+                min={filtro.from || undefined}
+                vacio="Cualquier fecha"
+                onChange={(valor) => cambiarFiltro({ to: valor || undefined })}
+              />
+              <ProductFilterSelect
+                label="Cliente"
+                icon={<UserRound size={18} />}
+                value={filtro.customerId ?? ""}
+                options={opcionesClientes(customers)}
+                onChange={(valor) =>
+                  cambiarFiltro({ customerId: valor || undefined })
+                }
+              />
+              <ProductFilterSelect
+                label="Estado"
+                icon={<ReceiptText size={18} />}
+                value={filtro.status ?? ""}
+                options={[
+                  { value: "", label: "Todos" },
+                  { value: "COMPLETED", label: "Confirmada" },
+                  { value: "CANCELLED", label: "Anulada" },
+                ]}
+                onChange={(value) =>
+                  cambiarFiltro({
+                    status: (value || undefined) as Sale["status"] | undefined,
+                  })
+                }
+              />
+              <ProductFilterSelect
+                label="Comprobante"
+                icon={<FileText size={18} />}
+                value={filtro.documentType ?? ""}
+                options={[
+                  { value: "", label: "Todos" },
+                  { value: "INTERNAL", label: "Compr. interno" },
+                  { value: "INVOICE", label: "Factura" },
+                ]}
+                onChange={(value) =>
+                  cambiarFiltro({
+                    documentType: (value || undefined) as
+                      FiltroHistorialVentas["documentType"] | undefined,
+                  })
+                }
+              />
+              <ProductFilterSelect
+                label="Pago"
+                icon={<Wallet size={18} />}
+                value={filtro.method ?? ""}
+                options={[
+                  { value: "", label: "Todos" },
+                  { value: "CASH", label: "Efectivo" },
+                  { value: "CARD", label: "Tarjeta" },
+                  { value: "TRANSFER", label: "Transferencia" },
+                  { value: "ACCOUNT", label: "Cuenta corriente" },
+                ]}
+                onChange={(value) =>
+                  cambiarFiltro({
+                    method: (value || undefined) as
+                      FiltroHistorialVentas["method"] | undefined,
+                  })
+                }
+              />
+              <label className="text-xs font-medium text-slate-600">
+                <span className="sr-only">Código interno</span>
+                <span className="flex h-12 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+                  <Search size={16} aria-hidden className="text-teal-700" />
+                  <input
+                    type="search"
+                    aria-label="Buscar por código interno"
+                    placeholder="Código interno"
+                    value={filtro.q ?? ""}
+                    maxLength={36}
+                    onChange={(event) =>
+                      cambiarFiltro({
+                        q: event.target.value.trim() || undefined,
+                      })
+                    }
+                    className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase text-slate-800 outline-none placeholder:font-sans placeholder:normal-case placeholder:text-slate-400"
+                  />
+                </span>
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <p role="status">
+                {/* El total queda fijo al cambiar de página: solo se reemplaza
                 cuando llega la respuesta. */}
-            {historial.listo
-              ? `${historial.total} venta${historial.total === 1 ? "" : "s"}${hayFiltros ? " con estos filtros" : ""}`
-              : " "}
-            {historial.sinConexion
-              ? " · Sin conexión con el servidor: se muestran las ventas guardadas en esta PC."
-              : ""}
-          </p>
-          {hayFiltros && (
-            <button
-              type="button"
-              onClick={() => {
-                setFiltro({});
-                setPage(1);
-              }}
-              className="rounded-lg px-2 py-1 font-semibold text-teal-700 hover:bg-teal-50"
+                {historial.listo
+                  ? `${historial.total} venta${historial.total === 1 ? "" : "s"}${hayFiltros ? " con estos filtros" : ""}`
+                  : " "}
+                {historial.sinConexion
+                  ? " · Sin conexión con el servidor: se muestran las ventas guardadas en esta PC."
+                  : ""}
+              </p>
+              {hayFiltros && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltro({});
+                    setPage(1);
+                  }}
+                  className="rounded-lg px-2 py-1 font-semibold text-teal-700 hover:bg-teal-50"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+          </section>
+          <section className="overflow-hidden border bg-white">
+            <div
+              aria-busy={historial.cargando}
+              className={`overflow-x-auto transition-opacity ${historial.cargando && historial.listo ? "opacity-60" : ""}`}
             >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      </section>
-      <section className="overflow-hidden border bg-white">
-        <div
-          aria-busy={historial.cargando}
-          className={`overflow-x-auto transition-opacity ${historial.cargando && historial.listo ? "opacity-60" : ""}`}
-        >
-          <table className="w-full min-w-210 text-left text-sm">
-            <thead className="bg-niebla-958 text-[10px] uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Cliente</th>
-                <th className="px-4 py-3">Total</th>
-                <th className="px-4 py-3">Ahorro</th>
-                <th className="px-4 py-3">Pago</th>
-                <th className="px-4 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {pageSales.map((sale) => {
-                const numero = numeroDeVenta(sale);
-                return (
-                  <tr
-                    key={sale.id}
-                    onClick={() => {
-                      onReasonChange("");
-                      setActionMessage("");
-                      setSelectedSaleId(sale.id);
-                    }}
-                    className={`cursor-pointer hover:bg-slate-50 ${selectedSaleId === sale.id ? "bg-marca-970" : ""}`}
-                  >
-                    <td className="px-4 py-3 text-xs">
-                      <button
-                        type="button"
-                        aria-label={`Ver venta ${numero.texto}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
+              <table className="w-full min-w-210 text-left text-sm">
+                <thead className="bg-niebla-958 text-[10px] uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">#</th>
+                    <th className="px-4 py-3">Fecha</th>
+                    <th className="px-4 py-3">Cliente</th>
+                    <th className="px-4 py-3">Total</th>
+                    <th className="px-4 py-3">Ahorro</th>
+                    <th className="px-4 py-3">Pago</th>
+                    <th className="px-4 py-3">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pageSales.map((sale) => {
+                    const numero = numeroDeVenta(sale);
+                    return (
+                      <tr
+                        key={sale.id}
+                        onClick={() => {
                           onReasonChange("");
                           setActionMessage("");
                           setSelectedSaleId(sale.id);
                         }}
-                        className="text-left"
+                        className={`cursor-pointer hover:bg-slate-50 ${selectedSaleId === sale.id ? "bg-marca-970" : ""}`}
                       >
-                        {/* Comprobante interno: tipo y número en una línea.
+                        <td className="px-4 py-3 text-xs">
+                          <button
+                            type="button"
+                            aria-label={`Ver venta ${numero.texto}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onReasonChange("");
+                              setActionMessage("");
+                              setSelectedSaleId(sale.id);
+                            }}
+                            className="text-left"
+                          >
+                            {/* Comprobante interno: tipo y número en una línea.
                             Factura: número de ARCA y abajo el interno
                             (SISTEMA-104). */}
-                        {numero.texto === numero.interno ? (
-                          <span className="font-semibold text-slate-700">
-                            Compr. interno{" "}
-                            <span className="font-mono">{numero.interno}</span>
-                          </span>
-                        ) : (
-                          <>
-                            <span className="font-semibold text-slate-700">
-                              {numero.texto}
-                            </span>
-                            <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
-                              {numero.interno}
-                              {numero.prueba ? " · prueba" : ""}
-                            </span>
-                          </>
-                        )}
-                        {numero.despues && (
-                          <span className="mt-0.5 block text-[10px] font-medium text-amber-700">
-                            Facturada después
-                          </span>
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      {sale.completedAt
-                        ? new Date(sale.completedAt).toLocaleString("es-AR", {
-                            hourCycle: "h23",
-                          })
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3">{customerName(sale)}</td>
-                    <td className="px-4 py-3 font-semibold">
-                      {money(sale.totalMinor)}
-                    </td>
-                    {/* Ahorro en su propia columna (SISTEMA-104): cuánto y
+                            {numero.texto === numero.interno ? (
+                              <span className="font-semibold text-slate-700">
+                                Compr. interno{" "}
+                                <span className="font-mono">
+                                  {numero.interno}
+                                </span>
+                              </span>
+                            ) : (
+                              <>
+                                <span className="font-semibold text-slate-700">
+                                  {numero.texto}
+                                </span>
+                                <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
+                                  {numero.interno}
+                                  {numero.prueba ? " · prueba" : ""}
+                                </span>
+                              </>
+                            )}
+                            {numero.despues && (
+                              <span className="mt-0.5 block text-[10px] font-medium text-amber-700">
+                                Facturada después
+                              </span>
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          {sale.completedAt
+                            ? new Date(sale.completedAt).toLocaleString(
+                                "es-AR",
+                                {
+                                  hourCycle: "h23",
+                                },
+                              )
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3">{customerName(sale)}</td>
+                        <td className="px-4 py-3 font-semibold">
+                          {money(sale.totalMinor)}
+                        </td>
+                        {/* Ahorro en su propia columna (SISTEMA-104): cuánto y
                         si fue por oferta, descuento o ambos. */}
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const descuento = descuentosDeVenta(sale.items);
-                        const ahorro =
-                          descuento.ofertasMinor + descuento.descuentoMinor;
-                        if (!ahorro)
-                          return <span className="text-slate-300">—</span>;
-                        // Al pasar el mouse dice qué oferta o descuento fue.
-                        return (
-                          <TooltipFlotante
-                            label={`Ver el ahorro de la venta ${numero.interno}`}
-                            detenerClick={false}
-                            className="rounded-md px-1 font-semibold tabular-nums text-rose-700 hover:bg-rose-50"
-                            trigger={<>−{money(ahorro)}</>}
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const descuento = descuentosDeVenta(sale.items);
+                            const ahorro =
+                              descuento.ofertasMinor + descuento.descuentoMinor;
+                            if (!ahorro)
+                              return <span className="text-slate-300">—</span>;
+                            // Al pasar el mouse dice qué oferta o descuento fue.
+                            return (
+                              <TooltipFlotante
+                                label={`Ver el ahorro de la venta ${numero.interno}`}
+                                detenerClick={false}
+                                className="rounded-md px-1 font-semibold tabular-nums text-rose-700 hover:bg-rose-50"
+                                trigger={<>−{money(ahorro)}</>}
+                              >
+                                <AhorroDeVentaDetalle
+                                  offers={sale.offers ?? []}
+                                  ofertasMinor={descuento.ofertasMinor}
+                                  descuentoMinor={descuento.descuentoMinor}
+                                />
+                              </TooltipFlotante>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-4 py-3">{paymentName(sale)}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${sale.porEnviar ? "bg-amber-100 text-amber-800" : sale.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
                           >
-                            <AhorroDeVentaDetalle
-                              offers={sale.offers ?? []}
-                              ofertasMinor={descuento.ofertasMinor}
-                              descuentoMinor={descuento.descuentoMinor}
-                            />
-                          </TooltipFlotante>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3">{paymentName(sale)}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${sale.porEnviar ? "bg-amber-100 text-amber-800" : sale.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
+                            {sale.porEnviar
+                              ? "Por enviar"
+                              : sale.status === "COMPLETED"
+                                ? "Confirmada"
+                                : "Anulada"}
+                          </span>
+                          {sale.notasCredito ? (
+                            <span className="mt-1 block text-[10px] font-medium text-amber-700">
+                              Con nota de crédito
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!pageSales.length && !historial.cargando ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-10 text-center text-slate-500"
                       >
-                        {sale.porEnviar
-                          ? "Por enviar"
-                          : sale.status === "COMPLETED"
-                            ? "Confirmada"
-                            : "Anulada"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!pageSales.length && !historial.cargando ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-10 text-center text-slate-500"
-                  >
-                    No hay ventas para los filtros seleccionados.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      <Pagination
-        total={historial.total}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        noun="ventas"
-        label="Páginas del historial de ventas"
-        onChange={setPage}
-      />
+                        No hay ventas para los filtros seleccionados.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <Pagination
+            total={historial.total}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            noun="ventas"
+            label="Páginas del historial de ventas"
+            onChange={setPage}
+          />
+        </>
+      )}
       <dialog
         ref={detailDialog}
         aria-labelledby="sale-detail-title"
@@ -8903,8 +8997,11 @@ function SalesHistory({
                       const barcode =
                         product?.barcodes.find((code) => code.primary)?.code ??
                         product?.barcodes[0]?.code;
+                      // El nombre viene del servidor: el catálogo de la PC
+                      // se carga por partes y puede no tener el producto.
                       const nombre =
                         item.description ??
+                        item.productName ??
                         product?.name ??
                         "Producto histórico";
                       return (
@@ -9060,15 +9157,6 @@ function SalesHistory({
                           ? "Ver / imprimir factura"
                           : "Imprimir comprobante"}
                       </button>
-                      {selectedSale.documentType === "INVOICE" && (
-                        <SaleCreditActions
-                          key={`${organizationId}:${branchId}:${selectedSale.id}`}
-                          token={token}
-                          organizationId={organizationId}
-                          branchId={branchId}
-                          saleId={selectedSale.id}
-                        />
-                      )}
                     </div>
                     <EnviarAArca
                       key={`arca:${selectedSale.id}`}
@@ -9084,39 +9172,37 @@ function SalesHistory({
                       }
                       onSent={() => onInvoiced(selectedSale)}
                     />
+                    {/* Devolución de toda la venta o de productos, con la
+                        plata y el stock (SISTEMA-110). */}
+                    <NotaCreditoBoton
+                      key={`nc:${selectedSale.id}`}
+                      token={token}
+                      organizationId={organizationId}
+                      branchId={branchId}
+                      sale={selectedSale}
+                      onDone={onCreditNote}
+                    />
                     {selectedSale.status === "COMPLETED" ? (
                       <details className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                         <summary className="cursor-pointer text-sm font-medium text-slate-600 focus-visible:outline-2 focus-visible:outline-teal-700">
-                          Anulación o devolución
+                          Anular la venta
                         </summary>
                         <Input
-                          label="Motivo para anulación o devolución"
+                          label="Motivo de la anulación"
                           value={operationReason}
                           onChange={onReasonChange}
                           required={false}
                         />
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            disabled={actionBusy}
-                            onClick={() =>
-                              void runAction(() => onCancel(selectedSale))
-                            }
-                            className="border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-700"
-                          >
-                            Anular
-                          </button>
-                          <button
-                            type="button"
-                            disabled={actionBusy}
-                            onClick={() =>
-                              void runAction(() => onReturn(selectedSale))
-                            }
-                            className="border border-teal-200 bg-white py-2 text-xs font-semibold text-teal-700"
-                          >
-                            Devolver
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          disabled={actionBusy}
+                          onClick={() =>
+                            void runAction(() => onCancel(selectedSale))
+                          }
+                          className="mt-3 w-full rounded-lg border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-700"
+                        >
+                          Anular
+                        </button>
                       </details>
                     ) : (
                       <p className="mt-4 text-xs text-slate-500">

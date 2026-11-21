@@ -2841,6 +2841,8 @@ export async function createCashMovement(
 export interface TicketHeaderSettings {
   printDensity?: number;
   logoRaster?: string;
+  /** El logo con sus colores para la cabecera y la pestaña (SISTEMA-110). */
+  logoImage?: string;
   name: string;
   address: string;
   city: string;
@@ -3170,6 +3172,8 @@ export type OfertaDeVentaRegistrada = {
 
 export type Sale = {
   id: string;
+  /** Cuántas notas de crédito tiene (historial, SISTEMA-110). */
+  notasCredito?: number;
   documentType?: "INTERNAL" | "INVOICE";
   fiscalTrial?: FiscalTrial | null;
   /** Factura de producción que devuelve la venta recién confirmada. */
@@ -3182,6 +3186,8 @@ export type Sale = {
     id: string;
     productId: string | null;
     description?: string | null;
+    /** Nombre del producto, del servidor (historial, SISTEMA-110). */
+    productName?: string | null;
     /** Null en un renglón de producto: faltante de una venta sin conexión. */
     lotId?: string | null;
     quantity: number;
@@ -3522,6 +3528,8 @@ export type FiltroHistorialVentas = {
   method?: Sale["payments"][number]["method"];
   /** Comienzo del código interno. */
   q?: string;
+  /** Uuid del cliente o SIN_CLIENTE (público general). */
+  customerId?: string;
 };
 
 export type PaginaHistorialVentas = {
@@ -3647,41 +3655,172 @@ export async function getSaleFiscalCapabilities(
   return (await response.json()) as SaleFiscalCapabilities;
 }
 
-export type CreditDetail = {
-  original: FiscalTrial;
-  credits: FiscalTrial[];
+/** Nota de crédito de una venta (SISTEMA-110). Importes en centavos como texto. */
+export type NotaCredito = {
+  id: string;
+  saleId: string;
+  creditKind: "INTERNA" | "FACTURA";
+  createdAt: string;
+  reason: string;
+  totalMinor: string;
+  /** Parte que bajó la deuda de cuenta corriente. */
+  accountMinor: string;
+  /** Parte devuelta en plata. */
+  refundMinor: string;
+  refundMethod: "CASH" | "CARD" | "TRANSFER" | null;
+  items: {
+    saleItemId: string;
+    name: string;
+    quantity: number;
+    amountMinor: string;
+    restocked: boolean;
+  }[];
+  /** Nota C (real o de prueba). Null en la interna. */
+  fiscal: FiscalTrial | null;
+};
+export type NotasCreditoVenta = {
+  /** Qué nota corresponde; null si no se puede hacer (ver `motivo`). */
+  tipo: "INTERNA" | "FACTURA" | "FACTURA_PRUEBA" | null;
+  motivo: string | null;
+  cuentaCorriente: boolean;
+  metodoSugerido: "CASH" | "CARD" | "TRANSFER";
+  /** La venta tiene cliente: se puede dejar saldo a favor. */
+  tieneCliente: boolean;
   items: {
     id: string;
     name: string;
+    productId: string | null;
     quantity: number;
+    /** Lo que queda sin devolver. */
     available: number;
     unitPriceMinor: string;
     discountMinor: string;
+    puedeReponer: boolean;
   }[];
+  notas: NotaCredito[];
 };
-export async function saleCreditOperation<T>(
+/** Nota del listado de la sucursal, con su venta. */
+export type NotaCreditoListada = NotaCredito & {
+  sale: {
+    id: string;
+    documentType: "INTERNAL" | "INVOICE";
+    customerName: string | null;
+  };
+  actorName: string | null;
+};
+export type FiltroNotasCredito = {
+  from?: string;
+  to?: string;
+  creditKind?: "INTERNA" | "FACTURA";
+  q?: string;
+  /** Uuid del cliente o SIN_CLIENTE (público general). */
+  customerId?: string;
+};
+export async function listarNotasCredito(
+  token: string,
+  organizationId: string,
+  branchId: string,
+  filtro: FiltroNotasCredito,
+  page: number,
+  pageSize = 10,
+): Promise<{ items: NotaCreditoListada[]; total: number }> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  for (const [clave, valor] of Object.entries(filtro))
+    if (valor) params.set(clave, String(valor));
+  const response = await fetch(
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/notas-credito?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok)
+    throw await responseError(
+      response,
+      "No se pudieron cargar las notas de crédito.",
+    );
+  return (await response.json()) as {
+    items: NotaCreditoListada[];
+    total: number;
+  };
+}
+export type NotaCreditoPedido = {
+  requestId: string;
+  reason: string;
+  items: { saleItemId: string; quantity: number; reponer: boolean }[];
+  /** SALDO_A_FAVOR: queda en la cuenta corriente del cliente. */
+  refundMethod?: "CASH" | "CARD" | "TRANSFER" | "SALDO_A_FAVOR";
+  cashSessionId?: string;
+  confirmProduction?: boolean;
+};
+async function notasCreditoFetch<T>(
   token: string,
   organizationId: string,
   branchId: string,
   saleId: string,
-  suffix = "",
-  input?: object,
+  sufijo: string,
+  body?: object,
 ): Promise<T> {
   const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/${saleId}/credits${suffix}`,
+    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/${saleId}/notas-credito${sufijo}`,
     {
-      method: input ? "POST" : "GET",
+      method: body ? "POST" : "GET",
       headers: authJson(token),
-      ...(input ? { body: JSON.stringify(input) } : {}),
+      ...(body ? { body: JSON.stringify(body) } : {}),
     },
   );
   if (!response.ok)
     throw await responseError(
       response,
-      "No se pudo completar la operación de nota de crédito.",
+      "No se pudo completar la nota de crédito.",
     );
   return (await response.json()) as T;
 }
+export const notasCreditoVenta = (
+  token: string,
+  organizationId: string,
+  branchId: string,
+  saleId: string,
+) =>
+  notasCreditoFetch<NotasCreditoVenta>(
+    token,
+    organizationId,
+    branchId,
+    saleId,
+    "",
+  );
+export const crearNotaCredito = (
+  token: string,
+  organizationId: string,
+  branchId: string,
+  saleId: string,
+  pedido: NotaCreditoPedido,
+) =>
+  notasCreditoFetch<NotasCreditoVenta & { notaId: string }>(
+    token,
+    organizationId,
+    branchId,
+    saleId,
+    "",
+    pedido,
+  );
+/** Envía o consulta en ARCA el comprobante de una nota; `reenviar`, si fue rechazado. */
+export const enviarNotaCredito = (
+  token: string,
+  organizationId: string,
+  branchId: string,
+  saleId: string,
+  notaId: string,
+  reenviar = false,
+) =>
+  notasCreditoFetch<FiscalTrial>(
+    token,
+    organizationId,
+    branchId,
+    saleId,
+    `/${notaId}/${reenviar ? "reencolar" : "procesar"}`,
+    {},
+  );
 export async function activateProduction(
   token: string,
   organizationId: string,
@@ -3717,21 +3856,6 @@ export async function cancelSale(
   );
   if (!response.ok)
     throw await responseError(response, "No se pudo anular la venta.");
-}
-
-export async function createCustomerReturn(
-  token: string,
-  organizationId: string,
-  branchId: string,
-  saleId: string,
-  input: { reason: string; items: { saleItemId: string; quantity: number }[] },
-): Promise<void> {
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${organizationId}/branches/${branchId}/sales/${saleId}/customer-returns`,
-    { method: "POST", headers: authJson(token), body: JSON.stringify(input) },
-  );
-  if (!response.ok)
-    throw await responseError(response, "No se pudo registrar la devolución.");
 }
 
 function authJson(token: string): HeadersInit {

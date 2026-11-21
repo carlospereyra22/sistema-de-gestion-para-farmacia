@@ -1456,7 +1456,8 @@ textarea:focus {
   font-weight: 600;
 }
 
-.workspace-sales-title svg {
+.workspace-sales-title svg,
+.workspace-sales-title [data-icono-imagen] {
   color: var(--color-marca-619);
 }
 
@@ -1560,6 +1561,104 @@ textarea:focus {
 
 .workspace-shell {
   --workspace-header-height: 82px;
+}
+/* Marca arriba del menú lateral (SISTEMA-110): ocupa el ancho del menú, con
+   su fondo y su borde; tapa la línea de abajo del encabezado para que el
+   menú se vea continuo. */
+.workspace-header-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: stretch;
+  flex-shrink: 0;
+  width: 252px;
+  height: calc(100% + 1px);
+  margin-left: -24px;
+  padding-inline: 14px 10px;
+  border-right: 1px solid var(--color-slate-200);
+  background: var(--color-niebla-996);
+}
+.workspace-header[data-sidebar="collapsed"] .workspace-header-brand {
+  width: 72px;
+  justify-content: center;
+  padding-inline: 0;
+}
+.workspace-header[data-sidebar="collapsed"] .workspace-brand-text {
+  display: none;
+}
+.workspace-brand-text {
+  min-width: 0;
+}
+.workspace-brand-text > p:first-child {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.workspace-brand-text > p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Abierto, el botón para ocultar el menú va a la derecha del nombre. Cerrado,
+   queda sobre el logo: aparece al pasar el mouse (o con el teclado) y en
+   pantallas táctiles tocar el logo abre el menú. */
+.workspace-header-brand .sidebar-toggle-marca {
+  margin-left: auto;
+}
+.workspace-header[data-sidebar="collapsed"] .sidebar-toggle-marca {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 40px;
+  height: 40px;
+  opacity: 0;
+  background: var(--color-niebla-996);
+}
+.workspace-header[data-sidebar="collapsed"]
+  .workspace-header-brand:hover
+  .sidebar-toggle-marca,
+.workspace-header[data-sidebar="collapsed"]
+  .sidebar-toggle-marca:focus-visible {
+  opacity: 1;
+}
+/* El título de la pantalla ya no necesita la línea que lo separaba. */
+.workspace-header-brand + .workspace-sales-title {
+  margin-left: 12px;
+  padding-left: 0;
+  border-left: 0;
+}
+@media (min-width: 1024px) and (max-width: 1799px) {
+  .workspace-header-brand {
+    margin-left: -16px;
+  }
+}
+@media (max-width: 767px) {
+  .workspace-header-brand {
+    margin-left: -16px;
+  }
+  .workspace-header[data-sidebar] .workspace-header-brand {
+    width: 72px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+  .workspace-header[data-sidebar] .workspace-brand-text {
+    display: none;
+  }
+  .workspace-header[data-sidebar] .sidebar-toggle-marca {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 40px;
+    height: 40px;
+    opacity: 0;
+    background: var(--color-niebla-996);
+  }
+  .workspace-header[data-sidebar]
+    .workspace-header-brand:hover
+    .sidebar-toggle-marca,
+  .workspace-header[data-sidebar] .sidebar-toggle-marca:focus-visible {
+    opacity: 1;
+  }
 }
 .workspace-shell > .workspace-header {
   position: sticky;

@@ -205,30 +205,23 @@ export function SupplierPayablesWorkspace({
     <>
       {!detail && toast}
       <section className="purchases-table-panel flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <FileText size={20} className="text-teal-700" />
-              Cuentas por pagar
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Facturas y vencimientos · {branchName}
-            </p>
-          </div>
-          {data && (
+        {/* El título "Cuentas por pagar" ya está en la barra de arriba: acá
+            sólo el saldo del listado. */}
+        {data && (
+          <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3">
             <p className="text-sm text-slate-500">
               Saldo del listado{" "}
-              <strong className="ml-1 text-lg text-teal-800">
+              <strong className="ml-1 text-lg tabular-nums text-teal-800">
                 {ars(data.totalMinor)}
               </strong>
               {BigInt(data.overdueMinor) > 0n && (
-                <span className="ml-3 text-rose-600">
+                <span className="ml-3 tabular-nums text-rose-600">
                   Vencido {ars(data.overdueMinor)}
                 </span>
               )}
             </p>
-          )}
-        </header>
+          </header>
+        )}
         <div className="grid shrink-0 items-center gap-2 border-b border-slate-100 p-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,2fr)_1fr_1fr_1fr_auto_auto]">
           <label className="relative block min-w-0">
             <Search

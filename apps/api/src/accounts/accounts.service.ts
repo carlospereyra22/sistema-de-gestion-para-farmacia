@@ -28,7 +28,11 @@ import {
   type TotalDebtInput,
 } from "./total-debt-increase";
 import {
+  SALDO_A_FAVOR,
+  esSaldoAFavor,
   readAllocations,
+  repartirSaldoAFavor,
+  saldoAFavorDisponible,
   validateAllocations,
   type ItemAllocation,
 } from "./item-allocations";
@@ -1533,6 +1537,7 @@ export class AccountsService {
           (entry) =>
             entry.type === "CREDIT" &&
             !entry.saleId &&
+            !esSaldoAFavor(entry.allocations) &&
             !readAllocations(entry.allocations).length,
         );
         const comparable =
@@ -1574,6 +1579,7 @@ export class AccountsService {
           (movement) =>
             movement.type === "CREDIT" &&
             !movement.saleId &&
+            !esSaldoAFavor(movement.allocations) &&
             !readAllocations(movement.allocations).length,
         )
         .map((movement) => ({
@@ -1583,6 +1589,84 @@ export class AccountsService {
         })),
       balanceMinor: this.balance(movements).toString(),
     };
+  }
+  /**
+   * Descuenta el saldo a favor del cliente (notas de crédito, SISTEMA-110) de
+   * lo que debe, de lo más viejo a lo más nuevo. Se llama dentro de la
+   * transacción de la nota y de cada venta a cuenta corriente. Lo que no
+   * alcanza a imputarse sigue a favor.
+   */
+  async aplicarSaldoAFavor(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    organizationId: string,
+    customerId: string,
+  ) {
+    const creditos = await tx.customerAccountMovement.findMany({
+      where: {
+        organizationId,
+        customerId,
+        type: "CREDIT",
+        saleId: null,
+        allocations: { path: ["kind"], equals: SALDO_A_FAVOR },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const conSaldo = creditos.filter((c) => saldoAFavorDisponible(c) > 0n);
+    if (!conSaldo.length) return;
+    const detalle = await this.itemBalances(
+      tx,
+      actorId,
+      organizationId,
+      customerId,
+    );
+    const pendientes = detalle.items
+      .filter((item) => BigInt(item.pendingMinor) > 0n)
+      .sort(
+        (a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0),
+      )
+      .map((item) => ({
+        saleItemId: item.saleItemId,
+        pendingMinor: BigInt(item.pendingMinor),
+      }));
+    for (const credito of conSaldo) {
+      const nuevas = repartirSaldoAFavor(
+        saldoAFavorDisponible(credito),
+        pendientes,
+      );
+      if (!nuevas.length) break;
+      // Lo imputado deja de estar pendiente para el próximo crédito.
+      for (const imputada of nuevas) {
+        const pendiente = pendientes.find(
+          (p) => p.saleItemId === imputada.saleItemId,
+        )!;
+        pendiente.pendingMinor -= BigInt(imputada.amountMinor);
+      }
+      const previas = readAllocations(credito.allocations);
+      const items = [...previas];
+      for (const imputada of nuevas) {
+        const igual = items.find((i) => i.saleItemId === imputada.saleItemId);
+        if (igual) igual.amountMinor += imputada.amountMinor;
+        else items.push({ ...imputada });
+      }
+      await tx.customerAccountMovement.update({
+        where: { id: credito.id },
+        data: {
+          allocations: {
+            ...(credito.allocations as Prisma.JsonObject),
+            items: items.map((item) => ({ ...item })),
+          },
+        },
+      });
+      await this.audit.recordInTransaction(tx, {
+        organizationId,
+        actorId,
+        entityType: "CUSTOMER_ACCOUNT",
+        entityId: credito.id,
+        action: "SALDO_A_FAVOR_APLICADO",
+        after: { customerId, items: nuevas },
+      });
+    }
   }
   private async pricePreview(
     tx: Prisma.TransactionClient,
@@ -2136,7 +2220,11 @@ export class AccountsService {
         const movement = await tx.customerAccountMovement.findFirst({
           where: { id: movementId, organizationId, customerId },
         });
-        if (!movement || readAllocations(movement.allocations).length)
+        if (
+          !movement ||
+          esSaldoAFavor(movement.allocations) ||
+          readAllocations(movement.allocations).length
+        )
           throw new BadRequestException(
             "El movimiento no está disponible para asignar artículos.",
           );

@@ -10,6 +10,11 @@ import {
 } from "class-validator";
 import { Transform } from "class-transformer";
 
+/** data: de una imagen PNG, WebP o JPEG en base64. */
+export const LOGO_IMAGEN =
+  /^data:image\/(?:png|webp|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/;
+export const LOGO_IMAGEN_MAXIMO = 90_000;
+
 export class TicketHeaderDto {
   @IsOptional()
   @IsInt()
@@ -20,6 +25,13 @@ export class TicketHeaderDto {
   @IsString()
   @Matches(/^(?:[0-9a-f]{4096})?$/)
   logoRaster?: string;
+  // El logo original, achicado (SISTEMA-110): se ve con sus colores en la
+  // cabecera y la pestaña. El ticket sigue usando logoRaster (blanco y negro).
+  @IsOptional()
+  @IsString()
+  @MaxLength(LOGO_IMAGEN_MAXIMO)
+  @Matches(LOGO_IMAGEN)
+  logoImage?: string;
   @Transform(({ value }: { value: unknown }) =>
     typeof value === "string" ? value.trim() : value,
   )
@@ -53,6 +65,10 @@ export function readTicketHeader(
         ? value.printDensity
         : 4,
     ...(field("logoRaster") ? { logoRaster: field("logoRaster") } : {}),
+    ...(LOGO_IMAGEN.test(field("logoImage")) &&
+    field("logoImage").length <= LOGO_IMAGEN_MAXIMO
+      ? { logoImage: field("logoImage") }
+      : {}),
     name: field("name") || organization?.name || "",
     address: field("address"),
     city: field("city"),

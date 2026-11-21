@@ -1,3 +1,5 @@
+> **Reemplazado por `NOTAS_CREDITO.md` (SISTEMA-110, 21/11/2026).** El menú de tres puntos y el diálogo de dos pasos se quitaron; la nota se hace desde el botón "Nota de crédito" del detalle de la venta. Lo de abajo queda como historia.
+
 # Acceso a notas de crédito desde Historial
 
 El detalle conserva la tabla de productos y agrupa los medios de pago registrados en etiquetas con iconos debajo de ella. No interpreta pagos brutos como netos ni calcula saldos nuevos. El panel lateral muestra total histórico, tipo de comprobante y estado comercial (no autorización fiscal), luego impresión y menú fiscal. Anulación y devolución mantienen sus manejadores y motivo, dentro de un desplegable inicialmente cerrado para evitar competir con las acciones de consulta. Las ventas anuladas conservan su aviso y no muestran esas acciones.

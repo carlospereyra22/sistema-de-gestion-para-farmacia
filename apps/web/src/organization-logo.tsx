@@ -15,13 +15,19 @@ export function OrganizationLogo({
   const [logo, setLogo] = useState<{
     organizationId: string;
     raster?: string;
+    imagen?: string;
   }>();
   useEffect(() => {
     if (!token || !organizationId) return;
     let active = true;
     void getTicketHeader(token, organizationId)
       .then((data) => {
-        if (active) setLogo({ organizationId, raster: data.logoRaster });
+        if (active)
+          setLogo({
+            organizationId,
+            raster: data.logoRaster,
+            imagen: data.logoImage,
+          });
       })
       .catch(() => {
         /* The default logo remains available if settings cannot load. */
@@ -30,9 +36,12 @@ export function OrganizationLogo({
       active = false;
     };
   }, [token, organizationId, revision]);
-  const raster =
-    logo?.organizationId === organizationId ? logo?.raster : undefined;
-  const src = useMemo(() => logoPreview(raster), [raster]);
+  const actual = logo?.organizationId === organizationId ? logo : undefined;
+  // Con sus colores si se cargó así (SISTEMA-110); si no, el del ticket.
+  const src = useMemo(
+    () => actual?.imagen ?? logoPreview(actual?.raster),
+    [actual?.imagen, actual?.raster],
+  );
   useEffect(() => applyOrganizationFavicon(src), [src]);
   return (
     <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">

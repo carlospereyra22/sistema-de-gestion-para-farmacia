@@ -508,7 +508,14 @@ export class ProductionSalesService {
    * Vuelve a poner en cola una factura rechazada (por ARCA o porque no llegó),
    * en el mismo registro: la venta conserva una sola factura.
    */
-  async requeue(actor: string, org: string, branch: string, saleId: string) {
+  async requeue(
+    actor: string,
+    org: string,
+    branch: string,
+    saleId: string,
+    /** Nota de crédito de la venta; sin esto, la factura. */
+    creditId?: string,
+  ) {
     await this.organizations.authorizeFiscalSale(actor, org);
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${saleId}::uuid FOR UPDATE`;
@@ -525,14 +532,18 @@ export class ProductionSalesService {
           organizationId: org,
           branchId: branch,
           sourceSaleId: saleId,
-          kind: "INVOICE",
+          ...(creditId
+            ? { id: creditId, kind: "CREDIT_NOTE" }
+            : { kind: "INVOICE" }),
         },
       });
       if (!doc)
         throw new BadRequestException("Comprobante productivo no encontrado.");
       if (doc.status !== "REJECTED")
         throw new ConflictException(
-          "Sólo se puede volver a emitir una factura rechazada o que no llegó a ARCA.",
+          creditId
+            ? "Sólo se puede volver a emitir una nota rechazada o que no llegó a ARCA."
+            : "Sólo se puede volver a emitir una factura rechazada o que no llegó a ARCA.",
         );
       await tx.fiscalDocument.update({
         where: { id: doc.id },

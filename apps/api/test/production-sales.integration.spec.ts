@@ -11,6 +11,7 @@ import { SalesService } from "../src/sales/sales.service";
 import { FiscalSalesService } from "../src/fiscal/fiscal-sales.service";
 import { ProductionSalesService } from "../src/fiscal/production-sales.service";
 import { ProductionCreditService } from "../src/fiscal/production-credit.service";
+import { NotasCreditoService } from "../src/sales/notas-credito.service";
 import { ProductionConfigurationService } from "../src/fiscal/production-configuration.service";
 import { ArcaConnectionService } from "../src/fiscal/arca-connection.service";
 import { ArcaSoap } from "../src/fiscal/arca-soap";
@@ -289,10 +290,18 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
             );
             const credits = new ProductionCreditService(
               scoped,
-              production,
               config,
               organizations,
               new AccountsService(scoped, new AuditService(scoped)),
+            );
+            const notas = new NotasCreditoService(
+              scoped,
+              new AuditService(scoped),
+              sales,
+              new AccountsService(scoped, new AuditService(scoped)),
+              app.get(FiscalSalesService),
+              production,
+              credits,
             );
             const input = {
               documentType: "INVOICE" as const,
@@ -371,72 +380,57 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
             const item = await tx.saleItem.findFirstOrThrow({
               where: { saleId: first.id },
             });
+            // Nota de crédito en un paso (SISTEMA-110): devuelve la plata y
+            // queda en cola; acá ARCA la autoriza en el momento.
             const request = {
               requestId: randomUUID(),
               reason: "Devolución parcial",
               confirmProduction: true,
-              items: [{ saleItemId: item.id, quantity: 1 }],
+              refundMethod: "CASH" as const,
+              cashSessionId: session.id,
+              items: [{ saleItemId: item.id, quantity: 1, reponer: false }],
             };
-            const note = await credits.create(
+            await expect(
+              notas.crear(user.id, org.id, branch.id, first.id, {
+                ...request,
+                requestId: randomUUID(),
+                confirmProduction: false,
+              }),
+            ).rejects.toThrow("Confirmá");
+            const note = await notas.crear(
               user.id,
               org.id,
               branch.id,
               first.id,
               request,
             );
-            expect(note.status).toBe("AUTHORIZED");
-            expect(note.voucherType).toBe(13);
-            expect(note.totalMinor).toBe(9500);
+            const noteDoc = await tx.fiscalDocument.findFirstOrThrow({
+              where: { customerReturnId: note.notaId },
+            });
+            expect(noteDoc.status).toBe("AUTHORIZED");
+            expect(noteDoc.voucherType).toBe(13);
+            expect(noteDoc.totalMinor).toBe(9500);
+            expect(noteDoc.settledAt).not.toBeNull();
             expect(
               external.mock.calls
                 .filter((call) => call[1] === "FECAESolicitar")
                 .at(-1)?.[2],
             ).toContain("<CbtesAsoc>");
             expect(
-              (
-                await credits.create(
-                  user.id,
-                  org.id,
-                  branch.id,
-                  first.id,
-                  request,
-                )
-              ).id,
-            ).toBe(note.id);
+              (await notas.crear(user.id, org.id, branch.id, first.id, request))
+                .notaId,
+            ).toBe(note.notaId);
             expect(sends).toBe(2);
-            const settle = {
-              expectedAccountMinor: 0,
-              expectedRefundMinor: 9500,
-              method: "CASH" as const,
-              cashSessionId: session.id,
-              reference: "Efectivo entregado fixture",
-              received: true,
-              confirm: true,
-            };
-            await credits.settle(
-              user.id,
-              org.id,
-              branch.id,
-              first.id,
-              note.id,
-              settle,
-            );
-            await credits.settle(
-              user.id,
-              org.id,
-              branch.id,
-              first.id,
-              note.id,
-              settle,
-            );
             expect(
               await tx.cashMovement.count({
                 where: {
                   cashSessionId: session.id,
-                  reason: { contains: note.id },
+                  type: "OUT",
+                  reason: { contains: note.notaId },
                 },
               }),
             ).toBe(1);
+            // Sin reponer: el stock no cambia.
             expect(
               (await tx.productLot.findUniqueOrThrow({ where: { id: lot.id } }))
                 .quantity,
@@ -444,24 +438,30 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
             expect(
               await tx.customerReturn.count({ where: { saleId: first.id } }),
             ).toBe(1);
-            const second = await credits.create(
+            const second = await notas.crear(
               user.id,
               org.id,
               branch.id,
               first.id,
-              { ...request, requestId: randomUUID() },
+              {
+                ...request,
+                requestId: randomUUID(),
+                items: [{ saleItemId: item.id, quantity: 1, reponer: true }],
+              },
             );
-            expect(second.totalMinor).toBe(9500);
+            expect(second.notas[0]?.totalMinor).toBe("9500");
+            expect(second.items[0]?.available).toBe(0);
+            // Repuesta: vuelve una unidad al lote de la venta.
             expect(
-              (await credits.detail(user.id, org.id, branch.id, first.id))
-                .items[0]?.available,
-            ).toBe(0);
+              (await tx.productLot.findUniqueOrThrow({ where: { id: lot.id } }))
+                .quantity,
+            ).toBe(29);
             await expect(
-              credits.create(user.id, org.id, branch.id, first.id, {
+              notas.crear(user.id, org.id, branch.id, first.id, {
                 ...request,
                 requestId: randomUUID(),
               }),
-            ).rejects.toThrow("cantidad");
+            ).rejects.toThrow("supera");
             const customer = await tx.customer.create({
               data: {
                 organizationId: org.id,
@@ -479,7 +479,8 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
             const financedItem = await tx.saleItem.findFirstOrThrow({
               where: { saleId: financed.id },
             });
-            const financedCredit = await credits.create(
+            // A cuenta corriente: baja la deuda del artículo, sin plata.
+            const financedCredit = await notas.crear(
               user.id,
               org.id,
               branch.id,
@@ -487,26 +488,17 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
               {
                 ...request,
                 requestId: randomUUID(),
-                items: [{ saleItemId: financedItem.id, quantity: 1 }],
+                refundMethod: undefined,
+                cashSessionId: undefined,
+                items: [
+                  { saleItemId: financedItem.id, quantity: 1, reponer: false },
+                ],
               },
             );
-            expect(
-              await credits.previewSettlement(
-                user.id,
-                org.id,
-                branch.id,
-                financed.id,
-                financedCredit.id,
-              ),
-            ).toMatchObject({ accountMinor: 9500, refundMinor: 0 });
-            await credits.settle(
-              user.id,
-              org.id,
-              branch.id,
-              financed.id,
-              financedCredit.id,
-              { ...settle, expectedAccountMinor: 9500, expectedRefundMinor: 0 },
-            );
+            expect(financedCredit.notas[0]).toMatchObject({
+              accountMinor: "9500",
+              refundMinor: "0",
+            });
             const balances = await new AccountsService(
               scoped,
               new AuditService(scoped),
@@ -518,7 +510,7 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
             ).toBe("9500");
             expect(
               await tx.cashMovement.count({
-                where: { reason: { contains: financedCredit.id } },
+                where: { reason: { contains: financedCredit.notaId } },
               }),
             ).toBe(0);
             // A fiscal refund and the original pending receipt are separate
@@ -565,49 +557,39 @@ describe("production workflow with local rollback DB and mocked ARCA", () => {
                 where: { sourceId: pendingSale.id, sourceType: "SALE" },
               });
             expect(pendingCollection.cashMinor).toBe(10000n);
-            const pendingNote = await credits.create(
-              user.id,
-              org.id,
-              branch.id,
-              pendingSale.id,
-              {
-                ...request,
-                requestId: randomUUID(),
-                items: [{ saleItemId: pendingItem.id, quantity: 1 }],
-              },
-            );
-            expect(pendingNote.totalMinor).toBe(9500);
             const beforePendingRefund = (
               await cash.list(user.id, org.id, branch.id)
             ).sessions.find((row) => row.id === session.id)!;
+            const pendingRequest = {
+              ...request,
+              requestId: randomUUID(),
+              items: [
+                { saleItemId: pendingItem.id, quantity: 1, reponer: false },
+              ],
+            };
             await expect(
-              credits.settle(
-                user.id,
-                org.id,
-                branch.id,
-                pendingSale.id,
-                pendingNote.id,
-                {
-                  ...settle,
-                  cashSessionId: undefined,
-                },
-              ),
+              notas.crear(user.id, org.id, branch.id, pendingSale.id, {
+                ...pendingRequest,
+                cashSessionId: undefined,
+              }),
             ).rejects.toThrow("caja abierta");
-            await credits.settle(
+            const pendingNote = {
+              id: (
+                await notas.crear(
+                  user.id,
+                  org.id,
+                  branch.id,
+                  pendingSale.id,
+                  pendingRequest,
+                )
+              ).notaId,
+            };
+            await notas.crear(
               user.id,
               org.id,
               branch.id,
               pendingSale.id,
-              pendingNote.id,
-              settle,
-            );
-            await credits.settle(
-              user.id,
-              org.id,
-              branch.id,
-              pendingSale.id,
-              pendingNote.id,
-              settle,
+              pendingRequest,
             );
             expect(
               (

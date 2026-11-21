@@ -61,9 +61,11 @@ export function trialTicketData(trial: FiscalTrial): {
       ? trial.kind === "CREDIT_NOTE"
         ? `Nota de crédito · ${trial.reason ?? ""}`
         : undefined
-      : trial.sourceSaleId
-        ? "VENTA DE PRUEBA · STOCK Y COBROS REGISTRADOS"
-        : "PRUEBA · SIN MOVIMIENTOS DE STOCK NI CAJA",
+      : trial.kind === "CREDIT_NOTE"
+        ? `NOTA DE CRÉDITO DE PRUEBA · ${trial.reason ?? ""}`
+        : trial.sourceSaleId
+          ? "VENTA DE PRUEBA · STOCK Y COBROS REGISTRADOS"
+          : "PRUEBA · SIN MOVIMIENTOS DE STOCK NI CAJA",
   };
   const document = trial.saleSnapshot?.recipient.docNumber;
   const fiscal: ThermalFiscalDetails = {

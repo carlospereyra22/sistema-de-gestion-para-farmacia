@@ -79,9 +79,11 @@ const EXCEPTIONS = [
   `OWNER_WHEN_BLOCKED GET organizations/:organizationId/branches`,
   `OWNER_WHEN_BLOCKED GET ${sales}`,
   `OWNER_WHEN_BLOCKED GET ${sales}/history`,
-  `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/credits`,
+  `OWNER_WHEN_BLOCKED GET ${sales}/notas-credito`,
   `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/credits/:documentId/settlement`,
   `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/invoice`,
+  // Notas de crédito de una venta (SISTEMA-110): consultar, como la factura.
+  `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/notas-credito`,
   `OWNER_WHEN_BLOCKED GET ${sales}/:saleId/ticket`,
   `READ_ONLY PATCH organizations/:organizationId/users/:userId`,
   `READ_ONLY PATCH organizations/:organizationId/users/:userId/password`,
@@ -97,6 +99,9 @@ const EXCEPTIONS = [
   `READ_ONLY POST ${sales}/:saleId/invoice/process`,
   // Volver a emitir la factura de una venta ya hecha, igual que invoice/process (07/11/2026).
   `READ_ONLY POST ${sales}/:saleId/invoice/reencolar`,
+  // Enviar o volver a emitir la nota de una devolución ya hecha (SISTEMA-110).
+  `READ_ONLY POST ${sales}/:saleId/notas-credito/:notaId/procesar`,
+  `READ_ONLY POST ${sales}/:saleId/notas-credito/:notaId/reencolar`,
   // Ventas hechas sin conexión: se deciden con el estado que tenía la farmacia
   // cuando ocurrieron; marcar un aviso como revisado termina algo pendiente (SISTEMA-63).
   `OFFLINE_SYNC POST ${sales}/offline`,

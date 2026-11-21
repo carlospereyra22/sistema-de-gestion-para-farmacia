@@ -11,6 +11,7 @@ import { AccountsService } from "../src/accounts/accounts.service";
 import { FiscalSalesService } from "../src/fiscal/fiscal-sales.service";
 import { ProductionSalesService } from "../src/fiscal/production-sales.service";
 import { ProductionCreditService } from "../src/fiscal/production-credit.service";
+import { NotasCreditoService } from "../src/sales/notas-credito.service";
 import { ProductionConfigurationService } from "../src/fiscal/production-configuration.service";
 import { ArcaConnectionService } from "../src/fiscal/arca-connection.service";
 import { ArcaSoap } from "../src/fiscal/arca-soap";
@@ -725,10 +726,18 @@ describe("ofertas (base local, transacción que se deshace)", () => {
             );
             const credits = new ProductionCreditService(
               e.scoped,
-              production,
               config,
               organizations,
               new AccountsService(e.scoped, new AuditService(e.scoped)),
+            );
+            const notas = new NotasCreditoService(
+              e.scoped,
+              new AuditService(e.scoped),
+              sales,
+              new AccountsService(e.scoped, new AuditService(e.scoped)),
+              app.get(FiscalSalesService),
+              production,
+              credits,
             );
             const venta = await sales.complete(
               e.dueño.id,
@@ -770,7 +779,7 @@ describe("ofertas (base local, transacción que se deshace)", () => {
               where: { saleId: venta.id },
             });
             // Devolver 1 de las 2 unidades devuelve la mitad de lo pagado.
-            const nota = await credits.create(
+            const nota = await notas.crear(
               e.dueño.id,
               e.org.id,
               e.branch.id,
@@ -779,11 +788,13 @@ describe("ofertas (base local, transacción que se deshace)", () => {
                 requestId: randomUUID(),
                 reason: "Devolución parcial del 2x1",
                 confirmProduction: true,
-                items: [{ saleItemId: item.id, quantity: 1 }],
+                refundMethod: "CASH",
+                cashSessionId: e.session.id,
+                items: [{ saleItemId: item.id, quantity: 1, reponer: true }],
               },
             );
-            expect(nota.status).toBe("AUTHORIZED");
-            expect(nota.totalMinor).toBe(5000);
+            expect(nota.notas[0]?.fiscal?.status).toBe("AUTHORIZED");
+            expect(nota.notas[0]?.totalMinor).toBe("5000");
             throw rollback;
           },
           { timeout: 60_000 },

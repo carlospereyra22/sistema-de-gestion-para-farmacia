@@ -41,6 +41,7 @@ import { assertNoEsSoporte } from "../auth/soporte";
 import { BranchAccessGuard } from "../auth/branch-access.guard";
 import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { SalesService } from "./sales.service";
+import { NotasCreditoService } from "./notas-credito.service";
 import { SaleFiscalOptionsDto } from "../fiscal/sale-fiscal-options";
 import { ProductionCreditService } from "../fiscal/production-credit.service";
 import { ProductionSalesService } from "../fiscal/production-sales.service";
@@ -170,9 +171,25 @@ class CustomerReturnDto extends ReasonDto {
   @Type(() => CustomerReturnItemDto)
   items!: CustomerReturnItemDto[];
 }
-class CreditDto extends CustomerReturnDto {
+class NotaCreditoItemDto {
+  @IsUUID() saleItemId!: string;
+  @Type(() => Number) @IsInt() @Min(1) quantity!: number;
+  @IsBoolean() reponer!: boolean;
+}
+/** Nota de crédito por la venta entera o por productos (SISTEMA-110). */
+class NotaCreditoDto {
   @IsUUID() requestId!: string;
-  @IsBoolean() confirmProduction!: boolean;
+  @IsString() @MinLength(3) @MaxLength(300) reason!: string;
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => NotaCreditoItemDto)
+  items!: NotaCreditoItemDto[];
+  @IsOptional()
+  @IsIn(["CASH", "CARD", "TRANSFER", "SALDO_A_FAVOR"])
+  refundMethod?: "CASH" | "CARD" | "TRANSFER" | "SALDO_A_FAVOR";
+  @IsOptional() @IsUUID() cashSessionId?: string;
+  @IsOptional() @IsBoolean() confirmProduction?: boolean;
 }
 class SettleCreditDto {
   @IsInt() @Min(0) expectedAccountMinor!: number;
@@ -184,6 +201,27 @@ class SettleCreditDto {
   @IsBoolean() confirm!: boolean;
 }
 
+/** Filtros del listado de notas de crédito (SISTEMA-110). */
+class NotasCreditoQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAXIMO_PAGINA_HISTORIAL)
+  pageSize?: number;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) from?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) to?: string;
+  @IsOptional() @IsIn(["INTERNA", "FACTURA"]) creditKind?:
+    "INTERNA" | "FACTURA";
+  @IsOptional() @IsString() @MaxLength(36) q?: string;
+  /** Uuid del cliente o SIN_CLIENTE (público general). */
+  @IsOptional()
+  @Matches(
+    /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|SIN_CLIENTE)$/i,
+  )
+  customerId?: string;
+}
 /** Filtros del historial de ventas (SISTEMA-104). */
 class SalesHistoryQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
@@ -203,6 +241,12 @@ class SalesHistoryQueryDto {
   @IsIn(["CASH", "CARD", "TRANSFER", "ACCOUNT", "OTHER"])
   method?: "CASH" | "CARD" | "TRANSFER" | "ACCOUNT" | "OTHER";
   @IsOptional() @IsString() @MaxLength(36) q?: string;
+  /** Uuid del cliente o SIN_CLIENTE (público general). */
+  @IsOptional()
+  @Matches(
+    /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|SIN_CLIENTE)$/i,
+  )
+  customerId?: string;
 }
 @Controller("organizations/:organizationId/branches/:branchId/sales")
 @UseGuards(JwtAccessGuard, BranchAccessGuard)
@@ -211,26 +255,52 @@ export class SalesController {
     private readonly sales: SalesService,
     private readonly credits: ProductionCreditService,
     private readonly production: ProductionSalesService,
+    private readonly notas: NotasCreditoService,
   ) {}
   @AllowOwnerWhenBlocked()
-  @Get(":saleId/credits")
-  creditsDetail(
+  @Get(":saleId/notas-credito")
+  notasCredito(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
     @Param("saleId", ParseUUIDPipe) saleId: string,
   ) {
-    return this.credits.detail(req.auth!.sub, org, branch, saleId);
+    return this.notas.detalle(req.auth!.sub, org, branch, saleId);
   }
-  @Post(":saleId/credits") createCredit(
+  @Post(":saleId/notas-credito")
+  crearNotaCredito(
     @Req() req: AuthenticatedRequest,
     @Param("organizationId") org: string,
     @Param("branchId") branch: string,
     @Param("saleId", ParseUUIDPipe) saleId: string,
-    @Body() input: CreditDto,
+    @Body() input: NotaCreditoDto,
   ) {
     assertNoEsSoporte(req);
-    return this.credits.create(req.auth!.sub, org, branch, saleId, input);
+    return this.notas.crear(req.auth!.sub, org, branch, saleId, input);
+  }
+  @AllowWhenReadOnly()
+  @Post(":saleId/notas-credito/:notaId/procesar")
+  procesarNotaCredito(
+    @Req() req: AuthenticatedRequest,
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Param("saleId", ParseUUIDPipe) saleId: string,
+    @Param("notaId", ParseUUIDPipe) notaId: string,
+  ) {
+    assertNoEsSoporte(req);
+    return this.notas.procesar(req.auth!.sub, org, branch, saleId, notaId);
+  }
+  @AllowWhenReadOnly()
+  @Post(":saleId/notas-credito/:notaId/reencolar")
+  reencolarNotaCredito(
+    @Req() req: AuthenticatedRequest,
+    @Param("organizationId") org: string,
+    @Param("branchId") branch: string,
+    @Param("saleId", ParseUUIDPipe) saleId: string,
+    @Param("notaId", ParseUUIDPipe) notaId: string,
+  ) {
+    assertNoEsSoporte(req);
+    return this.notas.reencolar(req.auth!.sub, org, branch, saleId, notaId);
   }
   @AllowWhenReadOnly()
   @Post(":saleId/credits/:documentId/process")
@@ -367,6 +437,25 @@ export class SalesController {
   ) {
     const { page = 1, pageSize = TAMANIO_PAGINA_HISTORIAL, ...filtro } = query;
     return this.sales.history(
+      request.auth!.sub,
+      organizationId,
+      branchId,
+      filtro,
+      page,
+      pageSize,
+    );
+  }
+  /** Notas de crédito de la sucursal (SISTEMA-110), como el historial. */
+  @AllowOwnerWhenBlocked()
+  @Get("notas-credito")
+  listarNotasCredito(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationId") organizationId: string,
+    @Param("branchId") branchId: string,
+    @Query() query: NotasCreditoQueryDto,
+  ) {
+    const { page = 1, pageSize = TAMANIO_PAGINA_HISTORIAL, ...filtro } = query;
+    return this.notas.listar(
       request.auth!.sub,
       organizationId,
       branchId,

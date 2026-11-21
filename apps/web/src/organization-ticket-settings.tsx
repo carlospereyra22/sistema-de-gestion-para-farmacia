@@ -1,6 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Building2, Upload, Eye, Save, MapPin, BadgeCheck } from "lucide-react";
-import { logoPreview, prepareTicketLogo } from "./lib/ticket-logo";
+import {
+  logoPreview,
+  prepararLogoImagen,
+  prepareTicketLogo,
+} from "./lib/ticket-logo";
 import {
   getTicketHeader,
   saveTicketHeader,
@@ -8,7 +12,10 @@ import {
 } from "./lib/api";
 
 const fields: {
-  key: Exclude<keyof TicketHeaderSettings, "logoRaster" | "printDensity">;
+  key: Exclude<
+    keyof TicketHeaderSettings,
+    "logoRaster" | "logoImage" | "printDensity"
+  >;
   label: string;
   max: number;
 }[] = [
@@ -112,8 +119,10 @@ export function OrganizationTicketSettings({
           >
             <label className="group relative mb-6 flex cursor-pointer flex-wrap items-center gap-4 rounded-xl border border-dashed border-teal-200 bg-teal-50/30 p-4 text-sm transition-colors hover:bg-teal-50 focus-within:ring-2 focus-within:ring-teal-600">
               <span className="grid size-16 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white p-2">
+                {/* El logo con sus colores; el del ticket se ve en la
+                    vista previa de al lado. */}
                 <img
-                  src={logoPreview(data.logoRaster)}
+                  src={data.logoImage ?? logoPreview(data.logoRaster)}
                   alt="Logo actual"
                   className="size-full object-contain"
                 />
@@ -127,7 +136,8 @@ export function OrganizationTicketSettings({
                 <span className="mt-1 block text-xs leading-5 text-slate-500">
                   PNG, JPG o WebP · Hasta 5 MB.
                   <br />
-                  Se adapta a blanco y negro para el ticket.
+                  En la cabecera se ve con sus colores; en el ticket, en blanco
+                  y negro.
                   <br />
                   Al guardar, también aparece en la cabecera y la pestaña.
                 </span>
@@ -153,11 +163,18 @@ export function OrganizationTicketSettings({
                   pending.current = true;
                   setBusy(true);
                   setMessage("");
-                  void prepareTicketLogo(file)
-                    .then((logoRaster) => {
+                  // Dos versiones: la original para la cabecera y la de
+                  // blanco y negro para la impresora.
+                  void Promise.all([
+                    prepareTicketLogo(file),
+                    prepararLogoImagen(file),
+                  ])
+                    .then(([logoRaster, logoImage]) => {
                       dirty.current = true;
                       setData((current) =>
-                        current ? { ...current, logoRaster } : current,
+                        current
+                          ? { ...current, logoRaster, logoImage }
+                          : current,
                       );
                     })
                     .catch((cause: unknown) =>

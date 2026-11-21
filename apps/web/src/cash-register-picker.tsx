@@ -82,17 +82,66 @@ export function SaleCashStatus({
         />
       </div>
     );
+  // Una sola caja: tarjeta como la de la cuenta y la sucursal del
+  // encabezado (SISTEMA-110), con el estado como un punto sobre el ícono.
+  const tono = session
+    ? "abierta"
+    : allowWithoutSession
+      ? "pendiente"
+      : "sin-caja";
+  const estilos = {
+    abierta: {
+      icono: "bg-marca-970 text-marca-535",
+      punto: "bg-emerald-500",
+      estado: "Abierta",
+    },
+    pendiente: {
+      icono: "bg-amber-50 text-amber-700",
+      punto: "bg-amber-500",
+      estado: "El cobro queda pendiente",
+    },
+    "sin-caja": {
+      icono: "bg-rose-50 text-rose-600",
+      punto: "bg-rose-500",
+      estado: "No se puede cobrar",
+    },
+  }[tono];
   return (
-    <span
+    <div
       role="status"
-      className={`inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${session ? "bg-emerald-50 text-emerald-700" : allowWithoutSession ? "bg-amber-50 text-amber-800" : "bg-rose-50 text-rose-700"}`}
+      aria-label={
+        session
+          ? `Caja abierta · ${name(session.cashRegisterId)}`
+          : allowWithoutSession
+            ? "Sin caja · el cobro queda pendiente"
+            : "Sin caja abierta"
+      }
+      className="flex h-11 items-center gap-2.5 rounded-xl border border-slate-200 bg-white pl-1.5 pr-3.5 shadow-sm"
     >
-      <span aria-hidden className="size-1.5 rounded-full bg-current" />
-      {session
-        ? `Caja abierta · ${name(session.cashRegisterId)}`
-        : allowWithoutSession
-          ? "Sin caja · el cobro queda pendiente"
-          : "Sin caja abierta"}
-    </span>
+      <span
+        className={`relative grid size-8 shrink-0 place-items-center rounded-lg ${estilos.icono}`}
+      >
+        <CashRegisterIcon size={17} aria-hidden />
+        <span
+          aria-hidden
+          className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white ${estilos.punto}`}
+        />
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className="block text-[11px] font-medium text-slate-500">
+          {session ? "Cobrás en" : "Caja para cobrar"}
+        </span>
+        <span className="flex items-baseline gap-1.5 whitespace-nowrap">
+          <span className="max-w-40 truncate text-sm font-semibold text-slate-800">
+            {session ? name(session.cashRegisterId) : "Sin caja abierta"}
+          </span>
+          <span
+            className={`text-[11px] font-medium ${session ? "text-emerald-700" : allowWithoutSession ? "text-amber-700" : "text-rose-600"}`}
+          >
+            {estilos.estado}
+          </span>
+        </span>
+      </span>
+    </div>
   );
 }
