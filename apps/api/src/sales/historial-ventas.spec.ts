@@ -60,4 +60,14 @@ describe("historial de ventas paginado (SISTEMA-104)", () => {
       payments: { some: { method: "CARD" } },
     });
   });
+
+  it("cliente: uno puntual o el público general", () => {
+    expect(
+      whereHistorialVentas("org", "suc", { customerId: "c1" }).customerId,
+    ).toBe("c1");
+    expect(
+      whereHistorialVentas("org", "suc", { customerId: "SIN_CLIENTE" })
+        .customerId,
+    ).toBeNull();
+  });
 });

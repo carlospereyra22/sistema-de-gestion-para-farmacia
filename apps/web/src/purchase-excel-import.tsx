@@ -1,3 +1,4 @@
+import { Boton } from "./boton";
 import { productoPorId } from "./lib/indice-productos";
 import { PurchasePackPicker } from "./purchase-pack-picker";
 import type { MedicineReference } from "./lib/api";
@@ -263,16 +264,15 @@ export function PurchaseExcelImport({
 
   return (
     <>
-      <button
-        type="button"
+      <Boton
+        variante="suave"
         disabled={disabled || Boolean(reading)}
         onClick={() => input.current?.click()}
         title="Excel del pedido o factura PDF de la droguería"
-        className="inline-flex h-9 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 text-sm font-medium text-teal-800 hover:bg-teal-100 disabled:opacity-50"
+        icono={<FileUp size={15} />}
       >
-        <FileUp size={16} aria-hidden="true" />
         {reading || "Importar archivo"}
-      </button>
+      </Boton>
       <input
         ref={input}
         type="file"

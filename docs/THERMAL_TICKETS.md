@@ -2,6 +2,8 @@
 
 Organización permite subir un logo PNG/JPG/WebP de hasta 5 MB. Se convierte, conservando proporciones y fondo blanco, a raster monocromo de 128 × 128; la vista previa muestra el mismo raster que imprime ESC/POS. Se guarda en `Organization.ticketHeader.logoRaster` (4096 caracteres hex validados), con los permisos y auditoría del encabezado, sin migración. Guardar encabezado confirma el cambio para ventas y cobros. Sin logo personalizado se conserva el original. El componente de impresión debe reiniciarse para cargar esta actualización; no se reenvían tickets pendientes.
 
+Logo a color y grises (SISTEMA-110, 19/11/2026): al subir el logo se guardan dos versiones. `logoImage` es la imagen original achicada (lado mayor ≤ 192 px, WebP o PNG, ≤ 60 KB; la API acepta hasta 90 KB de `data:image/png|webp|jpeg`) y se usa en la cabecera, la pestaña y la configuración; en la auditoría sólo queda que hay imagen. `logoRaster` sigue siendo el de la impresora, pero los grises y colores intermedios se simulan con puntos (difusión de error de Floyd-Steinberg) en vez de un corte fijo: antes todo lo más oscuro que un gris claro salía negro y un logo con relleno de color quedaba una mancha. Los logos cargados antes sólo tienen el raster: hay que volver a subirlos para verlos con color.
+
 Historial de ventas: 10 registros por página sobre las últimas 200 ventas que devuelve el endpoint existente; CSV conserva todos los resultados cargados y filtrados. El detalle se abre en diálogo con impresión, total, motivo y acciones existentes; no se eliminan ventas históricas. Los filtros vuelven a la primera página y las operaciones muestran su respuesta dentro del diálogo.
 
 ## Impresión actual — 14/09/2026

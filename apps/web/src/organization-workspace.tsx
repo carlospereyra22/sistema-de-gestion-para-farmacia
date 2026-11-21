@@ -1,3 +1,5 @@
+import { IconoImagen } from "./icono-imagen";
+import { ICONOS_ORGANIZACION } from "./lib/iconos-organizacion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -67,13 +69,12 @@ export function OrganizationWorkspace({
   onUsers: () => void;
 }) {
   return (
-    <div className="mt-2 min-w-0">
-      <p className="text-sm text-slate-500">
-        Administrá los datos de tu organización, sus sucursales y comprobantes.
-      </p>
+    // El título va en la barra de arriba, como en los demás módulos
+    // (SISTEMA-110): la página empieza por las pestañas.
+    <div className="min-w-0">
       <nav
         aria-label="Secciones de organización"
-        className="mt-5 mb-6 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-200/50 p-1.5"
+        className="mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-200/50 p-1.5"
       >
         {(
           [
@@ -90,11 +91,12 @@ export function OrganizationWorkspace({
             onClick={() => onTabChange(id)}
             className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 ${tab === id ? "bg-white font-semibold text-teal-700 shadow-sm" : "text-slate-500 hover:bg-white/60 hover:text-teal-700"}`}
           >
-            {id === "tickets" ? (
-              <ReceiptText size={16} />
-            ) : (
-              <Building2 size={16} />
-            )}
+            {/* Ícono propio (SISTEMA-110): 24 px con margen negativo,
+                así la pestaña no crece. */}
+            <IconoImagen
+              url={ICONOS_ORGANIZACION[id]}
+              className="-my-0.5 size-6"
+            />
             {label}
           </button>
         ))}

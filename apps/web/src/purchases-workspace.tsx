@@ -69,7 +69,18 @@ import {
   ShoppingBag,
   FileText,
   ArrowLeft,
+  ArrowRight,
+  Save,
+  RotateCcw,
+  CircleDot,
+  CircleSlash,
+  Truck,
 } from "lucide-react";
+import { ProductFilterSelect } from "./product-filter-select";
+import { SelectorFecha } from "./selector-fecha";
+import { botonTexto } from "./lib/botones";
+import { borradorVacio } from "./lib/compra-borrador-vacio";
+import { Boton } from "./boton";
 import {
   getParties,
   getPurchases,
@@ -115,8 +126,6 @@ import { OperationConfirmDialog } from "./operation-confirm-dialog";
 
 const field =
   "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm";
-const button =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 text-sm font-medium text-teal-800 disabled:opacity-50";
 const money = (n: number) =>
   (n / 100).toLocaleString("es-AR", { style: "currency", currency: "ARS" });
 type Draft = {
@@ -750,6 +759,12 @@ export function PurchasesWorkspace({
       setDetail(undefined);
       return;
     }
+    // Sin nada cargado no hay borrador que guardar: se cierra sin preguntar.
+    if (draft && borradorVacio(draft)) {
+      setDraft(undefined);
+      setOpen(false);
+      return;
+    }
     if (draft) {
       setDiscard(true);
       return;
@@ -834,37 +849,46 @@ export function PurchasesWorkspace({
         )}
         <div className="flex flex-wrap justify-end gap-2">
           {receivingPage && !draft.locked && (
-            <button
-              type="button"
-              className="px-2 text-xs font-medium text-slate-500 hover:text-rose-700"
-              onClick={close}
-            >
-              Descartar borrador
+            <button type="button" className={botonTexto} onClick={close}>
+              <X size={13} aria-hidden /> Descartar borrador
             </button>
           )}
-          <button
-            className={button}
+          <Boton
             disabled={busy}
             onClick={receivingPage ? leaveReception : close}
+            icono={receivingPage ? <ArrowLeft size={15} /> : <X size={15} />}
+            // En el diálogo, Esc cierra (PurchaseDialog).
+            tecla={receivingPage ? undefined : "Esc"}
           >
             {receivingPage ? "Volver a Compras" : "Cancelar"}
-          </button>
+          </Boton>
           {draft.mode === "direct" &&
             draft.step === "receive" &&
             !draft.locked && (
-              <button
-                className={button}
+              <Boton
                 onClick={() => patch({ step: "edit" })}
+                icono={<ArrowLeft size={15} />}
               >
                 Volver a productos
-              </button>
+              </Boton>
             )}
-          <button
-            className={`${button} bg-teal-700 text-white`}
+          <Boton
+            variante="primario"
             disabled={
               busy || (!draft.locked && draft.step === "receive" && !reviewed)
             }
             onClick={() => void submit()}
+            icono={
+              draft.locked ? (
+                <RotateCcw size={15} />
+              ) : draft.step === "receive" ? (
+                <PackageCheck size={15} />
+              ) : draft.mode === "direct" ? (
+                <ArrowRight size={15} />
+              ) : (
+                <Save size={15} />
+              )
+            }
           >
             {busy
               ? "Guardando…"
@@ -875,7 +899,7 @@ export function PurchasesWorkspace({
                   : draft.mode === "direct"
                     ? "Continuar a recepción"
                     : "Guardar pedido"}
-          </button>
+          </Boton>
         </div>
       </div>
     </footer>
@@ -987,64 +1011,88 @@ export function PurchasesWorkspace({
                 onChange={(e) => setQuery(e.target.value)}
               />
             </label>
-            <label className="text-xs text-slate-500">
-              Estado
-              <select
-                className={field}
+            {/* Selectores y fechas del sistema (SISTEMA-110): no disparan
+                el "change" nativo, así que cada uno vuelve a la página 1. */}
+            <div className="text-xs text-slate-500">
+              <p className="mb-1">Estado</p>
+              <ProductFilterSelect
+                compact
+                label="Estado"
+                icon={<CircleDot size={15} aria-hidden />}
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {["ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"].map(
-                  (s) => (
-                    <option key={s} value={s}>
-                      {purchaseStatus({ status: s as Purchase["status"] })}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-            <label className="text-xs text-slate-500">
-              Proveedor
-              <select
-                className={field}
+                options={[
+                  { value: "", label: "Todos" },
+                  ...(
+                    [
+                      "ORDERED",
+                      "PARTIALLY_RECEIVED",
+                      "RECEIVED",
+                      "CANCELLED",
+                    ] as const
+                  ).map((s) => ({
+                    value: s,
+                    label: purchaseStatus({ status: s }),
+                  })),
+                ]}
+                onChange={(value) => {
+                  setStatus(value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <div className="text-xs text-slate-500">
+              <p className="mb-1">Proveedor</p>
+              <ProductFilterSelect
+                compact
+                label="Proveedor"
+                icon={<Truck size={15} aria-hidden />}
                 value={supplierFilter}
-                onChange={(e) => setSupplierFilter(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {suppliers.map((s) => (
-                  <option value={s.id} key={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-slate-500">
-              Desde
-              <input
-                type="date"
-                className={field}
+                options={[
+                  { value: "", label: "Todos" },
+                  ...suppliers.map((s) => ({ value: s.id, label: s.name })),
+                ]}
+                onChange={(value) => {
+                  setSupplierFilter(value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <div className="text-xs text-slate-500">
+              <p className="mb-1">Desde</p>
+              <SelectorFecha
+                compact
+                label="Desde"
+                vacio="Cualquier fecha"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                max={to || undefined}
+                onChange={(value) => {
+                  setFrom(value);
+                  setPage(1);
+                }}
               />
-            </label>
-            <label className="text-xs text-slate-500">
-              Hasta
-              <input
-                type="date"
-                className={field}
+            </div>
+            <div className="text-xs text-slate-500">
+              <p className="mb-1">Hasta</p>
+              <SelectorFecha
+                compact
+                label="Hasta"
+                vacio="Cualquier fecha"
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                min={from || undefined}
+                onChange={(value) => {
+                  setTo(value);
+                  setPage(1);
+                }}
               />
-            </label>
+            </div>
             {canBuy && (
-              <button
-                className={`${button} whitespace-nowrap bg-teal-700 text-white`}
+              <Boton
+                variante="primario"
                 onClick={newPurchase}
+                icono={<Plus size={15} />}
               >
-                <Plus size={16} />
                 Nueva compra
-              </button>
+              </Boton>
             )}
           </div>
           {!from && !to && (
@@ -1261,30 +1309,28 @@ export function PurchasesWorkspace({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {detail.canRegisterDebt !== false && (
-                    <button
-                      type="button"
-                      className={button}
+                    <Boton
                       onClick={() => {
                         setDetail(undefined);
                         setOpen(false);
                         onRegisterDebt(detail.id);
                       }}
+                      icono={<FileText size={15} />}
                     >
-                      <FileText size={16} />
                       Registrar deuda
-                    </button>
+                    </Boton>
                   )}
                   {canReceiveGoods &&
                     ["ORDERED", "PARTIALLY_RECEIVED"].includes(
                       detail.status,
                     ) && (
-                      <button
-                        className={button}
+                      <Boton
+                        variante="suave"
                         onClick={() => receive(detail)}
+                        icono={<PackageCheck size={15} />}
                       >
-                        <PackageCheck size={16} />
                         Recibir mercadería
-                      </button>
+                      </Boton>
                     )}
                 </div>
               </div>
@@ -1389,9 +1435,11 @@ export function PurchasesWorkspace({
                         onChange={(e) => setCloseReason(e.target.value)}
                       />
                     </label>
-                    <button
+                    <Boton
+                      variante="peligro"
+                      className="mt-3"
+                      icono={<CircleSlash size={15} />}
                       disabled={busy || closeReason.trim().length < 3}
-                      className={`${button} mt-3`}
                       onClick={async () => {
                         if (pending.current) return;
                         pending.current = true;
@@ -1433,7 +1481,7 @@ export function PurchasesWorkspace({
                       }}
                     >
                       Confirmar cierre del saldo
-                    </button>
+                    </Boton>
                   </details>
                 )}
             </>
@@ -1466,7 +1514,7 @@ export function PurchasesWorkspace({
                       </label>
                       <div className="text-sm">
                         <div className="flex items-center gap-1.5">
-                          <label htmlFor="purchase-mode">Modalidad</label>
+                          <span>Modalidad</span>
                           <PurchaseHelp label="Ayuda sobre modalidad">
                             <strong>Pedido pendiente:</strong> guardá lo
                             encargado sin sumar stock. Después recibís lo que
@@ -1478,21 +1526,24 @@ export function PurchasesWorkspace({
                             lotes para ingresarlos al inventario.
                           </PurchaseHelp>
                         </div>
-                        <select
-                          id="purchase-mode"
-                          className={field}
-                          value={draft.mode}
-                          onChange={(e) =>
-                            patch({
-                              mode: e.target.value as "order" | "direct",
-                            })
-                          }
-                        >
-                          <option value="order">Pedido pendiente</option>
-                          {canReceiveGoods && (
-                            <option value="direct">Compra directa</option>
-                          )}
-                        </select>
+                        <div className="mt-1">
+                          <ProductFilterSelect
+                            compact
+                            label="Modalidad"
+                            icon={null}
+                            disabled={busy || Boolean(draft.locked)}
+                            value={draft.mode}
+                            options={[
+                              { value: "order", label: "Pedido pendiente" },
+                              ...(canReceiveGoods
+                                ? [{ value: "direct", label: "Compra directa" }]
+                                : []),
+                            ]}
+                            onChange={(value) =>
+                              patch({ mode: value as "order" | "direct" })
+                            }
+                          />
+                        </div>
                       </div>
                       <div className="text-sm">
                         <div className="flex items-center gap-1.5">
@@ -1518,15 +1569,18 @@ export function PurchasesWorkspace({
                           onChange={(e) => patch({ reference: e.target.value })}
                         />
                       </div>
-                      <label className="text-sm">
-                        Fecha (opcional)
-                        <input
-                          type="date"
-                          className={field}
-                          value={draft.orderedAt}
-                          onChange={(e) => patch({ orderedAt: e.target.value })}
-                        />
-                      </label>
+                      <div className="text-sm">
+                        <p>Fecha (opcional)</p>
+                        <div className="mt-1">
+                          <SelectorFecha
+                            compact
+                            label="Fecha de la compra"
+                            disabled={busy || Boolean(draft.locked)}
+                            value={draft.orderedAt}
+                            onChange={(orderedAt) => patch({ orderedAt })}
+                          />
+                        </div>
+                      </div>
                     </div>
                     <div
                       className="relative my-4"

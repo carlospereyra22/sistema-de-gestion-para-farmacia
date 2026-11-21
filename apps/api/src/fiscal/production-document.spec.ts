@@ -30,6 +30,7 @@ export const productionFixture: FiscalDocument = {
   issuer: {},
   saleSnapshot: {},
   reason: null,
+  customerReturnId: null,
   cae: null,
   detail: null,
   caeExpires: null,

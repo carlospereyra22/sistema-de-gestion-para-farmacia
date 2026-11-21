@@ -45,8 +45,24 @@ export function trialBody(
     "point" | "voucherType" | "number" | "date" | "totalMinor"
   > &
     Partial<Pick<FiscalTrial, "docType" | "docNumber" | "saleSnapshot">>,
+  /** Nota de crédito (13): la factura de prueba que acredita. */
+  original?: Pick<
+    FiscalTrial,
+    "voucherType" | "point" | "number" | "date" | "issuer"
+  > | null,
 ) {
-  return `<FeCAEReq><FeCabReq><CantReg>1</CantReg><PtoVta>${trial.point}</PtoVta><CbteTipo>${trial.voucherType}</CbteTipo></FeCabReq><FeDetReq><FECAEDetRequest><Concepto>1</Concepto><DocTipo>${trial.docType ?? 99}</DocTipo><DocNro>${trial.docNumber ?? "0"}</DocNro><CbteDesde>${trial.number}</CbteDesde><CbteHasta>${trial.number}</CbteHasta><CbteFch>${trial.date}</CbteFch><ImpTotal>${(trial.totalMinor / 100).toFixed(2)}</ImpTotal><ImpTotConc>0</ImpTotConc><ImpNeto>${trial.voucherType === 11 ? (trial.totalMinor / 100).toFixed(2) : "100.00"}</ImpNeto><ImpOpEx>0</ImpOpEx><ImpTrib>0</ImpTrib><ImpIVA>${trial.voucherType === 6 ? "21.00" : "0.00"}</ImpIVA><MonId>PES</MonId><MonCotiz>1</MonCotiz><CondicionIVAReceptorId>${Number(obj(obj(trial.saleSnapshot).recipient).vatId) || 5}</CondicionIVAReceptorId>${trial.voucherType === 6 ? "<Iva><AlicIva><Id>5</Id><BaseImp>100.00</BaseImp><Importe>21.00</Importe></AlicIva></Iva>" : ""}</FECAEDetRequest></FeDetReq></FeCAEReq>`;
+  if (
+    trial.voucherType === 13 &&
+    (!original?.number || original.voucherType !== 11)
+  )
+    throw new BadRequestException(
+      "La nota de crédito de prueba requiere la factura original autorizada.",
+    );
+  const asociado =
+    trial.voucherType === 13 && original
+      ? `<CbtesAsoc><CbteAsoc><Tipo>${original.voucherType}</Tipo><PtoVta>${original.point}</PtoVta><Nro>${original.number}</Nro><Cuit>${readFiscalProfile(original.issuer).cuit}</Cuit><CbteFch>${original.date}</CbteFch></CbteAsoc></CbtesAsoc>`
+      : "";
+  return `<FeCAEReq><FeCabReq><CantReg>1</CantReg><PtoVta>${trial.point}</PtoVta><CbteTipo>${trial.voucherType}</CbteTipo></FeCabReq><FeDetReq><FECAEDetRequest><Concepto>1</Concepto><DocTipo>${trial.docType ?? 99}</DocTipo><DocNro>${trial.docNumber ?? "0"}</DocNro><CbteDesde>${trial.number}</CbteDesde><CbteHasta>${trial.number}</CbteHasta><CbteFch>${trial.date}</CbteFch><ImpTotal>${(trial.totalMinor / 100).toFixed(2)}</ImpTotal><ImpTotConc>0</ImpTotConc><ImpNeto>${[11, 13].includes(trial.voucherType) ? (trial.totalMinor / 100).toFixed(2) : "100.00"}</ImpNeto><ImpOpEx>0</ImpOpEx><ImpTrib>0</ImpTrib><ImpIVA>${trial.voucherType === 6 ? "21.00" : "0.00"}</ImpIVA><MonId>PES</MonId><MonCotiz>1</MonCotiz><CondicionIVAReceptorId>${Number(obj(obj(trial.saleSnapshot).recipient).vatId) || 5}</CondicionIVAReceptorId>${asociado}${trial.voucherType === 6 ? "<Iva><AlicIva><Id>5</Id><BaseImp>100.00</BaseImp><Importe>21.00</Importe></AlicIva></Iva>" : ""}</FECAEDetRequest></FeDetReq></FeCAEReq>`;
 }
 export function matchesTrial(
   result: Record<string, unknown>,
@@ -76,7 +92,7 @@ export class FiscalTrialService {
   async history(actor: string, org: string) {
     await this.organizations.authorizeFiscalManagement(actor, org);
     return this.prisma.fiscalTrial.findMany({
-      where: { organizationId: org, sourceSaleId: null },
+      where: { organizationId: org, sourceSaleId: null, kind: "INVOICE" },
       orderBy: { createdAt: "desc" },
       take: 30,
     });
@@ -190,7 +206,15 @@ export class FiscalTrialService {
       const response = await this.soap.call(
         "wsfe",
         "FECAESolicitar",
-        authXml(access) + trialBody(numbered),
+        authXml(access) +
+          trialBody(
+            numbered,
+            numbered.originalId
+              ? await this.prisma.fiscalTrial.findUnique({
+                  where: { id: numbered.originalId },
+                })
+              : null,
+          ),
       );
       const detail = obj(obj(response.FeDetResp).FECAEDetResponse);
       if (
@@ -291,7 +315,9 @@ export class FiscalTrialService {
       where: {
         id,
         organizationId: org,
-        ...(saleId ? { sourceSaleId: saleId } : {}),
+        ...(saleId
+          ? { OR: [{ sourceSaleId: saleId }, { creditSaleId: saleId }] }
+          : {}),
       },
     });
     if (!trial) throw new BadRequestException("No se encontró la prueba.");
@@ -370,9 +396,11 @@ export class FiscalTrialService {
         actor,
         trial,
         "REJECTED",
-        trial.sourceSaleId
-          ? `No llegó a ARCA: el número ${trial.number} no se usó. Podés volver a emitir la factura.`
-          : `No llegó a ARCA: el número ${trial.number} no se usó. Podés emitir otra prueba.`,
+        trial.kind === "CREDIT_NOTE"
+          ? `No llegó a ARCA: el número ${trial.number} no se usó. Podés volver a emitir la nota de crédito.`
+          : trial.sourceSaleId
+            ? `No llegó a ARCA: el número ${trial.number} no se usó. Podés volver a emitir la factura.`
+            : `No llegó a ARCA: el número ${trial.number} no se usó. Podés emitir otra prueba.`,
       );
     const detail = consultaInexistente
       ? `ARCA todavía no muestra el comprobante ${trial.number}. Volvé a consultar en ${minutosRestantes(esperaMs)} min; si sigue sin aparecer, se libera el número.`
@@ -382,8 +410,17 @@ export class FiscalTrialService {
     if (trial.status === "UNCERTAIN") return { ...trial, detail };
     return this.finish(actor, trial, "UNCERTAIN", detail);
   }
-  /** Vuelve a poner en cola la factura de prueba rechazada de una venta. */
-  async requeue(actor: string, org: string, branch: string, saleId: string) {
+  /**
+   * Vuelve a poner en cola la factura de prueba rechazada de una venta, o una
+   * de sus notas de crédito (`creditId`).
+   */
+  async requeue(
+    actor: string,
+    org: string,
+    branch: string,
+    saleId: string,
+    creditId?: string,
+  ) {
     await this.organizations.authorizeFiscalSale(actor, org);
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${saleId}::uuid FOR UPDATE`;
@@ -391,18 +428,31 @@ export class FiscalTrialService {
         where: { id: saleId, organizationId: org, branchId: branch },
         include: { fiscalTrial: true },
       });
-      if (!sale?.fiscalTrial)
+      const trial = creditId
+        ? await tx.fiscalTrial.findFirst({
+            where: {
+              id: creditId,
+              organizationId: org,
+              creditSaleId: saleId,
+              kind: "CREDIT_NOTE",
+            },
+          })
+        : sale?.fiscalTrial;
+      if (!sale || !trial)
         throw new BadRequestException(
-          "La venta no tiene una factura de homologación.",
+          creditId
+            ? "No se encontró la nota de crédito de prueba."
+            : "La venta no tiene una factura de homologación.",
         );
       if (sale.status !== "COMPLETED")
         throw new BadRequestException(
           "La venta está anulada; no se vuelve a emitir su factura.",
         );
-      const trial = sale.fiscalTrial;
       if (trial.status !== "REJECTED")
         throw new ConflictException(
-          "Sólo se puede volver a emitir una factura rechazada o que no llegó a ARCA.",
+          creditId
+            ? "Sólo se puede volver a emitir una nota rechazada o que no llegó a ARCA."
+            : "Sólo se puede volver a emitir una factura rechazada o que no llegó a ARCA.",
         );
       await tx.fiscalTrial.update({
         where: { id: trial.id },

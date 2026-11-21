@@ -3,7 +3,7 @@ import {
   ConflictException,
   Injectable,
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma, type FiscalTrial } from "@prisma/client";
 import type { SaleFiscalOptions } from "@gestion/contracts";
 import { saleFiscalRecipient } from "./sale-fiscal-options";
 import { PrismaService } from "../prisma/prisma.service";
@@ -14,6 +14,24 @@ import { argentinaDate, FiscalTrialService } from "./fiscal-trial.service";
 import { organizationTicketStore } from "../organizations/ticket-header";
 import type { FiscalActor } from "./actor-fiscal";
 import { estadoInicial, type FacturaDiferida } from "./factura-diferida";
+import { obj } from "./arca-soap";
+
+/** Datos de una nota de crédito fiscal, armados por la devolución (SISTEMA-110). */
+export type NotaFiscal = {
+  requestId: string;
+  customerReturnId: string;
+  reason: string;
+  totalMinor: bigint;
+  items: {
+    saleItemId: string;
+    productId: string | null;
+    name: string;
+    quantity: number;
+    unitPriceMinor: string;
+    discountMinor: string;
+    amountMinor: string;
+  }[];
+};
 
 export { fiscalRecipient } from "./fiscal-recipient";
 
@@ -168,8 +186,116 @@ export class FiscalSalesService {
       },
     });
   }
-  requeue(actor: string, org: string, branch: string, saleId: string) {
-    return this.trials.requeue(actor, org, branch, saleId);
+  requeue(
+    actor: string,
+    org: string,
+    branch: string,
+    saleId: string,
+    creditId?: string,
+  ) {
+    return this.trials.requeue(actor, org, branch, saleId, creditId);
+  }
+  /**
+   * Nota de crédito C de prueba (SISTEMA-110): queda en cola dentro de la
+   * transacción de la devolución. Requiere la factura de prueba autorizada.
+   */
+  async enqueueCredit(
+    tx: Prisma.TransactionClient,
+    actor: string,
+    org: string,
+    branch: string,
+    saleId: string,
+    nota: NotaFiscal,
+  ) {
+    const original = await tx.fiscalTrial.findFirst({
+      where: { organizationId: org, sourceSaleId: saleId, kind: "INVOICE" },
+    });
+    if (!original || original.status !== "AUTHORIZED" || !original.number)
+      throw new BadRequestException(
+        "La factura de prueba de la venta todavía no está autorizada por ARCA. Esperá a que se autorice para hacer la nota de crédito.",
+      );
+    const previas = await tx.fiscalTrial.aggregate({
+      where: { organizationId: org, creditSaleId: saleId, kind: "CREDIT_NOTE" },
+      _sum: { totalMinor: true },
+    });
+    if (
+      nota.totalMinor <= 0n ||
+      nota.totalMinor + BigInt(previas._sum.totalMinor ?? 0) >
+        BigInt(original.totalMinor)
+    )
+      throw new BadRequestException(
+        "La nota de crédito supera lo que queda de la factura.",
+      );
+    const snapshot = obj(original.saleSnapshot);
+    const created = await tx.fiscalTrial.create({
+      data: {
+        organizationId: org,
+        requestId: nota.requestId,
+        kind: "CREDIT_NOTE",
+        originalId: original.id,
+        creditSaleId: saleId,
+        customerReturnId: nota.customerReturnId,
+        reason: nota.reason,
+        status: "QUEUED",
+        point: original.point,
+        voucherType: 13,
+        date: argentinaDate(),
+        totalMinor: Number(nota.totalMinor),
+        issuer: original.issuer as Prisma.InputJsonValue,
+        docType: original.docType,
+        docNumber: original.docNumber,
+        saleSnapshot: {
+          ...snapshot,
+          items: nota.items,
+          originalNumber: `${String(original.point).padStart(5, "0")}-${String(original.number).padStart(8, "0")}`,
+        } as Prisma.InputJsonValue,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        organizationId: org,
+        branchId: branch,
+        actorId: actor,
+        entityType: "FISCAL_TRIAL",
+        entityId: created.id,
+        action: "CREDIT_QUEUED",
+        after: {
+          saleId,
+          originalId: original.id,
+          customerReturnId: nota.customerReturnId,
+          environment: "HOMOLOGATION",
+          totalMinor: nota.totalMinor.toString(),
+        },
+      },
+    });
+    return created;
+  }
+  /** Envía (o concilia) una nota de crédito de prueba de la venta. */
+  async processCredit(
+    actor: FiscalActor,
+    org: string,
+    branch: string,
+    saleId: string,
+    creditId: string,
+  ) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, organizationId: org, branchId: branch },
+    });
+    const current = await this.prisma.fiscalTrial.findFirst({
+      where: {
+        id: creditId,
+        organizationId: org,
+        creditSaleId: saleId,
+        kind: "CREDIT_NOTE",
+      },
+    });
+    if (!sale || !current)
+      throw new BadRequestException(
+        "No se encontró la nota de crédito de prueba.",
+      );
+    if (current.status !== "QUEUED")
+      return this.trials.reconcile(actor, org, current.id, sale.id);
+    return this.enviar(actor, org, sale.id, current);
   }
   async process(
     actor: FiscalActor,
@@ -194,6 +320,16 @@ export class FiscalSalesService {
     if (current.status === "HELD") return current;
     if (current.status !== "QUEUED")
       return this.trials.reconcile(actor, org, current.id, sale.id);
+    return this.enviar(actor, org, sale.id, current);
+  }
+  /** Reserva el número y manda a ARCA una factura o nota de prueba en cola. */
+  private async enviar(
+    actor: FiscalActor,
+    org: string,
+    saleId: string,
+    current: FiscalTrial,
+  ) {
+    const sale = { id: saleId };
     try {
       const access = await this.connection.access(actor, org, "sale");
       if (access.cuit !== readFiscalProfile(current.issuer).cuit)

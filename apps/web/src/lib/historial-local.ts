@@ -10,6 +10,7 @@ type VentaFiltrable = {
   status: string;
   documentType?: string;
   completedAt: string | null;
+  customerId?: string | null;
   payments: { method: string }[];
 };
 
@@ -36,6 +37,10 @@ export function filtrarHistorialLocal<T extends VentaFiltrable>(
           (venta.documentType ?? "INTERNAL") === filtro.documentType) &&
         (!filtro.method ||
           venta.payments.some((pago) => pago.method === filtro.method)) &&
+        (!filtro.customerId ||
+          (filtro.customerId === "SIN_CLIENTE"
+            ? !venta.customerId
+            : venta.customerId === filtro.customerId)) &&
         (!codigo || venta.id.replaceAll("-", "").startsWith(codigo))
       );
     })

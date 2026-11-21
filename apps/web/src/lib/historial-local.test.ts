@@ -48,4 +48,31 @@ describe("historial filtrado en la PC (SISTEMA-104)", () => {
       /^d7214329/,
     );
   });
+
+  it("filtra por cliente o público general", () => {
+    const ventas = [
+      {
+        id: "a",
+        status: "COMPLETED",
+        completedAt: null,
+        customerId: "c1",
+        payments: [],
+      },
+      {
+        id: "b",
+        status: "COMPLETED",
+        completedAt: null,
+        customerId: null,
+        payments: [],
+      },
+    ];
+    expect(
+      filtrarHistorialLocal(ventas, { customerId: "c1" }).map((v) => v.id),
+    ).toEqual(["a"]);
+    expect(
+      filtrarHistorialLocal(ventas, { customerId: "SIN_CLIENTE" }).map(
+        (v) => v.id,
+      ),
+    ).toEqual(["b"]);
+  });
 });

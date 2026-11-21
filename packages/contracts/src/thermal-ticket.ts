@@ -1,6 +1,7 @@
 /** Presentation only. Monetary values are persisted minor units, never recomputed by the printer. */
 export interface ThermalTicket {
-  kind: "sale" | "account";
+  /** credit: nota de crédito interna (SISTEMA-110). */
+  kind: "sale" | "account" | "credit";
   id: string;
   number: string;
   date: string;

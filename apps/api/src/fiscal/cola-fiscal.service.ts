@@ -174,6 +174,54 @@ export class ColaFiscalService implements OnModuleInit, OnModuleDestroy {
         );
       }
 
+      // Notas de crédito de prueba (SISTEMA-110): mismo grupo que las
+      // facturas de prueba de la farmacia.
+      const notasPrueba = await this.prisma.fiscalTrial.findMany({
+        where: {
+          status: { in: SIN_RESOLVER },
+          kind: "CREDIT_NOTE",
+          creditSaleId: { not: null },
+          ...filtro,
+        },
+        orderBy: { createdAt: "asc" },
+        take: LEIDOS_POR_VUELTA,
+      });
+      const ventasDeNotas = await this.prisma.sale.findMany({
+        where: {
+          id: {
+            in: notasPrueba.flatMap((nota) =>
+              nota.creditSaleId ? [nota.creditSaleId] : [],
+            ),
+          },
+        },
+        select: { id: true, status: true, branchId: true },
+      });
+      for (const nota of notasPrueba) {
+        const venta = ventasDeNotas.find((v) => v.id === nota.creditSaleId);
+        if (!venta) continue;
+        pendientes.push({
+          id: nota.id,
+          grupo: `homo:${nota.organizationId}`,
+          estado: nota.status as EstadoPendiente,
+          creado: nota.createdAt,
+          actualizado: nota.updatedAt,
+          ventaAnulada: venta.status !== "COMPLETED",
+        });
+        envios.set(
+          nota.id,
+          async () =>
+            (
+              await this.fiscal.processCredit(
+                PROCESO_AUTOMATICO,
+                nota.organizationId,
+                venta.branchId,
+                venta.id,
+                nota.id,
+              )
+            ).status,
+        );
+      }
+
       const plan = planificarCola(pendientes, ahora(), (id) =>
         this.intentos.get(id),
       );

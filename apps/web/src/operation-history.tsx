@@ -1,3 +1,4 @@
+import { BotonEncabezado } from "./boton-encabezado";
 import { productoPorId } from "./lib/indice-productos";
 import { useEffect, useRef, useState } from "react";
 import { History, X, Search } from "lucide-react";
@@ -68,14 +69,12 @@ export function OperationHistory(props: {
   });
   return (
     <>
-      <button
-        type="button"
+      <BotonEncabezado
         onClick={() => setOpen(true)}
-        className={`inline-flex ${props.compact ? "h-10 rounded-xl border-slate-200 px-3 text-slate-600" : "h-11 rounded-lg border-slate-300 px-4 text-teal-700"} items-center gap-2 border bg-white text-sm font-medium shadow-sm transition-colors hover:border-teal-200 hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-teal-500`}
-      >
-        <History size={16} />
-        Historial
-      </button>
+        icono={<History size={17} aria-hidden />}
+        sobre={props.kind}
+        titulo="Historial"
+      />
       {open && (
         <HistoryDialog
           {...props}

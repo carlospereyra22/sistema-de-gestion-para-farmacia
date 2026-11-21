@@ -30,6 +30,7 @@ import { subscriptionDenied } from "../platform/subscription-gate";
 import { CashMovementType, PaymentMethod, Prisma } from "@prisma/client";
 
 import { AuditService } from "../audit/audit.service";
+import { AccountsService } from "../accounts/accounts.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { stockAvailability } from "../inventory/stock-availability";
 import { allocateSaleLots } from "./sale-lot-allocation";
@@ -127,6 +128,8 @@ export class SalesService {
     @Optional() private readonly production?: ProductionSalesService,
     @Optional()
     private readonly productionConfiguration?: ProductionConfigurationService,
+    /** Para descontar el saldo a favor del cliente (SISTEMA-110). */
+    @Optional() private readonly accounts?: AccountsService,
   ) {}
 
   async fiscalOptions(
@@ -288,12 +291,44 @@ export class SalesService {
               deferredReason: true,
             },
           },
+          // Para marcar en el historial las ventas con nota de crédito.
+          customerReturns: {
+            where: { creditKind: { not: null } },
+            select: { id: true },
+          },
         },
       }),
     ]);
+    // Nombre de cada producto: la web carga el catálogo por partes y sin
+    // esto mostraba "Producto histórico" (SISTEMA-110).
+    const productos = await this.prisma.product.findMany({
+      where: {
+        organizationId,
+        id: {
+          in: [
+            ...new Set(
+              sales.flatMap((sale) =>
+                sale.items.flatMap((item) =>
+                  item.productId ? [item.productId] : [],
+                ),
+              ),
+            ),
+          ],
+        },
+      },
+      select: { id: true, name: true },
+    });
+    const nombre = new Map(productos.map((p) => [p.id, p.name]));
     return {
-      items: sales.map((sale) => ({
+      items: sales.map(({ customerReturns, ...sale }) => ({
         ...this.serialize(sale),
+        items: this.serialize(sale).items.map((item) => ({
+          ...item,
+          productName: item.productId
+            ? (nombre.get(item.productId) ?? null)
+            : null,
+        })),
+        notasCredito: customerReturns.length,
         offers: sale.offers.map((offer) => ({
           ...offer,
           discountMinor: offer.discountMinor.toString(),
@@ -1900,6 +1935,14 @@ export class SalesService {
                 ...occurred,
               },
             });
+            // Si el cliente tenía saldo a favor (nota de crédito), se
+            // descuenta de esta compra.
+            await this.accounts?.aplicarSaldoAFavor(
+              tx,
+              actorId,
+              organizationId,
+              input.customerId,
+            );
           }
           if (!collectionSessionId)
             await recordPendingCollection(
@@ -2429,6 +2472,10 @@ export class SalesService {
       }))
     )
       throw new NotFoundException("La sucursal no está disponible.");
+  }
+  /** Chequeo de permisos de ventas, para otros servicios del módulo. */
+  autorizar(actorId: string, organizationId: string, code: string) {
+    return this.assert(actorId, organizationId, code);
   }
   private async assert(actorId: string, organizationId: string, code: string) {
     const membership = await this.prisma.userOrganization.findUnique({

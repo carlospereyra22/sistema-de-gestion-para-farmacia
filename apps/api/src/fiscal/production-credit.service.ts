@@ -3,24 +3,16 @@ import { lockCashSession } from "../cash/lock-cash-session";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { OrganizationsService } from "../organizations/organizations.service";
-import { ProductionSalesService } from "./production-sales.service";
 import { ProductionConfigurationService } from "./production-configuration.service";
 import { argentinaDate } from "./fiscal-trial.service";
-import { creditLineAmount } from "./credit-lines";
 import { obj, list, str } from "./arca-soap";
+import type { NotaFiscal } from "./fiscal-sales.service";
 import { AccountsService } from "../accounts/accounts.service";
 
-export type CreditRequest = {
-  requestId: string;
-  reason: string;
-  items: { saleItemId: string; quantity: number }[];
-  confirmProduction: boolean;
-};
 @Injectable()
 export class ProductionCreditService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sales: ProductionSalesService,
     private readonly configurations: ProductionConfigurationService,
     private readonly organizations: OrganizationsService,
     private readonly accounts: AccountsService,
@@ -260,202 +252,92 @@ export class ProductionCreditService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
-  async detail(actor: string, org: string, branch: string, saleId: string) {
-    await this.organizations.authorizeFiscalSale(actor, org);
-    const sale = await this.prisma.sale.findFirstOrThrow({
-      where: { id: saleId, organizationId: org, branchId: branch },
-      include: { items: true },
-    });
-    const original = await this.prisma.fiscalDocument.findFirst({
-      where: {
-        sourceSaleId: saleId,
-        organizationId: org,
-        kind: "INVOICE",
-        status: "AUTHORIZED",
-      },
-    });
-    if (!original)
-      throw new BadRequestException(
-        "La venta no tiene una factura productiva autorizada.",
-      );
-    const credits = await this.prisma.fiscalDocument.findMany({
-      where: { originalId: original.id },
-      orderBy: { createdAt: "desc" },
-    });
-    const reserved = credits
-      .filter((doc) => doc.status !== "REJECTED")
-      .flatMap((doc) => list(obj(doc.saleSnapshot).items).map(obj));
-    const names = list(obj(original.saleSnapshot).items).map(obj);
-    return {
-      original: this.sales.present(original),
-      credits: credits.map((doc) => this.sales.present(doc)),
-      items: sale.items.map((item) => ({
-        id: item.id,
-        name:
-          item.description ||
-          str(names.find((n) => str(n.productId) === item.productId)?.name) ||
-          "Producto",
-        quantity: item.quantity,
-        available:
-          item.quantity -
-          reserved
-            .filter((r) => r.saleItemId === item.id)
-            .reduce((n, r) => n + Number(r.quantity), 0),
-        unitPriceMinor: String(item.unitPriceMinor),
-        discountMinor: String(item.discountMinor),
-      })),
-    };
-  }
-  async create(
+  /**
+   * Nota de crédito C productiva (SISTEMA-110): queda en cola dentro de la
+   * transacción de la devolución, que ya movió plata y stock; por eso nace
+   * liquidada. Requiere la factura productiva autorizada.
+   */
+  async enqueueCredit(
+    tx: Prisma.TransactionClient,
     actor: string,
     org: string,
     branch: string,
     saleId: string,
-    input: CreditRequest,
+    nota: NotaFiscal,
+    liquidacion: Prisma.InputJsonValue,
   ) {
-    await this.organizations.authorizeFiscalSale(actor, org);
+    await this.configurations.validate(tx, org, branch);
+    const original = await tx.fiscalDocument.findFirst({
+      where: {
+        sourceSaleId: saleId,
+        organizationId: org,
+        branchId: branch,
+        kind: "INVOICE",
+      },
+    });
+    if (!original || original.status !== "AUTHORIZED")
+      throw new BadRequestException(
+        "La factura de la venta todavía no está autorizada por ARCA. Esperá a que se autorice para hacer la nota de crédito.",
+      );
+    const prior = await tx.fiscalDocument.aggregate({
+      where: { originalId: original.id, status: { not: "REJECTED" } },
+      _sum: { totalMinor: true },
+    });
     if (
-      !input.confirmProduction ||
-      input.reason.trim().length < 3 ||
-      !input.items.length ||
-      new Set(input.items.map((i) => i.saleItemId)).size !== input.items.length
+      nota.totalMinor <= 0n ||
+      nota.totalMinor + BigInt(prior._sum.totalMinor ?? 0) >
+        BigInt(original.totalMinor)
     )
       throw new BadRequestException(
-        "Confirmá la nota de crédito, el motivo y los artículos sin repetir.",
+        "La nota de crédito supera lo que queda de la factura.",
       );
-    const doc = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${saleId}::uuid AND "organizationId"=${org}::uuid AND "branchId"=${branch}::uuid FOR UPDATE`;
-      const existing = await tx.fiscalDocument.findUnique({
-        where: {
-          organizationId_requestId: {
-            organizationId: org,
-            requestId: input.requestId,
-          },
-        },
-      });
-      if (existing) {
-        if (existing.sourceSaleId !== saleId || existing.kind !== "CREDIT_NOTE")
-          throw new BadRequestException(
-            "La operación pertenece a otro comprobante.",
-          );
-        return existing;
-      }
-      await this.configurations.validate(tx, org, branch);
-      const original = await tx.fiscalDocument.findFirst({
-        where: {
-          sourceSaleId: saleId,
-          organizationId: org,
-          branchId: branch,
-          kind: "INVOICE",
-          status: "AUTHORIZED",
-        },
-      });
-      if (!original)
-        throw new BadRequestException(
-          "Se requiere una factura productiva autorizada.",
-        );
-      const sale = await tx.sale.findFirstOrThrow({
-        where: {
-          id: saleId,
-          organizationId: org,
-          branchId: branch,
-          status: "COMPLETED",
-        },
-        include: { items: true },
-      });
-      const prior = await tx.fiscalDocument.findMany({
-        where: { originalId: original.id, status: { not: "REJECTED" } },
-      });
-      const reserved = prior.flatMap((doc) =>
-        list(obj(doc.saleSnapshot).items).map(obj),
-      );
-      const names = list(obj(original.saleSnapshot).items).map(obj);
-      const items = input.items.map((requested) => {
-        const item = sale.items.find(
-          (line) => line.id === requested.saleItemId,
-        );
-        if (!item)
-          throw new BadRequestException("El artículo no pertenece a la venta.");
-        const returned = reserved
-          .filter((line) => line.saleItemId === item.id)
-          .reduce((n, line) => n + Number(line.quantity), 0);
-        const amount = creditLineAmount(
-          item.unitPriceMinor,
-          item.discountMinor,
-          item.quantity,
-          returned,
-          requested.quantity,
-        );
-        return {
-          saleItemId: item.id,
-          productId: item.productId,
-          name:
-            item.description ||
-            str(names.find((n) => str(n.productId) === item.productId)?.name) ||
-            "Producto",
-          quantity: requested.quantity,
-          unitPriceMinor: String(item.unitPriceMinor),
-          discountMinor: String(
-            item.unitPriceMinor * BigInt(requested.quantity) - amount,
-          ),
-          amountMinor: String(amount),
-        };
-      });
-      const total = items.reduce((n, item) => n + BigInt(item.amountMinor), 0n);
-      if (
-        total <= 0n ||
-        total + prior.reduce((n, doc) => n + BigInt(doc.totalMinor), 0n) >
-          BigInt(original.totalMinor)
-      )
-        throw new BadRequestException(
-          "El crédito excede la factura original o es cero.",
-        );
-      const snapshot = obj(original.saleSnapshot);
-      const created = await tx.fiscalDocument.create({
-        data: {
-          organizationId: org,
-          branchId: branch,
-          sourceSaleId: saleId,
-          requestId: input.requestId,
-          environment: "PRODUCTION",
-          kind: "CREDIT_NOTE",
-          originalId: original.id,
-          status: "QUEUED",
-          issuerCuit: original.issuerCuit,
-          point: original.point,
-          voucherType: 13,
-          date: argentinaDate(),
-          totalMinor: Number(total),
-          docType: original.docType,
-          docNumber: original.docNumber,
-          recipientVatId: original.recipientVatId,
-          issuer: original.issuer as Prisma.InputJsonValue,
-          saleSnapshot: {
-            ...snapshot,
-            items,
-            originalNumber: `${String(original.point).padStart(5, "0")}-${String(original.number).padStart(8, "0")}`,
-          } as Prisma.InputJsonValue,
-          reason: input.reason.trim(),
-        },
-      });
-      await tx.auditLog.create({
-        data: {
-          organizationId: org,
-          branchId: branch,
-          actorId: actor,
-          entityType: "FISCAL_DOCUMENT",
-          entityId: created.id,
-          action: "CREDIT_QUEUED",
-          after: {
-            originalId: original.id,
-            items: input.items,
-            totalMinor: String(total),
-            reason: input.reason.trim(),
-          },
-        },
-      });
-      return created;
+    const snapshot = obj(original.saleSnapshot);
+    const created = await tx.fiscalDocument.create({
+      data: {
+        organizationId: org,
+        branchId: branch,
+        sourceSaleId: saleId,
+        requestId: nota.requestId,
+        environment: "PRODUCTION",
+        kind: "CREDIT_NOTE",
+        originalId: original.id,
+        customerReturnId: nota.customerReturnId,
+        status: "QUEUED",
+        issuerCuit: original.issuerCuit,
+        point: original.point,
+        voucherType: 13,
+        date: argentinaDate(),
+        totalMinor: Number(nota.totalMinor),
+        docType: original.docType,
+        docNumber: original.docNumber,
+        recipientVatId: original.recipientVatId,
+        issuer: original.issuer as Prisma.InputJsonValue,
+        saleSnapshot: {
+          ...snapshot,
+          items: nota.items,
+          originalNumber: `${String(original.point).padStart(5, "0")}-${String(original.number).padStart(8, "0")}`,
+        } as Prisma.InputJsonValue,
+        reason: nota.reason,
+        settledAt: new Date(),
+        settlement: liquidacion,
+      },
     });
-    return this.sales.process(actor, org, branch, saleId, doc.id);
+    await tx.auditLog.create({
+      data: {
+        organizationId: org,
+        branchId: branch,
+        actorId: actor,
+        entityType: "FISCAL_DOCUMENT",
+        entityId: created.id,
+        action: "CREDIT_QUEUED",
+        after: {
+          originalId: original.id,
+          customerReturnId: nota.customerReturnId,
+          totalMinor: nota.totalMinor.toString(),
+          reason: nota.reason,
+        },
+      },
+    });
+    return created;
   }
 }

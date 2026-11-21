@@ -44,7 +44,7 @@ Probar la API en Docker (dentro de WSL): `Iniciar Gestion - Docker.cmd` /
 
 - Reglas y decisiones: `BUSINESS_RULES.md`, `DECISIONS.md`, `ARCHITECTURE.md`,
   `DATA_MODEL.md`, `ROADMAP.md`, `IMPLEMENTATION_STATUS.md`.
-- Ventas: `SALE_UNIT_PRICE.md`, `SALE_MANUAL_CONCEPTS.md`, `SALE_CREDIT_ACTIONS.md`,
+- Ventas: `SALE_UNIT_PRICE.md`, `SALE_MANUAL_CONCEPTS.md`, `NOTAS_CREDITO.md` (notas de crédito y devoluciones),
   `SALES_*.md`.
 - Caja: `CASH_SIMPLE_IMPLEMENTATION.md`, `CASH_WORKSPACE.md`, `CASH_IMPROVEMENTS_PLAN.md`.
 - Cuentas corrientes: `ACCOUNT_*.md`, `CUSTOMERS.md`, `CUSTOMER_BILLING.md`.
@@ -80,6 +80,7 @@ Unica carpeta de skills del proyecto, para Codex y Claude Code. No crear copias 
 | Cambiar backend: endpoints, servicios, reglas de negocio            | `.agents/skills/nueva-funcionalidad-api/SKILL.md` |
 | Cambiar frontend: pantallas, componentes, `lib/`                    | `.agents/skills/nueva-funcionalidad-web/SKILL.md` |
 | Arreglar una vista con selectores o agregar uno                     | `.agents/skills/selectores-web/SKILL.md`          |
+| Crear o retocar pantallas, botones, fechas, tarjetas (diseño)       | `.agents/skills/diseno-sistema/SKILL.md`          |
 | Cambiar `schema.prisma` o crear migraciones                         | `.agents/skills/migracion-prisma/SKILL.md`        |
 | Terminar cualquier cambio de codigo                                 | `.agents/skills/cerrar-tarea/SKILL.md`            |
 | Ramas, commits, pull requests, merge o conflictos de git            | `.agents/skills/git-equipo/SKILL.md`              |

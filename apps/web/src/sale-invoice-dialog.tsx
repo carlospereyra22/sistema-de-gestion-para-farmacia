@@ -4,7 +4,6 @@ import { requeueSaleInvoice, saleInvoice, type FiscalTrial } from "./lib/api";
 import { trialTicket } from "./lib/fiscal-trial-ticket";
 import { printTicketFrame } from "./lib/browser-ticket-print";
 import { thermalTicketHtml } from "./lib/thermal-ticket";
-import { SaleCreditNotes } from "./sale-credit-notes";
 
 const INVOICE_REFRESH_MS = 20_000;
 
@@ -34,7 +33,6 @@ export function SaleInvoiceDialog({
   const [trial, setTrial] = useState<FiscalTrial>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [showCredits, setShowCredits] = useState(false);
   const [confirmRequeue, setConfirmRequeue] = useState(false);
   const pending = useRef(false);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -292,28 +290,6 @@ export function SaleInvoiceDialog({
               Volver a emitir factura
             </button>
           ))}
-        {trial?.environment === "PRODUCTION" &&
-          trial.status === "AUTHORIZED" && (
-            <>
-              <button
-                type="button"
-                className="mt-4 text-sm text-teal-700 underline"
-                onClick={() => setShowCredits(!showCredits)}
-              >
-                {showCredits
-                  ? "Cerrar notas de crédito"
-                  : "Devolución total / parcial · Notas de crédito"}
-              </button>
-              {showCredits && (
-                <SaleCreditNotes
-                  token={token}
-                  organizationId={organizationId}
-                  branchId={branchId}
-                  saleId={saleId}
-                />
-              )}
-            </>
-          )}
       </section>
     </dialog>,
     document.body,

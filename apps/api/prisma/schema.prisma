@@ -168,11 +168,22 @@ model FiscalTrial {
   deferredReason String? @db.VarChar(20)
   /// Cuándo una factura en espera (HELD) pasó a la cola al incorporar el cobro.
   releasedAt DateTime? @db.Timestamptz(6)
+  /// INVOICE (factura o prueba suelta) o CREDIT_NOTE: nota de crédito de prueba de una venta.
+  kind String @default("INVOICE") @db.VarChar(20)
+  /// Nota de crédito: la factura de prueba que acredita.
+  originalId String? @db.Uuid
+  /// Nota de crédito: la venta. sourceSaleId queda para la factura (una por venta).
+  creditSaleId String? @db.Uuid
+  /// Nota de crédito: la devolución comercial que la originó.
+  customerReturnId String? @db.Uuid
+  reason String?
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   @@unique([organizationId, requestId])
   @@index([organizationId, status])
+  @@index([creditSaleId])
+  @@index([originalId])
 }
 
 model AuditLog {
@@ -1426,6 +1437,8 @@ model FiscalDocument {
   issuer Json
   saleSnapshot Json
   reason String?
+  /// Nota de crédito: la devolución comercial que la originó (null en las anteriores).
+  customerReturnId String? @db.Uuid
   cae String?
   caeExpires String?
   detail String?
@@ -1516,8 +1529,23 @@ model CustomerReturn {
   reason String
   status CustomerReturnStatus @default(RECEIVED_NOT_RESTOCKED)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
+  // Nota de crédito (SISTEMA-110). Null en las devoluciones anteriores, que no
+  // movían plata ni stock.
+  /// Solicitud idempotente de la nota de crédito.
+  requestId String? @db.Uuid
+  /// INTERNA (venta con comprobante interno) o FACTURA (nota de crédito C, real o de prueba).
+  creditKind String? @db.VarChar(20)
+  totalMinor BigInt?
+  /// Parte que bajó la deuda de cuenta corriente de esos artículos.
+  accountMinor BigInt?
+  /// Parte devuelta en plata.
+  refundMinor BigInt?
+  refundMethod PaymentMethod?
+  /// Caja de la que salió el efectivo devuelto.
+  cashSessionId String? @db.Uuid
   sale Sale @relation(fields: [saleId], references: [id], onDelete: Restrict)
   items CustomerReturnItem[]
+  @@unique([organizationId, requestId])
   @@index([organizationId, branchId, createdAt])
   @@index([saleId])
 }
@@ -1527,6 +1555,10 @@ model CustomerReturnItem {
   customerReturnId String @db.Uuid
   saleItemId String @db.Uuid
   quantity Int
+  /// Importe acreditado del renglón (nota de crédito). Null en las devoluciones anteriores.
+  amountMinor BigInt?
+  /// Volvió al stock vendible, al lote de la venta.
+  restocked Boolean @default(false)
   customerReturn CustomerReturn @relation(fields: [customerReturnId], references: [id], onDelete: Restrict)
   saleItem SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
   @@index([customerReturnId])
