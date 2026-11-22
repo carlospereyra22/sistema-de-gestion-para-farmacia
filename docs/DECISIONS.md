@@ -501,6 +501,13 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   fila lleva el ambiente porque test y producción comparten la base. Ver
   `EXTERNAL_PRODUCT_CATALOG.md`.
 
+- **Finales de línea de las migraciones fijados en `.gitattributes` (SISTEMA-114, 22/11/2026).**
+  Prisma guarda la huella de cada migración con sus finales de línea, y el publicador
+  empaqueta la carpeta de la PC. Con `core.autocrlf` de Windows, una migración que se
+  aplicó en LF pasaba a CRLF y el publicador de test frenaba con "Migracion aplicada
+  modificada". Todas van en LF salvo las 18 que test aplicó con CRLF (comprobado contra
+  las bases de test y producción). Una migración nueva sale en LF.
+
 - **Actualización mensual del catálogo externo en el servidor (SISTEMA-113, 22/11/2026).**
   Decisión del usuario: las 5 tiendas se vuelven a descargar solas una vez por mes en
   el servidor y se suman los productos nuevos. Como el servidor todavía no usa Docker
