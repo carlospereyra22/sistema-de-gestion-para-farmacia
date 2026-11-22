@@ -2,11 +2,12 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { ReportCustomers } from "@gestion/contracts";
 import { PrismaService } from "../prisma/prisma.service";
-import { ReportAccessService } from "./report-access.service";
+import { ReportAccessService, type ReportScope } from "./report-access.service";
 import type { ReportFiltersQuery } from "./report-filters.dto";
 import { kpi, sharePct, trendBuckets } from "./report-math";
 import { argentineDate, type ReportRange } from "./report-period";
 import { salesWhere, TZ } from "./report-sales-data";
+import { loyaltySummary, type LoyaltyCustomer } from "./report-loyalty";
 import {
   civil,
   daysBetween,
@@ -167,6 +168,13 @@ export class ReportCustomersService {
         GROUP BY 1`,
     ]);
 
+    const loyalty = await this.loyalty(
+      organizationId,
+      branchIds,
+      period,
+      unit,
+      now,
+    );
     const debtors = balances.filter((row) => row.balance > 0n);
     const balanceTotal = debtors.reduce((sum, row) => sum + row.balance, 0n);
     const salesBy = new Map<
@@ -253,6 +261,7 @@ export class ReportCustomersService {
             oldestDaysOverdue: row.oldestDaysOverdue,
             lastPaymentAt: row.lastPaymentAt,
           })),
+        loyalty,
         collections: collections.map((row) => ({
           id: row.id,
           customer: row.customer,
@@ -263,6 +272,104 @@ export class ReportCustomersService {
         })),
       },
     };
+  }
+
+  /**
+   * Fidelidad (SISTEMA-117): historia de compras de cada cliente identificado
+   * hasta el fin del período, en las sucursales del alcance.
+   */
+  private async loyalty(
+    organizationId: string,
+    branchIds: string[],
+    period: ReportScope["period"],
+    unit: string,
+    now: Date,
+  ) {
+    const end = period.end < now ? period.end : now;
+    const base = Prisma.sql`
+      s."organizationId" = ${organizationId}::uuid
+      AND s."branchId" = ANY(${branchIds}::uuid[])
+      AND s.status = 'COMPLETED' AND s."customerId" IS NOT NULL
+      AND s."completedAt" < ${period.end}`;
+    const local = Prisma.sql`(s."completedAt" AT TIME ZONE ${TZ})`;
+    const previous = period.previous;
+    const [customers, months, buckets, share] = await Promise.all([
+      this.prisma.$queryRaw<
+        {
+          id: string;
+          name: string;
+          firstAt: Date;
+          firstMonth: string;
+          lastAt: Date;
+          lifetime: number;
+          visits: number;
+          lifetimeSpend: bigint;
+          inPeriod: number;
+          periodSpend: bigint;
+          inPrevious: number;
+        }[]
+      >`
+        SELECT c.id, c.name, min(s."completedAt") AS "firstAt",
+          to_char(min(${local}), 'YYYY-MM') AS "firstMonth",
+          max(s."completedAt") AS "lastAt", count(*)::int AS lifetime,
+          count(DISTINCT (${local})::date)::int AS visits,
+          sum(s."totalMinor")::bigint AS "lifetimeSpend",
+          count(*) FILTER (WHERE s."completedAt" >= ${period.start})::int AS "inPeriod",
+          coalesce(sum(s."totalMinor") FILTER (WHERE s."completedAt" >= ${period.start}), 0)::bigint AS "periodSpend",
+          count(*) FILTER (WHERE ${
+            previous
+              ? Prisma.sql`s."completedAt" >= ${previous.start} AND s."completedAt" < ${previous.end}`
+              : Prisma.sql`false`
+          })::int AS "inPrevious"
+        FROM "Sale" s JOIN "Customer" c ON c.id = s."customerId"
+        WHERE ${base} GROUP BY c.id, c.name`,
+      this.prisma.$queryRaw<{ id: string; month: string }[]>`
+        SELECT DISTINCT s."customerId" AS id, to_char(${local}, 'YYYY-MM') AS month
+        FROM "Sale" s WHERE ${base}`,
+      this.prisma.$queryRaw<
+        { bucket: string; newCount: number; returningCount: number }[]
+      >`
+        WITH firsts AS (
+          SELECT s."customerId" AS id, min(s."completedAt") AS first
+          FROM "Sale" s WHERE ${base} GROUP BY 1
+        ), visits AS (
+          SELECT DISTINCT s."customerId" AS id,
+            to_char(date_trunc(${unit}, ${local}), 'YYYY-MM-DD') AS bucket
+          FROM "Sale" s WHERE ${base} AND s."completedAt" >= ${period.start}
+        )
+        SELECT v.bucket,
+          count(*) FILTER (WHERE to_char(date_trunc(${unit}, f.first AT TIME ZONE ${TZ}), 'YYYY-MM-DD') = v.bucket)::int AS "newCount",
+          count(*) FILTER (WHERE to_char(date_trunc(${unit}, f.first AT TIME ZONE ${TZ}), 'YYYY-MM-DD') <> v.bucket)::int AS "returningCount"
+        FROM visits v JOIN firsts f ON f.id = v.id GROUP BY v.bucket`,
+      this.prisma.$queryRaw<{ total: bigint; identified: bigint }[]>`
+        SELECT coalesce(sum(s."totalMinor"), 0)::bigint AS total,
+          coalesce(sum(s."totalMinor") FILTER (WHERE s."customerId" IS NOT NULL), 0)::bigint AS identified
+        FROM "Sale" s WHERE ${salesWhere(organizationId, branchIds, period)}`,
+    ]);
+    const visited = new Map<string, Set<string>>();
+    for (const row of months) {
+      const set = visited.get(row.id) ?? new Set<string>();
+      set.add(row.month);
+      visited.set(row.id, set);
+    }
+    const byBucket = new Map(buckets.map((row) => [row.bucket, row]));
+    const totals = share[0];
+    return loyaltySummary({
+      customers: customers as LoyaltyCustomer[],
+      reference: end,
+      periodStart: period.start,
+      hasPrevious: Boolean(previous),
+      newVsReturning: trendBuckets(period, unit as "day").map((bucket) => ({
+        bucket,
+        newCount: byBucket.get(bucket)?.newCount ?? 0,
+        returningCount: byBucket.get(bucket)?.returningCount ?? 0,
+      })),
+      months: visited,
+      lastMonth: argentineDate(end).slice(0, 7),
+      identifiedSharePct: totals
+        ? sharePct(totals.identified, totals.total)
+        : null,
+    });
   }
 
   private async activeCustomers(

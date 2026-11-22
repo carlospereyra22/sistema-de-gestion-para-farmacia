@@ -635,6 +635,11 @@ describe("report overview isolated schema", () => {
       now,
     );
     expect(customers.charts.aging).toHaveLength(7);
+    // Fidelidad (SISTEMA-117) también corre contra la base real.
+    expect(customers.tables.loyalty.segments).toHaveLength(5);
+    expect(customers.tables.loyalty.newVsReturning).toHaveLength(31);
+    expect(inventory.charts.expiryByMonth).toHaveLength(7);
+    expect(purchases.charts.duesCalendar).toHaveLength(7);
     await expect(
       tabs.purchases.purchases(fixture.owner, fixture.org.id, october, now),
     ).rejects.toBeInstanceOf(ForbiddenException);

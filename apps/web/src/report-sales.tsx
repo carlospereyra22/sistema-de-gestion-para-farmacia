@@ -234,6 +234,35 @@ export function ReportSalesContent({
             <SalesInsights data={data} />
           </ReportPanel>
 
+          <ReportPanel
+            animar={animar}
+            title="¿Cuándo se vende?"
+            icon={<CalendarDays size={16} aria-hidden />}
+            hint="Facturado por día de la semana y hora. Para armar turnos, reponer antes del pico y elegir cuándo lanzar una oferta."
+            className="border-teal-200/70"
+          >
+            <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+              <ReportPanelChart
+                tipo="mapa"
+                option={options.heatmap}
+                label="Mapa de calor de ventas por día y hora"
+                height={300}
+              />
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-700">
+                  Por hora
+                  {comparisonLabel ? ", contra el período comparado" : ""}
+                </p>
+                <ReportPanelChart
+                  tipo="barras"
+                  option={options.hours}
+                  label="Ventas por hora"
+                  height={280}
+                />
+              </div>
+            </div>
+          </ReportPanel>
+
           <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
             <ReportPanel
               animar={animar}
@@ -298,35 +327,6 @@ export function ReportSalesContent({
               ) : (
                 <ReportEmptyState title="Sin cobros en el período" />
               )}
-            </ReportPanel>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
-            <ReportPanel
-              animar={animar}
-              orden={0}
-              title="Ventas por hora"
-              icon={<Clock size={16} aria-hidden />}
-              hint="Facturado según la hora de cobro, en hora de Argentina."
-            >
-              <ReportPanelChart
-                tipo="barras"
-                option={options.hours}
-                label="Ventas por hora"
-              />
-            </ReportPanel>
-            <ReportPanel
-              animar={animar}
-              orden={1}
-              title="Días y horarios fuertes"
-              icon={<CalendarDays size={16} aria-hidden />}
-              hint="Facturado por día de la semana y hora: sirve para armar turnos y reponer antes del pico."
-            >
-              <ReportPanelChart
-                tipo="mapa"
-                option={options.heatmap}
-                label="Mapa de calor de ventas por día y hora"
-              />
             </ReportPanel>
           </div>
 

@@ -33,6 +33,27 @@ export function weightedCostChange(
   return base === 0n ? null : Number((delta * 1000n) / base) / 10;
 }
 
+export const DUE_BUCKETS = [
+  { id: "overdue", name: "Vencido" },
+  { id: "week", name: "Esta semana" },
+  { id: "2weeks", name: "En 2 semanas" },
+  { id: "month", name: "En el mes" },
+  { id: "2months", name: "En 2 meses" },
+  { id: "later", name: "Más adelante" },
+  { id: "undated", name: "Sin vencimiento" },
+] as const;
+
+/** Cuándo vence una cuota, contando desde hoy (vence hoy = esta semana). */
+export function dueBucket(daysUntil: number | null) {
+  if (daysUntil === null) return "undated";
+  if (daysUntil < 0) return "overdue";
+  if (daysUntil <= 7) return "week";
+  if (daysUntil <= 14) return "2weeks";
+  if (daysUntil <= 30) return "month";
+  if (daysUntil <= 60) return "2months";
+  return "later";
+}
+
 /**
  * Pestaña Compras y proveedores (SISTEMA-116). Lo recibido (mercadería que
  * entró) y lo facturado por proveedores se muestran por separado y nunca se
@@ -238,6 +259,22 @@ export class ReportPurchasesService {
             ? (previousTrend.get(previousBuckets[index] ?? "") ?? 0n).toString()
             : null,
         })),
+        duesCalendar: DUE_BUCKETS.map((bucket) => {
+          const group = open.filter(
+            (due) =>
+              dueBucket(
+                due.dueOn ? daysBetween(today, civil(due.dueOn)) : null,
+              ) === bucket.id,
+          );
+          return {
+            id: bucket.id,
+            name: bucket.name,
+            amountMinor: group
+              .reduce((sum, due) => sum + due.balance, 0n)
+              .toString(),
+            invoices: new Set(group.map((due) => due.invoiceId)).size,
+          };
+        }),
         suppliers: suppliers.map((row) => ({
           id: row.id,
           name: row.name,

@@ -1,7 +1,7 @@
 import { ageBalance, agingBucket } from "./report-customers.service";
 import { bucketEnds, coverageDays } from "./report-inventory.service";
-import { paretoCount } from "./report-products.service";
-import { weightedCostChange } from "./report-purchases.service";
+import { abcClasses, paretoCount } from "./report-products.service";
+import { dueBucket, weightedCostChange } from "./report-purchases.service";
 import { marginPct } from "./report-tab-helpers";
 
 describe("reglas de las pestañas de Reportes (SISTEMA-116)", () => {
@@ -70,5 +70,28 @@ describe("reglas de las pestañas de Reportes (SISTEMA-116)", () => {
     expect(ageBalance(200n, [], today)).toEqual([
       { bucket: "undated", amount: 200n, daysLate: 0 },
     ]);
+  });
+
+  it("ABC: A hasta el 80 %, B hasta el 95 %, C el resto", () => {
+    expect(abcClasses([600n, 200n, 100n, 60n, 40n])).toEqual([
+      { id: "A", products: 2, sharePct: 80 },
+      { id: "B", products: 2, sharePct: 16 },
+      { id: "C", products: 1, sharePct: 4 },
+    ]);
+    expect(abcClasses([])).toEqual([
+      { id: "A", products: 0, sharePct: null },
+      { id: "B", products: 0, sharePct: null },
+      { id: "C", products: 0, sharePct: null },
+    ]);
+  });
+
+  it("calendario de pagos: vence hoy cuenta como esta semana", () => {
+    expect(dueBucket(-1)).toBe("overdue");
+    expect(dueBucket(0)).toBe("week");
+    expect(dueBucket(10)).toBe("2weeks");
+    expect(dueBucket(25)).toBe("month");
+    expect(dueBucket(45)).toBe("2months");
+    expect(dueBucket(90)).toBe("later");
+    expect(dueBucket(null)).toBe("undated");
   });
 });

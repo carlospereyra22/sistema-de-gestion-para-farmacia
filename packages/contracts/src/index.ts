@@ -40,6 +40,8 @@ export type {
   ReportPurchasesKpi,
   ReportCustomers,
   ReportCustomersKpi,
+  ReportLoyalty,
+  ReportLoyaltySegment,
   ReportOverviewKpi,
   ReportPage,
   ReportPaymentMethod,

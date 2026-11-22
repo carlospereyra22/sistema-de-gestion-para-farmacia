@@ -332,6 +332,46 @@ el estilo y la animacion del Resumen, y funcionan con una o varias sucursales.
   permisos 403) y `report-tabs.test.tsx`.
 - Pendiente (tareas 11 y 12): filtros cruzados, detalle de transacciones y exportacion.
 
+## Identidad propia de cada pestana y Fidelidad (SISTEMA-117, 22/11/2026)
+
+Pedido del usuario: que las pestanas no se vean todas iguales, con mejores colores y
+lecturas, y que Clientes estudie la fidelidad. Cada pestana tiene una **pieza
+central** propia (`report-visuals.tsx`: `ReportSection`, `ReportRing`,
+`ReportStackedBar`, `ReportStat`, `ReportHero`, `ReportCohortTable`):
+
+- **Ventas**: "Cuando se vende": mapa de calor dia x hora junto a ventas por hora.
+- **Rentabilidad**: cascada ventas con costo -> costo -> ganancia (y ventas sin costo
+  aparte), anillo de margen, recargo sobre el costo (distinto del margen).
+- **Productos**: curva de Pareto (ventas por producto y % acumulado con la marca del
+  80 %) y clasificacion **ABC** (A hasta el 80 % de la venta, B hasta el 95 %, C el
+  resto; la clase la decide donde arranca el producto en la curva).
+- **Inventario**: salud del stock (cada producto en su peor estado: sano, stock bajo,
+  por vencer, con vencidos, sin stock) y vencimientos por mes (6 meses y lo vencido).
+- **Compras**: calendario de pagos (vencido, esta semana, 2 semanas, el mes, 2 meses,
+  mas adelante, sin vencimiento; vence hoy = esta semana).
+- **Clientes**: seccion **Fidelidad** primero y **Cuenta corriente** despues.
+
+Colores: paleta categorica `reportCategorical` (sin orden: medios de pago,
+categorias, proveedores) y de estados `reportStatus` (bien, atencion, mal), con su par
+oscuro en `report-chart-theme.ts`. Barras HTML con animacion `reportes-barra`.
+
+**Fidelidad** (`report-loyalty.ts`, solo ventas con cliente identificado; la pantalla
+muestra que parte de lo facturado tiene cliente):
+
+- Visitas = **dias distintos con compra** (dos tickets la misma tarde son una visita).
+  Frecuencia habitual = dias entre la primera y la ultima visita / (visitas - 1),
+  minimo 1.
+- Recompra = clientes del periodo que ya habian comprado antes / clientes del periodo.
+  Retencion = de los clientes del periodo comparado, cuantos compraron en este.
+- Segmentos (al fin del periodo): **perdido** mas de 120 dias sin comprar; **en
+  riesgo** paso 1,5 veces su frecuencia (minimo 30 dias) o compro una vez y no volvio
+  en 60; **nuevo** primera compra en el periodo; **frecuente** 4 o mas visitas cada 30
+  dias o menos; **regular** el resto.
+- Nuevos contra recurrentes por tramo, distribucion de frecuencia, **cohortes** por mes
+  de primera compra (% que volvio cada mes siguiente, hasta 5; los meses que no
+  llegaron no se muestran) y **clientes para recuperar** (en riesgo o perdidos, los que
+  mas compraron primero).
+
 ## Tareas
 
 1. **Mapa de metricas y contratos.** Matriz metrica -> fuente -> formula -> limitaciones;

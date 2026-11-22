@@ -234,6 +234,59 @@ export class ReportInventoryService {
       )
       .slice(0, 15);
 
+    // Salud del stock por producto (cada producto en un solo estado, el peor).
+    const expiredProducts = new Set(
+      lots.filter(expired).map((lot) => lot.productId),
+    );
+    const expiringProducts = new Set(
+      expiring
+        .filter(({ daysLeft }) => daysLeft >= 0)
+        .map(({ lot }) => lot.productId),
+    );
+    const health = {
+      healthy: 0,
+      low: 0,
+      out: outOfStock,
+      expiring: 0,
+      expired: 0,
+    };
+    for (const [id, units] of sellable) {
+      if (!productBy.has(id) || units <= 0) continue;
+      if (expiredProducts.has(id)) health.expired += 1;
+      else if (expiringProducts.has(id)) health.expiring += 1;
+      else if (units <= lowStock) health.low += 1;
+      else health.healthy += 1;
+    }
+    for (const id of expiredProducts)
+      if (productBy.has(id) && !(sellable.get(id) ?? 0)) health.expired += 1;
+    const months = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(`${today.slice(0, 7)}-01T12:00:00Z`);
+      date.setUTCMonth(date.getUTCMonth() + index);
+      return date.toISOString().slice(0, 7);
+    });
+    const expiryByMonth = [
+      { key: "expired", match: (lot: (typeof lots)[number]) => expired(lot) },
+      ...months.map((month) => ({
+        key: month,
+        match: (lot: (typeof lots)[number]) =>
+          !expired(lot) &&
+          lot.expiresAt !== null &&
+          civil(lot.expiresAt).slice(0, 7) === month,
+      })),
+    ].map(({ key, match }) => {
+      const group = lots.filter(match);
+      return {
+        month: key,
+        lots: group.length,
+        units: group.reduce((sum, lot) => sum + lot.quantity, 0),
+        valueMinor: showsValue
+          ? group
+              .reduce((sum, lot) => sum + BigInt(lot.quantity) * lot.cost, 0n)
+              .toString()
+          : null,
+      };
+    });
+
     return {
       meta: reportMeta(
         "inventory",
@@ -274,6 +327,8 @@ export class ReportInventoryService {
           sharePct: sharePct(row.amount, categoryTotal),
           units: row.units,
         })),
+        health,
+        expiryByMonth,
       },
       tables: {
         expiring: expiring.slice(0, 100).map(({ lot, daysLeft }) => ({

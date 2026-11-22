@@ -158,6 +158,15 @@ describe("pestaña Productos", () => {
         { id: "c1", name: "Analgésicos", value: "300000", sharePct: 100 },
       ],
       rotation: [product],
+      pareto: [
+        { name: "Ibuprofeno 400", valueMinor: "300000", cumulativePct: 75 },
+        { name: "Shampoo", valueMinor: "100000", cumulativePct: 100 },
+      ],
+      abc: [
+        { id: "A", products: 1, sharePct: 75 },
+        { id: "B", products: 1, sharePct: 25 },
+        { id: "C", products: 0, sharePct: 0 },
+      ],
     },
     tables: {
       stale: [
@@ -185,6 +194,8 @@ describe("pestaña Productos", () => {
       "Crema vieja",
       "Nunca vendido",
       "Valor a costo",
+      "¿Qué productos sostienen el negocio?",
+      "que nunca falten",
     ])
       expect(html).toContain(text);
   });
@@ -231,6 +242,21 @@ describe("pestaña Inventario", () => {
           units: 120,
         },
       ],
+      health: { healthy: 10, low: 3, out: 2, expiring: 1, expired: 1 },
+      expiryByMonth: [
+        {
+          month: "expired",
+          lots: 1,
+          units: 3,
+          valueMinor: showsValue ? "3000" : null,
+        },
+        {
+          month: "2026-11",
+          lots: 0,
+          units: 0,
+          valueMinor: showsValue ? "0" : null,
+        },
+      ],
     },
     tables: {
       expiring: [
@@ -272,6 +298,9 @@ describe("pestaña Inventario", () => {
       "Vencido hace 16",
       "Vencidos con existencia",
       "+25 %",
+      "Salud del stock",
+      "Sanos",
+      "Con vencidos",
     ])
       expect(html).toContain(text);
   });
@@ -300,6 +329,10 @@ describe("pestaña Compras", () => {
       trend: [{ bucket: "2026-10-10", value: "300000", previous: "100000" }],
       suppliers: [
         { id: "s1", name: "Droguería Sur", value: "300000", sharePct: 100 },
+      ],
+      duesCalendar: [
+        { id: "overdue", name: "Vencido", amountMinor: "50000", invoices: 1 },
+        { id: "week", name: "Esta semana", amountMinor: "0", invoices: 0 },
       ],
     },
     tables: {
@@ -344,6 +377,8 @@ describe("pestaña Compras", () => {
       "Deuda vencida con proveedores",
       "36 d",
       "No hay mercadería pendiente de recibir.",
+      "Calendario de pagos a proveedores",
+      "Ya vencido",
     ])
       expect(html).toContain(text);
   });
@@ -393,6 +428,45 @@ describe("pestaña Clientes", () => {
           lastPaymentAt: "2026-10-10T15:00:00Z",
         },
       ],
+      loyalty: {
+        identifiedSharePct: 18.5,
+        returningPct: 60,
+        retentionPct: 40,
+        newCustomers: 2,
+        returningCustomers: 3,
+        medianDaysBetween: 21,
+        purchasesPerCustomer: 1.8,
+        spendPerCustomerMinor: "45000",
+        segments: [
+          { id: "frequent", customers: 2, lifetimeMinor: "500000" },
+          { id: "regular", customers: 1, lifetimeMinor: "90000" },
+          { id: "new", customers: 2, lifetimeMinor: "40000" },
+          { id: "atRisk", customers: 1, lifetimeMinor: "300000" },
+          { id: "lost", customers: 0, lifetimeMinor: "0" },
+        ],
+        newVsReturning: [
+          { bucket: "2026-10-10", newCount: 1, returningCount: 2 },
+        ],
+        frequency: [
+          { id: "once", name: "Una sola compra", customers: 2 },
+          { id: "30", name: "Cada mes", customers: 3 },
+        ],
+        cohorts: [
+          { month: "2026-09", customers: 4, retention: [50, 25, null] },
+        ],
+        toRecover: [
+          {
+            id: "c9",
+            name: "Rosa Díaz",
+            lastPurchaseAt: "2026-09-01T15:00:00Z",
+            daysSince: 60,
+            usualDays: 20,
+            purchases: 6,
+            lifetimeMinor: "300000",
+            segment: "atRisk",
+          },
+        ],
+      },
       collections: [],
     },
   };
@@ -406,13 +480,27 @@ describe("pestaña Clientes", () => {
       />,
     );
     for (const text of [
-      "Cobrado sobre lo vendido a cuenta",
+      "Cobrado sobre lo fiado",
       "50 %",
       "la deuda sube",
       "Deuda vencida",
-      "40 % del saldo total",
+      "40 % del saldo",
       "45 d",
       "Sin cobros en el período.",
+    ])
+      expect(html).toContain(text);
+    for (const text of [
+      "Fidelidad",
+      "18,5 % de lo facturado tiene cliente identificado",
+      "Compran cada",
+      "21 días",
+      "Frecuentes",
+      "En riesgo",
+      "Rosa Díaz",
+      "cada 20 d",
+      "Cohortes",
+      "50 %",
+      "Cuenta corriente",
     ])
       expect(html).toContain(text);
     // Nunca datos personales en la vista general.

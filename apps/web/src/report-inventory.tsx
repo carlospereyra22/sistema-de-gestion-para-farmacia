@@ -14,10 +14,13 @@ import {
 import type { ReportInventory } from "@gestion/contracts";
 import { donutOption } from "./lib/report-charts-ventas";
 import {
+  calendarOption,
   columnsOption,
   stockTrendOption,
   trendUnitOptions,
 } from "./lib/report-charts-tabs";
+import { reportStatus } from "./lib/report-chart-theme";
+import { ReportStackedBar } from "./report-visuals";
 import { formatMoneyMinor } from "./lib/report-format";
 import type { ReportView } from "./lib/report-view";
 import { Boton } from "./boton";
@@ -89,6 +92,28 @@ export function ReportInventoryContent({
         charts.categories.slice(0, 8).map((row) => ({
           name: row.name,
           value: Number(row.value),
+        })),
+        value ? "money" : "units",
+      ),
+      expiry: calendarOption(
+        charts.expiryByMonth.map((row, index) => ({
+          name:
+            row.month === "expired"
+              ? "Vencido"
+              : new Date(`${row.month}-15T12:00:00`).toLocaleDateString(
+                  "es-AR",
+                  { month: "short", year: "2-digit" },
+                ),
+          value: value ? Number(row.valueMinor ?? 0) : row.units,
+          color:
+            row.month === "expired"
+              ? reportStatus.worst
+              : index === 1
+                ? reportStatus.bad
+                : index <= 3
+                  ? reportStatus.warn
+                  : reportStatus.info,
+          detail: `${row.lots} ${row.lots === 1 ? "lote" : "lotes"} · ${row.units.toLocaleString("es-AR")} u.`,
         })),
         value ? "money" : "units",
       ),
@@ -201,6 +226,69 @@ export function ReportInventoryContent({
         />
       </div>
       <ReportWarnings warnings={meta.dataQuality.warnings} />
+
+      <ReportPanel
+        animar={animar}
+        title="Salud del stock"
+        icon={<Gauge size={16} aria-hidden />}
+        hint="Cada producto con stock en un solo estado, el peor. Y cuánto vence cada mes."
+        className="border-teal-200/70"
+      >
+        <div className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
+          <ReportStackedBar
+            label="Productos por estado del stock"
+            unit="productos"
+            parts={[
+              {
+                id: "healthy",
+                label: "Sanos",
+                value: charts.health.healthy,
+                color: "bg-emerald-500",
+                detail: `Más de ${tables.lowStockThreshold} unidades y sin vencimientos cerca`,
+              },
+              {
+                id: "low",
+                label: "Stock bajo",
+                value: charts.health.low,
+                color: "bg-amber-400",
+                detail: `${tables.lowStockThreshold} unidades o menos`,
+              },
+              {
+                id: "expiring",
+                label: "Por vencer",
+                value: charts.health.expiring,
+                color: "bg-orange-500",
+                detail: `Algún lote vence en ${tables.expiryWindowDays} días`,
+              },
+              {
+                id: "expired",
+                label: "Con vencidos",
+                value: charts.health.expired,
+                color: "bg-rose-800",
+                detail: "Tienen lotes vencidos con existencia",
+              },
+              {
+                id: "out",
+                label: "Sin stock",
+                value: charts.health.out,
+                color: "bg-rose-500",
+                detail: "Se vendían y hoy no hay",
+              },
+            ]}
+          />
+          <div>
+            <p className="mb-1 text-xs font-semibold text-slate-700">
+              Vencimientos por mes {value ? "(valor a costo)" : "(unidades)"}
+            </p>
+            <ReportPanelChart
+              tipo="barras"
+              option={options.expiry}
+              label="Vencimientos por mes"
+              height={220}
+            />
+          </div>
+        </div>
+      </ReportPanel>
 
       <ReportPanel
         animar={animar}

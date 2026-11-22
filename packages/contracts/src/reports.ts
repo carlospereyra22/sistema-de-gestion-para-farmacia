@@ -358,6 +358,10 @@ export type ReportProducts = ReportResponse<
     categories: ReportBreakdownItem[];
     /** Productos con ventas y stock, para rotación contra margen (o ventas). */
     rotation: ReportProductRow[];
+    /** Curva de Pareto (SISTEMA-117): hasta 40, de mayor a menor venta. */
+    pareto: { name: string; valueMinor: MoneyMinor; cumulativePct: number }[];
+    /** Clasificación ABC: A hasta el 80 % de la venta, B hasta el 95 %, C el resto. */
+    abc: { id: "A" | "B" | "C"; products: number; sharePct: number | null }[];
   },
   {
     /** Productos activos con stock y sin ventas en `staleDays` días. */
@@ -394,6 +398,21 @@ export type ReportInventory = ReportResponse<
     trend: { bucket: string; units: number; valueMinor: MoneyMinor | null }[];
     /** Valor a costo (o unidades sin permiso) por categoría. */
     categories: (ReportBreakdownItem & { units: number })[];
+    /** Salud del stock (SISTEMA-117): productos por estado. */
+    health: {
+      healthy: number;
+      low: number;
+      out: number;
+      expiring: number;
+      expired: number;
+    };
+    /** Vencimientos de los próximos 6 meses (y lo ya vencido como "vencido"). */
+    expiryByMonth: {
+      month: string;
+      lots: number;
+      units: number;
+      valueMinor: MoneyMinor | null;
+    }[];
   },
   {
     expiring: {
@@ -434,6 +453,13 @@ export type ReportPurchases = ReportResponse<
     trendUnit: ReportTrendUnit;
     trend: ReportSeriesPoint[];
     suppliers: ReportBreakdownItem[];
+    /** Calendario de pagos (SISTEMA-117): saldo por cuándo vence. */
+    duesCalendar: {
+      id: string;
+      name: string;
+      amountMinor: MoneyMinor;
+      invoices: number;
+    }[];
   },
   {
     /** Facturado por proveedores en el período (aparte de lo recibido). */
@@ -475,6 +501,60 @@ export type ReportPurchases = ReportResponse<
 export type ReportCustomersKpi =
   "activeCustomers" | "accountBalance" | "collected" | "debtors";
 
+/** Segmentos de fidelidad (SISTEMA-117), según la última compra y la frecuencia. */
+export type ReportLoyaltySegment =
+  "new" | "frequent" | "regular" | "atRisk" | "lost";
+
+/**
+ * Fidelidad de clientes (SISTEMA-117). Sólo ventas con cliente identificado:
+ * `identifiedSharePct` dice cuánto de lo facturado tiene cliente.
+ */
+export type ReportLoyalty = {
+  identifiedSharePct: number | null;
+  /** Clientes del período que ya habían comprado antes / clientes del período. */
+  returningPct: number | null;
+  /** De los clientes del período comparado, cuántos volvieron en éste. */
+  retentionPct: number | null;
+  newCustomers: number;
+  returningCustomers: number;
+  /** Mediana de días entre compras, de clientes con 2 o más compras. */
+  medianDaysBetween: number | null;
+  /** Compras promedio por cliente en el período, con un decimal. */
+  purchasesPerCustomer: number | null;
+  /** Facturado promedio por cliente en el período. */
+  spendPerCustomerMinor: MoneyMinor | null;
+  segments: {
+    id: ReportLoyaltySegment;
+    customers: number;
+    /** Facturado histórico hasta el fin del período. */
+    lifetimeMinor: MoneyMinor;
+  }[];
+  /** Clientes distintos por tramo: nuevos (primera compra) y recurrentes. */
+  newVsReturning: {
+    bucket: string;
+    newCount: number;
+    returningCount: number;
+  }[];
+  /** Cuántos clientes compran cada tantos días (promedio entre compras). */
+  frequency: { id: string; name: string; customers: number }[];
+  /**
+   * Cohortes por mes de primera compra (hasta 6): `retention[i]` es el % que
+   * volvió a comprar en el mes i+1 después; null si ese mes todavía no llegó.
+   */
+  cohorts: { month: string; customers: number; retention: (number | null)[] }[];
+  /** Clientes que superaron su frecuencia habitual sin volver. */
+  toRecover: {
+    id: string;
+    name: string;
+    lastPurchaseAt: string;
+    daysSince: number;
+    usualDays: number | null;
+    purchases: number;
+    lifetimeMinor: MoneyMinor;
+    segment: ReportLoyaltySegment;
+  }[];
+};
+
 /** Pestaña Clientes y cuentas corrientes (SISTEMA-116). Sin DNI, CUIT ni teléfono. */
 export type ReportCustomers = ReportResponse<
   ReportCustomersKpi,
@@ -500,6 +580,7 @@ export type ReportCustomers = ReportResponse<
       oldestDaysOverdue: number;
       lastPaymentAt: string | null;
     }[];
+    loyalty: ReportLoyalty;
     collections: {
       id: string;
       customer: string;

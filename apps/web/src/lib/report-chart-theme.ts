@@ -20,6 +20,45 @@ export const reportPalette = [
 
 export const reportComparisonColor = "#94a3b8";
 
+/**
+ * Paleta categórica (SISTEMA-117): para partes de un total que no tienen orden
+ * (medios de pago, categorías, proveedores). Distinguible de a pares y en modo
+ * oscuro tiene su par más claro.
+ */
+export const reportCategorical = [
+  "#0d9488",
+  "#6366f1",
+  "#f59e0b",
+  "#ec4899",
+  "#0ea5e9",
+  "#84cc16",
+  "#a855f7",
+  "#94a3b8",
+] as const;
+
+const categoricaOscura = [
+  "#2dd4bf",
+  "#818cf8",
+  "#fbbf24",
+  "#f472b6",
+  "#38bdf8",
+  "#a3e635",
+  "#c084fc",
+  "#7d8ca0",
+] as const;
+
+/** Colores con significado: bien, atención, mal, y sus intermedios. */
+export const reportStatus = {
+  good: "#10b981",
+  info: "#0ea5e9",
+  new: "#6366f1",
+  warn: "#f59e0b",
+  alert: "#f97316",
+  bad: "#e11d48",
+  worst: "#9f1239",
+  neutral: "#94a3b8",
+} as const;
+
 /** Mismo orden que `reportPalette`: la serie principal es la más visible. */
 const paletaOscura = [
   "#3fd0b8",
@@ -36,6 +75,15 @@ const coloresOscuros: Record<string, string> = {
     reportPalette.map((color, indice) => [color, paletaOscura[indice]]),
   ),
   [reportComparisonColor]: "#6d7c8f",
+  ...Object.fromEntries(
+    reportCategorical
+      .slice(0, 7)
+      .map((color, indice) => [color, categoricaOscura[indice]]),
+  ),
+  "#10b981": "#34d399",
+  "#f97316": "#fb923c",
+  "#e11d48": "#fb7185",
+  "#9f1239": "#f43f5e",
   "#066b60": "#62e3cc",
   "#8fd3c3": "#2a5f59",
   "#334155": "#c3ccd7",

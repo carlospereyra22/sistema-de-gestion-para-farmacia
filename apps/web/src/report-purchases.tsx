@@ -1,6 +1,7 @@
 import { useMemo, type ReactElement } from "react";
 import {
   ArrowUpRight,
+  CalendarDays,
   FileWarning,
   Handshake,
   PackageOpen,
@@ -13,7 +14,13 @@ import {
 import type { ReportPurchases } from "@gestion/contracts";
 import { rankingOption, trendOption } from "./lib/report-charts";
 import { donutOption } from "./lib/report-charts-ventas";
-import { formatPercent, trendUnitOptions } from "./lib/report-charts-tabs";
+import {
+  calendarOption,
+  formatPercent,
+  trendUnitOptions,
+} from "./lib/report-charts-tabs";
+import { reportStatus } from "./lib/report-chart-theme";
+import { ReportStat } from "./report-visuals";
 import { formatMoneyMinor } from "./lib/report-format";
 import { comparisonOptions, type ReportView } from "./lib/report-view";
 import { ReportKpiCard } from "./report-kpi";
@@ -47,6 +54,17 @@ export function ReportPurchasesTab(props: {
     </ReportTabLoader>
   );
 }
+
+/** Lo vencido en rojo, lo inmediato en naranja o ámbar y lo lejano en frío. */
+const dueColors: Record<string, string> = {
+  overdue: reportStatus.bad,
+  week: reportStatus.alert,
+  "2weeks": reportStatus.warn,
+  month: reportStatus.info,
+  "2months": reportStatus.new,
+  later: "#a855f7",
+  undated: reportStatus.neutral,
+};
 
 const date = (value: string | null) =>
   value
@@ -91,6 +109,15 @@ export function ReportPurchasesContent({
         charts.suppliers
           .slice(0, 8)
           .map((row) => ({ name: row.name, value: Number(row.value) })),
+      ),
+      calendar: calendarOption(
+        charts.duesCalendar.map((row) => ({
+          name: row.name,
+          value: Number(row.amountMinor),
+          color: dueColors[row.id] ?? reportStatus.neutral,
+          detail: `${row.invoices} ${row.invoices === 1 ? "factura" : "facturas"}`,
+        })),
+        "money",
       ),
       increases: rankingOption(
         tables.costIncreases.slice(0, 10).map((row) => ({
@@ -182,6 +209,44 @@ export function ReportPurchasesContent({
           help="Último costo del período contra el último anterior, en productos comprados en los dos, ponderado por lo comprado."
         />
       </div>
+
+      <ReportPanel
+        animar={animar}
+        title="Calendario de pagos a proveedores"
+        icon={<CalendarDays size={16} aria-hidden />}
+        hint="Saldo de facturas según cuándo vence, contando desde hoy. Para planificar la caja."
+        className="border-teal-200/70"
+      >
+        <div className="grid gap-5 xl:grid-cols-[1fr_2.2fr]">
+          <div className="grid content-center gap-2.5">
+            <ReportStat
+              label="A pagar en total"
+              value={formatMoneyMinor(tables.pendingTotals.balanceMinor)}
+              detail={`${kpis.pendingInvoices.value ?? 0} facturas con saldo`}
+            />
+            <ReportStat
+              label="Ya vencido"
+              value={formatMoneyMinor(tables.pendingTotals.overdueMinor)}
+              tone={tables.pendingTotals.overdueMinor !== "0" ? "bad" : "good"}
+              detail="Pagar primero"
+            />
+            <ReportStat
+              label="Vence esta semana"
+              value={formatMoneyMinor(
+                charts.duesCalendar.find((row) => row.id === "week")
+                  ?.amountMinor ?? "0",
+              )}
+              detail="Hoy y los próximos 7 días"
+            />
+          </div>
+          <ReportPanelChart
+            tipo="barras"
+            option={options.calendar}
+            label="Calendario de pagos"
+            height={250}
+          />
+        </div>
+      </ReportPanel>
 
       <ReportPanel
         animar={animar}

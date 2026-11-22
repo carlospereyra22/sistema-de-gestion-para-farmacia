@@ -1,4 +1,8 @@
-import { reportComparisonColor, reportPalette } from "./report-chart-theme";
+import {
+  reportComparisonColor,
+  reportPalette,
+  reportStatus,
+} from "./report-chart-theme";
 import { axisMoney, bucketLabel, tooltipMoney } from "./report-charts";
 
 /**
@@ -425,6 +429,348 @@ export function agingOption(
             color: agingColors[item.id] ?? reportPalette[1],
             borderRadius: [4, 4, 0, 0],
           },
+        })),
+      },
+    ],
+  };
+}
+
+/** Clientes nuevos (primera compra) y recurrentes por tramo, apilados. */
+export function newVsReturningOption(
+  points: readonly {
+    bucket: string;
+    newCount: number;
+    returningCount: number;
+  }[],
+  unit: TrendUnit,
+) {
+  const series = [
+    {
+      id: "recurrentes",
+      name: "Volvieron",
+      color: reportStatus.good,
+      key: "returningCount" as const,
+    },
+    {
+      id: "nuevos",
+      name: "Nuevos",
+      color: reportStatus.new,
+      key: "newCount" as const,
+    },
+  ];
+  return {
+    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    legend,
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: TooltipParam[]) => {
+        const point = points[params[0]?.dataIndex ?? 0];
+        if (!point) return "";
+        const total = point.newCount + point.returningCount;
+        return [
+          `<strong>${bucketLabel(point.bucket, unit)}</strong>`,
+          ...params.map(
+            (param) =>
+              `${param.marker}${param.seriesName}: ${param.value ?? 0}`,
+          ),
+          total
+            ? `Volvieron: ${Math.round((point.returningCount / total) * 100)} % de los clientes`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: points.map((point) => bucketLabel(point.bucket, unit)),
+    },
+    yAxis: { type: "value", minInterval: 1 },
+    series: series.map((serie, index) => ({
+      id: serie.id,
+      name: serie.name,
+      type: "bar",
+      stack: "clientes",
+      barMaxWidth: 22,
+      itemStyle: {
+        color: serie.color,
+        borderRadius: index === series.length - 1 ? [4, 4, 0, 0] : 0,
+      },
+      data: points.map((point) => point[serie.key]),
+    })),
+  };
+}
+
+/** Cuántos clientes compran cada tantos días: de seguido (verde) a esporádico. */
+export function frequencyOption(
+  items: readonly { id: string; name: string; customers: number }[],
+) {
+  const colors: Record<string, string> = {
+    "7": "#0d9488",
+    "15": "#14b8a6",
+    "30": "#0ea5e9",
+    "60": "#6366f1",
+    "90": "#a855f7",
+    more: "#f59e0b",
+    once: "#94a3b8",
+  };
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      valueFormatter: (value: number) =>
+        `${value} ${value === 1 ? "cliente" : "clientes"}`,
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, fontSize: 10, width: 70, overflow: "break" },
+    },
+    yAxis: { type: "value", minInterval: 1 },
+    series: [
+      {
+        id: "frecuencia",
+        type: "bar",
+        barMaxWidth: 34,
+        label: { show: true, position: "top", fontSize: 10, color: "#475569" },
+        data: items.map((item) => ({
+          name: item.name,
+          value: item.customers,
+          itemStyle: {
+            color: colors[item.id] ?? reportPalette[1],
+            borderRadius: [4, 4, 0, 0],
+          },
+        })),
+      },
+    ],
+  };
+}
+
+/**
+ * Curva de Pareto: ventas de cada producto (columnas, de mayor a menor) y el %
+ * acumulado (línea, eje derecho) con la marca del 80 %.
+ */
+export function paretoOption(
+  rows: readonly { name: string; valueMinor: string; cumulativePct: number }[],
+) {
+  const cut = rows.findIndex((row) => row.cumulativePct >= 80);
+  return {
+    grid: { left: 8, right: 8, top: 36, bottom: 8, containLabel: true },
+    legend,
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: TooltipParam[]) => {
+        const row = rows[params[0]?.dataIndex ?? 0];
+        if (!row) return "";
+        return `<strong>${row.name}</strong><br/>Ventas: ${tooltipMoney(Number(row.valueMinor))}<br/>Acumulado: ${percent(row.cumulativePct)}`;
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: rows.map((_, index) => `${index + 1}`),
+      name: "Productos, de mayor a menor venta",
+      nameLocation: "middle",
+      nameGap: 22,
+      nameTextStyle: { fontSize: 10, color: "#64748b" },
+    },
+    yAxis: [
+      { type: "value", axisLabel: { formatter: axisMoney } },
+      {
+        type: "value",
+        max: 100,
+        axisLabel: { formatter: (value: number) => `${value} %` },
+        splitLine: { show: false },
+      },
+    ],
+    series: [
+      {
+        id: "ventas",
+        name: "Ventas del producto",
+        type: "bar",
+        barMaxWidth: 16,
+        data: rows.map((row, index) => ({
+          value: Number(row.valueMinor),
+          itemStyle: {
+            // Los que hacen el 80 % en verde; el resto, más claro.
+            color: cut < 0 || index <= cut ? reportStatus.good : "#a5dccf",
+            borderRadius: [3, 3, 0, 0],
+          },
+        })),
+      },
+      {
+        id: "acumulado",
+        name: "% acumulado",
+        type: "line",
+        yAxisIndex: 1,
+        smooth: true,
+        symbol: "none",
+        itemStyle: { color: reportStatus.new },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { type: "dashed", color: reportStatus.warn },
+          label: { formatter: "80 %", fontSize: 10, color: "#64748b" },
+          data: [{ yAxis: 80 }],
+        },
+        data: rows.map((row) => row.cumulativePct),
+      },
+    ],
+  };
+}
+
+/**
+ * Cascada de rentabilidad: ventas con costo, menos el costo, da la ganancia.
+ * Lo que no tiene costo de lote va aparte, en gris.
+ */
+export function waterfallOption(values: {
+  salesMinor: number;
+  costMinor: number;
+  profitMinor: number;
+  withoutCostMinor: number;
+}) {
+  const steps = [
+    {
+      name: "Ventas con costo",
+      base: 0,
+      value: values.salesMinor,
+      color: reportStatus.info,
+    },
+    {
+      name: "Costo de lo vendido",
+      base: values.profitMinor,
+      value: values.costMinor,
+      color: reportStatus.bad,
+    },
+    {
+      name: "Ganancia bruta",
+      base: 0,
+      value: values.profitMinor,
+      color: reportStatus.good,
+    },
+    ...(values.withoutCostMinor > 0
+      ? [
+          {
+            name: "Ventas sin costo",
+            base: 0,
+            value: values.withoutCostMinor,
+            color: reportStatus.neutral,
+          },
+        ]
+      : []),
+  ];
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const step = steps[params[0]?.dataIndex ?? 0];
+        return step
+          ? `<strong>${step.name}</strong><br/>${tooltipMoney(step.value)}`
+          : "";
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: steps.map((step) => step.name),
+      axisLabel: { interval: 0, fontSize: 11 },
+    },
+    yAxis: { type: "value", axisLabel: { formatter: axisMoney } },
+    series: [
+      {
+        id: "base",
+        type: "bar",
+        stack: "cascada",
+        silent: true,
+        itemStyle: { color: "transparent" },
+        data: steps.map((step) => step.base),
+      },
+      {
+        id: "valor",
+        type: "bar",
+        stack: "cascada",
+        barMaxWidth: 56,
+        label: {
+          show: true,
+          position: "top",
+          fontSize: 11,
+          color: "#334155",
+          formatter: ({ value }: { value: number }) => axisMoney(value),
+        },
+        data: steps.map((step) => ({
+          value: step.value,
+          itemStyle: { color: step.color, borderRadius: [5, 5, 0, 0] },
+        })),
+      },
+    ],
+  };
+}
+
+/**
+ * Columnas con un color por grupo (calendarios de vencimientos y de pagos):
+ * lo urgente en rojo, lo próximo en ámbar y lo lejano en tonos fríos.
+ */
+export function calendarOption(
+  items: readonly {
+    name: string;
+    value: number;
+    color: string;
+    detail?: string;
+  }[],
+  format: "money" | "units",
+) {
+  const show = (value: number) =>
+    format === "money"
+      ? tooltipMoney(value)
+      : `${value.toLocaleString("es-AR")} u.`;
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const item = items[params[0]?.dataIndex ?? 0];
+        return item
+          ? `<strong>${item.name}</strong><br/>${show(item.value)}${item.detail ? `<br/>${item.detail}` : ""}`
+          : "";
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        formatter: (value: number) =>
+          format === "money" ? axisMoney(value) : value.toLocaleString("es-AR"),
+      },
+    },
+    series: [
+      {
+        id: "calendario",
+        type: "bar",
+        barMaxWidth: 40,
+        label: {
+          show: true,
+          position: "top",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ value }: { value: number }) =>
+            value
+              ? format === "money"
+                ? axisMoney(value)
+                : value.toLocaleString("es-AR")
+              : "",
+        },
+        data: items.map((item) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: { color: item.color, borderRadius: [4, 4, 0, 0] },
         })),
       },
     ],

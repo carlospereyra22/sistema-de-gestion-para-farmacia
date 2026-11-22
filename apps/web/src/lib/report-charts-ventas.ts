@@ -1,4 +1,8 @@
-import { reportComparisonColor, reportPalette } from "./report-chart-theme";
+import {
+  reportCategorical,
+  reportComparisonColor,
+  reportPalette,
+} from "./report-chart-theme";
 import {
   axisMoney,
   bucketLabel,
@@ -276,8 +280,11 @@ export function heatmapOption(
  * Torta con agujero (participación): importe y porcentaje en el tooltip y la
  * leyenda al costado para no tapar las porciones.
  */
-export function donutOption(items: readonly { name: string; value: number }[]) {
+export function donutOption(
+  items: readonly { name: string; value: number; color?: string }[],
+) {
   return {
+    color: [...reportCategorical],
     tooltip: {
       trigger: "item",
       formatter: ({
@@ -311,7 +318,11 @@ export function donutOption(items: readonly { name: string; value: number }[]) {
         labelLine: { show: false },
         itemStyle: { borderColor: "#ffffff", borderWidth: 2, borderRadius: 4 },
         emphasis: { scale: true, scaleSize: 4 },
-        data: items.map((item) => ({ name: item.name, value: item.value })),
+        data: items.map((item) => ({
+          name: item.name,
+          value: item.value,
+          ...(item.color ? { itemStyle: { color: item.color } } : {}),
+        })),
       },
     ],
   };

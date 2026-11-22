@@ -2070,6 +2070,18 @@ textarea:focus {
   .reportes-actualizando {
     animation: reportes-fila 160ms ease-out 150ms backwards;
   }
+  /* Barras hechas en HTML (segmentos, salud del stock, SISTEMA-117): crecen
+     desde la izquierda con la curva de los gráficos. */
+  [data-entrada="entrando"] .reportes-barra {
+    animation: reportes-crecer 1600ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: calc(300ms + var(--fila, 0) * 60ms);
+    transform-origin: left center;
+  }
+}
+@keyframes reportes-crecer {
+  from {
+    transform: scaleX(0);
+  }
 }
 @keyframes reportes-aparicion {
   from {

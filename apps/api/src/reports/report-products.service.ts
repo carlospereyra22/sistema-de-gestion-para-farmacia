@@ -39,6 +39,27 @@ export function paretoCount(values: readonly bigint[], threshold = 80) {
   return values.length;
 }
 
+/** Clasificación ABC: A hasta el 80 % de la venta, B hasta el 95 %, C el resto. */
+export function abcClasses(values: readonly bigint[]) {
+  const total = values.reduce((sum, value) => sum + value, 0n);
+  const counts = { A: 0, B: 0, C: 0 };
+  const sums = { A: 0n, B: 0n, C: 0n };
+  let acc = 0n;
+  for (const value of values) {
+    // La clase la decide dónde arranca el producto en la curva acumulada.
+    const start = total > 0n ? Number((acc * 1000n) / total) / 10 : 100;
+    const key = start < 80 ? "A" : start < 95 ? "B" : "C";
+    counts[key] += 1;
+    sums[key] += value;
+    acc += value;
+  }
+  return (["A", "B", "C"] as const).map((id) => ({
+    id,
+    products: counts[id],
+    sharePct: total > 0n ? Number((sums[id] * 1000n) / total) / 10 : null,
+  }));
+}
+
 /**
  * Pestaña Productos (SISTEMA-116): qué se vende, qué concentra la venta, qué
  * está parado. Stock y "sin movimiento" son estado actual; ventas, del período.
@@ -232,6 +253,20 @@ export class ReportProductsService {
             categories.reduce((sum, item) => sum + item.value, 0n),
           ),
         })),
+        pareto: (() => {
+          const total = byAmount.reduce((sum, row) => sum + row.amount, 0n);
+          let acc = 0n;
+          return byAmount.slice(0, 40).map((row) => {
+            acc += row.amount;
+            return {
+              name: row.name,
+              valueMinor: row.amount.toString(),
+              cumulativePct:
+                total > 0n ? Number((acc * 1000n) / total) / 10 : 0,
+            };
+          });
+        })(),
+        abc: abcClasses(byAmount.map((row) => row.amount)),
         rotation: byAmount
           .filter((row) => row.rotation !== null)
           .slice(0, ROTATION_POINTS)

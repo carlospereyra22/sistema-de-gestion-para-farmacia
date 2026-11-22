@@ -1,4 +1,9 @@
-import { useMemo, useState, type ReactElement } from "react";
+import {
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from "react";
 import {
   Archive,
   Boxes,
@@ -14,7 +19,11 @@ import {
 import type { ReportProducts } from "@gestion/contracts";
 import { rankingOption } from "./lib/report-charts";
 import { donutOption } from "./lib/report-charts-ventas";
-import { formatPercent, rotationOption } from "./lib/report-charts-tabs";
+import {
+  formatPercent,
+  paretoOption,
+  rotationOption,
+} from "./lib/report-charts-tabs";
 import { formatMoneyMinor } from "./lib/report-format";
 import type { ReportView } from "./lib/report-view";
 import { ReportKpiCard } from "./report-kpi";
@@ -43,6 +52,25 @@ export function ReportProductsTab(props: {
     </ReportTabLoader>
   );
 }
+
+/** Clases ABC: qué hacer con cada grupo. */
+const abcLook = {
+  A: {
+    card: "border-emerald-100 bg-emerald-50/50",
+    badge: "bg-emerald-600 text-white",
+    text: "El 80 % de la venta: que nunca falten y con buen precio.",
+  },
+  B: {
+    card: "border-sky-100 bg-sky-50/50",
+    badge: "bg-sky-500 text-white",
+    text: "El 15 % siguiente: reponer sin sobrestock.",
+  },
+  C: {
+    card: "border-slate-200 bg-slate-50/70",
+    badge: "bg-slate-400 text-white",
+    text: "El último 5 %: comprar poco, evaluar si conviene tenerlos.",
+  },
+} as const;
 
 /** Promedio simple de una lista (para el corte de los cuadrantes). */
 const average = (values: readonly number[]) =>
@@ -87,6 +115,7 @@ export function ReportProductsContent({
           .slice(0, 10)
           .map((row) => ({ name: row.name, value: Number(row.value) })),
       ),
+      pareto: paretoOption(charts.pareto),
       rotation: rotationOption(rotation, axis, {
         rotation:
           Math.round(average(rotation.map((row) => row.rotation ?? 0)) * 100) /
@@ -177,6 +206,56 @@ export function ReportProductsContent({
           help="Productos con stock vendible de 5 unidades o menos. Estado actual."
         />
       </div>
+
+      {charts.pareto.length ? (
+        <ReportPanel
+          animar={animar}
+          title="¿Qué productos sostienen el negocio?"
+          icon={<Target size={16} aria-hidden />}
+          hint="Curva de Pareto: ventas de cada producto de mayor a menor y el % acumulado. En verde, los que hacen el 80 % de la venta."
+          className="border-teal-200/70"
+        >
+          <div className="grid gap-5 xl:grid-cols-[1.7fr_1fr]">
+            <ReportPanelChart
+              tipo="barras"
+              option={options.pareto}
+              label="Curva de Pareto de ventas"
+              height={300}
+            />
+            <ul className="grid content-center gap-2.5">
+              {charts.abc.map((group, index) => {
+                const look = abcLook[group.id];
+                return (
+                  <li
+                    key={group.id}
+                    className={`reportes-fila flex items-center gap-3 rounded-xl border px-3.5 py-3 ${look.card}`}
+                    style={{ "--fila": index } as CSSProperties}
+                  >
+                    <span
+                      className={`grid size-10 shrink-0 place-items-center rounded-xl text-lg font-bold ${look.badge}`}
+                    >
+                      {group.id}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-slate-800">
+                          {group.products.toLocaleString("es-AR")} productos
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums text-slate-900">
+                          {formatPercent(group.sharePct)}
+                        </span>
+                      </span>
+                      <span className="block text-[11px] text-slate-500">
+                        {look.text}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </ReportPanel>
+      ) : null}
 
       <ReportPanel
         animar={animar}

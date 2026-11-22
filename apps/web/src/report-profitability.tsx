@@ -20,7 +20,9 @@ import {
   formatPp,
   profitTrendOption,
   trendUnitOptions,
+  waterfallOption,
 } from "./lib/report-charts-tabs";
+import { ReportRing, ReportStat } from "./report-visuals";
 import { formatMoneyMinor } from "./lib/report-format";
 import type { ReportView } from "./lib/report-view";
 import { ReportKpiCard } from "./report-kpi";
@@ -90,6 +92,23 @@ export function ReportProfitabilityContent({
       .slice(0, 10);
     return {
       trend: profitTrendOption(charts.trend, charts.trendUnit),
+      waterfall: (() => {
+        const sales = charts.categories.reduce(
+          (sum, row) => sum + Number(row.netSalesMinor),
+          0,
+        );
+        const profit = Number(kpis.grossProfit.value ?? 0);
+        const coverage = tables.costCoveragePct;
+        return waterfallOption({
+          salesMinor: sales,
+          costMinor: Number(kpis.costOfSales.value ?? 0),
+          profitMinor: profit,
+          withoutCostMinor:
+            coverage && coverage > 0 && coverage < 100
+              ? Math.round((sales * 100) / coverage) - sales
+              : 0,
+        });
+      })(),
       products: rankingOption(
         products.map((row) => ({
           name: `${row.name} (${row.units} u.)`,
@@ -115,7 +134,7 @@ export function ReportProfitabilityContent({
         })),
       ),
     };
-  }, [charts, tables.branches, ranking]);
+  }, [charts, tables.branches, tables.costCoveragePct, kpis, ranking]);
 
   const best = charts.products[0];
   const worstCategory = [...charts.categories]
@@ -208,6 +227,58 @@ export function ReportProfitabilityContent({
         />
       </div>
       <ReportWarnings warnings={meta.dataQuality.warnings} />
+
+      <ReportPanel
+        animar={animar}
+        title="De la venta a la ganancia"
+        icon={<Coins size={16} aria-hidden />}
+        hint="Lo vendido con costo, menos el costo de la mercadería, da la ganancia bruta. Lo que no tiene costo de lote queda aparte."
+        className="border-teal-200/70"
+      >
+        <div className="grid gap-5 xl:grid-cols-[2fr_auto_1fr]">
+          <ReportPanelChart
+            tipo="barras"
+            option={options.waterfall}
+            label="De la venta a la ganancia"
+            height={260}
+          />
+          <div className="flex items-center justify-center">
+            <ReportRing
+              value={
+                kpis.marginPct.value === null
+                  ? null
+                  : Number(kpis.marginPct.value)
+              }
+              color="text-emerald-500"
+              label="de cada peso vendido es ganancia bruta"
+              animar={animar}
+              size={150}
+            />
+          </div>
+          <div className="grid content-center gap-2.5">
+            <ReportStat
+              label="Recargo sobre el costo"
+              value={
+                kpis.costOfSales.value && kpis.costOfSales.value !== "0"
+                  ? formatPercent(
+                      Math.round(
+                        (Number(kpis.grossProfit.value ?? 0) /
+                          Number(kpis.costOfSales.value)) *
+                          1000,
+                      ) / 10,
+                    )
+                  : "—"
+              }
+              detail="Ganancia / costo. No es lo mismo que el margen."
+            />
+            <ReportStat
+              label="Ganancia por ticket"
+              value={formatMoneyMinor(kpis.profitPerTicket.value ?? "0")}
+              detail="En promedio, cada venta deja esto"
+            />
+          </div>
+        </div>
+      </ReportPanel>
 
       <ReportPanel
         animar={animar}
