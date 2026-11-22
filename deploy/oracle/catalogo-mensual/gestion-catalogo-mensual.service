@@ -1,0 +1,27 @@
+[Unit]
+Description=Actualizacion mensual del catalogo externo (5 tiendas, solo suma; SISTEMA-113)
+After=postgresql.service network-online.target
+Requires=postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gestion-catalogo
+Group=gestion-catalogo
+EnvironmentFile=/etc/gestion-catalogo/environment
+WorkingDirectory=/var/lib/gestion-catalogo
+ExecStart=/usr/local/sbin/gestion-catalogo-mensual
+UMask=0027
+Nice=15
+IOSchedulingClass=idle
+# Las descargas son lentas a proposito (pausas entre consultas) y pueden esperar
+# si una tienda pide bajar el ritmo.
+TimeoutStartSec=14h
+MemoryMax=2G
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/gestion-catalogo /var/backups/gestion-catalogo
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

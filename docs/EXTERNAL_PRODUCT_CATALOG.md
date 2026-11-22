@@ -70,6 +70,22 @@ uv run --python 3.12 --with openpyxl --with pillow --with httpx python -m unitte
 
 `--previous` conserva referencias válidas de capturas anteriores cuando el código ya no aparece en el nuevo listado, señalándolas como históricas. No rescata códigos que la captura actual excluye ni productos fuera del alcance. En la primera instalación se omite ese argumento. Las fotos VTEX nuevas se solicitan en la variante de 800 px del mismo identificador de imagen; se conservan URL de origen y de descarga.
 
+## Actualización mensual (SISTEMA-113)
+
+`scripts/external-catalog/actualizar_mensual.py --datos <carpeta>` hace el ciclo completo con los mismos scripts de arriba: descarga las 5 tiendas (reanudable; si una pide bajar el ritmo con 429, espera 10, 20 y 40 minutos y retoma), controla la cobertura, prepara con `--previous`, baja fotos, audita, instala con respaldo, verifica y recién entonces promueve la captura a `sources/` y `current/` (conserva sólo la versión anterior en `staging/anterior-*`). Deja un resumen en `resumenes/<fecha>.json` con los productos por tienda y los códigos nuevos.
+
+No instala nada, y deja el motivo en el resumen, si:
+
+- una tienda devuelve menos del 90 % de los productos de la vez anterior (sitio caído o cambiado) o no deja cobertura;
+- faltarían más del 1 % (mínimo 50) de los códigos vigentes: sólo suma, y los que una tienda deja de publicar siguen como históricos;
+- falla la preparación, las fotos, la auditoría o la instalación (en ese caso la transacción no se confirma).
+
+Si una tienda no se deja descargar (caída, o sigue respondiendo 429 después de las esperas), se usa su captura anterior, queda en `captura_anterior` del resumen y las demás se actualizan igual. No se intenta esquivar un bloqueo de la tienda. El 22/11/2026 Farmacorp respondió 429 desde la primera página y se mantuvo su captura del 01/11. `--usar-anterior <tienda>` hace lo mismo a propósito.
+
+`--sin-instalar` prepara y audita sin tocar la base. Una corrida cortada se retoma con la misma `--fecha`.
+
+En el servidor corre el día 1 de cada mes a las 04:00 de Argentina con un temporizador de systemd, sin Docker, con usuario propio y la conexión en `CATALOGO_DATABASE_URL` (sólo `localhost`/`127.0.0.1` y esta base; nunca la comercial) y los respaldos en `CATALOGO_RESPALDOS`. Instalación y operación: `deploy/oracle/catalogo-mensual/README.md`. En la PC, `install.py` sigue usando `apps/api/.env` como antes.
+
 ## API y formulario
 
 `GET /api/v1/organizations/:organizationId/catalog/external-products/barcode/:code` requiere JWT, CATALOG_MANAGE y que la organización figure en `EXTERNAL_CATALOG_ORGANIZATION_ID`, que admite varias separadas por coma. La vista previa local requiere `EXTERNAL_CATALOG_PREVIEW=true`. Sin URL explícita, la conexión externa se deriva en memoria únicamente desde localhost/gestion_dev; una URL explícita inválida falla sin fallback. No se copian credenciales a documentación.

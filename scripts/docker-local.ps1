@@ -302,7 +302,12 @@ function CatalogoExterno {
   }
 
   if ((Compose @("up", "-d", "--wait", "db")) -ne 0) { Fallar "No arrancó la base de Docker." }
-  $existe = (PsqlEnDocker "gestion_docker" "-tAc `"SELECT 1 FROM pg_database WHERE datname='catalogo_juncos_external'`"") -join ""
+  # La consulta va en un archivo: las comillas no sobreviven el paso a WSL.
+  $consulta = Join-Path $carpeta "catalogo-existe.sql"
+  "SELECT 1 FROM pg_database WHERE datname = 'catalogo_juncos_external';" | Set-Content -Encoding ascii $consulta
+  $existe = (& wsl.exe -d $Distro --cd $raiz -- bash -c ("docker compose -f $compose exec -T db " +
+    "psql -q -U gestion_docker -d gestion_docker -tA < '$(RutaWsl $consulta)'")) -join ""
+  Remove-Item $consulta -ErrorAction SilentlyContinue
   if ($existe.Trim() -ne "1") {
     PsqlEnDocker "gestion_docker" "-c 'CREATE DATABASE catalogo_juncos_external'" | Out-Host
     if ($LASTEXITCODE -ne 0) { Fallar "No se pudo crear la base del catálogo en Docker." }
