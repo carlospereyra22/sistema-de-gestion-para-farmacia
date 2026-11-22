@@ -251,6 +251,162 @@ rol en Configuracion → Roles y permisos.
   octubre 2026, marca `DEMO`, "Sucursal Norte (demo)") con un script fuera del repo.
   No forman parte del sistema ni de las migraciones.
 
+## Pestana Ventas (SISTEMA-115, 22/11/2026)
+
+- API `GET organizations/:organizationId/reports/sales` (`report-sales.service.ts`),
+  filtros `from`, `to`, `branchId`, `comparison` y `granularity` (`day`, `week`,
+  `month`; `hour` da 400 porque las horas tienen su grafico). Otros filtros dan 400.
+- **Mismas consultas que el Resumen**: `report-sales-data.ts` (`ReportSalesData`)
+  tiene totales por sucursal, tendencia, categorias y medios de pago; las dos
+  pestanas lo usan, asi Ventas netas, ticket promedio, unidades y medios de pago
+  coinciden siempre (el test de integracion lo compara).
+- KPIs: Ventas netas, Tickets, Ticket promedio y Unidades vendidas, con variacion.
+- Lectura rapida (`report-sales-insights.ts`): hora pico y dia de la semana mas
+  fuerte (sobre lo facturado), sucursal que mas vende (solo con 2 o mas),
+  descuentos otorgados y devoluciones con su variacion y su % sobre lo facturado,
+  y unidades por ticket.
+- Graficos: evolucion de ventas netas por dia, semana (desde el lunes) o mes, con
+  tickets en el tooltip y el periodo comparado punteado; con 2 o mas sucursales,
+  "Por sucursal" muestra una linea por sucursal (hasta 8, las que mas venden);
+  medios de pago en torta (sobre lo facturado); ventas por hora (columnas, con el
+  periodo comparado); mapa de calor dia de la semana x hora (facturado y tickets);
+  categorias por importe o unidades.
+- Hora y dia de la semana usan lo **facturado** por la hora local de cobro: las
+  devoluciones no tienen hora de venta. Por eso suman lo facturado, no las netas.
+- Tabla por sucursal (con 2 o mas): ventas netas, variacion contra el periodo
+  comparado, tickets, ticket promedio, unidades y %.
+- Web: `report-sales.tsx`. Piezas comunes de todas las pestanas en
+  `report-panel.tsx` (`ReportPanel`, `ReportPanelChart`, `ReportSegmented`,
+  `ReportWarnings`, `ReportUpdatingFrame`) y `lib/use-report-result.ts` (carga con
+  "Actualizando..." y la entrada animada de la sesion). Graficos en
+  `lib/report-charts-ventas.ts`; animaciones nuevas `torta` y `mapa` en
+  `lib/animacion-reportes.ts`, con la misma curva que el resto.
+- Solo con conexion: sin internet avisa en vez de mostrar datos viejos.
+- Pendiente para la tarea de Interaccion: filtros cruzados (clic en una hora o
+  medio de pago) y detalle de tickets.
+
+## Rentabilidad, Productos, Inventario, Compras y Clientes (SISTEMA-116, 22/11/2026)
+
+Endpoints `organizations/:organizationId/reports/{profitability,products,inventory,purchases,customers}`
+(`report-*.service.ts`), con la forma comun de `report-tab-helpers.ts`: rechazan los
+filtros que no usan, exigen su permiso **en la API** (403) y devuelven `meta`, `kpis`,
+`charts` y `tables`. Web: `report-<pestana>.tsx` con `ReportTabLoader`,
+`ReportInsightList` y `ReportTable` (`report-panel.tsx`); graficos en
+`lib/report-charts-tabs.ts`. Todas con "Lectura rapida" (lo que mas conviene mirar),
+el estilo y la animacion del Resumen, y funcionan con una o varias sucursales.
+
+- **Rentabilidad** (`REPORT_PROFIT_READ`): ganancia bruta, margen ponderado (variacion
+  en pp), costo de ventas y ganancia por ticket, todo **estimado** con el costo del lote
+  y con aviso de cobertura. Ganancia y margen en el tiempo (columnas + linea, dos ejes),
+  productos mas rentables por ganancia o por margen (por margen, solo con 3 o mas
+  unidades), margen por categoria, ganancia por sucursal y tabla ingresos/costo/ganancia
+  con variacion en pp. **Margen objetivo 20 %**: productos con 2 o mas unidades por
+  debajo aparecen en "margen bajo"; el sistema no cambia precios.
+- **Productos**: activos (no archivados en todas las sucursales del alcance),
+  **cuantos productos hacen el 80 % de la venta** (Pareto), sin movimiento en N dias
+  (activos con stock, por defecto 30) y stock bajo. Top por unidades, facturacion o
+  ganancia; participacion por categoria; rotacion (unidades / stock actual,
+  **aproximada**) contra margen o ventas con cortes en el promedio; tabla de productos
+  parados con su valor a costo.
+- **Inventario**: valor del stock a costo (sin permiso de costos: unidades), stock bajo,
+  **sin stock = productos vendidos en los ultimos 90 dias que hoy no tienen stock
+  vendible** (no todo el catalogo nunca comprado) y lotes por vencer. **Evolucion
+  reconstruida**: stock al cierre de cada tramo = stock actual menos los movimientos
+  posteriores (`InventoryMovement`, con signo y lote); el valor usa el costo actual del
+  lote. Capital por categoria, **stock critico con dias de cobertura** (stock / venta
+  diaria de los ultimos 30 dias) y vencimientos (vencidos primero).
+- **Compras** (`PURCHASE_READ`): recibido (cantidad recibida x costo, por fecha de
+  recepcion), proveedores activos, facturas con saldo y **variacion de costos
+  ponderada por lo comprado** (ultimo costo del periodo contra el ultimo anterior).
+  Lo facturado por proveedores se informa **aparte** y nunca se suma a lo recibido.
+  Evolucion, por proveedor, mayores aumentos, facturas pendientes con mora y
+  recepciones pendientes con dias de espera.
+- **Clientes** (`ACCOUNT_READ`): clientes con compras, saldo de cuenta corriente,
+  cobrado (creditos con medio de pago) y clientes con deuda. **Vendido a cuenta contra
+  cobrado** en el tiempo, mejores clientes, **antiguedad de saldos por vencimiento de
+  cada venta, imputando el saldo de la venta mas nueva a la mas vieja (FIFO: lo cobrado
+  salda primero lo mas viejo)**, mayores deudores con vencido y ultimo pago, y ultimos
+  cobros. Sin DNI, CUIT ni telefono.
+- Tests: `report-tabs.spec.ts` (reglas puras), integracion en
+  `test/report-overview.integration.spec.ts` (Rentabilidad concilia con el Resumen,
+  permisos 403) y `report-tabs.test.tsx`.
+- Pendiente (tareas 11 y 12): filtros cruzados, detalle de transacciones y exportacion.
+
+## Identidad propia de cada pestana y Fidelidad (SISTEMA-117, 22/11/2026)
+
+Pedido del usuario: que las pestanas no se vean todas iguales, con mejores colores y
+lecturas, y que Clientes estudie la fidelidad. Cada pestana tiene una **pieza
+central** propia (`report-visuals.tsx`: `ReportSection`, `ReportRing`,
+`ReportStackedBar`, `ReportStat`, `ReportHero`, `ReportCohortTable`):
+
+- **Ventas**: "Cuando se vende": mapa de calor dia x hora junto a ventas por hora.
+- **Rentabilidad**: cascada ventas con costo -> costo -> ganancia (y ventas sin costo
+  aparte), anillo de margen, recargo sobre el costo (distinto del margen).
+- **Productos**: curva de Pareto (ventas por producto y % acumulado con la marca del
+  80 %) y clasificacion **ABC** (A hasta el 80 % de la venta, B hasta el 95 %, C el
+  resto; la clase la decide donde arranca el producto en la curva).
+- **Inventario**: salud del stock (cada producto en su peor estado: sano, stock bajo,
+  por vencer, con vencidos, sin stock) y vencimientos por mes (6 meses y lo vencido).
+- **Compras**: calendario de pagos (vencido, esta semana, 2 semanas, el mes, 2 meses,
+  mas adelante, sin vencimiento; vence hoy = esta semana).
+- **Clientes**: seccion **Fidelidad** primero y **Cuenta corriente** despues.
+
+Colores: paleta categorica `reportCategorical` (sin orden: medios de pago,
+categorias, proveedores) y de estados `reportStatus` (bien, atencion, mal), con su par
+oscuro en `report-chart-theme.ts`. Barras HTML con animacion `reportes-barra`.
+
+**Fidelidad** (`report-loyalty.ts`, solo ventas con cliente identificado; la pantalla
+muestra que parte de lo facturado tiene cliente):
+
+- Visitas = **dias distintos con compra** (dos tickets la misma tarde son una visita).
+  Frecuencia habitual = dias entre la primera y la ultima visita / (visitas - 1),
+  minimo 1.
+- Recompra = clientes del periodo que ya habian comprado antes / clientes del periodo.
+  Retencion = de los clientes del periodo comparado, cuantos compraron en este.
+- Segmentos (al fin del periodo): **perdido** mas de 120 dias sin comprar; **en
+  riesgo** paso 1,5 veces su frecuencia (minimo 30 dias) o compro una vez y no volvio
+  en 60; **nuevo** primera compra en el periodo; **frecuente** 4 o mas visitas cada 30
+  dias o menos; **regular** el resto.
+- Nuevos contra recurrentes por tramo, distribucion de frecuencia, **cohortes** por mes
+  de primera compra (% que volvio cada mes siguiente, hasta 5; los meses que no
+  llegaron no se muestran) y **clientes para recuperar** (en riesgo o perdidos, los que
+  mas compraron primero).
+
+## Colores suaves, lectura rapida arriba y Cuentas corrientes aparte (SISTEMA-118, 22/11/2026)
+
+Pedido del usuario:
+
+- **Colores profundos y apagados** (el anillo exterior de una rueda de color; ni
+  fuertes ni pastel): `reportCategorical` (verde azulado oscuro, azul profundo, naranja
+  tostado, vino, mostaza, verde bosque, ciruela, pizarra) y `reportStatus` (verde
+  profundo, mostaza, naranja tostado, ladrillo), con un par mas claro para el modo
+  oscuro. Las barras HTML (estados, salud del stock, "de cada $100") usan esos mismos
+  colores.
+- **Graficos para decidir**: Ventas suma tickets por importe y venta promedio por dia
+  de la semana (facturado del dia / veces que cayo ese dia hasta hoy); Rentabilidad,
+  "donde se gano y donde se perdio" (productos cuya ganancia mas cambio contra el
+  periodo comparado); Productos, "en alza y en caida" (unidades contra el comparado);
+  Inventario, dias de stock por categoria (unidades / venta diaria de 30 dias; mas de
+  90 sobrestock, menos de 15 faltante; mas de un año se dibuja con tope) en lugar del
+  stock por categoria que repetia el capital, y "Vendio en 30 dias" en stock critico
+  en vez de una venta diaria decimal; Compras, lo recibido contra el costo de lo
+  vendido (con permiso de costos).
+- **Orden fijo en todas las pestanas**: KPIs, debajo la "Lectura rapida" y despues la
+  pieza central y el resto.
+- **Rentabilidad**: la cuenta (vendiste - te costo la mercaderia = ganaste) en una
+  sola tarjeta suave, con la barra "de cada $100 que vendes" en pastel.
+- **Productos**: la curva de Pareto muestra todos los productos vendidos (hasta 300),
+  cada uno con el color de su clase; la linea cruza el 80 % donde termina la clase A.
+  Al lado, la clasificacion ABC explicada: A imprescindibles, B importantes, C
+  complementarios, con cuantos productos son, que parte de la venta hacen y que
+  hacer.
+- **Cuentas corrientes es una pestana propia** (`report-accounts.tsx`, slug
+  `cuentas-corrientes`, mismo permiso y mismos datos de `reports/customers`): saldo,
+  deuda vencida, cobrado y deudores; fiado y cobrado, antiguedad, mayores deudores y
+  ultimos cobros. **Clientes** queda para la fidelidad (KPIs de recompra, retencion y
+  frecuencia; estados, nuevos y recurrentes, cohortes, para recuperar y mejores
+  clientes).
+
 ## Tareas
 
 1. **Mapa de metricas y contratos.** Matriz metrica -> fuente -> formula -> limitaciones;

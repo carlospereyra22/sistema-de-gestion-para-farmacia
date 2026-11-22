@@ -15,13 +15,18 @@ const compact = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 1,
 });
 /** Eje en pesos abreviados: 125000000 centavos -> "1,3 M". */
-const axisMoney = (minor: number) => compact.format(minor / 100);
-const tooltipMoney = (minor: number) => formatMoneyMinor(String(minor));
+export const axisMoney = (minor: number) => compact.format(minor / 100);
+export const tooltipMoney = (minor: number) => formatMoneyMinor(String(minor));
 
-/** Etiqueta del eje X: "05/10" por dia, "oct 26" por mes. */
-export function bucketLabel(bucket: string, granularity: "day" | "month") {
+/** Etiqueta del eje X: "05/10" por dia, "sem 05/10" por semana, "oct 26" por mes. */
+export function bucketLabel(
+  bucket: string,
+  granularity: "day" | "week" | "month",
+) {
   if (granularity === "day")
     return `${bucket.slice(8, 10)}/${bucket.slice(5, 7)}`;
+  if (granularity === "week")
+    return `sem ${bucket.slice(8, 10)}/${bucket.slice(5, 7)}`;
   return new Date(`${bucket}T12:00:00`).toLocaleDateString("es-AR", {
     month: "short",
     year: "2-digit",
@@ -31,7 +36,7 @@ export function bucketLabel(bucket: string, granularity: "day" | "month") {
 /** Evolucion de ventas netas: area del periodo actual y linea punteada del anterior. */
 export function trendOption(
   points: readonly ReportSeriesPoint[],
-  granularity: "day" | "month",
+  granularity: "day" | "week" | "month",
   comparisonLabel: string | null,
 ) {
   const series: Record<string, unknown>[] = [
@@ -78,9 +83,13 @@ export function trendOption(
  */
 export function rankingOption(
   items: readonly { name: string; value: number; share?: number | null }[],
-  format: "money" | "units",
+  format: "money" | "units" | "percent",
 ) {
   const rows = [...items].reverse();
+  const plain = (value: number) =>
+    format === "percent"
+      ? `${value.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`
+      : value.toLocaleString("es-AR");
   return {
     grid: { left: 8, right: 96, top: 4, bottom: 4, containLabel: true },
     tooltip: {
@@ -89,7 +98,9 @@ export function rankingOption(
       valueFormatter: (value: number) =>
         format === "money"
           ? tooltipMoney(value)
-          : `${value.toLocaleString("es-AR")} u.`,
+          : format === "percent"
+            ? plain(value)
+            : `${value.toLocaleString("es-AR")} u.`,
     },
     xAxis: { type: "value", show: false },
     yAxis: {
@@ -122,9 +133,7 @@ export function rankingOption(
             value: number;
             data: { share?: number | null };
           }) =>
-            (format === "money"
-              ? axisMoney(value)
-              : value.toLocaleString("es-AR")) +
+            (format === "money" ? axisMoney(value) : plain(value)) +
             (data.share === undefined || data.share === null
               ? ""
               : ` · ${data.share.toLocaleString("es-AR")} %`),

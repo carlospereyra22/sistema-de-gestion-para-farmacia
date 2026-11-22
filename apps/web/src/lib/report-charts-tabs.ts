@@ -1,0 +1,945 @@
+import {
+  reportComparisonColor,
+  reportPalette,
+  reportCategorical,
+  reportStatus,
+} from "./report-chart-theme";
+import { axisMoney, bucketLabel, tooltipMoney } from "./report-charts";
+
+/**
+ * Gráficos de Rentabilidad, Productos, Inventario, Compras y Clientes
+ * (SISTEMA-116). Mismo tema, ejes y tooltips que el Resumen y Ventas.
+ */
+
+type TrendUnit = "day" | "week" | "month";
+
+/** Opciones del selector de agrupación de las evoluciones. */
+export const trendUnitOptions: readonly { id: TrendUnit; label: string }[] = [
+  { id: "day", label: "Día" },
+  { id: "week", label: "Semana" },
+  { id: "month", label: "Mes" },
+];
+
+export const formatPercent = (value: number | null | undefined) =>
+  value === null || value === undefined
+    ? "—"
+    : `${value.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`;
+
+/** Variación en puntos porcentuales con signo ("+1,5 pp"). */
+export const formatPp = (value: number | null | undefined) =>
+  value === null || value === undefined
+    ? "—"
+    : `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toLocaleString("es-AR", { maximumFractionDigits: 1 })} pp`;
+
+type TooltipParam = {
+  seriesName: string;
+  value: number | null;
+  marker: string;
+  dataIndex: number;
+};
+
+const percent = (value: number | null | undefined) =>
+  value === null || value === undefined
+    ? "—"
+    : `${value.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`;
+
+const legend = { top: 0, right: 0, itemWidth: 14, itemHeight: 8 };
+
+/**
+ * Ganancia bruta en columnas (eje izquierdo, pesos) y margen % en línea (eje
+ * derecho). Los dos ejes van rotulados para no confundir unidades.
+ */
+export function profitTrendOption(
+  points: readonly {
+    bucket: string;
+    profitMinor: string;
+    netSalesMinor: string;
+    marginPct: number | null;
+  }[],
+  unit: TrendUnit,
+) {
+  return {
+    grid: { left: 8, right: 8, top: 40, bottom: 8, containLabel: true },
+    legend,
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: TooltipParam[]) => {
+        const point = points[params[0]?.dataIndex ?? 0];
+        if (!point) return "";
+        return [
+          `<strong>${bucketLabel(point.bucket, unit)}</strong>`,
+          `Ganancia bruta: ${tooltipMoney(Number(point.profitMinor))}`,
+          `Ventas con costo: ${tooltipMoney(Number(point.netSalesMinor))}`,
+          `Margen: ${percent(point.marginPct)}`,
+        ].join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: points.map((point) => bucketLabel(point.bucket, unit)),
+    },
+    yAxis: [
+      {
+        type: "value",
+        name: "Ganancia",
+        nameTextStyle: { fontSize: 10, color: "#64748b" },
+        axisLabel: { formatter: axisMoney },
+      },
+      {
+        type: "value",
+        name: "Margen %",
+        nameTextStyle: { fontSize: 10, color: "#64748b" },
+        axisLabel: { formatter: (value: number) => `${value} %` },
+        splitLine: { show: false },
+      },
+    ],
+    series: [
+      {
+        id: "ganancia",
+        name: "Ganancia bruta",
+        type: "bar",
+        barMaxWidth: 22,
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[2] },
+        emphasis: { itemStyle: { color: reportPalette[1] } },
+        data: points.map((point) => Number(point.profitMinor)),
+      },
+      {
+        id: "margen",
+        name: "Margen %",
+        type: "line",
+        yAxisIndex: 1,
+        smooth: true,
+        symbolSize: 5,
+        itemStyle: { color: reportPalette[0] },
+        data: points.map((point) => point.marginPct),
+      },
+    ],
+  };
+}
+
+/** Columnas verticales con su etiqueta (margen por categoría, por ejemplo). */
+export function columnsOption(
+  items: readonly { name: string; value: number; label?: string }[],
+  format: "money" | "percent" | "units",
+) {
+  const show = (value: number) =>
+    format === "money"
+      ? tooltipMoney(value)
+      : format === "percent"
+        ? percent(value)
+        : `${value.toLocaleString("es-AR")} u.`;
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      valueFormatter: show,
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, width: 90, overflow: "truncate", fontSize: 11 },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        formatter: (value: number) =>
+          format === "money"
+            ? axisMoney(value)
+            : format === "percent"
+              ? `${value} %`
+              : value.toLocaleString("es-AR"),
+      },
+    },
+    series: [
+      {
+        id: "columnas",
+        type: "bar",
+        barMaxWidth: 28,
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[1] },
+        emphasis: { itemStyle: { color: reportPalette[0] } },
+        label: {
+          show: true,
+          position: "top",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ data }: { data: { label?: string } }) =>
+            data.label ?? "",
+        },
+        data: items.map((item) => ({
+          name: item.name,
+          value: item.value,
+          label: item.label,
+        })),
+      },
+    ],
+  };
+}
+
+/**
+ * Rotación contra margen (o contra ventas, sin permiso de costos). Cada punto
+ * es un producto; el tamaño, sus ventas netas. Las líneas punteadas marcan los
+ * cortes de los cuadrantes y se dicen en el tooltip.
+ */
+export function rotationOption(
+  rows: readonly {
+    name: string;
+    rotation: number | null;
+    marginPct: number | null;
+    netSalesMinor: string;
+    units: number;
+    stock: number;
+  }[],
+  axis: "margin" | "sales",
+  cuts: { rotation: number; y: number },
+) {
+  const points = rows.filter(
+    (row) =>
+      row.rotation !== null && (axis === "sales" || row.marginPct !== null),
+  );
+  const max = Math.max(1, ...points.map((row) => Number(row.netSalesMinor)));
+  return {
+    grid: { left: 8, right: 24, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "item",
+      formatter: ({ dataIndex }: { dataIndex: number }) => {
+        const row = points[dataIndex];
+        if (!row) return "";
+        return [
+          `<strong>${row.name}</strong>`,
+          `Rotación: ${row.rotation?.toLocaleString("es-AR")} (vendió ${row.units} u., stock ${row.stock})`,
+          axis === "margin" ? `Margen: ${percent(row.marginPct)}` : "",
+          `Ventas netas: ${tooltipMoney(Number(row.netSalesMinor))}`,
+        ]
+          .filter(Boolean)
+          .join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "value",
+      name: "Rotación",
+      nameLocation: "middle",
+      nameGap: 24,
+      nameTextStyle: { fontSize: 10, color: "#64748b" },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      name: axis === "margin" ? "Margen %" : "Ventas",
+      nameTextStyle: { fontSize: 10, color: "#64748b" },
+      axisLabel: {
+        formatter: (value: number) =>
+          axis === "margin" ? `${value} %` : axisMoney(value),
+      },
+    },
+    series: [
+      {
+        id: "productos",
+        type: "scatter",
+        itemStyle: { color: reportPalette[1], opacity: 0.8 },
+        emphasis: { itemStyle: { color: reportPalette[2], opacity: 1 } },
+        symbolSize: (_value: unknown, params: { dataIndex: number }) => {
+          const row = points[params.dataIndex];
+          return row ? 8 + 22 * Math.sqrt(Number(row.netSalesMinor) / max) : 8;
+        },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { type: "dashed", color: reportComparisonColor },
+          label: { fontSize: 10, color: "#64748b" },
+          data: [
+            { xAxis: cuts.rotation, label: { formatter: "Rotación media" } },
+            {
+              yAxis: cuts.y,
+              label: {
+                formatter: axis === "margin" ? "Margen medio" : "Venta media",
+              },
+            },
+          ],
+        },
+        data: points.map((row) => [
+          row.rotation,
+          axis === "margin" ? row.marginPct : Number(row.netSalesMinor),
+        ]),
+      },
+    ],
+  };
+}
+
+/** Vendido a cuenta (columnas) contra cobrado (línea), y el cobrado anterior. */
+export function accountTrendOption(
+  points: readonly {
+    bucket: string;
+    soldOnAccountMinor: string;
+    collectedMinor: string;
+    previousCollectedMinor: string | null;
+  }[],
+  unit: TrendUnit,
+  comparisonLabel: string | null,
+) {
+  const series: Record<string, unknown>[] = [
+    {
+      id: "vendido",
+      name: "Vendido a cuenta",
+      type: "bar",
+      barMaxWidth: 20,
+      itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[2] },
+      data: points.map((point) => Number(point.soldOnAccountMinor)),
+    },
+    {
+      id: "cobrado",
+      name: "Cobrado",
+      type: "line",
+      smooth: true,
+      symbolSize: 5,
+      itemStyle: { color: reportPalette[0] },
+      data: points.map((point) => Number(point.collectedMinor)),
+    },
+  ];
+  if (comparisonLabel)
+    series.push({
+      id: "cobrado-anterior",
+      name: `Cobrado (${comparisonLabel.toLowerCase()})`,
+      type: "line",
+      smooth: true,
+      symbol: "none",
+      lineStyle: { type: "dashed", color: reportComparisonColor },
+      itemStyle: { color: reportComparisonColor },
+      data: points.map((point) => Number(point.previousCollectedMinor ?? 0)),
+    });
+  return {
+    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    legend: { ...legend, type: "scroll" },
+    tooltip: { trigger: "axis", valueFormatter: tooltipMoney },
+    xAxis: {
+      type: "category",
+      data: points.map((point) => bucketLabel(point.bucket, unit)),
+    },
+    yAxis: { type: "value", axisLabel: { formatter: axisMoney } },
+    series,
+  };
+}
+
+/** Stock al cierre de cada tramo: valor a costo o unidades. */
+export function stockTrendOption(
+  points: readonly {
+    bucket: string;
+    units: number;
+    valueMinor: string | null;
+  }[],
+  unit: TrendUnit,
+  showsValue: boolean,
+) {
+  return {
+    grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: TooltipParam[]) => {
+        const point = points[params[0]?.dataIndex ?? 0];
+        if (!point) return "";
+        return [
+          `<strong>Al cierre de ${bucketLabel(point.bucket, unit)}</strong>`,
+          showsValue && point.valueMinor !== null
+            ? `Valor a costo: ${tooltipMoney(Number(point.valueMinor))}`
+            : "",
+          `Unidades: ${point.units.toLocaleString("es-AR")}`,
+        ]
+          .filter(Boolean)
+          .join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: points.map((point) => bucketLabel(point.bucket, unit)),
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        formatter: (value: number) =>
+          showsValue ? axisMoney(value) : value.toLocaleString("es-AR"),
+      },
+    },
+    series: [
+      {
+        id: "stock",
+        name: showsValue ? "Valor del stock" : "Unidades en stock",
+        type: "line",
+        smooth: true,
+        symbolSize: 4,
+        areaStyle: { opacity: 0.12 },
+        data: points.map((point) =>
+          showsValue ? Number(point.valueMinor ?? 0) : point.units,
+        ),
+      },
+    ],
+  };
+}
+
+/** Colores de la antigüedad: al día en verde, cuanto más atraso, más rojo. */
+const agingColors: Record<string, string> = {
+  current: "#2f8f6f",
+  "1-30": "#7a9a3a",
+  "31-60": "#c99a12",
+  "61-90": "#c8641b",
+  "91-120": "#b23a48",
+  "120+": "#7b2d4f",
+  undated: "#94a3b8",
+};
+
+/** Antigüedad de saldos en columnas, del día al más atrasado. */
+export function agingOption(
+  items: readonly { id: string; name: string; value: string }[],
+) {
+  const total = items.reduce((sum, item) => sum + Number(item.value), 0);
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: TooltipParam[]) => {
+        const item = items[params[0]?.dataIndex ?? 0];
+        if (!item) return "";
+        const value = Number(item.value);
+        return `<strong>${item.name}</strong><br/>${tooltipMoney(value)} · ${percent(total ? (value / total) * 100 : null)} del saldo`;
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, fontSize: 10 },
+    },
+    yAxis: { type: "value", axisLabel: { formatter: axisMoney } },
+    series: [
+      {
+        id: "antiguedad",
+        type: "bar",
+        barMaxWidth: 36,
+        label: {
+          show: true,
+          position: "top",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ value }: { value: number }) =>
+            value ? axisMoney(value) : "",
+        },
+        data: items.map((item) => ({
+          name: item.name,
+          value: Number(item.value),
+          itemStyle: {
+            color: agingColors[item.id] ?? reportPalette[1],
+            borderRadius: [4, 4, 0, 0],
+          },
+        })),
+      },
+    ],
+  };
+}
+
+/** Clientes nuevos (primera compra) y recurrentes por tramo, apilados. */
+export function newVsReturningOption(
+  points: readonly {
+    bucket: string;
+    newCount: number;
+    returningCount: number;
+  }[],
+  unit: TrendUnit,
+) {
+  const series = [
+    {
+      id: "recurrentes",
+      name: "Volvieron",
+      color: reportStatus.good,
+      key: "returningCount" as const,
+    },
+    {
+      id: "nuevos",
+      name: "Nuevos",
+      color: reportStatus.new,
+      key: "newCount" as const,
+    },
+  ];
+  return {
+    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    legend,
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: TooltipParam[]) => {
+        const point = points[params[0]?.dataIndex ?? 0];
+        if (!point) return "";
+        const total = point.newCount + point.returningCount;
+        return [
+          `<strong>${bucketLabel(point.bucket, unit)}</strong>`,
+          ...params.map(
+            (param) =>
+              `${param.marker}${param.seriesName}: ${param.value ?? 0}`,
+          ),
+          total
+            ? `Volvieron: ${Math.round((point.returningCount / total) * 100)} % de los clientes`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: points.map((point) => bucketLabel(point.bucket, unit)),
+    },
+    yAxis: { type: "value", minInterval: 1 },
+    series: series.map((serie, index) => ({
+      id: serie.id,
+      name: serie.name,
+      type: "bar",
+      stack: "clientes",
+      barMaxWidth: 22,
+      itemStyle: {
+        color: serie.color,
+        borderRadius: index === series.length - 1 ? [4, 4, 0, 0] : 0,
+      },
+      data: points.map((point) => point[serie.key]),
+    })),
+  };
+}
+
+/** Cuántos clientes compran cada tantos días: de seguido (verde) a esporádico. */
+export function frequencyOption(
+  items: readonly { id: string; name: string; customers: number }[],
+) {
+  const colors: Record<string, string> = {
+    "7": "#1f6f6b",
+    "15": "#2f8f6f",
+    "30": "#2f6fb0",
+    "60": "#4b4fa8",
+    "90": "#5b3b8c",
+    more: "#c8641b",
+    once: "#94a3b8",
+  };
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      valueFormatter: (value: number) =>
+        `${value} ${value === 1 ? "cliente" : "clientes"}`,
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, fontSize: 10, width: 70, overflow: "break" },
+    },
+    yAxis: { type: "value", minInterval: 1 },
+    series: [
+      {
+        id: "frecuencia",
+        type: "bar",
+        barMaxWidth: 34,
+        label: { show: true, position: "top", fontSize: 10, color: "#475569" },
+        data: items.map((item) => ({
+          name: item.name,
+          value: item.customers,
+          itemStyle: {
+            color: colors[item.id] ?? reportPalette[1],
+            borderRadius: [4, 4, 0, 0],
+          },
+        })),
+      },
+    ],
+  };
+}
+
+/** Colores de las clases ABC, suaves. */
+export const abcColors = { A: "#1f6f6b", B: "#2f6fb0", C: "#94a3b8" } as const;
+
+/**
+ * Curva de Pareto: ventas de cada producto (columnas, de mayor a menor,
+ * coloreadas por clase ABC) y el % acumulado (línea, eje derecho), con la
+ * marca del 80 % donde termina la clase A.
+ */
+export function paretoOption(
+  rows: readonly {
+    name: string;
+    valueMinor: string;
+    cumulativePct: number;
+    abc: "A" | "B" | "C";
+  }[],
+) {
+  return {
+    grid: { left: 8, right: 12, top: 16, bottom: 24, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: TooltipParam[]) => {
+        const index = params[0]?.dataIndex ?? 0;
+        const row = rows[index];
+        if (!row) return "";
+        return `<strong>${index + 1}. ${row.name}</strong><br/>Clase ${row.abc} · Ventas: ${tooltipMoney(Number(row.valueMinor))}<br/>Con los anteriores suman el ${percent(row.cumulativePct)} de la venta`;
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: rows.map((_, index) => `${index + 1}`),
+      axisLabel: { show: false },
+      axisTick: { show: false },
+      name: "Productos, de mayor a menor venta",
+      nameLocation: "middle",
+      nameGap: 10,
+      nameTextStyle: { fontSize: 10, color: "#64748b" },
+    },
+    yAxis: [
+      { type: "value", axisLabel: { formatter: axisMoney } },
+      {
+        type: "value",
+        max: 100,
+        interval: 20,
+        axisLabel: { formatter: (value: number) => `${value} %` },
+        splitLine: { show: false },
+      },
+    ],
+    series: [
+      {
+        id: "ventas",
+        name: "Ventas del producto",
+        type: "bar",
+        barCategoryGap: "15%",
+        data: rows.map((row) => ({
+          value: Number(row.valueMinor),
+          itemStyle: { color: abcColors[row.abc], borderRadius: [2, 2, 0, 0] },
+        })),
+      },
+      {
+        id: "acumulado",
+        name: "% acumulado",
+        type: "line",
+        yAxisIndex: 1,
+        smooth: true,
+        symbol: "none",
+        lineStyle: { width: 2, color: "#c8641b" },
+        itemStyle: { color: "#c8641b" },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { type: "dashed", color: "#7b2d4f" },
+          label: {
+            position: "insideStartTop",
+            formatter: "80 % de la venta",
+            fontSize: 10,
+            color: "#7b2d4f",
+          },
+          data: [{ yAxis: 80 }],
+        },
+        data: rows.map((row) => row.cumulativePct),
+      },
+    ],
+  };
+}
+
+/**
+ * Columnas con un color por grupo (calendarios de vencimientos y de pagos):
+ * lo urgente en rojo, lo próximo en ámbar y lo lejano en tonos fríos.
+ */
+export function calendarOption(
+  items: readonly {
+    name: string;
+    value: number;
+    color: string;
+    detail?: string;
+  }[],
+  format: "money" | "units",
+) {
+  const show = (value: number) =>
+    format === "money"
+      ? tooltipMoney(value)
+      : `${value.toLocaleString("es-AR")} u.`;
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const item = items[params[0]?.dataIndex ?? 0];
+        return item
+          ? `<strong>${item.name}</strong><br/>${show(item.value)}${item.detail ? `<br/>${item.detail}` : ""}`
+          : "";
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        formatter: (value: number) =>
+          format === "money" ? axisMoney(value) : value.toLocaleString("es-AR"),
+      },
+    },
+    series: [
+      {
+        id: "calendario",
+        type: "bar",
+        barMaxWidth: 40,
+        label: {
+          show: true,
+          position: "top",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ value }: { value: number }) =>
+            value
+              ? format === "money"
+                ? axisMoney(value)
+                : value.toLocaleString("es-AR")
+              : "",
+        },
+        data: items.map((item) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: { color: item.color, borderRadius: [4, 4, 0, 0] },
+        })),
+      },
+    ],
+  };
+}
+
+/**
+ * Barras divergentes (SISTEMA-118): lo que sube a la derecha en verde y lo que
+ * baja a la izquierda en ladrillo. Para cambios contra el período anterior.
+ */
+export function divergingOption(
+  items: readonly { name: string; value: number; detail?: string }[],
+  format: "money" | "units",
+) {
+  const rows = [...items].sort((a, b) => a.value - b.value);
+  const show = (value: number) =>
+    format === "money"
+      ? tooltipMoney(value)
+      : `${value.toLocaleString("es-AR")} u.`;
+  return {
+    grid: { left: 8, right: 56, top: 8, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const row = rows[params[0]?.dataIndex ?? 0];
+        if (!row) return "";
+        return `<strong>${row.name}</strong><br/>${row.value > 0 ? "+" : ""}${show(row.value)}${row.detail ? `<br/>${row.detail}` : ""}`;
+      },
+    },
+    xAxis: {
+      type: "value",
+      axisLabel: {
+        formatter: (value: number) =>
+          format === "money" ? axisMoney(value) : value.toLocaleString("es-AR"),
+      },
+    },
+    yAxis: {
+      type: "category",
+      data: rows.map((row) => row.name),
+      axisLabel: {
+        width: 150,
+        overflow: "truncate",
+        fontSize: 11,
+        color: "#334155",
+      },
+      axisTick: { show: false },
+    },
+    series: [
+      {
+        id: "cambio",
+        type: "bar",
+        barMaxWidth: 16,
+        label: {
+          show: true,
+          position: "right",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ value }: { value: number }) =>
+            `${value > 0 ? "+" : ""}${format === "money" ? axisMoney(value) : value.toLocaleString("es-AR")}`,
+        },
+        data: rows.map((row) => ({
+          name: row.name,
+          value: row.value,
+          itemStyle: {
+            color: row.value >= 0 ? reportStatus.good : reportStatus.bad,
+            borderRadius: row.value >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4],
+          },
+        })),
+      },
+    ],
+  };
+}
+
+/** Columnas simples con un color y etiqueta arriba (tickets, promedio por día). */
+export function simpleColumnsOption(
+  items: readonly { name: string; value: number; detail?: string }[],
+  format: "money" | "count",
+  color: string = reportCategorical[1],
+) {
+  const show = (value: number) =>
+    format === "money" ? tooltipMoney(value) : value.toLocaleString("es-AR");
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const item = items[params[0]?.dataIndex ?? 0];
+        return item
+          ? `<strong>${item.name}</strong><br/>${show(item.value)}${item.detail ? `<br/>${item.detail}` : ""}`
+          : "";
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, fontSize: 10, width: 76, overflow: "break" },
+    },
+    yAxis: {
+      type: "value",
+      minInterval: format === "count" ? 1 : undefined,
+      axisLabel: {
+        formatter: (value: number) =>
+          format === "money" ? axisMoney(value) : value.toLocaleString("es-AR"),
+      },
+    },
+    series: [
+      {
+        id: "columnas-simples",
+        type: "bar",
+        barMaxWidth: 36,
+        itemStyle: { color, borderRadius: [4, 4, 0, 0] },
+        label: {
+          show: true,
+          position: "top",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ value }: { value: number }) =>
+            value
+              ? format === "money"
+                ? axisMoney(value)
+                : value.toLocaleString("es-AR")
+              : "",
+        },
+        data: items.map((item) => ({ name: item.name, value: item.value })),
+      },
+    ],
+  };
+}
+
+/**
+ * Días de stock por categoría: cuánto dura al ritmo de venta. Más de 90 días
+ * es sobrestock (naranja), menos de 15 es faltante (ladrillo), lo demás sano.
+ */
+export function stockDaysOption(
+  items: readonly { name: string; units: number; days: number | null }[],
+) {
+  const rows = [...items].reverse();
+  const color = (days: number | null) =>
+    days === null
+      ? reportStatus.neutral
+      : days > 90
+        ? reportStatus.alert
+        : days < 15
+          ? reportStatus.bad
+          : reportStatus.good;
+  return {
+    grid: { left: 8, right: 56, top: 8, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const row = rows[params[0]?.dataIndex ?? 0];
+        if (!row) return "";
+        return `<strong>${row.name}</strong><br/>${row.units.toLocaleString("es-AR")} u. en stock<br/>${row.days === null ? "Sin ventas en 30 días" : `Alcanza ${row.days.toLocaleString("es-AR")} días`}`;
+      },
+    },
+    xAxis: {
+      type: "value",
+      name: "días",
+      nameTextStyle: { fontSize: 10, color: "#64748b" },
+    },
+    yAxis: {
+      type: "category",
+      data: rows.map((row) => row.name),
+      axisLabel: {
+        width: 130,
+        overflow: "truncate",
+        fontSize: 11,
+        color: "#334155",
+      },
+      axisTick: { show: false },
+    },
+    series: [
+      {
+        id: "dias",
+        type: "bar",
+        barMaxWidth: 16,
+        label: {
+          show: true,
+          position: "right",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ dataIndex }: { dataIndex: number }) => {
+            const days = rows[dataIndex]?.days;
+            if (days === null || days === undefined) return "sin ventas";
+            return days > 365 ? "más de 1 año" : `${days} d`;
+          },
+        },
+        data: rows.map((row) => ({
+          name: row.name,
+          // Más de un año se dibuja como un año: una categoría con muchísimo
+          // stock no aplasta al resto. El tooltip dice el número real.
+          value: Math.min(row.days ?? 0, 365),
+          itemStyle: { color: color(row.days), borderRadius: [0, 4, 4, 0] },
+        })),
+      },
+    ],
+  };
+}
+
+/** Lo recibido (columnas) contra el costo de lo vendido (línea) por tramo. */
+export function buyVsSellOption(
+  points: readonly {
+    bucket: string;
+    receivedMinor: string;
+    soldCostMinor: string | null;
+  }[],
+  unit: TrendUnit,
+) {
+  const withCost = points.some((point) => point.soldCostMinor !== null);
+  return {
+    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    legend,
+    tooltip: { trigger: "axis", valueFormatter: tooltipMoney },
+    xAxis: {
+      type: "category",
+      data: points.map((point) => bucketLabel(point.bucket, unit)),
+    },
+    yAxis: { type: "value", axisLabel: { formatter: axisMoney } },
+    series: [
+      {
+        id: "compras",
+        name: "Compraste (recibido)",
+        type: "bar",
+        barMaxWidth: 22,
+        itemStyle: { color: reportCategorical[1], borderRadius: [4, 4, 0, 0] },
+        data: points.map((point) => Number(point.receivedMinor)),
+      },
+      ...(withCost
+        ? [
+            {
+              id: "vendido",
+              name: "Vendiste (a costo)",
+              type: "line",
+              smooth: true,
+              symbolSize: 5,
+              itemStyle: { color: reportCategorical[2] },
+              data: points.map((point) => Number(point.soldCostMinor ?? 0)),
+            },
+          ]
+        : []),
+    ],
+  };
+}

@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   Boxes,
+  BookUser,
   ContactRound,
   LayoutDashboard,
   Lock,
@@ -32,6 +33,13 @@ import {
 import { ReportFiltersBar } from "./report-filters-bar";
 import { workspaceLocation } from "./lib/workspace-location";
 import { ReportOverviewTab } from "./report-overview";
+import { ReportSalesTab } from "./report-sales";
+import { ReportProfitabilityTab } from "./report-profitability";
+import { ReportProductsTab } from "./report-products";
+import { ReportInventoryTab } from "./report-inventory";
+import { ReportPurchasesTab } from "./report-purchases";
+import { ReportCustomersTab } from "./report-customers";
+import { ReportAccountsTab } from "./report-accounts";
 import {
   ReportEmptyState,
   ReportErrorState,
@@ -47,20 +55,11 @@ const tabIcons: Record<ReportTab, LucideIcon> = {
   inventory: Boxes,
   purchases: Truck,
   customers: ContactRound,
+  accounts: BookUser,
 };
 
-const upcoming: Partial<Record<ReportTab, string>> = {
-  sales:
-    "Ventas por día y por hora, mapa de calor, medios de pago y detalle por sucursal.",
-  profitability:
-    "Ganancia bruta estimada, margen, costo de ventas y productos más rentables.",
-  products: "Más vendidos, productos sin movimiento y rotación contra margen.",
-  inventory: "Valor del stock, stock bajo, sin stock y próximos vencimientos.",
-  purchases:
-    "Compras recibidas, facturas pendientes, recepciones pendientes y aumentos de costo.",
-  customers:
-    "Saldos de cuenta corriente, cobranzas, antigüedad de deuda y mayores deudores.",
-};
+/** Todas las pestañas están hechas (SISTEMA-115 y SISTEMA-116). */
+const upcoming: Partial<Record<ReportTab, string>> = {};
 
 /**
  * Modulo Reportes: pestanas, filtros globales y contenido de la pestana activa.
@@ -241,6 +240,23 @@ function ReportTabContent({
         onOpenInventory={onOpenInventory}
       />
     );
+  if (tab === "sales")
+    return (
+      <ReportSalesTab
+        active={active}
+        token={token}
+        organizationId={organizationId}
+        view={view}
+      />
+    );
+  const common = { active, token, organizationId, view };
+  if (tab === "profitability") return <ReportProfitabilityTab {...common} />;
+  if (tab === "products") return <ReportProductsTab {...common} />;
+  if (tab === "inventory")
+    return <ReportInventoryTab {...common} onOpenInventory={onOpenInventory} />;
+  if (tab === "purchases") return <ReportPurchasesTab {...common} />;
+  if (tab === "customers") return <ReportCustomersTab {...common} />;
+  if (tab === "accounts") return <ReportAccountsTab {...common} />;
   return (
     <div className={reportCardClass}>
       <ReportEmptyState

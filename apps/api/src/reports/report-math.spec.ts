@@ -65,4 +65,25 @@ describe("report math", () => {
       "2026-03-01",
     ]);
   });
+
+  it("agrupa por semana desde el lunes, como PostgreSQL", () => {
+    // 01/10/2026 es jueves: la primera semana arranca el lunes 28/09.
+    const october = parseReportPeriod(
+      { from: "2026-10-01", to: "2026-10-31" },
+      now,
+    );
+    expect(trendBuckets(october, "week")).toEqual([
+      "2026-09-28",
+      "2026-10-05",
+      "2026-10-12",
+      "2026-10-19",
+      "2026-10-26",
+    ]);
+    // Si el rango empieza un lunes, la primera semana es ese mismo día.
+    const monday = parseReportPeriod(
+      { from: "2026-10-05", to: "2026-10-11" },
+      now,
+    );
+    expect(trendBuckets(monday, "week")).toEqual(["2026-10-05"]);
+  });
 });

@@ -4,6 +4,14 @@ import {
   REPORT_DEFAULTS,
   type ReportFilterOptions,
   type ReportOverview,
+  type ReportSales,
+  type ReportSalesTrendUnit,
+  type ReportTrendUnit,
+  type ReportProfitability,
+  type ReportProducts,
+  type ReportInventory,
+  type ReportPurchases,
+  type ReportCustomers,
 } from "@gestion/contracts";
 import {
   argentineToday,
@@ -89,6 +97,86 @@ export async function getReportOverview(
     ...((await response.json()) as ReportOverview),
     ...(guardada ? { guardadaEl: guardada } : {}),
   };
+}
+
+/**
+ * Pestaña Ventas (SISTEMA-115). Sólo con conexión: sin internet avisa en vez
+ * de mostrar datos viejos.
+ */
+export async function getReportSales(
+  token: string,
+  organizationId: string,
+  view: Parameters<typeof reportQuery>[0] & {
+    granularity?: ReportSalesTrendUnit;
+  },
+): Promise<ReportSales> {
+  const query = new URLSearchParams(reportQuery(view));
+  if (view.granularity) query.set("granularity", view.granularity);
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiBaseUrl}/organizations/${organizationId}/reports/sales?${query.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (cause) {
+    if (cause instanceof SinConexionError)
+      throw new SinConexionError(
+        "Sin conexión: la pestaña Ventas necesita internet. El Resumen sí se puede ver con lo guardado en la PC.",
+      );
+    throw cause;
+  }
+  if (!response.ok)
+    throw await reportError(response, "No se pudo cargar Ventas.");
+  return (await response.json()) as ReportSales;
+}
+
+/** Ruta de cada pestaña con su tipo de respuesta (SISTEMA-116). */
+export type ReportTabResponses = {
+  profitability: ReportProfitability;
+  products: ReportProducts;
+  inventory: ReportInventory;
+  purchases: ReportPurchases;
+  customers: ReportCustomers;
+};
+
+const tabNames: Record<keyof ReportTabResponses, string> = {
+  profitability: "Rentabilidad",
+  products: "Productos",
+  inventory: "Inventario",
+  purchases: "Compras",
+  customers: "Clientes",
+};
+
+/**
+ * Carga una pestaña de Reportes. Sólo con conexión: sin internet avisa en vez
+ * de mostrar datos viejos (el Resumen sí tiene copia guardada).
+ */
+export async function getReportTab<K extends keyof ReportTabResponses>(
+  tab: K,
+  token: string,
+  organizationId: string,
+  view: Parameters<typeof reportQuery>[0] & {
+    granularity?: ReportTrendUnit;
+  },
+): Promise<ReportTabResponses[K]> {
+  const query = new URLSearchParams(reportQuery(view));
+  if (view.granularity) query.set("granularity", view.granularity);
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiBaseUrl}/organizations/${organizationId}/reports/${tab}?${query.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (cause) {
+    if (cause instanceof SinConexionError)
+      throw new SinConexionError(
+        `Sin conexión: la pestaña ${tabNames[tab]} necesita internet. El Resumen sí se puede ver con lo guardado en la PC.`,
+      );
+    throw cause;
+  }
+  if (!response.ok)
+    throw await reportError(response, `No se pudo cargar ${tabNames[tab]}.`);
+  return (await response.json()) as ReportTabResponses[K];
 }
 
 /** Períodos que la PC guarda para ver reportes sin conexión. */
