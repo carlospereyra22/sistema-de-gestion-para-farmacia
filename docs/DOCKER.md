@@ -25,16 +25,17 @@ autorización: los archivos del servidor todavía no se ejecutaron nunca.
 
 ## Roles
 
-| Rol              | Comando                       | Tareas programadas | Notas                                                      |
-| ---------------- | ----------------------------- | ------------------ | ---------------------------------------------------------- |
-| `api-1`, `api-2` | `node /app/entrada/main.js`   | Apagadas           | Puertos loopback 3000 y 3002 (test: 3001 y 3003)           |
-| `worker`         | `node /app/entrada/worker.js` | Encendidas         | **Una sola copia**. Precios 09 y 17 h, cola fiscal, cargos |
-| `migrate`        | `prisma migrate deploy`       | —                  | Sólo al publicar                                           |
-| `consola`        | el que se indique             | Apagadas           | Comandos de servidor                                       |
+| Rol              | Comando                       | Tareas programadas | Notas                                                                           |
+| ---------------- | ----------------------------- | ------------------ | ------------------------------------------------------------------------------- |
+| `api-1`, `api-2` | `node /app/entrada/main.js`   | Apagadas           | Puertos loopback 3000 y 3002 (test: 3001 y 3003)                                |
+| `worker`         | `node /app/entrada/worker.js` | Encendidas         | **Una sola copia**. Precios 09 y 17 h, cola fiscal, cargos, aportes al catálogo |
+| `migrate`        | `prisma migrate deploy`       | —                  | Sólo al publicar                                                                |
+| `consola`        | el que se indique             | Apagadas           | Comandos de servidor                                                            |
 
 Las tareas se apagan con las variables que ya existían:
 `PRICE_REFRESH_SCHEDULER=off`, `FISCAL_QUEUE_WORKER=off`,
-`SUBSCRIPTION_SCHEDULER=off`. Las acciones a pedido (actualizar precios de una
+`SUBSCRIPTION_SCHEDULER=off`, y la de los aportes de las farmacias al catálogo
+externo (SISTEMA-112), `CATALOG_APORTES_SCHEDULER=off`. Las acciones a pedido (actualizar precios de una
 farmacia, enviar una factura desde la web) siguen funcionando en la API.
 
 `/app/entrada` es un enlace que el Dockerfile crea hacia `dist/src` o `dist`,
@@ -71,14 +72,15 @@ que manda la web (error 400) y parece que "no guarda" (pasó con el logo a color
 de SISTEMA-110). Por eso, después de tocar `apps/api` o de un `git pull` con
 cambios de la API, siempre reconstruir.
 
-| Cuándo                                             | Qué hacer                                                                                                              |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Prender la PC para trabajar                        | Doble clic en **Iniciar Gestion - Docker.cmd**                                                                         |
-| Terminar                                           | Doble clic en **Detener Gestion - Docker.cmd**                                                                         |
-| Se cambió código de la API o se bajaron cambios    | `scripts/docker-local.ps1 iniciar -Reconstruir` (reconstruye la imagen, unos minutos)                                  |
-| Traer los datos de `gestion_dev` (sólo si se pide) | `scripts/docker-local.ps1 copiar-datos`. **Reemplaza** todos los datos de la base de Docker; `gestion_dev` sólo se lee |
-| Ver si está todo arriba                            | `scripts/docker-local.ps1 estado`                                                                                      |
-| Apagar la PC                                       | Se puede apagar directo. Al prenderla, todo arranca apagado: volver a **Iniciar Gestion - Docker.cmd**                 |
+| Cuándo                                             | Qué hacer                                                                                                                                                 |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prender la PC para trabajar                        | Doble clic en **Iniciar Gestion - Docker.cmd**                                                                                                            |
+| Terminar                                           | Doble clic en **Detener Gestion - Docker.cmd**                                                                                                            |
+| Se cambió código de la API o se bajaron cambios    | `scripts/docker-local.ps1 iniciar -Reconstruir` (reconstruye la imagen, unos minutos)                                                                     |
+| Traer los datos de `gestion_dev` (sólo si se pide) | `scripts/docker-local.ps1 copiar-datos`. **Reemplaza** todos los datos de la base de Docker; `gestion_dev` sólo se lee                                    |
+| Cargar o refrescar el catálogo externo             | `scripts/docker-local.ps1 catalogo-externo` (SISTEMA-112): copia las fichas de las tiendas del catálogo de Windows; conserva los aportes de las farmacias |
+| Ver si está todo arriba                            | `scripts/docker-local.ps1 estado`                                                                                                                         |
+| Apagar la PC                                       | Se puede apagar directo. Al prenderla, todo arranca apagado: volver a **Iniciar Gestion - Docker.cmd**                                                    |
 
 Los comandos `scripts/docker-local.ps1 ...` se corren en PowerShell desde la
 carpeta del proyecto, con `powershell -ExecutionPolicy Bypass -File` adelante.
