@@ -21,37 +21,34 @@ export const reportPalette = [
 export const reportComparisonColor = "#94a3b8";
 
 /**
- * Paleta categórica (SISTEMA-117, pastel en SISTEMA-118): partes de un total
- * sin orden (medios de pago, categorías, proveedores). Tonos suaves que se
- * distinguen de a pares; sobre fondo oscuro se ven bien tal cual.
+ * Paleta categórica (SISTEMA-117; profunda en SISTEMA-118, pedido del
+ * usuario): partes de un total sin orden (medios de pago, categorías,
+ * proveedores). Tonos oscuros y apagados, como el anillo exterior de una
+ * rueda de color: se distinguen bien sin gritar.
  */
 export const reportCategorical = [
-  "#8fd3c3",
-  "#b4bdf5",
-  "#f8d58c",
-  "#f5b3cf",
-  "#9fd8f2",
-  "#c9e59a",
-  "#d7bdf3",
-  "#cfd8e3",
+  "#1f6f6b",
+  "#2f55a4",
+  "#c8641b",
+  "#7b2d4f",
+  "#c99a12",
+  "#3f7d3a",
+  "#5b3b8c",
+  "#64748b",
 ] as const;
 
-/**
- * Colores con significado, en pastel: bien, atención, mal y sus intermedios.
- * Nunca colores fuertes en Reportes (pedido del usuario, SISTEMA-118).
- */
+/** Colores con significado, profundos: bien, atención, mal y sus intermedios. */
 export const reportStatus = {
-  good: "#8fd3c3",
-  info: "#9fd8f2",
-  new: "#b4bdf5",
-  warn: "#f8d58c",
-  alert: "#f8bf94",
-  bad: "#f5a8b5",
-  worst: "#e98597",
-  neutral: "#cfd8e3",
+  good: "#2f8f6f",
+  info: "#2f6fb0",
+  new: "#4b4fa8",
+  warn: "#c99a12",
+  alert: "#c8641b",
+  bad: "#b23a48",
+  worst: "#7b2d4f",
+  neutral: "#94a3b8",
 } as const;
 
-/** Texto legible sobre los pastel (etiquetas dentro de barras). */
 export const reportInk = "#334155";
 
 /** Mismo orden que `reportPalette`: la serie principal es la más visible. */
@@ -70,6 +67,17 @@ const coloresOscuros: Record<string, string> = {
     reportPalette.map((color, indice) => [color, paletaOscura[indice]]),
   ),
   [reportComparisonColor]: "#6d7c8f",
+  "#1f6f6b": "#3fb3aa",
+  "#2f55a4": "#6f93e0",
+  "#c8641b": "#e8904e",
+  "#7b2d4f": "#c46b93",
+  "#c99a12": "#e6bd45",
+  "#3f7d3a": "#79b672",
+  "#5b3b8c": "#9b7fd0",
+  "#2f8f6f": "#5cc09c",
+  "#2f6fb0": "#6aa6e3",
+  "#4b4fa8": "#8589dc",
+  "#b23a48": "#e07482",
 
   "#066b60": "#62e3cc",
   "#8fd3c3": "#2a5f59",

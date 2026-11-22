@@ -145,7 +145,11 @@ export class ReportProductsService {
     const names = new Map(
       (
         await this.prisma.product.findMany({
-          where: { id: { in: [...sold.keys()] } },
+          where: {
+            id: {
+              in: [...new Set([...sold.keys(), ...(soldBefore?.keys() ?? [])])],
+            },
+          },
           select: {
             id: true,
             name: true,
@@ -271,6 +275,31 @@ export class ReportProductsService {
           });
         })(),
         abc: abcClasses(byAmount.map((row) => row.amount)),
+        movers: (() => {
+          if (!soldBefore) return [];
+          const ids = new Set([...sold.keys(), ...soldBefore.keys()]);
+          const rows = [...ids].map((id) => {
+            const units = Math.max(0, sold.get(id)?.units ?? 0);
+            const previousUnits = Math.max(0, soldBefore.get(id)?.units ?? 0);
+            return {
+              id,
+              name: names.get(id)?.name ?? "Producto",
+              units,
+              previousUnits,
+              change: units - previousUnits,
+            };
+          });
+          return [
+            ...rows
+              .filter((row) => row.change > 0)
+              .sort((a, b) => b.change - a.change)
+              .slice(0, 8),
+            ...rows
+              .filter((row) => row.change < 0)
+              .sort((a, b) => a.change - b.change)
+              .slice(0, 8),
+          ];
+        })(),
         rotation: byAmount
           .filter((row) => row.rotation !== null)
           .slice(0, ROTATION_POINTS)

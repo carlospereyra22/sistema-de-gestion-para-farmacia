@@ -190,7 +190,7 @@ export type StackedPart = {
   id: string;
   label: string;
   value: number;
-  /** Clase de fondo (bg-*). */
+  /** Color de la paleta del tema (hex) o clase de fondo (bg-*). */
   color: string;
   detail?: string;
 };
@@ -224,11 +224,14 @@ export function ReportStackedBar({
               .map((part, index) => (
                 <span
                   key={part.id}
-                  className={`reportes-barra h-full ${part.color} ${index ? "border-l-2 border-white" : ""}`}
+                  className={`reportes-barra h-full ${part.color.startsWith("#") ? "" : part.color} ${index ? "border-l-2 border-white" : ""}`}
                   style={
                     {
                       width: `${(part.value / total) * 100}%`,
                       "--fila": index,
+                      ...(part.color.startsWith("#")
+                        ? { backgroundColor: part.color }
+                        : {}),
                     } as CSSProperties
                   }
                   title={`${part.label}: ${part.value}`}
@@ -312,15 +315,15 @@ export function ReportCohortTable({
 }): ReactElement {
   const shade = (value: number) =>
     value >= 60
-      ? "bg-teal-300 text-teal-950"
+      ? "bg-teal-700 text-white"
       : value >= 40
-        ? "bg-teal-200 text-teal-900"
+        ? "bg-teal-600 text-white"
         : value >= 25
-          ? "bg-teal-100 text-teal-900"
+          ? "bg-teal-400 text-teal-950"
           : value >= 10
-            ? "bg-teal-50 text-teal-800"
+            ? "bg-teal-200 text-teal-900"
             : value > 0
-              ? "bg-slate-50 text-teal-800"
+              ? "bg-teal-50 text-teal-800"
               : "bg-slate-50 text-slate-400";
   const columns = Math.max(0, ...cohorts.map((row) => row.retention.length));
   return (

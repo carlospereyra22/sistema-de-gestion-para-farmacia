@@ -77,6 +77,7 @@ export class ReportProfitabilityService {
       branchesNow,
       branchesBefore,
       names,
+      productsBefore,
     ] = await Promise.all([
       this.salesData.branchTotals(sales(period), returns(period)),
       previous
@@ -127,12 +128,29 @@ export class ReportProfitabilityService {
           orderBy: { name: "asc" },
         }),
       ]),
+      previous
+        ? profitBy(
+            this.prisma,
+            Prisma.sql`p.id::text`,
+            sales(previous),
+            returns(previous),
+          )
+        : null,
     ]);
     const [categoryNames, branches] = names;
     const productNames = new Map(
       (
         await this.prisma.product.findMany({
-          where: { id: { in: [...products.keys()] } },
+          where: {
+            id: {
+              in: [
+                ...new Set([
+                  ...products.keys(),
+                  ...(productsBefore?.keys() ?? []),
+                ]),
+              ],
+            },
+          },
           select: { id: true, name: true },
         })
       ).map((product) => [product.id, product.name]),
@@ -228,6 +246,35 @@ export class ReportProfitabilityService {
           )
           .filter((row) => row.netSalesMinor !== "0")
           .sort(byProfit),
+        profitChanges: (() => {
+          if (!productsBefore) return [];
+          const ids = new Set([...products.keys(), ...productsBefore.keys()]);
+          const changes = [...ids].map((id) => {
+            const now = products.get(id);
+            const before = productsBefore.get(id);
+            const profitNow = now ? now.netSales - now.cost : 0n;
+            const profitBefore = before ? before.netSales - before.cost : 0n;
+            return {
+              id,
+              name: productNames.get(id) ?? "Producto",
+              profitMinor: profitNow.toString(),
+              previousProfitMinor: profitBefore.toString(),
+              change: profitNow - profitBefore,
+            };
+          });
+          const up = changes
+            .filter((row) => row.change > 0n)
+            .sort((a, b) => (b.change > a.change ? 1 : -1))
+            .slice(0, 8);
+          const down = changes
+            .filter((row) => row.change < 0n)
+            .sort((a, b) => (a.change > b.change ? 1 : -1))
+            .slice(0, 8);
+          return [...up, ...down].map(({ change, ...row }) => ({
+            ...row,
+            changeMinor: change.toString(),
+          }));
+        })(),
       },
       tables: {
         branches: branches.map((branch) => {

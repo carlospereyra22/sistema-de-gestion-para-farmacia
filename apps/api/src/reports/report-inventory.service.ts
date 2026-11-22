@@ -218,6 +218,7 @@ export class ReportInventoryService {
           id,
           name: productBy.get(id)!.name,
           stock: units,
+          soldLast30: sold,
           dailyUnits: daily === null ? null : Math.round(daily * 10) / 10,
           coverageDays: coverageDays(units, daily),
         };
@@ -328,6 +329,39 @@ export class ReportInventoryService {
           units: row.units,
         })),
         health,
+        stockDays: (() => {
+          const byCategory = new Map<string, { units: number; sold: number }>();
+          for (const [id, units] of sellable) {
+            const key = productBy.get(id)?.categoryId ?? "none";
+            if (!productBy.has(id)) continue;
+            const found = byCategory.get(key) ?? { units: 0, sold: 0 };
+            found.units += units;
+            byCategory.set(key, found);
+          }
+          for (const row of recent) {
+            if (!productBy.has(row.id)) continue;
+            const key = productBy.get(row.id)?.categoryId ?? "none";
+            const found = byCategory.get(key) ?? { units: 0, sold: 0 };
+            found.sold += row.units ?? 0;
+            byCategory.set(key, found);
+          }
+          return [...byCategory]
+            .filter(([, row]) => row.units > 0)
+            .map(([id, row]) => ({
+              id: id === "none" ? null : id,
+              name:
+                id === "none"
+                  ? "Sin categoría"
+                  : (categoryName.get(id) ?? "Categoría"),
+              units: row.units,
+              days:
+                row.sold > 0
+                  ? Math.round(row.units / (row.sold / COVERAGE_SALES_DAYS))
+                  : null,
+            }))
+            .sort((a, b) => (b.days ?? 100000) - (a.days ?? 100000))
+            .slice(0, 12);
+        })(),
         expiryByMonth,
       },
       tables: {

@@ -146,8 +146,8 @@ export function hourOption(
       name: ACTUAL,
       type: "bar",
       barMaxWidth: 22,
-      itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[3] },
-      emphasis: { itemStyle: { color: reportPalette[2] } },
+      itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[1] },
+      emphasis: { itemStyle: { color: reportPalette[0] } },
       data: visible.map((row) => ({
         name: hourLabel(row.hour),
         value: Number(row.amountMinor),
@@ -255,14 +255,14 @@ export function heatmapOption(
       itemHeight: 140,
       text: ["Más", "Menos"],
       textStyle: { color: "#64748b", fontSize: 11 },
-      inRange: { color: ["#edf2f7", "#d3efe8", "#a5dccf", "#6fc1b1"] },
+      inRange: { color: ["#edf2f7", "#a5dccf", "#3fa392", "#1f6f6b"] },
     },
     series: [
       {
         id: "mapa",
         type: "heatmap",
         itemStyle: { borderColor: "#ffffff", borderWidth: 2, borderRadius: 3 },
-        emphasis: { itemStyle: { borderColor: "#3fa392", borderWidth: 1 } },
+        emphasis: { itemStyle: { borderColor: "#1f6f6b", borderWidth: 1 } },
         data: cells.map((cell) => ({
           value: [
             cell.hour - first,

@@ -84,6 +84,15 @@ describe("pestaña Rentabilidad", () => {
       ],
       products: [row("p1", "Ibuprofeno", 60), row("p2", "Shampoo", 12)],
       categories: [row("c1", "Analgésicos", 60), row("c2", "Higiene", 12)],
+      profitChanges: [
+        {
+          id: "p1",
+          name: "Ibuprofeno",
+          profitMinor: "60000",
+          previousProfitMinor: "20000",
+          changeMinor: "40000",
+        },
+      ],
     },
     tables: {
       branches: [
@@ -114,6 +123,7 @@ describe("pestaña Rentabilidad", () => {
       "Ganancia bruta estimada",
       "Margen bruto",
       "Vendiste",
+      "¿Dónde se ganó y dónde se perdió?",
       "Te costó la mercadería",
       "Ganaste (bruto)",
       "De cada $100 que vendés",
@@ -177,6 +187,15 @@ describe("pestaña Productos", () => {
           abc: "B",
         },
       ],
+      movers: [
+        {
+          id: "p1",
+          name: "Ibuprofeno 400",
+          units: 30,
+          previousUnits: 10,
+          change: 20,
+        },
+      ],
       abc: [
         { id: "A", products: 1, sharePct: 75 },
         { id: "B", products: 1, sharePct: 25 },
@@ -211,6 +230,7 @@ describe("pestaña Productos", () => {
       "Valor a costo",
       "¿Qué productos sostienen el negocio?",
       "Imprescindibles",
+      "Productos en alza y en caída",
       "Clasificación ABC.",
     ])
       expect(html).toContain(text);
@@ -259,6 +279,7 @@ describe("pestaña Inventario", () => {
         },
       ],
       health: { healthy: 10, low: 3, out: 2, expiring: 1, expired: 1 },
+      stockDays: [{ id: "c1", name: "Analgésicos", units: 120, days: 40 }],
       expiryByMonth: [
         {
           month: "expired",
@@ -294,6 +315,7 @@ describe("pestaña Inventario", () => {
           stock: 4,
           dailyUnits: 2,
           coverageDays: 2,
+          soldLast30: 60,
         },
       ],
       lowStockThreshold: 5,
@@ -311,6 +333,8 @@ describe("pestaña Inventario", () => {
       "Valor del stock",
       "Lo primero que se acaba",
       "Alcanza 2 días",
+      "60 u.",
+      "¿Cuántos días dura el stock?",
       "Vencido hace 16",
       "Vencidos con existencia",
       "+25 %",
@@ -345,6 +369,13 @@ describe("pestaña Compras", () => {
       trend: [{ bucket: "2026-10-10", value: "300000", previous: "100000" }],
       suppliers: [
         { id: "s1", name: "Droguería Sur", value: "300000", sharePct: 100 },
+      ],
+      buyVsSell: [
+        {
+          bucket: "2026-10-10",
+          receivedMinor: "300000",
+          soldCostMinor: "200000",
+        },
       ],
       duesCalendar: [
         { id: "overdue", name: "Vencido", amountMinor: "50000", invoices: 1 },
@@ -394,6 +425,7 @@ describe("pestaña Compras", () => {
       "36 d",
       "No hay mercadería pendiente de recibir.",
       "Calendario de pagos a proveedores",
+      "¿Se compra de más o de menos?",
       "Ya vencido",
     ])
       expect(html).toContain(text);

@@ -15,11 +15,13 @@ import {
   Tags,
   Target,
   Trophy,
+  TrendingUp,
 } from "lucide-react";
 import type { ReportProducts } from "@gestion/contracts";
 import { rankingOption } from "./lib/report-charts";
 import { donutOption } from "./lib/report-charts-ventas";
 import {
+  divergingOption,
   formatPercent,
   paretoOption,
   rotationOption,
@@ -57,17 +59,17 @@ export function ReportProductsTab(props: {
 const abcLook = {
   A: {
     name: "Imprescindibles",
-    badge: "bg-teal-100 text-teal-800",
+    badge: "bg-teal-700 text-white",
     text: "Son pocos pero hacen la mayor parte de la venta. Que nunca falten y con buen precio.",
   },
   B: {
     name: "Importantes",
-    badge: "bg-sky-100 text-sky-800",
+    badge: "bg-blue-700 text-white",
     text: "Venta pareja. Reponer a tiempo, sin acumular de más.",
   },
   C: {
     name: "Complementarios",
-    badge: "bg-slate-100 text-slate-600",
+    badge: "bg-slate-400 text-white",
     text: "Venden poco. Comprar justo y evaluar si conviene tenerlos.",
   },
 } as const;
@@ -116,6 +118,14 @@ export function ReportProductsContent({
           .map((row) => ({ name: row.name, value: Number(row.value) })),
       ),
       pareto: paretoOption(charts.pareto),
+      movers: divergingOption(
+        charts.movers.map((row) => ({
+          name: row.name,
+          value: row.change,
+          detail: `Antes ${row.previousUnits} u. · ahora ${row.units} u.`,
+        })),
+        "units",
+      ),
       rotation: rotationOption(rotation, axis, {
         rotation:
           Math.round(average(rotation.map((row) => row.rotation ?? 0)) * 100) /
@@ -328,6 +338,22 @@ export function ReportProductsContent({
           )}
         </ReportPanel>
       </div>
+
+      {charts.movers.length ? (
+        <ReportPanel
+          animar={animar}
+          title="Productos en alza y en caída"
+          icon={<TrendingUp size={16} aria-hidden />}
+          hint="Unidades vendidas contra el período comparado. Los que suben: reponer de más. Los que caen: ver si falta stock, si subió el precio o si dejó de pedirse."
+        >
+          <ReportPanelChart
+            tipo="barras"
+            option={options.movers}
+            label="Productos en alza y en caída"
+            height={Math.max(200, charts.movers.length * 26)}
+          />
+        </ReportPanel>
+      ) : null}
 
       <ReportPanel
         animar={animar}

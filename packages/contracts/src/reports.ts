@@ -254,6 +254,22 @@ export type ReportSales = ReportResponse<
     categories: (ReportBreakdownItem & { units: number })[];
     /** Hasta 40 por unidades netas, con su venta neta (para ordenar por importe). */
     topProducts: (ReportBreakdownItem & { units: number })[];
+    /** Tickets por importe (SISTEMA-118): cuántos y cuánto suman en cada rango. */
+    ticketSizes: {
+      id: string;
+      name: string;
+      tickets: number;
+      amountMinor: MoneyMinor;
+    }[];
+    /**
+     * Venta promedio de cada día de la semana (1 = lunes): facturado del día
+     * dividido las veces que ese día cayó en el período.
+     */
+    weekdayAverage: {
+      weekday: number;
+      averageMinor: MoneyMinor;
+      days: number;
+    }[];
   },
   {
     branches: ReportSalesBranchRow[];
@@ -316,6 +332,17 @@ export type ReportProfitability = ReportResponse<
     /** Hasta 20, ordenados por ganancia. */
     products: ReportProfitRow[];
     categories: ReportProfitRow[];
+    /**
+     * Productos cuya ganancia más cambió contra el período comparado
+     * (SISTEMA-118): hasta 8 que más ganaron y 8 que más perdieron.
+     */
+    profitChanges: {
+      id: string;
+      name: string;
+      profitMinor: MoneyMinor;
+      previousProfitMinor: MoneyMinor;
+      changeMinor: MoneyMinor;
+    }[];
   },
   {
     /** Cada sucursal con su margen y la variación en puntos porcentuales. */
@@ -373,6 +400,17 @@ export type ReportProducts = ReportResponse<
     }[];
     /** Clasificación ABC: A hasta el 80 % de la venta, B hasta el 95 %, C el resto. */
     abc: { id: "A" | "B" | "C"; products: number; sharePct: number | null }[];
+    /**
+     * Productos en alza y en caída (SISTEMA-118): diferencia de unidades contra
+     * el período comparado; hasta 8 de cada lado.
+     */
+    movers: {
+      id: string;
+      name: string;
+      units: number;
+      previousUnits: number;
+      change: number;
+    }[];
   },
   {
     /** Productos activos con stock y sin ventas en `staleDays` días. */
@@ -417,6 +455,16 @@ export type ReportInventory = ReportResponse<
       expiring: number;
       expired: number;
     };
+    /**
+     * Días de stock por categoría (SISTEMA-118): unidades vendibles / venta
+     * diaria de los últimos 30 días. null si no se vendió.
+     */
+    stockDays: {
+      id: string | null;
+      name: string;
+      units: number;
+      days: number | null;
+    }[];
     /** Vencimientos de los próximos 6 meses (y lo ya vencido como "vencido"). */
     expiryByMonth: {
       month: string;
@@ -441,6 +489,8 @@ export type ReportInventory = ReportResponse<
       id: string;
       name: string;
       stock: number;
+      /** Unidades vendidas en los últimos 30 días. */
+      soldLast30: number;
       dailyUnits: number | null;
       coverageDays: number | null;
     }[];
@@ -464,6 +514,15 @@ export type ReportPurchases = ReportResponse<
     trendUnit: ReportTrendUnit;
     trend: ReportSeriesPoint[];
     suppliers: ReportBreakdownItem[];
+    /**
+     * Compras contra costo de lo vendido por tramo (SISTEMA-118); el costo es
+     * null sin permiso de costos.
+     */
+    buyVsSell: {
+      bucket: string;
+      receivedMinor: MoneyMinor;
+      soldCostMinor: MoneyMinor | null;
+    }[];
     /** Calendario de pagos (SISTEMA-117): saldo por cuándo vence. */
     duesCalendar: {
       id: string;

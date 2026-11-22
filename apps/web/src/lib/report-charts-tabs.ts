@@ -1,6 +1,7 @@
 import {
   reportComparisonColor,
   reportPalette,
+  reportCategorical,
   reportStatus,
 } from "./report-chart-theme";
 import { axisMoney, bucketLabel, tooltipMoney } from "./report-charts";
@@ -98,8 +99,8 @@ export function profitTrendOption(
         name: "Ganancia bruta",
         type: "bar",
         barMaxWidth: 22,
-        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[4] },
-        emphasis: { itemStyle: { color: reportPalette[3] } },
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[2] },
+        emphasis: { itemStyle: { color: reportPalette[1] } },
         data: points.map((point) => Number(point.profitMinor)),
       },
       {
@@ -155,8 +156,8 @@ export function columnsOption(
         id: "columnas",
         type: "bar",
         barMaxWidth: 28,
-        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[3] },
-        emphasis: { itemStyle: { color: reportPalette[2] } },
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[1] },
+        emphasis: { itemStyle: { color: reportPalette[0] } },
         label: {
           show: true,
           position: "top",
@@ -235,7 +236,7 @@ export function rotationOption(
       {
         id: "productos",
         type: "scatter",
-        itemStyle: { color: reportPalette[3], opacity: 0.85 },
+        itemStyle: { color: reportPalette[1], opacity: 0.8 },
         emphasis: { itemStyle: { color: reportPalette[2], opacity: 1 } },
         symbolSize: (_value: unknown, params: { dataIndex: number }) => {
           const row = points[params.dataIndex];
@@ -282,7 +283,7 @@ export function accountTrendOption(
       name: "Vendido a cuenta",
       type: "bar",
       barMaxWidth: 20,
-      itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[4] },
+      itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[2] },
       data: points.map((point) => Number(point.soldOnAccountMinor)),
     },
     {
@@ -377,13 +378,13 @@ export function stockTrendOption(
 
 /** Colores de la antigüedad: al día en verde, cuanto más atraso, más rojo. */
 const agingColors: Record<string, string> = {
-  current: "#8fd3c3",
-  "1-30": "#c9e59a",
-  "31-60": "#f8d58c",
-  "61-90": "#f8bf94",
-  "91-120": "#f5a8b5",
-  "120+": "#e98597",
-  undated: "#cfd8e3",
+  current: "#2f8f6f",
+  "1-30": "#7a9a3a",
+  "31-60": "#c99a12",
+  "61-90": "#c8641b",
+  "91-120": "#b23a48",
+  "120+": "#7b2d4f",
+  undated: "#94a3b8",
 };
 
 /** Antigüedad de saldos en columnas, del día al más atrasado. */
@@ -507,13 +508,13 @@ export function frequencyOption(
   items: readonly { id: string; name: string; customers: number }[],
 ) {
   const colors: Record<string, string> = {
-    "7": "#6fc1b1",
-    "15": "#8fd3c3",
-    "30": "#9fd8f2",
-    "60": "#b4bdf5",
-    "90": "#d7bdf3",
-    more: "#f8d58c",
-    once: "#cfd8e3",
+    "7": "#1f6f6b",
+    "15": "#2f8f6f",
+    "30": "#2f6fb0",
+    "60": "#4b4fa8",
+    "90": "#5b3b8c",
+    more: "#c8641b",
+    once: "#94a3b8",
   };
   return {
     grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
@@ -549,7 +550,7 @@ export function frequencyOption(
 }
 
 /** Colores de las clases ABC, suaves. */
-export const abcColors = { A: "#8fd3c3", B: "#9fd8f2", C: "#cfd8e3" } as const;
+export const abcColors = { A: "#1f6f6b", B: "#2f6fb0", C: "#94a3b8" } as const;
 
 /**
  * Curva de Pareto: ventas de cada producto (columnas, de mayor a menor,
@@ -614,17 +615,17 @@ export function paretoOption(
         yAxisIndex: 1,
         smooth: true,
         symbol: "none",
-        lineStyle: { width: 2, color: "#7c8ce0" },
-        itemStyle: { color: "#7c8ce0" },
+        lineStyle: { width: 2, color: "#c8641b" },
+        itemStyle: { color: "#c8641b" },
         markLine: {
           silent: true,
           symbol: "none",
-          lineStyle: { type: "dashed", color: "#c8a35a" },
+          lineStyle: { type: "dashed", color: "#7b2d4f" },
           label: {
             position: "insideStartTop",
             formatter: "80 % de la venta",
             fontSize: 10,
-            color: "#8a6d2f",
+            color: "#7b2d4f",
           },
           data: [{ yAxis: 80 }],
         },
@@ -698,6 +699,247 @@ export function calendarOption(
           itemStyle: { color: item.color, borderRadius: [4, 4, 0, 0] },
         })),
       },
+    ],
+  };
+}
+
+/**
+ * Barras divergentes (SISTEMA-118): lo que sube a la derecha en verde y lo que
+ * baja a la izquierda en ladrillo. Para cambios contra el período anterior.
+ */
+export function divergingOption(
+  items: readonly { name: string; value: number; detail?: string }[],
+  format: "money" | "units",
+) {
+  const rows = [...items].sort((a, b) => a.value - b.value);
+  const show = (value: number) =>
+    format === "money"
+      ? tooltipMoney(value)
+      : `${value.toLocaleString("es-AR")} u.`;
+  return {
+    grid: { left: 8, right: 56, top: 8, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const row = rows[params[0]?.dataIndex ?? 0];
+        if (!row) return "";
+        return `<strong>${row.name}</strong><br/>${row.value > 0 ? "+" : ""}${show(row.value)}${row.detail ? `<br/>${row.detail}` : ""}`;
+      },
+    },
+    xAxis: {
+      type: "value",
+      axisLabel: {
+        formatter: (value: number) =>
+          format === "money" ? axisMoney(value) : value.toLocaleString("es-AR"),
+      },
+    },
+    yAxis: {
+      type: "category",
+      data: rows.map((row) => row.name),
+      axisLabel: {
+        width: 150,
+        overflow: "truncate",
+        fontSize: 11,
+        color: "#334155",
+      },
+      axisTick: { show: false },
+    },
+    series: [
+      {
+        id: "cambio",
+        type: "bar",
+        barMaxWidth: 16,
+        label: {
+          show: true,
+          position: "right",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ value }: { value: number }) =>
+            `${value > 0 ? "+" : ""}${format === "money" ? axisMoney(value) : value.toLocaleString("es-AR")}`,
+        },
+        data: rows.map((row) => ({
+          name: row.name,
+          value: row.value,
+          itemStyle: {
+            color: row.value >= 0 ? reportStatus.good : reportStatus.bad,
+            borderRadius: row.value >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4],
+          },
+        })),
+      },
+    ],
+  };
+}
+
+/** Columnas simples con un color y etiqueta arriba (tickets, promedio por día). */
+export function simpleColumnsOption(
+  items: readonly { name: string; value: number; detail?: string }[],
+  format: "money" | "count",
+  color: string = reportCategorical[1],
+) {
+  const show = (value: number) =>
+    format === "money" ? tooltipMoney(value) : value.toLocaleString("es-AR");
+  return {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const item = items[params[0]?.dataIndex ?? 0];
+        return item
+          ? `<strong>${item.name}</strong><br/>${show(item.value)}${item.detail ? `<br/>${item.detail}` : ""}`
+          : "";
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: items.map((item) => item.name),
+      axisLabel: { interval: 0, fontSize: 10, width: 76, overflow: "break" },
+    },
+    yAxis: {
+      type: "value",
+      minInterval: format === "count" ? 1 : undefined,
+      axisLabel: {
+        formatter: (value: number) =>
+          format === "money" ? axisMoney(value) : value.toLocaleString("es-AR"),
+      },
+    },
+    series: [
+      {
+        id: "columnas-simples",
+        type: "bar",
+        barMaxWidth: 36,
+        itemStyle: { color, borderRadius: [4, 4, 0, 0] },
+        label: {
+          show: true,
+          position: "top",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ value }: { value: number }) =>
+            value
+              ? format === "money"
+                ? axisMoney(value)
+                : value.toLocaleString("es-AR")
+              : "",
+        },
+        data: items.map((item) => ({ name: item.name, value: item.value })),
+      },
+    ],
+  };
+}
+
+/**
+ * Días de stock por categoría: cuánto dura al ritmo de venta. Más de 90 días
+ * es sobrestock (naranja), menos de 15 es faltante (ladrillo), lo demás sano.
+ */
+export function stockDaysOption(
+  items: readonly { name: string; units: number; days: number | null }[],
+) {
+  const rows = [...items].reverse();
+  const color = (days: number | null) =>
+    days === null
+      ? reportStatus.neutral
+      : days > 90
+        ? reportStatus.alert
+        : days < 15
+          ? reportStatus.bad
+          : reportStatus.good;
+  return {
+    grid: { left: 8, right: 56, top: 8, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: { dataIndex: number }[]) => {
+        const row = rows[params[0]?.dataIndex ?? 0];
+        if (!row) return "";
+        return `<strong>${row.name}</strong><br/>${row.units.toLocaleString("es-AR")} u. en stock<br/>${row.days === null ? "Sin ventas en 30 días" : `Alcanza ${row.days.toLocaleString("es-AR")} días`}`;
+      },
+    },
+    xAxis: {
+      type: "value",
+      name: "días",
+      nameTextStyle: { fontSize: 10, color: "#64748b" },
+    },
+    yAxis: {
+      type: "category",
+      data: rows.map((row) => row.name),
+      axisLabel: {
+        width: 130,
+        overflow: "truncate",
+        fontSize: 11,
+        color: "#334155",
+      },
+      axisTick: { show: false },
+    },
+    series: [
+      {
+        id: "dias",
+        type: "bar",
+        barMaxWidth: 16,
+        label: {
+          show: true,
+          position: "right",
+          fontSize: 10,
+          color: "#475569",
+          formatter: ({ dataIndex }: { dataIndex: number }) => {
+            const days = rows[dataIndex]?.days;
+            if (days === null || days === undefined) return "sin ventas";
+            return days > 365 ? "más de 1 año" : `${days} d`;
+          },
+        },
+        data: rows.map((row) => ({
+          name: row.name,
+          // Más de un año se dibuja como un año: una categoría con muchísimo
+          // stock no aplasta al resto. El tooltip dice el número real.
+          value: Math.min(row.days ?? 0, 365),
+          itemStyle: { color: color(row.days), borderRadius: [0, 4, 4, 0] },
+        })),
+      },
+    ],
+  };
+}
+
+/** Lo recibido (columnas) contra el costo de lo vendido (línea) por tramo. */
+export function buyVsSellOption(
+  points: readonly {
+    bucket: string;
+    receivedMinor: string;
+    soldCostMinor: string | null;
+  }[],
+  unit: TrendUnit,
+) {
+  const withCost = points.some((point) => point.soldCostMinor !== null);
+  return {
+    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    legend,
+    tooltip: { trigger: "axis", valueFormatter: tooltipMoney },
+    xAxis: {
+      type: "category",
+      data: points.map((point) => bucketLabel(point.bucket, unit)),
+    },
+    yAxis: { type: "value", axisLabel: { formatter: axisMoney } },
+    series: [
+      {
+        id: "compras",
+        name: "Compraste (recibido)",
+        type: "bar",
+        barMaxWidth: 22,
+        itemStyle: { color: reportCategorical[1], borderRadius: [4, 4, 0, 0] },
+        data: points.map((point) => Number(point.receivedMinor)),
+      },
+      ...(withCost
+        ? [
+            {
+              id: "vendido",
+              name: "Vendiste (a costo)",
+              type: "line",
+              smooth: true,
+              symbolSize: 5,
+              itemStyle: { color: reportCategorical[2] },
+              data: points.map((point) => Number(point.soldCostMinor ?? 0)),
+            },
+          ]
+        : []),
     ],
   };
 }

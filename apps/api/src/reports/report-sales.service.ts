@@ -28,7 +28,15 @@ import {
   sumTotals,
   TZ,
 } from "./report-sales-data";
-import { byWeekday, highlight, unitsPerTicket } from "./report-sales-insights";
+import {
+  byWeekday,
+  highlight,
+  TICKET_SIZES,
+  ticketSizeOf,
+  unitsPerTicket,
+  weekdayOccurrences,
+} from "./report-sales-insights";
+import { argentineDate } from "./report-period";
 
 /** Filtros que Ventas todavía no usa: se rechazan en vez de ignorarlos. */
 const unsupported = [
@@ -97,6 +105,7 @@ export class ReportSalesService {
       categories,
       payments,
       topProducts,
+      totals,
       discounts,
       previousDiscounts,
       branches,
@@ -118,6 +127,12 @@ export class ReportSalesService {
       this.salesData.categories(organizationId, sales(period), returns(period)),
       this.salesData.payments(sales(period)),
       this.salesData.topProducts(sales(period), returns(period), 40),
+      this.prisma.$queryRaw<
+        { total: bigint; tickets: number; amount: bigint }[]
+      >`
+        SELECT s."totalMinor" AS total, count(*)::int AS tickets,
+          sum(s."totalMinor")::bigint AS amount
+        FROM "Sale" s WHERE ${sales(period)} GROUP BY 1`,
       this.discounts(sales(period)),
       previous ? this.discounts(sales(previous)) : null,
       this.prisma.branch.findMany({
@@ -257,6 +272,35 @@ export class ReportSalesService {
             value: row.amount,
           })),
         ),
+        ticketSizes: TICKET_SIZES.map((size) => {
+          const rows = totals.filter(
+            (row) => ticketSizeOf(row.total) === size.id,
+          );
+          return {
+            id: size.id,
+            name: size.name,
+            tickets: rows.reduce((sum, row) => sum + row.tickets, 0),
+            amountMinor: rows
+              .reduce((sum, row) => sum + row.amount, 0n)
+              .toString(),
+          };
+        }),
+        weekdayAverage: (() => {
+          // Hasta hoy: un día que todavía no llegó no baja el promedio.
+          const today = argentineDate(now);
+          const counts = weekdayOccurrences(
+            period.from,
+            period.to < today ? period.to : today,
+          );
+          return byWeekday(heatmap).map((row) => ({
+            weekday: row.weekday,
+            days: counts[row.weekday - 1] ?? 0,
+            averageMinor: (counts[row.weekday - 1]
+              ? row.amount / BigInt(counts[row.weekday - 1]!)
+              : 0n
+            ).toString(),
+          }));
+        })(),
         topProducts: topProducts.map((row) => ({
           id: row.id,
           name: row.name,

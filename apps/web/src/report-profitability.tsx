@@ -19,9 +19,11 @@ import {
 } from "lucide-react";
 import type { ReportProfitability, ReportProfitRow } from "@gestion/contracts";
 import { rankingOption } from "./lib/report-charts";
+import { reportStatus } from "./lib/report-chart-theme";
 import { donutOption } from "./lib/report-charts-ventas";
 import {
   columnsOption,
+  divergingOption,
   formatPercent,
   formatPp,
   profitTrendOption,
@@ -97,6 +99,14 @@ export function ReportProfitabilityContent({
       .slice(0, 10);
     return {
       trend: profitTrendOption(charts.trend, charts.trendUnit),
+      changes: divergingOption(
+        charts.profitChanges.map((row) => ({
+          name: row.name,
+          value: Number(row.changeMinor),
+          detail: `Antes ${formatMoneyMinor(row.previousProfitMinor)} · ahora ${formatMoneyMinor(row.profitMinor)}`,
+        })),
+        "money",
+      ),
       products: rankingOption(
         products.map((row) => ({
           name: `${row.name} (${row.units} u.)`,
@@ -309,6 +319,22 @@ export function ReportProfitabilityContent({
         </ReportPanel>
       </div>
 
+      {charts.profitChanges.length ? (
+        <ReportPanel
+          animar={animar}
+          title="¿Dónde se ganó y dónde se perdió?"
+          icon={<TrendingDown size={16} aria-hidden />}
+          hint="Productos cuya ganancia más cambió contra el período comparado. En rojo, los que dejaron de ganar: revisar precio, costo o faltantes."
+        >
+          <ReportPanelChart
+            tipo="barras"
+            option={options.changes}
+            label="Cambios de ganancia por producto"
+            height={Math.max(200, charts.profitChanges.length * 26)}
+          />
+        </ReportPanel>
+      ) : null}
+
       <div
         className={`grid gap-4 ${severalBranches ? "xl:grid-cols-[1.4fr_1fr]" : ""}`}
       >
@@ -458,14 +484,18 @@ function EquationTerm({
   tone: "sales" | "cost" | "profit";
 }): ReactElement {
   const dot = {
-    sales: "bg-sky-200",
-    cost: "bg-rose-200",
-    profit: "bg-emerald-200",
+    sales: reportStatus.info,
+    cost: reportStatus.bad,
+    profit: reportStatus.good,
   }[tone];
   return (
     <div className="min-w-0 flex-1 px-1">
       <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-        <span className={`size-2.5 rounded-full ${dot}`} aria-hidden />
+        <span
+          className="size-2.5 rounded-full"
+          style={{ backgroundColor: dot }}
+          aria-hidden
+        />
         {label}
       </p>
       <p
@@ -544,16 +574,25 @@ function ProfitEquation({
         <div className="flex h-8 w-full overflow-hidden rounded-full bg-slate-100 text-xs font-semibold">
           {costShare > 0 ? (
             <span
-              className="reportes-barra flex items-center justify-center bg-rose-100 text-rose-800"
-              style={{ width: `${costShare}%` }}
+              className="reportes-barra flex items-center justify-center text-white"
+              style={{
+                width: `${costShare}%`,
+                backgroundColor: reportStatus.bad,
+              }}
             >
               {costShare >= 12 ? `$${costShare} son costo` : `$${costShare}`}
             </span>
           ) : null}
           {profitShare > 0 ? (
             <span
-              className="reportes-barra flex items-center justify-center border-l-2 border-white bg-emerald-100 text-emerald-800"
-              style={{ width: `${profitShare}%`, "--fila": 1 } as CSSProperties}
+              className="reportes-barra flex items-center justify-center border-l-2 border-white text-white"
+              style={
+                {
+                  width: `${profitShare}%`,
+                  backgroundColor: reportStatus.good,
+                  "--fila": 1,
+                } as CSSProperties
+              }
             >
               {profitShare >= 12
                 ? `$${profitShare} te quedan`

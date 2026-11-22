@@ -6,10 +6,11 @@ import { ReportAccessService } from "./report-access.service";
 import type { ReportFiltersQuery } from "./report-filters.dto";
 import { kpi, sharePct, trendBuckets, unavailableKpi } from "./report-math";
 import { argentineDate, type ReportRange } from "./report-period";
-import { TZ } from "./report-sales-data";
+import { returnsWhere, salesWhere, TZ } from "./report-sales-data";
 import {
   civil,
   daysBetween,
+  profitBy,
   reportMeta,
   rejectFilters,
   requireAccess,
@@ -95,6 +96,7 @@ export class ReportPurchasesService {
       dues,
       costs,
       pending,
+      soldCost,
     ] = await Promise.all([
       this.received(receipts(period), unit),
       previous ? this.received(receipts(previous), unit) : null,
@@ -206,6 +208,17 @@ export class ReportPurchasesService {
         GROUP BY pu.id, sp.name
         HAVING sum(greatest(pi."orderedQuantity" - pi."receivedQuantity" - pi."cancelledQuantity", 0)) > 0
         ORDER BY pu."orderedAt" ASC NULLS LAST`,
+      // Costo de lo vendido por tramo, sólo con permiso de costos.
+      scope.access.profitability
+        ? profitBy(
+            this.prisma,
+            Prisma.sql`to_char(date_trunc(${unit}, s."completedAt" AT TIME ZONE ${TZ}), 'YYYY-MM-DD')`,
+            salesWhere(organizationId, branchIds, period),
+            returnsWhere(organizationId, branchIds, period),
+            Prisma.empty,
+            Prisma.sql`to_char(date_trunc(${unit}, cr."createdAt" AT TIME ZONE ${TZ}), 'YYYY-MM-DD')`,
+          )
+        : null,
     ]);
 
     const total = [...trend.values()].reduce((sum, value) => sum + value, 0n);
@@ -257,6 +270,13 @@ export class ReportPurchasesService {
           value: (trend.get(bucket) ?? 0n).toString(),
           previous: previousTrend
             ? (previousTrend.get(previousBuckets[index] ?? "") ?? 0n).toString()
+            : null,
+        })),
+        buyVsSell: buckets.map((bucket) => ({
+          bucket,
+          receivedMinor: (trend.get(bucket) ?? 0n).toString(),
+          soldCostMinor: soldCost
+            ? (soldCost.get(bucket)?.cost ?? 0n).toString()
             : null,
         })),
         duesCalendar: DUE_BUCKETS.map((bucket) => {

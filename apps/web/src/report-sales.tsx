@@ -36,6 +36,8 @@ import {
   salesTrendOption,
   weekdayName,
 } from "./lib/report-charts-ventas";
+import { simpleColumnsOption } from "./lib/report-charts-tabs";
+import { reportCategorical } from "./lib/report-chart-theme";
 import { formatMoneyMinor, kpiTrend } from "./lib/report-format";
 import { getReportSales } from "./lib/reports-api";
 import { comparisonOptions, type ReportView } from "./lib/report-view";
@@ -157,6 +159,24 @@ export function ReportSalesContent({
       ),
       hours: hourOption(charts.byHour, comparisonLabel),
       heatmap: heatmapOption(charts.heatmap),
+      ticketSizes: simpleColumnsOption(
+        charts.ticketSizes.map((row) => ({
+          name: row.name,
+          value: row.tickets,
+          detail: `${formatMoneyMinor(row.amountMinor)} en total`,
+        })),
+        "count",
+        reportCategorical[1],
+      ),
+      weekdays: simpleColumnsOption(
+        charts.weekdayAverage.map((row) => ({
+          name: weekdayName(row.weekday),
+          value: Number(row.averageMinor),
+          detail: `Promedio de ${row.days} ${row.days === 1 ? "día" : "días"}`,
+        })),
+        "money",
+        reportCategorical[0],
+      ),
       products: rankingOption(
         charts.topProducts
           .slice()
@@ -356,6 +376,35 @@ export function ReportSalesContent({
               </div>
             </div>
           </ReportPanel>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <ReportPanel
+              animar={animar}
+              orden={0}
+              title="¿Cuánto se gasta por compra?"
+              icon={<Wallet size={16} aria-hidden />}
+              hint="Cantidad de tickets por importe. Sirve para armar combos y ofertas que suban el ticket."
+            >
+              <ReportPanelChart
+                tipo="barras"
+                option={options.ticketSizes}
+                label="Tickets por importe"
+              />
+            </ReportPanel>
+            <ReportPanel
+              animar={animar}
+              orden={1}
+              title="Venta promedio por día de la semana"
+              icon={<CalendarDays size={16} aria-hidden />}
+              hint="Lo facturado cada día dividido las veces que ese día cayó en el período. Para organizar turnos y pedidos."
+            >
+              <ReportPanelChart
+                tipo="barras"
+                option={options.weekdays}
+                label="Venta promedio por día de la semana"
+              />
+            </ReportPanel>
+          </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <ReportPanel

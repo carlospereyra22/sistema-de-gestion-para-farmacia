@@ -80,6 +80,19 @@ const sales = (branches = 2): ReportSales => ({
         units: 3,
       },
     ],
+    ticketSizes: [
+      { id: "5k", name: "Hasta $5.000", tickets: 2, amountMinor: "600000" },
+      {
+        id: "10k",
+        name: "$5.000 a $10.000",
+        tickets: 1,
+        amountMinor: "900000",
+      },
+    ],
+    weekdayAverage: [
+      { weekday: 2, averageMinor: "25000", days: 4 },
+      { weekday: 6, averageMinor: "100000", days: 5 },
+    ],
     categories: [
       {
         id: "c1",
@@ -146,6 +159,8 @@ describe("pestaña Ventas (SISTEMA-115)", () => {
       "Ticket promedio",
       "Unidades vendidas",
       "Hora pico",
+      "¿Cuánto se gasta por compra?",
+      "Venta promedio por día de la semana",
       "10 h a 11 h",
       "Día más fuerte",
       "Sábado",

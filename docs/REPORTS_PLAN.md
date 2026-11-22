@@ -376,10 +376,21 @@ muestra que parte de lo facturado tiene cliente):
 
 Pedido del usuario:
 
-- **Nada de colores fuertes en Reportes**: `reportCategorical` y `reportStatus` son
-  pastel (verde agua, lavanda, durazno, rosa claro, celeste); rankings y columnas en
-  verde suave (`reportPalette[3]`); mapa de calor hasta un verde medio; segmentos,
-  salud del stock, cohortes y la barra "de cada $100" en tonos 100-300 de Tailwind.
+- **Colores profundos y apagados** (el anillo exterior de una rueda de color; ni
+  fuertes ni pastel): `reportCategorical` (verde azulado oscuro, azul profundo, naranja
+  tostado, vino, mostaza, verde bosque, ciruela, pizarra) y `reportStatus` (verde
+  profundo, mostaza, naranja tostado, ladrillo), con un par mas claro para el modo
+  oscuro. Las barras HTML (estados, salud del stock, "de cada $100") usan esos mismos
+  colores.
+- **Graficos para decidir**: Ventas suma tickets por importe y venta promedio por dia
+  de la semana (facturado del dia / veces que cayo ese dia hasta hoy); Rentabilidad,
+  "donde se gano y donde se perdio" (productos cuya ganancia mas cambio contra el
+  periodo comparado); Productos, "en alza y en caida" (unidades contra el comparado);
+  Inventario, dias de stock por categoria (unidades / venta diaria de 30 dias; mas de
+  90 sobrestock, menos de 15 faltante; mas de un año se dibuja con tope) en lugar del
+  stock por categoria que repetia el capital, y "Vendio en 30 dias" en stock critico
+  en vez de una venta diaria decimal; Compras, lo recibido contra el costo de lo
+  vendido (con permiso de costos).
 - **Orden fijo en todas las pestanas**: KPIs, debajo la "Lectura rapida" y despues la
   pieza central y el resto.
 - **Rentabilidad**: la cuenta (vendiste - te costo la mercaderia = ganaste) en una

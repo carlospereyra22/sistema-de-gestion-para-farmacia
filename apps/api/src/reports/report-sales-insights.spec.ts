@@ -2,7 +2,9 @@ import {
   byWeekday,
   highlight,
   strongest,
+  ticketSizeOf,
   unitsPerTicket,
+  weekdayOccurrences,
 } from "./report-sales-insights";
 
 describe("lectura rápida de Ventas", () => {
@@ -39,5 +41,22 @@ describe("lectura rápida de Ventas", () => {
   it("unidades por ticket con un decimal", () => {
     expect(unitsPerTicket(7, 3)).toBe(2.3);
     expect(unitsPerTicket(5, 0)).toBeNull();
+  });
+
+  it("rangos de ticket en pesos: el límite entra en el rango de abajo", () => {
+    expect(ticketSizeOf(500000n)).toBe("5k");
+    expect(ticketSizeOf(500001n)).toBe("10k");
+    expect(ticketSizeOf(25000000n)).toBe("more");
+  });
+
+  it("cuenta cuántas veces cae cada día para promediar la venta", () => {
+    // 01/10/2026 (jueves) al 14/10/2026: dos semanas exactas.
+    expect(weekdayOccurrences("2026-10-01", "2026-10-14")).toEqual([
+      2, 2, 2, 2, 2, 2, 2,
+    ]);
+    // Un solo jueves.
+    expect(weekdayOccurrences("2026-10-01", "2026-10-01")).toEqual([
+      0, 0, 0, 1, 0, 0, 0,
+    ]);
   });
 });

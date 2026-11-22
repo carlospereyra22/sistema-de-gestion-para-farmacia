@@ -15,6 +15,7 @@ import type {
   ReportLoyaltySegment,
 } from "@gestion/contracts";
 import { rankingOption } from "./lib/report-charts";
+import { reportStatus } from "./lib/report-chart-theme";
 import {
   formatPercent,
   frequencyOption,
@@ -69,31 +70,31 @@ const segmentInfo: Record<
 > = {
   frequent: {
     label: "Frecuentes",
-    color: "bg-teal-300",
+    color: reportStatus.good,
     text: "4 o más visitas, cada 30 días o menos",
     tone: "bg-teal-50 text-teal-800",
   },
   regular: {
     label: "Regulares",
-    color: "bg-sky-200",
+    color: reportStatus.info,
     text: "Vuelven a su ritmo",
     tone: "bg-sky-50 text-sky-800",
   },
   new: {
     label: "Nuevos",
-    color: "bg-indigo-200",
+    color: reportStatus.new,
     text: "Primera compra en el período",
     tone: "bg-indigo-50 text-indigo-800",
   },
   atRisk: {
     label: "En riesgo",
-    color: "bg-amber-200",
+    color: reportStatus.warn,
     text: "Pasaron 1,5 veces su frecuencia sin volver",
     tone: "bg-amber-50 text-amber-800",
   },
   lost: {
     label: "Perdidos",
-    color: "bg-rose-200",
+    color: reportStatus.bad,
     text: "Más de 120 días sin comprar",
     tone: "bg-rose-50 text-rose-800",
   },

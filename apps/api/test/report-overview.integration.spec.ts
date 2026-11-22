@@ -481,6 +481,18 @@ describe("report overview isolated schema", () => {
       tickets: 2,
       previousAmountMinor: "2000",
     });
+    // 3 tickets: 3000, 1000 y 1000 centavos (todos hasta $5.000).
+    expect(result.charts.ticketSizes[0]).toMatchObject({
+      id: "5k",
+      tickets: 3,
+      amountMinor: "5000",
+    });
+    // Octubre tiene 5 sábados: 4000 / 5 = 800 de promedio.
+    expect(result.charts.weekdayAverage[5]).toEqual({
+      weekday: 6,
+      averageMinor: "800",
+      days: 5,
+    });
     expect(result.charts.heatmap).toEqual([
       { weekday: 2, hour: 10, amountMinor: "1000", tickets: 1 },
       { weekday: 6, hour: 10, amountMinor: "3000", tickets: 1 },
@@ -640,6 +652,8 @@ describe("report overview isolated schema", () => {
     expect(customers.tables.loyalty.newVsReturning).toHaveLength(31);
     expect(inventory.charts.expiryByMonth).toHaveLength(7);
     expect(purchases.charts.duesCalendar).toHaveLength(7);
+    expect(purchases.charts.buyVsSell).toHaveLength(31);
+    expect(inventory.charts.stockDays.every((row) => row.units > 0)).toBe(true);
     await expect(
       tabs.purchases.purchases(fixture.owner, fixture.org.id, october, now),
     ).rejects.toBeInstanceOf(ForbiddenException);

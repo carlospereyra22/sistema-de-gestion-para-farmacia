@@ -28,6 +28,35 @@ export function byWeekday(
   }));
 }
 
+/** Rangos de importe de ticket, en centavos (SISTEMA-118). */
+export const TICKET_SIZES = [
+  { id: "5k", name: "Hasta $5.000", max: 500000n },
+  { id: "10k", name: "$5.000 a $10.000", max: 1000000n },
+  { id: "20k", name: "$10.000 a $20.000", max: 2000000n },
+  { id: "50k", name: "$20.000 a $50.000", max: 5000000n },
+  { id: "100k", name: "$50.000 a $100.000", max: 10000000n },
+  { id: "more", name: "Más de $100.000", max: null },
+] as const;
+
+export function ticketSizeOf(totalMinor: bigint) {
+  return TICKET_SIZES.find(
+    (size) => size.max === null || totalMinor <= size.max,
+  )!.id;
+}
+
+/**
+ * Cuántas veces cae cada día de la semana (1 = lunes) entre dos fechas
+ * civiles inclusivas: para promediar la venta de cada día.
+ */
+export function weekdayOccurrences(from: string, to: string) {
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (let day = Date.parse(from); day <= Date.parse(to); day += 86400000) {
+    const weekday = (new Date(day).getUTCDay() + 6) % 7;
+    counts[weekday]! += 1;
+  }
+  return counts;
+}
+
 /** Unidades por ticket con un decimal; null sin tickets. */
 export function unitsPerTicket(units: number, tickets: number): number | null {
   if (!tickets) return null;

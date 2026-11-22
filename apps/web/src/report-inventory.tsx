@@ -16,6 +16,7 @@ import { donutOption } from "./lib/report-charts-ventas";
 import {
   calendarOption,
   columnsOption,
+  stockDaysOption,
   stockTrendOption,
   trendUnitOptions,
 } from "./lib/report-charts-tabs";
@@ -88,6 +89,7 @@ export function ReportInventoryContent({
   const options = useMemo(
     () => ({
       trend: stockTrendOption(charts.trend, charts.trendUnit, value),
+      stockDays: stockDaysOption(charts.stockDays),
       categories: columnsOption(
         charts.categories.slice(0, 8).map((row) => ({
           name: row.name,
@@ -251,35 +253,35 @@ export function ReportInventoryContent({
                 id: "healthy",
                 label: "Sanos",
                 value: charts.health.healthy,
-                color: "bg-emerald-200",
+                color: reportStatus.good,
                 detail: `Más de ${tables.lowStockThreshold} unidades y sin vencimientos cerca`,
               },
               {
                 id: "low",
                 label: "Stock bajo",
                 value: charts.health.low,
-                color: "bg-amber-200",
+                color: reportStatus.warn,
                 detail: `${tables.lowStockThreshold} unidades o menos`,
               },
               {
                 id: "expiring",
                 label: "Por vencer",
                 value: charts.health.expiring,
-                color: "bg-orange-200",
+                color: reportStatus.alert,
                 detail: `Algún lote vence en ${tables.expiryWindowDays} días`,
               },
               {
                 id: "expired",
                 label: "Con vencidos",
                 value: charts.health.expired,
-                color: "bg-rose-300",
+                color: reportStatus.worst,
                 detail: "Tienen lotes vencidos con existencia",
               },
               {
                 id: "out",
                 label: "Sin stock",
                 value: charts.health.out,
-                color: "bg-rose-200",
+                color: reportStatus.bad,
                 detail: "Se vendían y hoy no hay",
               },
             ]}
@@ -365,12 +367,12 @@ export function ReportInventoryContent({
                 render: (row) => row.stock.toLocaleString("es-AR"),
               },
               {
-                label: "Venta/día",
+                label: "Vendió en 30 días",
                 numeric: true,
                 render: (row) =>
-                  row.dailyUnits === null
-                    ? "—"
-                    : row.dailyUnits.toLocaleString("es-AR"),
+                  row.soldLast30
+                    ? `${row.soldLast30.toLocaleString("es-AR")} u.`
+                    : "—",
               },
               {
                 label: "Alcanza",
@@ -390,15 +392,16 @@ export function ReportInventoryContent({
         <ReportPanel
           animar={animar}
           orden={1}
-          title="Stock por categoría"
+          title="¿Cuántos días dura el stock?"
           icon={<Warehouse size={16} aria-hidden />}
-          hint={value ? "Valor a costo." : "Unidades."}
+          hint="Por categoría, al ritmo de venta de los últimos 30 días. Naranja: más de 90 días (sobrestock). Rojo: menos de 15 (se acaba)."
         >
-          {charts.categories.length ? (
+          {charts.stockDays.length ? (
             <ReportPanelChart
               tipo="barras"
-              option={options.categories}
-              label="Stock por categoría"
+              option={options.stockDays}
+              label="Días de stock por categoría"
+              height={Math.max(180, charts.stockDays.length * 30)}
             />
           ) : (
             <ReportEmptyState title="Sin stock" />

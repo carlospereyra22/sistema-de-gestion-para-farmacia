@@ -7,6 +7,7 @@ import {
   PackageOpen,
   PieChart,
   ReceiptText,
+  Scale,
   Truck,
   TrendingUp,
   Wallet,
@@ -15,6 +16,7 @@ import type { ReportPurchases } from "@gestion/contracts";
 import { rankingOption, trendOption } from "./lib/report-charts";
 import { donutOption } from "./lib/report-charts-ventas";
 import {
+  buyVsSellOption,
   calendarOption,
   formatPercent,
   trendUnitOptions,
@@ -110,6 +112,7 @@ export function ReportPurchasesContent({
           .slice(0, 8)
           .map((row) => ({ name: row.name, value: Number(row.value) })),
       ),
+      buyVsSell: buyVsSellOption(charts.buyVsSell, charts.trendUnit),
       calendar: calendarOption(
         charts.duesCalendar.map((row) => ({
           name: row.name,
@@ -297,6 +300,23 @@ export function ReportPurchasesContent({
           )}
         </ReportPanel>
       </div>
+
+      <ReportPanel
+        animar={animar}
+        title="¿Se compra de más o de menos?"
+        icon={<Scale size={16} aria-hidden />}
+        hint={
+          charts.buyVsSell.some((row) => row.soldCostMinor !== null)
+            ? "Columnas: lo que entró. Línea: lo que salió vendido, a costo. Si las columnas quedan seguido por encima, el stock crece."
+            : "Lo que entró por tramo. Con permiso de costos se compara con lo vendido."
+        }
+      >
+        <ReportPanelChart
+          tipo="barras"
+          option={options.buyVsSell}
+          label="Compras contra lo vendido a costo"
+        />
+      </ReportPanel>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <ReportPanel
