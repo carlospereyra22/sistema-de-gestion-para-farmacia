@@ -198,3 +198,82 @@ export type ReportOverview = ReportResponse<
     cashClosures: ReportCashClosures;
   }
 >;
+
+export type ReportSalesKpi =
+  "netSales" | "tickets" | "averageTicket" | "unitsSold";
+
+/** Agrupación de la evolución de Ventas; la hora tiene su propio gráfico. */
+export type ReportSalesTrendUnit = "day" | "week" | "month";
+
+/** Fila de la tabla por sucursal de Ventas (SISTEMA-115). */
+export type ReportSalesBranchRow = {
+  id: string;
+  name: string;
+  netSalesMinor: MoneyMinor;
+  /** Ventas netas del período comparado; null sin comparación. */
+  previousNetSalesMinor: MoneyMinor | null;
+  changePct: number | null;
+  tickets: number;
+  /** Facturado / tickets; null sin tickets. */
+  averageTicketMinor: MoneyMinor | null;
+  unitsSold: number;
+  sharePct: number | null;
+};
+
+/**
+ * Pestaña Ventas (SISTEMA-115). Hora y día de la semana usan lo facturado por
+ * la hora local de confirmación; las devoluciones no tienen hora de venta.
+ */
+export type ReportSales = ReportResponse<
+  ReportSalesKpi,
+  {
+    trendUnit: ReportSalesTrendUnit;
+    /** Ventas netas y tickets por tramo; `previous*` alineado por posición. */
+    trend: (ReportSeriesPoint & {
+      tickets: number;
+      previousTickets: number | null;
+    })[];
+    /** Con 2 o más sucursales: ventas netas de cada una, alineadas con `trend`. */
+    branchTrend: { id: string; name: string; values: MoneyMinor[] }[];
+    /** 24 horas (0 a 23): facturado y tickets del período y del comparado. */
+    byHour: {
+      hour: number;
+      amountMinor: MoneyMinor;
+      tickets: number;
+      previousAmountMinor: MoneyMinor | null;
+    }[];
+    /** Sólo celdas con ventas. `weekday`: 1 = lunes … 7 = domingo. */
+    heatmap: {
+      weekday: number;
+      hour: number;
+      amountMinor: MoneyMinor;
+      tickets: number;
+    }[];
+    paymentMethods: ReportBreakdownItem[];
+    categories: (ReportBreakdownItem & { units: number })[];
+  },
+  {
+    branches: ReportSalesBranchRow[];
+    /** Lectura rápida del período. */
+    insights: {
+      peakHour: {
+        hour: number;
+        amountMinor: MoneyMinor;
+        sharePct: number | null;
+      } | null;
+      bestWeekday: {
+        weekday: number;
+        amountMinor: MoneyMinor;
+        sharePct: number | null;
+      } | null;
+      /** Sólo con 2 o más sucursales. */
+      topBranch: { id: string; name: string; sharePct: number | null } | null;
+      discounts: ReportKpi;
+      returns: ReportKpi;
+      /** Devuelto / facturado × 100. */
+      returnRatePct: number | null;
+      /** Unidades por ticket, con un decimal. */
+      unitsPerTicket: number | null;
+    };
+  }
+>;

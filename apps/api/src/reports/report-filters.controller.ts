@@ -12,6 +12,7 @@ import { JwtAccessGuard } from "../auth/jwt-access.guard";
 import { ReportAccessService } from "./report-access.service";
 import { ReportFiltersQuery } from "./report-filters.dto";
 import { ReportOverviewService } from "./report-overview.service";
+import { ReportSalesService } from "./report-sales.service";
 
 /**
  * Reportes a nivel organizacion: pueden abarcar varias sucursales, por eso no usan
@@ -23,6 +24,7 @@ export class ReportFiltersController {
   constructor(
     private readonly access: ReportAccessService,
     private readonly overviewReport: ReportOverviewService,
+    private readonly salesReport: ReportSalesService,
   ) {}
 
   @Get("filter-options") filterOptions(
@@ -38,5 +40,14 @@ export class ReportFiltersController {
     @Query() query: ReportFiltersQuery,
   ) {
     return this.overviewReport.overview(req.auth!.sub, organizationId, query);
+  }
+
+  /** Pestaña Ventas (SISTEMA-115). */
+  @Get("sales") sales(
+    @Req() req: AuthenticatedRequest,
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Query() query: ReportFiltersQuery,
+  ) {
+    return this.salesReport.sales(req.auth!.sub, organizationId, query);
   }
 }

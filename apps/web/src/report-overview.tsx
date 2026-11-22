@@ -1,27 +1,12 @@
-import {
-  createContext,
-  lazy,
-  Suspense,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { useMemo, type CSSProperties, type ReactElement } from "react";
 import {
   AlertTriangle,
   Boxes,
   CalendarClock,
   ChevronRight,
   CreditCard,
-  Info,
   Package,
   ReceiptText,
-  RefreshCw,
   Store,
   Tags,
   TrendingUp,
@@ -29,107 +14,25 @@ import {
   Wallet,
 } from "lucide-react";
 import type { ReportAlert, ReportOverview } from "@gestion/contracts";
-import type { EChartsCoreOption } from "echarts/core";
 import { paymentLabels, rankingOption, trendOption } from "./lib/report-charts";
 import { formatMoneyMinor } from "./lib/report-format";
 import { getReportOverview } from "./lib/reports-api";
-import {
-  tocaAnimarReportes,
-  type TipoAnimacionGrafico,
-} from "./lib/animacion-reportes";
 import { comparisonOptions, type ReportView } from "./lib/report-view";
 import { ReportCashClosuresPanel } from "./report-cash-closures";
 import { ReportKpiCard } from "./report-kpi";
-import { useEntrada, type EstadoEntrada } from "./lib/use-reportes-movimiento";
+import {
+  ReportPanel as Panel,
+  ReportPanelChart as Chart,
+  ReportUpdatingFrame,
+  ReportWarnings,
+} from "./report-panel";
+import { useReportResult } from "./lib/use-report-result";
 import {
   ReportEmptyState,
   ReportErrorState,
   ReportSkeleton,
   reportCardClass,
 } from "./report-states";
-
-const ReportChart = lazy(() => import("./report-chart"));
-
-/**
- * Entrada del panel que contiene a un gráfico: el gráfico se monta (y se dibuja)
- * recién cuando el panel entra en pantalla.
- */
-const EntradaPanel = createContext<{ animar: boolean; estado: EstadoEntrada }>({
-  animar: false,
-  estado: "lista",
-});
-
-/**
- * Tarjeta de un widget. Con la entrada animada aparece la primera vez que
- * entra en pantalla, no todas juntas al cargar (SISTEMA-87, SISTEMA-90).
- */
-function Panel({
-  title,
-  icon,
-  hint,
-  orden = 0,
-  animar = false,
-  children,
-}: {
-  title: string;
-  icon: ReactNode;
-  hint?: string;
-  /** Orden de aparición dentro de su fila. */
-  orden?: number;
-  animar?: boolean;
-  children: ReactNode;
-}): ReactElement {
-  const [ref, estado] = useEntrada<HTMLElement>(animar);
-  return (
-    <section
-      ref={ref}
-      data-entrada={estado}
-      className={`${reportCardClass} reportes-entrada reportes-panel min-w-0 p-4`}
-      style={{ "--orden": orden } as CSSProperties}
-    >
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-        <span className="text-marca-535">{icon}</span>
-        {title}
-      </h2>
-      {hint ? (
-        <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p>
-      ) : null}
-      <div className="mt-3">
-        <EntradaPanel.Provider value={{ animar, estado }}>
-          {children}
-        </EntradaPanel.Provider>
-      </div>
-    </section>
-  );
-}
-
-function Chart({
-  option,
-  label,
-  height = 260,
-  tipo,
-}: {
-  option: EChartsCoreOption;
-  label: string;
-  height?: number;
-  tipo: TipoAnimacionGrafico;
-}): ReactElement {
-  const { animar, estado } = useContext(EntradaPanel);
-  // Mismo alto mientras espera: nada salta cuando el gráfico aparece.
-  const lugar = <div style={{ height }} />;
-  if (estado === "pendiente") return lugar;
-  return (
-    <Suspense fallback={lugar}>
-      <ReportChart
-        option={option}
-        label={label}
-        height={height}
-        animacion={tipo}
-        animarEntrada={animar}
-      />
-    </Suspense>
-  );
-}
 
 const alertText: Record<
   ReportAlert["kind"],
@@ -167,63 +70,19 @@ export function ReportOverviewTab({
   active?: boolean;
 }): ReactElement {
   const { from, to, branchId, comparison } = view;
-  // El resultado se guarda con sus filtros. Al cambiar un filtro se sigue viendo
-  // lo anterior (apenas atenuado y con "Actualizando…") hasta que llega lo
-  // nuevo, y entonces números y gráficos van de lo anterior a lo nuevo
-  // (SISTEMA-90). De otra organización o con error nunca se muestra lo viejo.
-  const key = JSON.stringify([organizationId, from, to, branchId, comparison]);
-  const [result, setResult] = useState<{
-    key: string;
-    organizationId: string;
-    data: ReportOverview & { guardadaEl?: number };
-  }>();
-  const [error, setError] = useState<string>();
-  const fresh = result?.key === key;
-  const data =
-    fresh || (!error && result?.organizationId === organizationId)
-      ? result?.data
-      : undefined;
-  const actualizando = Boolean(data) && !fresh;
-  const load = useCallback(() => {
-    let current = true;
-    setError(undefined);
-    getReportOverview(token, organizationId, {
-      from,
-      to,
-      branchId,
-      comparison,
-    })
-      .then((next) => {
-        if (current) setResult({ key, organizationId, data: next });
-      })
-      .catch((cause: unknown) => {
-        if (current)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "No se pudo cargar el Resumen.",
-          );
-      });
-    return () => {
-      current = false;
-    };
-  }, [token, organizationId, from, to, branchId, comparison, key]);
-  useEffect(() => {
-    if (active) return load();
-  }, [active, load]);
-  // La entrada animada se decide una vez, cuando el Resumen se ve por primera
-  // vez con datos: sólo la primera vez de la sesión (SISTEMA-87).
-  // Se decide una sola vez por pantalla: en desarrollo React repite los
-  // efectos, y la segunda vez ya figuraba como vista y no animaba.
-  const decision = useRef<boolean>(undefined);
-  const [animar, setAnimar] = useState<boolean>();
-  useEffect(() => {
-    if (!active || !data) return;
-    decision.current ??= tocaAnimarReportes() && !data.guardadaEl;
-    setAnimar(decision.current);
-  }, [active, data]);
-  // Cada bloque recuerda si ya hizo su entrada: un cambio de filtros no la
-  // repite, y los de más abajo la hacen cuando se ven por primera vez.
+  const { data, error, actualizando, animar, load } = useReportResult({
+    active,
+    organizationId,
+    filtros: [from, to, branchId, comparison],
+    cargar: () =>
+      getReportOverview(token, organizationId, {
+        from,
+        to,
+        branchId,
+        comparison,
+      }),
+    errorPorDefecto: "No se pudo cargar el Resumen.",
+  });
 
   if (!data || animar === undefined)
     return error ? (
@@ -232,34 +91,17 @@ export function ReportOverviewTab({
       <ReportSkeleton />
     );
   return (
-    <div className="relative" aria-busy={actualizando}>
-      {actualizando ? (
-        <p
-          role="status"
-          className="reportes-actualizando pointer-events-none absolute -top-2.5 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-marca-908 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-marca-535 shadow-sm"
-        >
-          <RefreshCw
-            size={11}
-            className="motion-safe:animate-spin"
-            aria-hidden
-          />
-          Actualizando…
-        </p>
+    <ReportUpdatingFrame actualizando={actualizando}>
+      {data.guardadaEl ? (
+        <ReportCopiaGuardada guardadaEl={data.guardadaEl} />
       ) : null}
-      <div
-        className={`transition-opacity duration-200 ${actualizando ? "opacity-70 delay-150" : ""}`}
-      >
-        {data.guardadaEl ? (
-          <ReportCopiaGuardada guardadaEl={data.guardadaEl} />
-        ) : null}
-        <ReportOverviewContent
-          data={data}
-          comparison={comparison}
-          onOpenInventory={onOpenInventory}
-          animar={animar}
-        />
-      </div>
-    </div>
+      <ReportOverviewContent
+        data={data}
+        comparison={comparison}
+        onOpenInventory={onOpenInventory}
+        animar={animar}
+      />
+    </ReportUpdatingFrame>
   );
 }
 
@@ -385,26 +227,7 @@ export function ReportOverviewContent({
       </div>
       {/* Aclaraciones sobre los datos (por ejemplo, ventas sin costo de lote):
           una nota sobria debajo de las tarjetas que explica, no una alarma. */}
-      {meta.dataQuality.warnings.length ? (
-        <ul className="space-y-1.5" aria-label="Aclaraciones sobre los datos">
-          {meta.dataQuality.warnings.map((warning) => (
-            <li
-              key={warning}
-              className="flex items-start gap-2.5 rounded-xl border border-niebla-913 bg-slate-50 px-3.5 py-2.5 text-xs leading-5 text-slate-600"
-            >
-              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-marca-970 text-marca-535">
-                <Info size={12} aria-hidden />
-              </span>
-              <span>
-                <strong className="font-semibold text-slate-800">
-                  Para tener en cuenta:
-                </strong>{" "}
-                {warning}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <ReportWarnings warnings={meta.dataQuality.warnings} />
 
       {empty ? (
         <div className={reportCardClass}>

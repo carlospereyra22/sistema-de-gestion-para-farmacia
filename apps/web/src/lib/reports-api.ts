@@ -4,6 +4,8 @@ import {
   REPORT_DEFAULTS,
   type ReportFilterOptions,
   type ReportOverview,
+  type ReportSales,
+  type ReportSalesTrendUnit,
 } from "@gestion/contracts";
 import {
   argentineToday,
@@ -89,6 +91,37 @@ export async function getReportOverview(
     ...((await response.json()) as ReportOverview),
     ...(guardada ? { guardadaEl: guardada } : {}),
   };
+}
+
+/**
+ * Pestaña Ventas (SISTEMA-115). Sólo con conexión: sin internet avisa en vez
+ * de mostrar datos viejos.
+ */
+export async function getReportSales(
+  token: string,
+  organizationId: string,
+  view: Parameters<typeof reportQuery>[0] & {
+    granularity?: ReportSalesTrendUnit;
+  },
+): Promise<ReportSales> {
+  const query = new URLSearchParams(reportQuery(view));
+  if (view.granularity) query.set("granularity", view.granularity);
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiBaseUrl}/organizations/${organizationId}/reports/sales?${query.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (cause) {
+    if (cause instanceof SinConexionError)
+      throw new SinConexionError(
+        "Sin conexión: la pestaña Ventas necesita internet. El Resumen sí se puede ver con lo guardado en la PC.",
+      );
+    throw cause;
+  }
+  if (!response.ok)
+    throw await reportError(response, "No se pudo cargar Ventas.");
+  return (await response.json()) as ReportSales;
 }
 
 /** Períodos que la PC guarda para ver reportes sin conexión. */

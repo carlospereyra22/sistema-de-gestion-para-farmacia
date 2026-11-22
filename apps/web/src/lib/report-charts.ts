@@ -15,13 +15,18 @@ const compact = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 1,
 });
 /** Eje en pesos abreviados: 125000000 centavos -> "1,3 M". */
-const axisMoney = (minor: number) => compact.format(minor / 100);
-const tooltipMoney = (minor: number) => formatMoneyMinor(String(minor));
+export const axisMoney = (minor: number) => compact.format(minor / 100);
+export const tooltipMoney = (minor: number) => formatMoneyMinor(String(minor));
 
-/** Etiqueta del eje X: "05/10" por dia, "oct 26" por mes. */
-export function bucketLabel(bucket: string, granularity: "day" | "month") {
+/** Etiqueta del eje X: "05/10" por dia, "sem 05/10" por semana, "oct 26" por mes. */
+export function bucketLabel(
+  bucket: string,
+  granularity: "day" | "week" | "month",
+) {
   if (granularity === "day")
     return `${bucket.slice(8, 10)}/${bucket.slice(5, 7)}`;
+  if (granularity === "week")
+    return `sem ${bucket.slice(8, 10)}/${bucket.slice(5, 7)}`;
   return new Date(`${bucket}T12:00:00`).toLocaleDateString("es-AR", {
     month: "short",
     year: "2-digit",
@@ -31,7 +36,7 @@ export function bucketLabel(bucket: string, granularity: "day" | "month") {
 /** Evolucion de ventas netas: area del periodo actual y linea punteada del anterior. */
 export function trendOption(
   points: readonly ReportSeriesPoint[],
-  granularity: "day" | "month",
+  granularity: "day" | "week" | "month",
   comparisonLabel: string | null,
 ) {
   const series: Record<string, unknown>[] = [

@@ -33,6 +33,9 @@ export const MOVIMIENTO = {
   lineaComparativaRetraso: 550,
   /** Barras horizontales: espera inicial. Duración y desfase según cantidad. */
   barrasRetraso: 300,
+  /** Mapa de calor: cada celda y la cascada completa (SISTEMA-115). */
+  mapaCelda: 900,
+  mapaCascada: 1200,
   /** Gráfico que ya se ve y cambia por un filtro. */
   graficoActualizacion: 500,
   /** Elementos nuevos que aparecen en un gráfico ya dibujado. */
@@ -139,7 +142,13 @@ export function tocaAnimarReportes(entorno: Entorno = entornoDelNavegador()) {
   }
 }
 
-export type TipoAnimacionGrafico = "linea" | "barras";
+/**
+ * - `linea`: el trazo avanza de izquierda a derecha.
+ * - `barras`: crecen desde el eje, de a una (también columnas).
+ * - `torta`: se abre girando desde arriba (SISTEMA-115).
+ * - `mapa`: las celdas del mapa de calor aparecen en cascada (SISTEMA-115).
+ */
+export type TipoAnimacionGrafico = "linea" | "barras" | "torta" | "mapa";
 /**
  * - `entrada`: la primera vez que se dibuja (línea de izquierda a derecha,
  *   barras que crecen desde el eje de a una).
@@ -189,6 +198,34 @@ export function opcionAnimada(
         animationDelay: 0,
         animationEasing: "cubicOut" as const,
       })),
+    };
+  if (tipo === "torta")
+    return {
+      ...comun,
+      series: series.map((serie) => ({
+        ...serie,
+        animationType: "expansion",
+        animationDuration: MOVIMIENTO.lineaPrincipal,
+        animationEasing: curvaEntrada,
+        animationDelay: MOVIMIENTO.barrasRetraso,
+      })),
+    };
+  if (tipo === "mapa")
+    return {
+      ...comun,
+      series: series.map((serie) => {
+        const cantidad = Array.isArray(serie.data) ? serie.data.length : 0;
+        // La cascada entera dura lo mismo sea cual sea la cantidad de celdas.
+        const desfase =
+          cantidad > 1 ? MOVIMIENTO.mapaCascada / (cantidad - 1) : 0;
+        return {
+          ...serie,
+          animationDuration: MOVIMIENTO.mapaCelda,
+          animationEasing: curvaEntrada,
+          animationDelay: (indice: number) =>
+            MOVIMIENTO.barrasRetraso + indice * desfase,
+        };
+      }),
     };
   if (tipo === "linea")
     return {

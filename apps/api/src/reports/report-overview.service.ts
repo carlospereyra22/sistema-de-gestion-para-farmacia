@@ -18,31 +18,18 @@ import {
   unavailableKpi,
 } from "./report-math";
 import { argentineDate, type ReportRange } from "./report-period";
-
-const TZ = "America/Argentina/Buenos_Aires";
-
-/** Linea neta de venta y su parte devuelta, redondeada a centavos. */
-const LINE = Prisma.sql`(si."unitPriceMinor" * si.quantity - si."discountMinor")`;
-const RETURNED = Prisma.sql`round(${LINE}::numeric * cri.quantity / si.quantity)`;
-
-type BranchTotals = {
-  tickets: number;
-  /** Facturado (Sale.totalMinor) y devuelto en el periodo: neto = invoiced − returned. */
-  invoiced: bigint;
-  returned: bigint;
-  units: number;
-  costedSales: bigint;
-  cost: bigint;
-};
-
-const emptyTotals = (): BranchTotals => ({
-  tickets: 0,
-  invoiced: 0n,
-  returned: 0n,
-  units: 0,
-  costedSales: 0n,
-  cost: 0n,
-});
+import {
+  emptyTotals,
+  LINE,
+  netOf,
+  profitOf,
+  ReportSalesData,
+  RETURNED,
+  returnsWhere,
+  salesWhere,
+  sumTotals,
+  TZ,
+} from "./report-sales-data";
 
 /** Filtros que el Resumen no usa: se rechazan en vez de ignorarlos en silencio. */
 const unsupported = [
@@ -63,6 +50,7 @@ export class ReportOverviewService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: ReportAccessService,
+    private readonly salesData: ReportSalesData,
   ) {}
 
   async overview(
@@ -78,15 +66,10 @@ export class ReportOverviewService {
       );
     const scope = await this.access.scope(actorId, organizationId, query, now);
     const { period, branchIds, access } = scope;
-    const sales = (range: ReportRange) => Prisma.sql`
-      s."organizationId" = ${organizationId}::uuid
-      AND s."branchId" = ANY(${branchIds}::uuid[])
-      AND s.status = 'COMPLETED'
-      AND s."completedAt" >= ${range.start} AND s."completedAt" < ${range.end}`;
-    const returns = (range: ReportRange) => Prisma.sql`
-      cr."organizationId" = ${organizationId}::uuid
-      AND cr."branchId" = ANY(${branchIds}::uuid[])
-      AND cr."createdAt" >= ${range.start} AND cr."createdAt" < ${range.end}`;
+    const sales = (range: ReportRange) =>
+      salesWhere(organizationId, branchIds, range);
+    const returns = (range: ReportRange) =>
+      returnsWhere(organizationId, branchIds, range);
 
     const granularity = trendGranularity(period);
     const today = argentineDate(now);
@@ -107,32 +90,23 @@ export class ReportOverviewService {
       branches,
       cashClosures,
     ] = await Promise.all([
-      this.branchTotals(sales(period), returns(period)),
+      this.salesData.branchTotals(sales(period), returns(period)),
       period.previous
-        ? this.branchTotals(sales(period.previous), returns(period.previous))
+        ? this.salesData.branchTotals(
+            sales(period.previous),
+            returns(period.previous),
+          )
         : null,
-      this.trend(sales(period), returns(period), granularity),
+      this.salesData.trend(sales(period), returns(period), granularity),
       period.previous
-        ? this.trend(
+        ? this.salesData.trend(
             sales(period.previous),
             returns(period.previous),
             granularity,
           )
         : null,
-      this.categories(organizationId, sales(period), returns(period)),
-      this.prisma.$queryRaw<{ method: string; amount: bigint }[]>`
-        WITH s AS (
-          SELECT s.id, s."totalMinor" FROM "Sale" s WHERE ${sales(period)}
-        ), p AS (
-          SELECT sp."saleId", sp.method::text AS method, sum(sp."amountMinor") AS amount
-          FROM "SalePayment" sp JOIN s ON s.id = sp."saleId" GROUP BY 1, 2
-        ), t AS (SELECT "saleId", sum(amount) AS paid FROM p GROUP BY 1)
-        SELECT p.method, sum(
-          p.amount - CASE WHEN p.method = 'CASH'
-            THEN greatest(t.paid - s."totalMinor", 0) ELSE 0 END
-        )::bigint AS amount
-        FROM p JOIN t ON t."saleId" = p."saleId" JOIN s ON s.id = p."saleId"
-        GROUP BY p.method ORDER BY amount DESC`,
+      this.salesData.categories(organizationId, sales(period), returns(period)),
+      this.salesData.payments(sales(period)),
       this.products(sales(period), returns(period)),
       this.alerts(branchIds, today, lowStock, expiryDays),
       this.prisma.branch.findMany({
@@ -146,22 +120,10 @@ export class ReportOverviewService {
       }),
     ]);
 
-    const sum = (rows: Map<string, BranchTotals>) =>
-      [...rows.values()].reduce(
-        (total, row) => ({
-          tickets: total.tickets + row.tickets,
-          invoiced: total.invoiced + row.invoiced,
-          returned: total.returned + row.returned,
-          units: total.units + row.units,
-          costedSales: total.costedSales + row.costedSales,
-          cost: total.cost + row.cost,
-        }),
-        emptyTotals(),
-      );
-    const total = sum(current);
-    const before = previous ? sum(previous) : null;
-    const profit = (row: BranchTotals) => row.costedSales - row.cost;
-    const net = (row: BranchTotals) => row.invoiced - row.returned;
+    const total = sumTotals(current.values());
+    const before = previous ? sumTotals(previous.values()) : null;
+    const profit = profitOf;
+    const net = netOf;
 
     const warnings: string[] = [];
     if (access.profitability && net(total) > 0n) {
@@ -225,9 +187,11 @@ export class ReportOverviewService {
         trendGranularity: granularity,
         salesTrend: buckets.map((bucket, index) => ({
           bucket,
-          value: (trend.get(bucket) ?? 0n).toString(),
+          value: (trend.get(bucket)?.amount ?? 0n).toString(),
           previous: previousTrend
-            ? (previousTrend.get(previousBuckets[index] ?? "") ?? 0n).toString()
+            ? (
+                previousTrend.get(previousBuckets[index] ?? "")?.amount ?? 0n
+              ).toString()
             : null,
         })),
         salesByCategory: breakdown(categories),
@@ -265,149 +229,6 @@ export class ReportOverviewService {
         cashClosures,
       },
     };
-  }
-
-  /**
-   * Totales por sucursal. `units`, `costedSales` y `cost` ya vienen netos de las
-   * devoluciones del periodo (se restan en la fecha de la devolucion); el importe
-   * devuelto queda aparte en `returned` para que el ticket promedio use lo facturado.
-   */
-  private async branchTotals(sales: Prisma.Sql, returns: Prisma.Sql) {
-    const [tickets, lines, returned] = await Promise.all([
-      this.prisma.$queryRaw<
-        { branchId: string; tickets: number; invoiced: bigint }[]
-      >`
-        SELECT s."branchId" AS "branchId", count(*)::int AS tickets,
-          coalesce(sum(s."totalMinor"), 0)::bigint AS invoiced
-        FROM "Sale" s WHERE ${sales} GROUP BY s."branchId"`,
-      this.prisma.$queryRaw<
-        { branchId: string; units: number; costedSales: bigint; cost: bigint }[]
-      >`
-        SELECT s."branchId" AS "branchId",
-          coalesce(sum(CASE WHEN si."productId" IS NOT NULL THEN si.quantity END), 0)::int AS units,
-          coalesce(sum(CASE WHEN pl.id IS NOT NULL THEN ${LINE} END), 0)::bigint AS "costedSales",
-          coalesce(sum(pl."unitCostMinor" * si.quantity), 0)::bigint AS cost
-        FROM "Sale" s
-        JOIN "SaleItem" si ON si."saleId" = s.id
-        LEFT JOIN "ProductLot" pl ON pl.id = si."lotId"
-        WHERE ${sales} GROUP BY s."branchId"`,
-      this.prisma.$queryRaw<
-        {
-          branchId: string;
-          amount: bigint;
-          units: number;
-          costedAmount: bigint;
-          cost: bigint;
-        }[]
-      >`
-        SELECT cr."branchId" AS "branchId",
-          coalesce(sum(${RETURNED}), 0)::bigint AS amount,
-          coalesce(sum(CASE WHEN si."productId" IS NOT NULL THEN cri.quantity END), 0)::int AS units,
-          coalesce(sum(CASE WHEN pl.id IS NOT NULL THEN ${RETURNED} END), 0)::bigint AS "costedAmount",
-          coalesce(sum(pl."unitCostMinor" * cri.quantity), 0)::bigint AS cost
-        FROM "CustomerReturn" cr
-        JOIN "CustomerReturnItem" cri ON cri."customerReturnId" = cr.id
-        JOIN "SaleItem" si ON si.id = cri."saleItemId"
-        LEFT JOIN "ProductLot" pl ON pl.id = si."lotId"
-        WHERE ${returns} GROUP BY cr."branchId"`,
-    ]);
-    const rows = new Map<string, BranchTotals>();
-    const row = (branchId: string) => {
-      const found = rows.get(branchId) ?? emptyTotals();
-      rows.set(branchId, found);
-      return found;
-    };
-    for (const item of tickets) {
-      row(item.branchId).tickets = item.tickets;
-      row(item.branchId).invoiced += item.invoiced;
-    }
-    for (const item of lines) {
-      const target = row(item.branchId);
-      target.units += item.units;
-      target.costedSales += item.costedSales;
-      target.cost += item.cost;
-    }
-    for (const item of returned) {
-      const target = row(item.branchId);
-      target.returned += item.amount;
-      target.units -= item.units;
-      target.costedSales -= item.costedAmount;
-      target.cost -= item.cost;
-    }
-    return rows;
-  }
-
-  /** Ventas netas por dia o mes local: facturado − devoluciones del tramo. */
-  private async trend(
-    sales: Prisma.Sql,
-    returns: Prisma.Sql,
-    unit: "day" | "month",
-  ) {
-    const [invoiced, returned] = await Promise.all([
-      this.prisma.$queryRaw<{ bucket: string; amount: bigint }[]>`
-        SELECT to_char(date_trunc(${unit}, s."completedAt" AT TIME ZONE ${TZ}), 'YYYY-MM-DD') AS bucket,
-          sum(s."totalMinor")::bigint AS amount
-        FROM "Sale" s WHERE ${sales} GROUP BY 1`,
-      this.prisma.$queryRaw<{ bucket: string; amount: bigint }[]>`
-        SELECT to_char(date_trunc(${unit}, cr."createdAt" AT TIME ZONE ${TZ}), 'YYYY-MM-DD') AS bucket,
-          sum(${RETURNED})::bigint AS amount
-        FROM "CustomerReturn" cr
-        JOIN "CustomerReturnItem" cri ON cri."customerReturnId" = cr.id
-        JOIN "SaleItem" si ON si.id = cri."saleItemId"
-        WHERE ${returns} GROUP BY 1`,
-    ]);
-    const buckets = new Map<string, bigint>();
-    for (const row of invoiced)
-      buckets.set(row.bucket, (buckets.get(row.bucket) ?? 0n) + row.amount);
-    for (const row of returned)
-      buckets.set(row.bucket, (buckets.get(row.bucket) ?? 0n) - row.amount);
-    return buckets;
-  }
-
-  /** Ventas netas por la categoria asignada al producto. */
-  private async categories(
-    organizationId: string,
-    sales: Prisma.Sql,
-    returns: Prisma.Sql,
-  ) {
-    const key = Prisma.sql`CASE WHEN si."productId" IS NULL THEN 'manual'
-      ELSE coalesce(p."categoryId"::text, 'none') END`;
-    const [sold, returned, names] = await Promise.all([
-      this.prisma.$queryRaw<{ key: string; amount: bigint }[]>`
-        SELECT ${key} AS key, sum(${LINE})::bigint AS amount
-        FROM "Sale" s JOIN "SaleItem" si ON si."saleId" = s.id
-        LEFT JOIN "Product" p ON p.id = si."productId"
-        WHERE ${sales} GROUP BY 1`,
-      this.prisma.$queryRaw<{ key: string; amount: bigint }[]>`
-        SELECT ${key} AS key, sum(${RETURNED})::bigint AS amount
-        FROM "CustomerReturn" cr
-        JOIN "CustomerReturnItem" cri ON cri."customerReturnId" = cr.id
-        JOIN "SaleItem" si ON si.id = cri."saleItemId"
-        LEFT JOIN "Product" p ON p.id = si."productId"
-        WHERE ${returns} GROUP BY 1`,
-      this.prisma.category.findMany({
-        where: { organizationId },
-        select: { id: true, name: true },
-      }),
-    ]);
-    const label = new Map(names.map((item) => [item.id, item.name]));
-    const totals = new Map<string, bigint>();
-    for (const row of sold) totals.set(row.key, row.amount);
-    for (const row of returned)
-      totals.set(row.key, (totals.get(row.key) ?? 0n) - row.amount);
-    return [...totals]
-      .map(([id, value]) => ({
-        id: id === "manual" || id === "none" ? null : id,
-        name:
-          id === "manual"
-            ? "Conceptos manuales"
-            : id === "none"
-              ? "Sin categoría"
-              : (label.get(id) ?? "Categoría"),
-        value,
-      }))
-      .filter((row) => row.value !== 0n)
-      .sort((left, right) => (right.value > left.value ? 1 : -1));
   }
 
   /** Top 10 productos por unidades netas de devoluciones. */

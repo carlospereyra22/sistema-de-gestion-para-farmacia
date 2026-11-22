@@ -32,6 +32,7 @@ import {
 import { ReportFiltersBar } from "./report-filters-bar";
 import { workspaceLocation } from "./lib/workspace-location";
 import { ReportOverviewTab } from "./report-overview";
+import { ReportSalesTab } from "./report-sales";
 import {
   ReportEmptyState,
   ReportErrorState,
@@ -50,8 +51,6 @@ const tabIcons: Record<ReportTab, LucideIcon> = {
 };
 
 const upcoming: Partial<Record<ReportTab, string>> = {
-  sales:
-    "Ventas por día y por hora, mapa de calor, medios de pago y detalle por sucursal.",
   profitability:
     "Ganancia bruta estimada, margen, costo de ventas y productos más rentables.",
   products: "Más vendidos, productos sin movimiento y rotación contra margen.",
@@ -239,6 +238,15 @@ function ReportTabContent({
         organizationId={organizationId}
         view={view}
         onOpenInventory={onOpenInventory}
+      />
+    );
+  if (tab === "sales")
+    return (
+      <ReportSalesTab
+        active={active}
+        token={token}
+        organizationId={organizationId}
+        view={view}
       />
     );
   return (

@@ -155,6 +155,37 @@ describe("gráficos de Reportes (SISTEMA-90)", () => {
     expect(barras!.data).toEqual(productos.series[0]!.data);
   });
 
+  it("la torta se abre con la misma curva y termina antes de 2,5 s (SISTEMA-115)", () => {
+    const torta = {
+      series: [{ type: "pie", data: [{ name: "A", value: 1 }] }],
+    };
+    const [serie] = series(opcionAnimada(torta, "torta", "entrada"));
+    expect(serie!.animationType).toBe("expansion");
+    expect(
+      (serie!.animationDelay as number) + (serie!.animationDuration as number),
+    ).toBeLessThan(2500);
+    expect(serie!.data).toEqual(torta.series[0]!.data);
+  });
+
+  it("el mapa de calor aparece en cascada, igual de largo con pocas o muchas celdas", () => {
+    for (const cantidad of [3, 40, 168]) {
+      const mapa = {
+        series: [
+          {
+            type: "heatmap",
+            data: Array.from({ length: cantidad }, (_, i) => [i % 24, 0, i]),
+          },
+        ],
+      };
+      const [serie] = series(opcionAnimada(mapa, "mapa", "entrada"));
+      const retraso = serie!.animationDelay as (indice: number) => number;
+      expect(retraso(1)).toBeGreaterThan(retraso(0));
+      expect(
+        retraso(cantidad - 1) + (serie!.animationDuration as number),
+      ).toBeLessThan(2500);
+    }
+  });
+
   it("al cambiar filtros interpola corto; con la sesión ya animada aparece directo", () => {
     const pagos = rankingOption(
       [

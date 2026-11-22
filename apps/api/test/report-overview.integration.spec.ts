@@ -7,6 +7,8 @@ import { PrismaService } from "../src/prisma/prisma.service";
 import type { EnvironmentService } from "../src/config/environment.service";
 import { ReportAccessService } from "../src/reports/report-access.service";
 import { ReportOverviewService } from "../src/reports/report-overview.service";
+import { ReportSalesData } from "../src/reports/report-sales-data";
+import { ReportSalesService } from "../src/reports/report-sales.service";
 
 /**
  * Caso armado a mano (octubre 2026, importes en centavos):
@@ -19,6 +21,7 @@ import { ReportOverviewService } from "../src/reports/report-overview.service";
  */
 describe("report overview isolated schema", () => {
   let app: TestingModule, db: PrismaService, reports: ReportOverviewService;
+  let salesReport: ReportSalesService;
   const schema = `report_overview_${randomUUID().replaceAll("-", "")}`;
   const now = new Date("2026-11-05T12:00:00Z");
   const october = { from: "2026-10-01", to: "2026-10-31" };
@@ -51,7 +54,16 @@ describe("report overview isolated schema", () => {
       databaseUrl: url.toString(),
     } as EnvironmentService);
     await db.$connect();
-    reports = new ReportOverviewService(db, new ReportAccessService(db));
+    reports = new ReportOverviewService(
+      db,
+      new ReportAccessService(db),
+      new ReportSalesData(db),
+    );
+    salesReport = new ReportSalesService(
+      db,
+      new ReportAccessService(db),
+      new ReportSalesData(db),
+    );
     fixture = await seed();
   }, 100000);
   afterAll(async () => {
@@ -421,5 +433,102 @@ describe("report overview isolated schema", () => {
         now,
       ),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  // Pestaña Ventas (SISTEMA-115) sobre el mismo caso. 10/10 y 31/10 son sábado
+  // y 20/10 martes; V1 y V2 a las 10 local, V3 a las 23:59 local.
+  it("Ventas: KPIs iguales al Resumen y lectura rápida del período", async () => {
+    const [sales, overview] = await Promise.all([
+      salesReport.sales(fixture.owner, fixture.org.id, october, now),
+      reports.overview(fixture.owner, fixture.org.id, october, now),
+    ]);
+    expect(sales.kpis.netSales).toEqual(overview.kpis.netSales);
+    expect(sales.kpis.averageTicket).toEqual(overview.kpis.averageTicket);
+    expect(sales.kpis.unitsSold).toEqual(overview.kpis.unitsSold);
+    expect(sales.kpis.tickets).toMatchObject({ value: "3", previous: "1" });
+    expect(sales.charts.paymentMethods).toEqual(overview.charts.paymentMethods);
+    expect(sales.tables.insights).toMatchObject({
+      peakHour: { hour: 10, amountMinor: "4000", sharePct: 80 },
+      bestWeekday: { weekday: 6, amountMinor: "4000", sharePct: 80 },
+      topBranch: { id: fixture.centro.id, sharePct: 75 },
+      returns: { value: "1000", previous: "0" },
+      returnRatePct: 20,
+      unitsPerTicket: 1,
+    });
+  });
+
+  it("Ventas: hora, mapa de calor y sucursales concilian", async () => {
+    const result = await salesReport.sales(
+      fixture.owner,
+      fixture.org.id,
+      october,
+      now,
+    );
+    const sum = (values: string[]) =>
+      values.reduce((total, value) => total + BigInt(value), 0n).toString();
+    // Facturado (5000), no neto: las devoluciones no tienen hora de venta.
+    expect(result.charts.byHour).toHaveLength(24);
+    expect(sum(result.charts.byHour.map((row) => row.amountMinor))).toBe(
+      "5000",
+    );
+    expect(result.charts.byHour[10]).toMatchObject({
+      amountMinor: "4000",
+      tickets: 2,
+      previousAmountMinor: "2000",
+    });
+    expect(result.charts.heatmap).toEqual([
+      { weekday: 2, hour: 10, amountMinor: "1000", tickets: 1 },
+      { weekday: 6, hour: 10, amountMinor: "3000", tickets: 1 },
+      { weekday: 6, hour: 23, amountMinor: "1000", tickets: 1 },
+    ]);
+    const centro = result.tables.branches.find(
+      (row) => row.id === fixture.centro.id,
+    );
+    expect(centro).toMatchObject({
+      netSalesMinor: "3000",
+      previousNetSalesMinor: "2000",
+      changePct: 50,
+      tickets: 2,
+      averageTicketMinor: "2000",
+    });
+    expect(sum(result.tables.branches.map((row) => row.netSalesMinor))).toBe(
+      result.kpis.netSales.value,
+    );
+    // Con dos sucursales hay una línea por sucursal que suma su neto.
+    expect(result.charts.branchTrend).toHaveLength(2);
+    for (const line of result.charts.branchTrend)
+      expect(sum(line.values)).toBe(
+        result.tables.branches.find((row) => row.id === line.id)!.netSalesMinor,
+      );
+  });
+
+  it("Ventas: agrupa por semana y rechaza la hora en la evolución", async () => {
+    const weekly = await salesReport.sales(
+      fixture.owner,
+      fixture.org.id,
+      { ...october, granularity: "week" },
+      now,
+    );
+    expect(weekly.charts.trendUnit).toBe("week");
+    expect(weekly.charts.trend.map((row) => row.bucket)).toEqual([
+      "2026-09-28",
+      "2026-10-05",
+      "2026-10-12",
+      "2026-10-19",
+      "2026-10-26",
+    ]);
+    expect(
+      weekly.charts.trend
+        .reduce((total, row) => total + BigInt(row.value), 0n)
+        .toString(),
+    ).toBe("4000");
+    await expect(
+      salesReport.sales(
+        fixture.owner,
+        fixture.org.id,
+        { ...october, granularity: "hour" },
+        now,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

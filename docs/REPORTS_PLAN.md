@@ -251,6 +251,40 @@ rol en Configuracion → Roles y permisos.
   octubre 2026, marca `DEMO`, "Sucursal Norte (demo)") con un script fuera del repo.
   No forman parte del sistema ni de las migraciones.
 
+## Pestana Ventas (SISTEMA-115, 22/11/2026)
+
+- API `GET organizations/:organizationId/reports/sales` (`report-sales.service.ts`),
+  filtros `from`, `to`, `branchId`, `comparison` y `granularity` (`day`, `week`,
+  `month`; `hour` da 400 porque las horas tienen su grafico). Otros filtros dan 400.
+- **Mismas consultas que el Resumen**: `report-sales-data.ts` (`ReportSalesData`)
+  tiene totales por sucursal, tendencia, categorias y medios de pago; las dos
+  pestanas lo usan, asi Ventas netas, ticket promedio, unidades y medios de pago
+  coinciden siempre (el test de integracion lo compara).
+- KPIs: Ventas netas, Tickets, Ticket promedio y Unidades vendidas, con variacion.
+- Lectura rapida (`report-sales-insights.ts`): hora pico y dia de la semana mas
+  fuerte (sobre lo facturado), sucursal que mas vende (solo con 2 o mas),
+  descuentos otorgados y devoluciones con su variacion y su % sobre lo facturado,
+  y unidades por ticket.
+- Graficos: evolucion de ventas netas por dia, semana (desde el lunes) o mes, con
+  tickets en el tooltip y el periodo comparado punteado; con 2 o mas sucursales,
+  "Por sucursal" muestra una linea por sucursal (hasta 8, las que mas venden);
+  medios de pago en torta (sobre lo facturado); ventas por hora (columnas, con el
+  periodo comparado); mapa de calor dia de la semana x hora (facturado y tickets);
+  categorias por importe o unidades.
+- Hora y dia de la semana usan lo **facturado** por la hora local de cobro: las
+  devoluciones no tienen hora de venta. Por eso suman lo facturado, no las netas.
+- Tabla por sucursal (con 2 o mas): ventas netas, variacion contra el periodo
+  comparado, tickets, ticket promedio, unidades y %.
+- Web: `report-sales.tsx`. Piezas comunes de todas las pestanas en
+  `report-panel.tsx` (`ReportPanel`, `ReportPanelChart`, `ReportSegmented`,
+  `ReportWarnings`, `ReportUpdatingFrame`) y `lib/use-report-result.ts` (carga con
+  "Actualizando..." y la entrada animada de la sesion). Graficos en
+  `lib/report-charts-ventas.ts`; animaciones nuevas `torta` y `mapa` en
+  `lib/animacion-reportes.ts`, con la misma curva que el resto.
+- Solo con conexion: sin internet avisa en vez de mostrar datos viejos.
+- Pendiente para la tarea de Interaccion: filtros cruzados (clic en una hora o
+  medio de pago) y detalle de tickets.
+
 ## Tareas
 
 1. **Mapa de metricas y contratos.** Matriz metrica -> fuente -> formula -> limitaciones;

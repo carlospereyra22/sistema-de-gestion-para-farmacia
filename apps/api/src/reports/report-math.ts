@@ -70,9 +70,23 @@ export function trendGranularity(range: ReportRange): "day" | "month" {
     : "month";
 }
 
-/** Claves de cada tramo del rango (YYYY-MM-DD; para meses, el dia 01). */
-export function trendBuckets(range: ReportRange, unit: "day" | "month") {
+/**
+ * Claves de cada tramo del rango (YYYY-MM-DD; para meses, el dia 01; para
+ * semanas, el lunes, como `date_trunc('week')` de PostgreSQL).
+ */
+export function trendBuckets(
+  range: ReportRange,
+  unit: "day" | "week" | "month",
+) {
   const buckets: string[] = [];
+  if (unit === "week") {
+    const from = Date.parse(range.from);
+    // getUTCDay: 0 = domingo; se retrocede hasta el lunes.
+    const monday = from - ((new Date(from).getUTCDay() + 6) % 7) * DAY;
+    for (let day = monday; day <= Date.parse(range.to); day += 7 * DAY)
+      buckets.push(new Date(day).toISOString().slice(0, 10));
+    return buckets;
+  }
   if (unit === "day") {
     for (
       let day = Date.parse(range.from);
