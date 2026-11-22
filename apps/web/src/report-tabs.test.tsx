@@ -112,6 +112,10 @@ describe("pestaña Rentabilidad", () => {
     for (const text of [
       "Ganancia bruta estimada",
       "Margen bruto",
+      "Vendiste",
+      "Te costó la mercadería",
+      "Ganaste (bruto)",
+      "De cada $100 que vendés",
       "Producto que más ganancia deja",
       "Categoría con menor margen",
       "Productos bajo 20 % de margen",

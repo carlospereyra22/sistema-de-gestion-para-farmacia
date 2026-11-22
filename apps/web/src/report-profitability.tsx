@@ -1,6 +1,12 @@
-import { useMemo, useState, type ReactElement } from "react";
+import {
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from "react";
 import {
   AlertTriangle,
+  Info,
   BadgeDollarSign,
   Coins,
   Percent,
@@ -20,9 +26,8 @@ import {
   formatPp,
   profitTrendOption,
   trendUnitOptions,
-  waterfallOption,
 } from "./lib/report-charts-tabs";
-import { ReportRing, ReportStat } from "./report-visuals";
+import { ReportStat } from "./report-visuals";
 import { formatMoneyMinor } from "./lib/report-format";
 import type { ReportView } from "./lib/report-view";
 import { ReportKpiCard } from "./report-kpi";
@@ -92,23 +97,6 @@ export function ReportProfitabilityContent({
       .slice(0, 10);
     return {
       trend: profitTrendOption(charts.trend, charts.trendUnit),
-      waterfall: (() => {
-        const sales = charts.categories.reduce(
-          (sum, row) => sum + Number(row.netSalesMinor),
-          0,
-        );
-        const profit = Number(kpis.grossProfit.value ?? 0);
-        const coverage = tables.costCoveragePct;
-        return waterfallOption({
-          salesMinor: sales,
-          costMinor: Number(kpis.costOfSales.value ?? 0),
-          profitMinor: profit,
-          withoutCostMinor:
-            coverage && coverage > 0 && coverage < 100
-              ? Math.round((sales * 100) / coverage) - sales
-              : 0,
-        });
-      })(),
       products: rankingOption(
         products.map((row) => ({
           name: `${row.name} (${row.units} u.)`,
@@ -134,8 +122,20 @@ export function ReportProfitabilityContent({
         })),
       ),
     };
-  }, [charts, tables.branches, tables.costCoveragePct, kpis, ranking]);
+  }, [charts, tables.branches, ranking]);
 
+  // Ventas con costo = suma de las categorías (sólo líneas con lote).
+  const salesWithCost = charts.categories
+    .reduce((sum, row) => sum + BigInt(row.netSalesMinor), 0n)
+    .toString();
+  const salesWithoutCost =
+    tables.costCoveragePct && tables.costCoveragePct < 100
+      ? (
+          (BigInt(salesWithCost) * 1000n) /
+            BigInt(Math.round(tables.costCoveragePct * 10)) -
+          BigInt(salesWithCost)
+        ).toString()
+      : "0";
   const best = charts.products[0];
   const worstCategory = [...charts.categories]
     .filter((row) => row.marginPct !== null)
@@ -232,52 +232,16 @@ export function ReportProfitabilityContent({
         animar={animar}
         title="De la venta a la ganancia"
         icon={<Coins size={16} aria-hidden />}
-        hint="Lo vendido con costo, menos el costo de la mercadería, da la ganancia bruta. Lo que no tiene costo de lote queda aparte."
+        hint="La cuenta del período: lo que vendiste menos lo que te costó la mercadería es lo que ganaste."
         className="border-teal-200/70"
       >
-        <div className="grid gap-5 xl:grid-cols-[2fr_auto_1fr]">
-          <ReportPanelChart
-            tipo="barras"
-            option={options.waterfall}
-            label="De la venta a la ganancia"
-            height={260}
-          />
-          <div className="flex items-center justify-center">
-            <ReportRing
-              value={
-                kpis.marginPct.value === null
-                  ? null
-                  : Number(kpis.marginPct.value)
-              }
-              color="text-emerald-500"
-              label="de cada peso vendido es ganancia bruta"
-              animar={animar}
-              size={150}
-            />
-          </div>
-          <div className="grid content-center gap-2.5">
-            <ReportStat
-              label="Recargo sobre el costo"
-              value={
-                kpis.costOfSales.value && kpis.costOfSales.value !== "0"
-                  ? formatPercent(
-                      Math.round(
-                        (Number(kpis.grossProfit.value ?? 0) /
-                          Number(kpis.costOfSales.value)) *
-                          1000,
-                      ) / 10,
-                    )
-                  : "—"
-              }
-              detail="Ganancia / costo. No es lo mismo que el margen."
-            />
-            <ReportStat
-              label="Ganancia por ticket"
-              value={formatMoneyMinor(kpis.profitPerTicket.value ?? "0")}
-              detail="En promedio, cada venta deja esto"
-            />
-          </div>
-        </div>
+        <ProfitEquation
+          salesMinor={salesWithCost}
+          costMinor={kpis.costOfSales.value ?? "0"}
+          profitMinor={kpis.grossProfit.value ?? "0"}
+          withoutCostMinor={salesWithoutCost}
+          profitPerTicketMinor={kpis.profitPerTicket.value}
+        />
       </ReportPanel>
 
       <ReportPanel
@@ -478,6 +442,159 @@ export function ReportProfitabilityContent({
           ]}
         />
       </ReportPanel>
+    </div>
+  );
+}
+
+/** Una cifra de la cuenta: etiqueta, monto y aclaración, con su color. */
+function EquationTerm({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: "sales" | "cost" | "profit";
+}): ReactElement {
+  const look = {
+    sales: "border-sky-200 bg-sky-50/70 text-sky-800",
+    cost: "border-rose-200 bg-rose-50/70 text-rose-700",
+    profit: "border-emerald-300 bg-emerald-50 text-emerald-800",
+  }[tone];
+  return (
+    <div className={`min-w-0 flex-1 rounded-xl border px-4 py-3 ${look}`}>
+      <p className="text-xs font-medium">{label}</p>
+      <p
+        className={`mt-0.5 truncate font-semibold tabular-nums text-slate-900 ${tone === "profit" ? "text-2xl" : "text-xl"}`}
+        title={value}
+      >
+        {value}
+      </p>
+      <p className="text-[11px] text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+const Operator = ({ sign }: { sign: string }) => (
+  <span
+    aria-hidden
+    className="grid size-8 shrink-0 place-items-center self-center rounded-full bg-slate-100 text-lg font-semibold text-slate-500"
+  >
+    {sign}
+  </span>
+);
+
+/**
+ * La cuenta del período escrita como se dice: vendiste − te costó = ganaste,
+ * y de cada $100 vendidos cuánto es costo y cuánto queda. Más clara que una
+ * cascada de barras flotantes (pedido del usuario, SISTEMA-117).
+ */
+function ProfitEquation({
+  salesMinor,
+  costMinor,
+  profitMinor,
+  withoutCostMinor,
+  profitPerTicketMinor,
+}: {
+  salesMinor: string;
+  costMinor: string;
+  profitMinor: string;
+  withoutCostMinor: string;
+  profitPerTicketMinor: string | null;
+}): ReactElement {
+  const sales = Number(salesMinor);
+  const cost = Number(costMinor);
+  const profit = Number(profitMinor);
+  const costShare = sales > 0 ? Math.round((cost / sales) * 100) : 0;
+  const profitShare = sales > 0 ? 100 - costShare : 0;
+  const markup = cost > 0 ? Math.round((profit / cost) * 1000) / 10 : null;
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
+        <EquationTerm
+          tone="sales"
+          label="Vendiste"
+          value={formatMoneyMinor(salesMinor)}
+          detail="Ventas netas con costo conocido"
+        />
+        <Operator sign="−" />
+        <EquationTerm
+          tone="cost"
+          label="Te costó la mercadería"
+          value={formatMoneyMinor(costMinor)}
+          detail="Costo de los lotes vendidos"
+        />
+        <Operator sign="=" />
+        <EquationTerm
+          tone="profit"
+          label="Ganaste (bruto)"
+          value={formatMoneyMinor(profitMinor)}
+          detail="Antes de sueldos, alquiler e impuestos"
+        />
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm font-semibold text-slate-800">
+          De cada $100 que vendés
+        </p>
+        <div className="flex h-9 w-full overflow-hidden rounded-lg bg-slate-100 text-xs font-semibold">
+          {costShare > 0 ? (
+            <span
+              className="reportes-barra flex items-center justify-center bg-rose-500 text-white"
+              style={{ width: `${costShare}%` }}
+            >
+              {costShare >= 12 ? `$${costShare} son costo` : `$${costShare}`}
+            </span>
+          ) : null}
+          {profitShare > 0 ? (
+            <span
+              className="reportes-barra flex items-center justify-center border-l-2 border-white bg-emerald-500 text-white"
+              style={{ width: `${profitShare}%`, "--fila": 1 } as CSSProperties}
+            >
+              {profitShare >= 12
+                ? `$${profitShare} te quedan`
+                : `$${profitShare}`}
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
+          <ReportStat
+            label="Margen"
+            value={`${profitShare} %`}
+            detail="Ganancia sobre lo vendido"
+            tone="good"
+          />
+          <ReportStat
+            label="Recargo sobre el costo"
+            value={markup === null ? "—" : formatPercent(markup)}
+            detail="Ganancia sobre lo que costó. No es el margen."
+          />
+          <ReportStat
+            label="Ganancia por ticket"
+            value={
+              profitPerTicketMinor
+                ? formatMoneyMinor(profitPerTicketMinor)
+                : "—"
+            }
+            detail="Lo que deja, en promedio, cada venta"
+          />
+        </div>
+      </div>
+
+      {withoutCostMinor !== "0" ? (
+        <p className="flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <Info
+            size={14}
+            className="mt-0.5 shrink-0 text-slate-400"
+            aria-hidden
+          />
+          Además vendiste {formatMoneyMinor(withoutCostMinor)} sin costo cargado
+          (conceptos manuales): no entran en esta cuenta porque no se sabe
+          cuánto costaron.
+        </p>
+      ) : null}
     </div>
   );
 }
