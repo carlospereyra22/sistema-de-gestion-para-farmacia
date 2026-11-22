@@ -312,15 +312,15 @@ export function ReportCohortTable({
 }): ReactElement {
   const shade = (value: number) =>
     value >= 60
-      ? "bg-teal-700 text-white"
+      ? "bg-teal-300 text-teal-950"
       : value >= 40
-        ? "bg-teal-500 text-white"
+        ? "bg-teal-200 text-teal-900"
         : value >= 25
-          ? "bg-teal-300 text-teal-950"
+          ? "bg-teal-100 text-teal-900"
           : value >= 10
-            ? "bg-teal-100 text-teal-900"
+            ? "bg-teal-50 text-teal-800"
             : value > 0
-              ? "bg-teal-50 text-teal-800"
+              ? "bg-slate-50 text-teal-800"
               : "bg-slate-50 text-slate-400";
   const columns = Math.max(0, ...cohorts.map((row) => row.retention.length));
   return (

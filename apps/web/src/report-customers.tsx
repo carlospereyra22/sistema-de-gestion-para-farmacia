@@ -1,24 +1,21 @@
 import { useMemo, type ReactElement } from "react";
 import {
-  BookUser,
-  CalendarClock,
   CalendarRange,
   Crown,
-  HandCoins,
   HeartHandshake,
-  Info,
   Repeat,
-  Scale,
-  UserRound,
+  UserCheck,
+  UserPlus,
   UserRoundSearch,
   Users,
-  Wallet,
 } from "lucide-react";
-import type { ReportCustomers, ReportLoyaltySegment } from "@gestion/contracts";
-import { paymentLabels, rankingOption } from "./lib/report-charts";
+import type {
+  ReportCustomers,
+  ReportKpi,
+  ReportLoyaltySegment,
+} from "@gestion/contracts";
+import { rankingOption } from "./lib/report-charts";
 import {
-  accountTrendOption,
-  agingOption,
   formatPercent,
   frequencyOption,
   newVsReturningOption,
@@ -35,17 +32,9 @@ import {
   ReportTable,
   type ReportInsightItem,
 } from "./report-panel";
-import { ReportEmptyState } from "./report-states";
+import { ReportEmptyState, reportCardClass } from "./report-states";
 import { ReportTabLoader } from "./report-tab-loader";
-import {
-  ReportChip,
-  ReportCohortTable,
-  ReportHero,
-  ReportRing,
-  ReportSection,
-  ReportStackedBar,
-  ReportStat,
-} from "./report-visuals";
+import { ReportCohortTable, ReportStackedBar } from "./report-visuals";
 
 export function ReportCustomersTab(props: {
   token: string;
@@ -73,54 +62,60 @@ export function ReportCustomersTab(props: {
   );
 }
 
-const day = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleDateString("es-AR", {
-        timeZone: "America/Argentina/Buenos_Aires",
-      })
-    : "—";
-
-/** Nombre, color y explicación de cada segmento de fidelidad. */
+/** Nombre, color (pastel) y explicación de cada segmento de fidelidad. */
 const segmentInfo: Record<
   ReportLoyaltySegment,
   { label: string; color: string; text: string; tone: string }
 > = {
   frequent: {
     label: "Frecuentes",
-    color: "bg-teal-600",
-    text: "4 o más compras, cada 30 días o menos",
+    color: "bg-teal-300",
+    text: "4 o más visitas, cada 30 días o menos",
     tone: "bg-teal-50 text-teal-800",
   },
   regular: {
     label: "Regulares",
-    color: "bg-sky-500",
+    color: "bg-sky-200",
     text: "Vuelven a su ritmo",
     tone: "bg-sky-50 text-sky-800",
   },
   new: {
     label: "Nuevos",
-    color: "bg-indigo-500",
+    color: "bg-indigo-200",
     text: "Primera compra en el período",
     tone: "bg-indigo-50 text-indigo-800",
   },
   atRisk: {
     label: "En riesgo",
-    color: "bg-amber-500",
+    color: "bg-amber-200",
     text: "Pasaron 1,5 veces su frecuencia sin volver",
     tone: "bg-amber-50 text-amber-800",
   },
   lost: {
     label: "Perdidos",
-    color: "bg-rose-500",
+    color: "bg-rose-200",
     text: "Más de 120 días sin comprar",
     tone: "bg-rose-50 text-rose-800",
   },
 };
 
+/** Indicador sin comparación armado en la pantalla (porcentajes, días). */
+const plainKpi = (
+  unit: ReportKpi["unit"],
+  value: number | null,
+): ReportKpi => ({
+  unit,
+  available: value !== null,
+  ...(value === null ? { unavailableReason: "NO_DATA" as const } : {}),
+  value: value === null ? null : String(value),
+  previous: null,
+  changePct: null,
+});
+
 /**
- * Pestaña Clientes (SISTEMA-116, rediseñada en SISTEMA-117): primero la
- * fidelidad (si el cliente vuelve, cada cuánto y a quién recuperar) y después
- * la cuenta corriente. Sin DNI, CUIT ni teléfono.
+ * Pestaña Clientes (SISTEMA-117/118): fidelidad. Si el cliente vuelve, cada
+ * cuánto, quién está por perderse y quiénes son los mejores. La cuenta
+ * corriente tiene su propia pestaña. Sólo ventas con cliente identificado.
  */
 export function ReportCustomersContent({
   data,
@@ -147,11 +142,6 @@ export function ReportCustomersContent({
         charts.trendUnit,
       ),
       frequency: frequencyOption(loyalty.frequency),
-      trend: accountTrendOption(
-        charts.trend,
-        charts.trendUnit,
-        comparisonLabel,
-      ),
       top: rankingOption(
         charts.topCustomers.map((row) => ({
           name: row.name,
@@ -160,344 +150,235 @@ export function ReportCustomersContent({
         })),
         "money",
       ),
-      aging: agingOption(charts.aging),
     }),
-    [charts, loyalty, comparisonLabel],
+    [charts, loyalty],
   );
-  const identified = loyalty.identifiedSharePct;
   const customersTotal = loyalty.segments.reduce(
     (sum, segment) => sum + segment.customers,
     0,
   );
+  const segment = (id: ReportLoyaltySegment) =>
+    loyalty.segments.find((row) => row.id === id);
+  const atRisk =
+    (segment("atRisk")?.customers ?? 0) + (segment("lost")?.customers ?? 0);
+  const fewIdentified =
+    loyalty.identifiedSharePct !== null && loyalty.identifiedSharePct < 50;
 
-  // Cuenta corriente.
-  const sold = charts.trend.reduce(
-    (sum, row) => sum + BigInt(row.soldOnAccountMinor),
-    0n,
-  );
-  const collected = charts.trend.reduce(
-    (sum, row) => sum + BigInt(row.collectedMinor),
-    0n,
-  );
-  const overdue = charts.aging
-    .filter((row) => row.id !== "current" && row.id !== "undated")
-    .reduce((sum, row) => sum + BigInt(row.value), 0n);
-  const balance = BigInt(kpis.accountBalance.value ?? "0");
-  const accountInsights: ReportInsightItem[] = [];
-  if (sold > 0n)
-    accountInsights.push({
-      icon: <Scale size={16} aria-hidden />,
-      title: "Cobrado sobre lo fiado",
-      value: formatPercent(Number((collected * 1000n) / sold) / 10),
-      detail:
-        collected >= sold
-          ? "Se cobró más de lo que se fió: la deuda baja"
-          : "Se fió más de lo que se cobró: la deuda sube",
-      tone: collected >= sold ? "good" : "bad",
+  const insights: ReportInsightItem[] = [
+    {
+      icon: <Users size={16} aria-hidden />,
+      title: "Ventas con cliente identificado",
+      value: formatPercent(loyalty.identifiedSharePct),
+      detail: fewIdentified
+        ? "Cargá el cliente al vender para medir mejor"
+        : "Del total facturado del período",
+      tone: fewIdentified ? "bad" : "good",
+    },
+    {
+      icon: <UserPlus size={16} aria-hidden />,
+      title: "Clientes nuevos",
+      value: loyalty.newCustomers.toLocaleString("es-AR"),
+      detail: `${loyalty.returningCustomers.toLocaleString("es-AR")} ya habían comprado antes`,
+    },
+    {
+      icon: <UserRoundSearch size={16} aria-hidden />,
+      title: "Para recuperar",
+      value: `${atRisk.toLocaleString("es-AR")} clientes`,
+      detail: atRisk
+        ? "En riesgo o perdidos: abajo, la lista"
+        : "Todos vuelven a su ritmo",
+      tone: atRisk ? "bad" : "good",
+    },
+  ];
+  if (charts.topCustomers[0])
+    insights.push({
+      icon: <Crown size={16} aria-hidden />,
+      title: "Mejor cliente del período",
+      value: charts.topCustomers[0].name,
+      detail: `${formatMoneyMinor(charts.topCustomers[0].value)} en ${charts.topCustomers[0].tickets} ${charts.topCustomers[0].tickets === 1 ? "compra" : "compras"}`,
     });
-  accountInsights.push({
-    icon: <CalendarClock size={16} aria-hidden />,
-    title: "Deuda vencida",
-    value: formatMoneyMinor(overdue.toString()),
-    detail: balance
-      ? `${formatPercent(Number((overdue * 1000n) / balance) / 10)} del saldo`
-      : "Sin saldo a cobrar",
-    tone: overdue > 0n ? "bad" : "good",
-  });
-  if (tables.debtors[0])
-    accountInsights.push({
-      icon: <UserRound size={16} aria-hidden />,
-      title: "Mayor deudor",
-      value: tables.debtors[0].name,
-      detail: formatMoneyMinor(tables.debtors[0].balanceMinor),
+  if (loyalty.spendPerCustomerMinor)
+    insights.push({
+      icon: <UserCheck size={16} aria-hidden />,
+      title: "Gasto por cliente",
+      value: formatMoneyMinor(loyalty.spendPerCustomerMinor),
+      detail: `${loyalty.purchasesPerCustomer?.toLocaleString("es-AR") ?? "—"} compras promedio en el período`,
     });
 
   return (
-    <div className="space-y-8">
-      <ReportSection
-        icon={<HeartHandshake size={18} aria-hidden />}
-        title="Fidelidad"
-        description="Si el cliente vuelve, cada cuánto y a quién conviene recuperar."
-        badge={
-          <ReportChip
-            tone={identified !== null && identified < 50 ? "warn" : "neutral"}
-          >
-            <Info size={13} aria-hidden />
-            {identified === null
-              ? "Sin ventas en el período"
-              : `${formatPercent(identified)} de lo facturado tiene cliente identificado`}
-          </ReportChip>
-        }
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ReportKpiCard
+          animar={animar}
+          orden={0}
+          label="Clientes con compras"
+          icon={<Users size={18} aria-hidden />}
+          kpi={kpis.activeCustomers}
+          help="Clientes identificados en al menos una venta confirmada del período."
+        />
+        <ReportKpiCard
+          animar={animar}
+          orden={1}
+          label="Recompra"
+          icon={<Repeat size={18} aria-hidden />}
+          kpi={plainKpi("percent", loyalty.returningPct)}
+          help="De los clientes que compraron en el período, qué parte ya había comprado antes."
+        />
+        <ReportKpiCard
+          animar={animar}
+          orden={2}
+          label="Retención"
+          icon={<HeartHandshake size={18} aria-hidden />}
+          kpi={plainKpi("percent", loyalty.retentionPct)}
+          help={
+            comparisonLabel
+              ? `De los clientes del ${comparisonLabel.toLowerCase()}, qué parte volvió a comprar en este período.`
+              : "Elegí una comparación para medir cuántos clientes volvieron."
+          }
+        />
+        <ReportKpiCard
+          animar={animar}
+          orden={3}
+          label="Compran cada (días)"
+          icon={<CalendarRange size={18} aria-hidden />}
+          kpi={plainKpi("count", loyalty.medianDaysBetween)}
+          help="Mediana de días entre visitas de los clientes que compraron más de una vez. Dos tickets el mismo día son una visita."
+        />
+      </div>
+
+      <ReportPanel
+        animar={animar}
+        title="Lectura rápida"
+        icon={<HeartHandshake size={16} aria-hidden />}
+        hint="Si el cliente vuelve, cada cuánto y a quién conviene llamar."
       >
-        {customersTotal ? (
-          <>
-            <ReportHero animar={animar}>
-              <div className="grid gap-6 lg:grid-cols-[auto_1fr] xl:grid-cols-[auto_1.1fr_1fr]">
-                <div className="flex flex-col items-center justify-center gap-1">
-                  <ReportRing
-                    value={loyalty.returningPct}
-                    color="text-teal-600"
-                    label="de los clientes del período ya habían comprado"
-                    animar={animar}
-                    size={150}
-                  />
-                  <p className="text-xs text-slate-500">
-                    {loyalty.returningCustomers} volvieron ·{" "}
-                    {loyalty.newCustomers} nuevos
-                  </p>
-                </div>
-                <div className="grid content-center gap-2.5 sm:grid-cols-2">
-                  <ReportStat
-                    label="Retención"
-                    value={formatPercent(loyalty.retentionPct)}
-                    detail={
-                      comparisonLabel
-                        ? `De los clientes del ${comparisonLabel.toLowerCase()}, volvieron`
-                        : "Elegí una comparación para verla"
-                    }
-                    tone={
-                      loyalty.retentionPct === null
-                        ? "neutral"
-                        : loyalty.retentionPct >= 50
-                          ? "good"
-                          : "bad"
-                    }
-                  />
-                  <ReportStat
-                    label="Compran cada"
-                    value={
-                      loyalty.medianDaysBetween === null
-                        ? "—"
-                        : `${loyalty.medianDaysBetween} días`
-                    }
-                    detail="Mediana entre compras de quienes volvieron"
-                  />
-                  <ReportStat
-                    label="Compras por cliente"
-                    value={
-                      loyalty.purchasesPerCustomer?.toLocaleString("es-AR") ??
-                      "—"
-                    }
-                    detail="En el período"
-                  />
-                  <ReportStat
-                    label="Gasto por cliente"
-                    value={
-                      loyalty.spendPerCustomerMinor
-                        ? formatMoneyMinor(loyalty.spendPerCustomerMinor)
-                        : "—"
-                    }
-                    detail="Facturado promedio en el período"
-                  />
-                </div>
-                <div className="lg:col-span-2 xl:col-span-1">
-                  <p className="mb-3 text-sm font-semibold text-slate-800">
-                    {customersTotal.toLocaleString("es-AR")} clientes por estado
-                  </p>
-                  <ReportStackedBar
-                    label="Clientes por estado"
-                    unit="clientes"
-                    parts={loyalty.segments.map((segment) => ({
-                      id: segment.id,
-                      label: segmentInfo[segment.id].label,
-                      value: segment.customers,
-                      color: segmentInfo[segment.id].color,
-                      detail: `${segmentInfo[segment.id].text} · ${formatMoneyMinor(segment.lifetimeMinor)} históricos`,
-                    }))}
-                  />
-                </div>
-              </div>
-            </ReportHero>
+        <ReportInsightList items={insights} />
+      </ReportPanel>
 
-            <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-              <ReportPanel
-                animar={animar}
-                orden={0}
-                title="Nuevos y los que vuelven"
-                icon={<Repeat size={16} aria-hidden />}
-                hint="Clientes distintos por tramo. Que crezca el verde es buena señal: la gente vuelve."
-                action={
-                  <ReportSegmented
-                    label="Agrupar por"
-                    value={charts.trendUnit}
-                    options={trendUnitOptions}
-                    onChange={onGranularity}
-                  />
-                }
-              >
-                <ReportPanelChart
-                  tipo="barras"
-                  option={options.newVsReturning}
-                  label="Clientes nuevos y recurrentes"
-                />
-              </ReportPanel>
-              <ReportPanel
-                animar={animar}
-                orden={1}
-                title="Cada cuánto compran"
-                icon={<CalendarRange size={16} aria-hidden />}
-                hint="Promedio de días entre compras de cada cliente."
-              >
-                <ReportPanelChart
-                  tipo="barras"
-                  option={options.frequency}
-                  label="Frecuencia de compra"
-                />
-              </ReportPanel>
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-              <ReportPanel
-                animar={animar}
-                orden={0}
-                title="Cohortes: ¿vuelven los que llegan?"
-                icon={<Users size={16} aria-hidden />}
-                hint="Por mes de primera compra: qué parte volvió a comprar cada mes siguiente. Más oscuro, más vuelven."
-              >
-                {loyalty.cohorts.length ? (
-                  <ReportCohortTable cohorts={loyalty.cohorts} />
-                ) : (
-                  <ReportEmptyState title="Sin clientes nuevos en los últimos 6 meses" />
-                )}
-              </ReportPanel>
-              <ReportPanel
-                animar={animar}
-                orden={1}
-                title="Clientes para recuperar"
-                icon={<UserRoundSearch size={16} aria-hidden />}
-                hint="Los que más compraban y dejaron de venir, primero. Un llamado o una oferta a tiempo."
-              >
-                <ReportTable
-                  rows={loyalty.toRecover}
-                  rowKey={(row) => row.id}
-                  empty="Nadie para recuperar: todos vuelven a su ritmo."
-                  minWidth={520}
-                  columns={[
-                    { label: "Cliente", render: (row) => row.name },
-                    {
-                      label: "Estado",
-                      render: (row) => (
-                        <span
-                          className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${segmentInfo[row.segment].tone}`}
-                        >
-                          {segmentInfo[row.segment].label}
-                        </span>
-                      ),
-                    },
-                    {
-                      label: "Sin venir",
-                      numeric: true,
-                      render: (row) => `${row.daysSince} d`,
-                    },
-                    {
-                      label: "Solía venir",
-                      numeric: true,
-                      render: (row) =>
-                        row.usualDays === null
-                          ? "1 compra"
-                          : `cada ${row.usualDays} d`,
-                    },
-                    {
-                      label: "Compró",
-                      numeric: true,
-                      render: (row) => formatMoneyMinor(row.lifetimeMinor),
-                    },
-                  ]}
-                />
-              </ReportPanel>
-            </div>
-          </>
-        ) : (
-          <ReportHero animar={animar}>
-            <ReportEmptyState
-              title="Todavía no hay ventas con cliente identificado"
-              description="Cargá el cliente al vender (aunque sea de contado) para medir quién vuelve y cada cuánto."
-            />
-          </ReportHero>
-        )}
-      </ReportSection>
-
-      <ReportSection
-        icon={<BookUser size={18} aria-hidden />}
-        title="Cuenta corriente"
-        description="Cuánto se fía, cuánto se cobra y quién debe."
-      >
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <ReportKpiCard
-            animar={animar}
-            orden={0}
-            label="Clientes con compras"
-            icon={<Users size={18} aria-hidden />}
-            kpi={kpis.activeCustomers}
-            help="Clientes identificados en al menos una venta confirmada del período."
-          />
-          <ReportKpiCard
-            animar={animar}
-            orden={1}
-            label="Saldo a cobrar"
-            icon={<BookUser size={18} aria-hidden />}
-            kpi={kpis.accountBalance}
-            higherIsBetter={false}
-            help="Lo que deben hoy los clientes: débitos menos créditos."
-          />
-          <ReportKpiCard
-            animar={animar}
-            orden={2}
-            label="Cobrado en el período"
-            icon={<HandCoins size={18} aria-hidden />}
-            kpi={kpis.collected}
-            help="Cobros de cuenta corriente con medio de pago. Las notas de crédito bajan la deuda pero no son cobros."
-          />
-          <ReportKpiCard
-            animar={animar}
-            orden={3}
-            label="Clientes con deuda"
-            icon={<Wallet size={18} aria-hidden />}
-            kpi={kpis.debtors}
-            higherIsBetter={false}
-            help="Clientes con saldo a cobrar hoy."
-          />
-        </div>
-        <ReportInsightList items={accountInsights} />
-        <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+      {customersTotal ? (
+        <>
           <ReportPanel
             animar={animar}
-            orden={0}
-            title="Fiado y cobrado"
-            icon={<Scale size={16} aria-hidden />}
-            hint="Columnas: lo que se fió. Línea: lo que se cobró. Si la línea queda abajo, la deuda crece."
+            title="Clientes por estado"
+            icon={<Users size={16} aria-hidden />}
+            hint="Cada cliente según su última compra y su propio ritmo: el que viene cada semana se marca en riesgo antes que el que viene cada dos meses."
           >
-            <ReportPanelChart
-              tipo="barras"
-              option={options.trend}
-              label="Vendido a cuenta y cobrado"
+            <ReportStackedBar
+              label="Clientes por estado"
+              unit="clientes"
+              parts={loyalty.segments.map((row) => ({
+                id: row.id,
+                label: segmentInfo[row.id].label,
+                value: row.customers,
+                color: segmentInfo[row.id].color,
+                detail: `${segmentInfo[row.id].text} · ${formatMoneyMinor(row.lifetimeMinor)} comprados en total`,
+              }))}
             />
           </ReportPanel>
-          <ReportPanel
-            animar={animar}
-            orden={1}
-            title="Antigüedad de saldos"
-            icon={<CalendarClock size={16} aria-hidden />}
-            hint="Según el vencimiento de cada venta a cuenta; lo cobrado salda primero lo más viejo."
-          >
-            {balance > 0n ? (
+
+          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <ReportPanel
+              animar={animar}
+              orden={0}
+              title="Nuevos y los que vuelven"
+              icon={<Repeat size={16} aria-hidden />}
+              hint="Clientes distintos por tramo. Que crezca la parte de los que vuelven es buena señal."
+              action={
+                <ReportSegmented
+                  label="Agrupar por"
+                  value={charts.trendUnit}
+                  options={trendUnitOptions}
+                  onChange={onGranularity}
+                />
+              }
+            >
               <ReportPanelChart
                 tipo="barras"
-                option={options.aging}
-                label="Antigüedad de saldos"
+                option={options.newVsReturning}
+                label="Clientes nuevos y recurrentes"
               />
-            ) : (
-              <ReportEmptyState title="Ningún cliente debe" />
-            )}
-          </ReportPanel>
-        </div>
-        <div className="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
+            </ReportPanel>
+            <ReportPanel
+              animar={animar}
+              orden={1}
+              title="Cada cuánto compran"
+              icon={<CalendarRange size={16} aria-hidden />}
+              hint="Promedio de días entre visitas de cada cliente."
+            >
+              <ReportPanelChart
+                tipo="barras"
+                option={options.frequency}
+                label="Frecuencia de compra"
+              />
+            </ReportPanel>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+            <ReportPanel
+              animar={animar}
+              orden={0}
+              title="¿Vuelven los que llegan?"
+              icon={<Users size={16} aria-hidden />}
+              hint="Cada fila, los clientes que compraron por primera vez ese mes. Cada columna, qué parte volvió a comprar en los meses siguientes."
+            >
+              {loyalty.cohorts.length ? (
+                <ReportCohortTable cohorts={loyalty.cohorts} />
+              ) : (
+                <ReportEmptyState title="Sin clientes nuevos en los últimos 6 meses" />
+              )}
+            </ReportPanel>
+            <ReportPanel
+              animar={animar}
+              orden={1}
+              title="Clientes para recuperar"
+              icon={<UserRoundSearch size={16} aria-hidden />}
+              hint="Los que más compraban y dejaron de venir, primero. Un llamado o una oferta a tiempo."
+            >
+              <ReportTable
+                rows={loyalty.toRecover}
+                rowKey={(row) => row.id}
+                empty="Nadie para recuperar: todos vuelven a su ritmo."
+                minWidth={520}
+                columns={[
+                  { label: "Cliente", render: (row) => row.name },
+                  {
+                    label: "Estado",
+                    render: (row) => (
+                      <span
+                        className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${segmentInfo[row.segment].tone}`}
+                      >
+                        {segmentInfo[row.segment].label}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: "Sin venir",
+                    numeric: true,
+                    render: (row) => `${row.daysSince} d`,
+                  },
+                  {
+                    label: "Solía venir",
+                    numeric: true,
+                    render: (row) =>
+                      row.usualDays === null
+                        ? "Una vez"
+                        : `cada ${row.usualDays} d`,
+                  },
+                  {
+                    label: "Compró en total",
+                    numeric: true,
+                    render: (row) => formatMoneyMinor(row.lifetimeMinor),
+                  },
+                ]}
+              />
+            </ReportPanel>
+          </div>
+
           <ReportPanel
             animar={animar}
-            orden={0}
             title="Mejores clientes"
             icon={<Crown size={16} aria-hidden />}
-            hint="Facturado en el período (no suma cobros)."
+            hint="Facturado en el período y su parte del total de estos clientes."
           >
             {charts.topCustomers.length ? (
               <ReportPanelChart
@@ -510,82 +391,15 @@ export function ReportCustomersContent({
               <ReportEmptyState title="Sin ventas a clientes identificados" />
             )}
           </ReportPanel>
-          <ReportPanel
-            animar={animar}
-            orden={1}
-            title="Clientes con mayor deuda"
-            icon={<UserRound size={16} aria-hidden />}
-            hint="Saldo de hoy, cuánto está vencido y cuándo pagó por última vez."
-          >
-            <ReportTable
-              rows={tables.debtors}
-              rowKey={(row) => row.id}
-              empty="Ningún cliente debe."
-              minWidth={560}
-              columns={[
-                { label: "Cliente", render: (row) => row.name },
-                {
-                  label: "Saldo",
-                  numeric: true,
-                  render: (row) => formatMoneyMinor(row.balanceMinor),
-                },
-                {
-                  label: "Vencido",
-                  numeric: true,
-                  render: (row) => formatMoneyMinor(row.overdueMinor),
-                  tone: (row) =>
-                    row.overdueMinor !== "0"
-                      ? "text-rose-600"
-                      : "text-slate-400",
-                },
-                {
-                  label: "Atraso",
-                  numeric: true,
-                  render: (row) =>
-                    row.oldestDaysOverdue ? `${row.oldestDaysOverdue} d` : "—",
-                },
-                {
-                  label: "Último pago",
-                  numeric: true,
-                  render: (row) => day(row.lastPaymentAt),
-                },
-              ]}
-            />
-          </ReportPanel>
-        </div>
-        <ReportPanel
-          animar={animar}
-          title="Últimos cobros"
-          icon={<HandCoins size={16} aria-hidden />}
-          hint="Cobros de cuenta corriente del período, los más recientes primero."
-        >
-          <ReportTable
-            rows={tables.collections}
-            rowKey={(row) => row.id}
-            empty="Sin cobros en el período."
-            minWidth={560}
-            columns={[
-              { label: "Fecha", render: (row) => day(row.createdAt) },
-              { label: "Cliente", render: (row) => row.customer },
-              {
-                label: "Sucursal",
-                render: (row) => (
-                  <span className="text-slate-500">{row.branch}</span>
-                ),
-              },
-              {
-                label: "Medio",
-                render: (row) => paymentLabels[row.method] ?? row.method,
-              },
-              {
-                label: "Importe",
-                numeric: true,
-                render: (row) => formatMoneyMinor(row.amountMinor),
-              },
-            ]}
+        </>
+      ) : (
+        <div className={reportCardClass}>
+          <ReportEmptyState
+            title="Todavía no hay ventas con cliente identificado"
+            description="Cargá el cliente al vender (aunque sea de contado) para medir quién vuelve y cada cuánto."
           />
-        </ReportPanel>
-      </ReportSection>
+        </div>
+      )}
     </div>
   );
 }

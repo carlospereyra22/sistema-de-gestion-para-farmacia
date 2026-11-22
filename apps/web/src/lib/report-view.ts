@@ -16,6 +16,11 @@ export const reportTabs = [
   { id: "inventory", slug: "inventario", label: "Inventario" },
   { id: "purchases", slug: "compras", label: "Compras" },
   { id: "customers", slug: "clientes", label: "Clientes" },
+  {
+    id: "accounts",
+    slug: "cuentas-corrientes",
+    label: "Cuentas corrientes",
+  },
 ] as const satisfies readonly { id: ReportTab; slug: string; label: string }[];
 
 /** Permiso que habilita cada pestana restringida (ver REPORTS_PLAN.md). */
@@ -28,6 +33,10 @@ export const restrictedTabs: Partial<
   },
   purchases: { key: "purchases", text: "Necesitás el permiso «Ver compras»." },
   customers: {
+    key: "customers",
+    text: "Necesitás el permiso de cuentas corrientes.",
+  },
+  accounts: {
     key: "customers",
     text: "Necesitás el permiso de cuentas corrientes.",
   },

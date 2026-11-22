@@ -334,7 +334,6 @@ export function ReportSalesContent({
             title="¿Cuándo se vende?"
             icon={<CalendarDays size={16} aria-hidden />}
             hint="Facturado por día de la semana y hora. Para armar turnos, reponer antes del pico y elegir cuándo lanzar una oferta."
-            className="border-teal-200/70"
           >
             <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
               <ReportPanelChart

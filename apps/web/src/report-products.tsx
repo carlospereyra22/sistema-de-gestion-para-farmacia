@@ -53,22 +53,22 @@ export function ReportProductsTab(props: {
   );
 }
 
-/** Clases ABC: qué hacer con cada grupo. */
+/** Clases ABC: nombre, color (el mismo de la curva) y qué hacer con cada una. */
 const abcLook = {
   A: {
-    card: "border-emerald-100 bg-emerald-50/50",
-    badge: "bg-emerald-600 text-white",
-    text: "El 80 % de la venta: que nunca falten y con buen precio.",
+    name: "Imprescindibles",
+    badge: "bg-teal-100 text-teal-800",
+    text: "Son pocos pero hacen la mayor parte de la venta. Que nunca falten y con buen precio.",
   },
   B: {
-    card: "border-sky-100 bg-sky-50/50",
-    badge: "bg-sky-500 text-white",
-    text: "El 15 % siguiente: reponer sin sobrestock.",
+    name: "Importantes",
+    badge: "bg-sky-100 text-sky-800",
+    text: "Venta pareja. Reponer a tiempo, sin acumular de más.",
   },
   C: {
-    card: "border-slate-200 bg-slate-50/70",
-    badge: "bg-slate-400 text-white",
-    text: "El último 5 %: comprar poco, evaluar si conviene tenerlos.",
+    name: "Complementarios",
+    badge: "bg-slate-100 text-slate-600",
+    text: "Venden poco. Comprar justo y evaluar si conviene tenerlos.",
   },
 } as const;
 
@@ -207,56 +207,6 @@ export function ReportProductsContent({
         />
       </div>
 
-      {charts.pareto.length ? (
-        <ReportPanel
-          animar={animar}
-          title="¿Qué productos sostienen el negocio?"
-          icon={<Target size={16} aria-hidden />}
-          hint="Curva de Pareto: ventas de cada producto de mayor a menor y el % acumulado. En verde, los que hacen el 80 % de la venta."
-          className="border-teal-200/70"
-        >
-          <div className="grid gap-5 xl:grid-cols-[1.7fr_1fr]">
-            <ReportPanelChart
-              tipo="barras"
-              option={options.pareto}
-              label="Curva de Pareto de ventas"
-              height={300}
-            />
-            <ul className="grid content-center gap-2.5">
-              {charts.abc.map((group, index) => {
-                const look = abcLook[group.id];
-                return (
-                  <li
-                    key={group.id}
-                    className={`reportes-fila flex items-center gap-3 rounded-xl border px-3.5 py-3 ${look.card}`}
-                    style={{ "--fila": index } as CSSProperties}
-                  >
-                    <span
-                      className={`grid size-10 shrink-0 place-items-center rounded-xl text-lg font-bold ${look.badge}`}
-                    >
-                      {group.id}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm font-semibold text-slate-800">
-                          {group.products.toLocaleString("es-AR")} productos
-                        </span>
-                        <span className="text-sm font-semibold tabular-nums text-slate-900">
-                          {formatPercent(group.sharePct)}
-                        </span>
-                      </span>
-                      <span className="block text-[11px] text-slate-500">
-                        {look.text}
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </ReportPanel>
-      ) : null}
-
       <ReportPanel
         animar={animar}
         title="Lectura rápida"
@@ -265,6 +215,66 @@ export function ReportProductsContent({
       >
         <ReportInsightList items={insights} />
       </ReportPanel>
+
+      {charts.pareto.length ? (
+        <ReportPanel
+          animar={animar}
+          title="¿Qué productos sostienen el negocio?"
+          icon={<Target size={16} aria-hidden />}
+          hint="Cada barra es un producto, de mayor a menor venta. La línea suma: dónde cruza el 80 % terminan los imprescindibles."
+        >
+          <div className="grid gap-5 xl:grid-cols-[1.7fr_1fr]">
+            <ReportPanelChart
+              tipo="barras"
+              option={options.pareto}
+              label="Curva de Pareto de ventas"
+              height={300}
+            />
+            <div className="space-y-2.5">
+              <p className="text-xs leading-5 text-slate-600">
+                <strong className="font-semibold text-slate-800">
+                  Clasificación ABC.
+                </strong>{" "}
+                Los productos ordenados de mayor a menor venta, agrupados según
+                cuánto aportan. Cada clase tiene su color en el gráfico.
+              </p>
+              <ul className="space-y-2">
+                {charts.abc.map((group, index) => {
+                  const look = abcLook[group.id];
+                  return (
+                    <li
+                      key={group.id}
+                      className="reportes-fila rounded-xl border border-slate-100 bg-white px-3.5 py-3"
+                      style={{ "--fila": index } as CSSProperties}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`grid size-8 shrink-0 place-items-center rounded-lg text-sm font-bold ${look.badge}`}
+                        >
+                          {group.id}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {look.name}
+                          </p>
+                          <p className="text-[11px] tabular-nums text-slate-500">
+                            {group.products.toLocaleString("es-AR")}{" "}
+                            {group.products === 1 ? "producto" : "productos"} ·{" "}
+                            {formatPercent(group.sharePct)} de la venta
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-1.5 text-xs text-slate-600">
+                        {look.text}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </ReportPanel>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <ReportPanel

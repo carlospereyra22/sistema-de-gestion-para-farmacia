@@ -98,8 +98,8 @@ export function profitTrendOption(
         name: "Ganancia bruta",
         type: "bar",
         barMaxWidth: 22,
-        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[2] },
-        emphasis: { itemStyle: { color: reportPalette[1] } },
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[4] },
+        emphasis: { itemStyle: { color: reportPalette[3] } },
         data: points.map((point) => Number(point.profitMinor)),
       },
       {
@@ -155,8 +155,8 @@ export function columnsOption(
         id: "columnas",
         type: "bar",
         barMaxWidth: 28,
-        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[1] },
-        emphasis: { itemStyle: { color: reportPalette[0] } },
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: reportPalette[3] },
+        emphasis: { itemStyle: { color: reportPalette[2] } },
         label: {
           show: true,
           position: "top",
@@ -235,8 +235,8 @@ export function rotationOption(
       {
         id: "productos",
         type: "scatter",
-        itemStyle: { color: reportPalette[1], opacity: 0.75 },
-        emphasis: { itemStyle: { color: reportPalette[0], opacity: 1 } },
+        itemStyle: { color: reportPalette[3], opacity: 0.85 },
+        emphasis: { itemStyle: { color: reportPalette[2], opacity: 1 } },
         symbolSize: (_value: unknown, params: { dataIndex: number }) => {
           const row = points[params.dataIndex];
           return row ? 8 + 22 * Math.sqrt(Number(row.netSalesMinor) / max) : 8;
@@ -377,13 +377,13 @@ export function stockTrendOption(
 
 /** Colores de la antigüedad: al día en verde, cuanto más atraso, más rojo. */
 const agingColors: Record<string, string> = {
-  current: "#3fa392",
-  "1-30": "#a5dccf",
-  "31-60": "#fcd34d",
-  "61-90": "#f59e0b",
-  "91-120": "#f97316",
-  "120+": "#e11d48",
-  undated: "#94a3b8",
+  current: "#8fd3c3",
+  "1-30": "#c9e59a",
+  "31-60": "#f8d58c",
+  "61-90": "#f8bf94",
+  "91-120": "#f5a8b5",
+  "120+": "#e98597",
+  undated: "#cfd8e3",
 };
 
 /** Antigüedad de saldos en columnas, del día al más atrasado. */
@@ -507,13 +507,13 @@ export function frequencyOption(
   items: readonly { id: string; name: string; customers: number }[],
 ) {
   const colors: Record<string, string> = {
-    "7": "#0d9488",
-    "15": "#14b8a6",
-    "30": "#0ea5e9",
-    "60": "#6366f1",
-    "90": "#a855f7",
-    more: "#f59e0b",
-    once: "#94a3b8",
+    "7": "#6fc1b1",
+    "15": "#8fd3c3",
+    "30": "#9fd8f2",
+    "60": "#b4bdf5",
+    "90": "#d7bdf3",
+    more: "#f8d58c",
+    once: "#cfd8e3",
   };
   return {
     grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
@@ -548,32 +548,42 @@ export function frequencyOption(
   };
 }
 
+/** Colores de las clases ABC, suaves. */
+export const abcColors = { A: "#8fd3c3", B: "#9fd8f2", C: "#cfd8e3" } as const;
+
 /**
- * Curva de Pareto: ventas de cada producto (columnas, de mayor a menor) y el %
- * acumulado (línea, eje derecho) con la marca del 80 %.
+ * Curva de Pareto: ventas de cada producto (columnas, de mayor a menor,
+ * coloreadas por clase ABC) y el % acumulado (línea, eje derecho), con la
+ * marca del 80 % donde termina la clase A.
  */
 export function paretoOption(
-  rows: readonly { name: string; valueMinor: string; cumulativePct: number }[],
+  rows: readonly {
+    name: string;
+    valueMinor: string;
+    cumulativePct: number;
+    abc: "A" | "B" | "C";
+  }[],
 ) {
-  const cut = rows.findIndex((row) => row.cumulativePct >= 80);
   return {
-    grid: { left: 8, right: 8, top: 36, bottom: 8, containLabel: true },
-    legend,
+    grid: { left: 8, right: 12, top: 16, bottom: 24, containLabel: true },
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
       formatter: (params: TooltipParam[]) => {
-        const row = rows[params[0]?.dataIndex ?? 0];
+        const index = params[0]?.dataIndex ?? 0;
+        const row = rows[index];
         if (!row) return "";
-        return `<strong>${row.name}</strong><br/>Ventas: ${tooltipMoney(Number(row.valueMinor))}<br/>Acumulado: ${percent(row.cumulativePct)}`;
+        return `<strong>${index + 1}. ${row.name}</strong><br/>Clase ${row.abc} · Ventas: ${tooltipMoney(Number(row.valueMinor))}<br/>Con los anteriores suman el ${percent(row.cumulativePct)} de la venta`;
       },
     },
     xAxis: {
       type: "category",
       data: rows.map((_, index) => `${index + 1}`),
+      axisLabel: { show: false },
+      axisTick: { show: false },
       name: "Productos, de mayor a menor venta",
       nameLocation: "middle",
-      nameGap: 22,
+      nameGap: 10,
       nameTextStyle: { fontSize: 10, color: "#64748b" },
     },
     yAxis: [
@@ -581,6 +591,7 @@ export function paretoOption(
       {
         type: "value",
         max: 100,
+        interval: 20,
         axisLabel: { formatter: (value: number) => `${value} %` },
         splitLine: { show: false },
       },
@@ -590,14 +601,10 @@ export function paretoOption(
         id: "ventas",
         name: "Ventas del producto",
         type: "bar",
-        barMaxWidth: 16,
-        data: rows.map((row, index) => ({
+        barCategoryGap: "15%",
+        data: rows.map((row) => ({
           value: Number(row.valueMinor),
-          itemStyle: {
-            // Los que hacen el 80 % en verde; el resto, más claro.
-            color: cut < 0 || index <= cut ? reportStatus.good : "#a5dccf",
-            borderRadius: [3, 3, 0, 0],
-          },
+          itemStyle: { color: abcColors[row.abc], borderRadius: [2, 2, 0, 0] },
         })),
       },
       {
@@ -607,12 +614,18 @@ export function paretoOption(
         yAxisIndex: 1,
         smooth: true,
         symbol: "none",
-        itemStyle: { color: reportStatus.new },
+        lineStyle: { width: 2, color: "#7c8ce0" },
+        itemStyle: { color: "#7c8ce0" },
         markLine: {
           silent: true,
           symbol: "none",
-          lineStyle: { type: "dashed", color: reportStatus.warn },
-          label: { formatter: "80 %", fontSize: 10, color: "#64748b" },
+          lineStyle: { type: "dashed", color: "#c8a35a" },
+          label: {
+            position: "insideStartTop",
+            formatter: "80 % de la venta",
+            fontSize: 10,
+            color: "#8a6d2f",
+          },
           data: [{ yAxis: 80 }],
         },
         data: rows.map((row) => row.cumulativePct),

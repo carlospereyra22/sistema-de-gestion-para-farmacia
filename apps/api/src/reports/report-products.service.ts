@@ -256,13 +256,17 @@ export class ReportProductsService {
         pareto: (() => {
           const total = byAmount.reduce((sum, row) => sum + row.amount, 0n);
           let acc = 0n;
-          return byAmount.slice(0, 40).map((row) => {
+          return byAmount.slice(0, 300).map((row) => {
+            // La clase la decide dónde arranca el producto en la curva.
+            const start = total > 0n ? Number((acc * 1000n) / total) / 10 : 100;
             acc += row.amount;
             return {
               name: row.name,
               valueMinor: row.amount.toString(),
               cumulativePct:
                 total > 0n ? Number((acc * 1000n) / total) / 10 : 0,
+              abc: (start < 80 ? "A" : start < 95 ? "B" : "C") as
+                "A" | "B" | "C",
             };
           });
         })(),

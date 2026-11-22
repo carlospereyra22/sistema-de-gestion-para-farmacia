@@ -229,10 +229,18 @@ export function ReportInventoryContent({
 
       <ReportPanel
         animar={animar}
+        title="Lectura rápida"
+        icon={<Gauge size={16} aria-hidden />}
+        hint="Qué se acaba, qué se vence y cuánta plata hay en góndola."
+      >
+        <ReportInsightList items={insights} />
+      </ReportPanel>
+
+      <ReportPanel
+        animar={animar}
         title="Salud del stock"
         icon={<Gauge size={16} aria-hidden />}
         hint="Cada producto con stock en un solo estado, el peor. Y cuánto vence cada mes."
-        className="border-teal-200/70"
       >
         <div className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
           <ReportStackedBar
@@ -243,35 +251,35 @@ export function ReportInventoryContent({
                 id: "healthy",
                 label: "Sanos",
                 value: charts.health.healthy,
-                color: "bg-emerald-500",
+                color: "bg-emerald-200",
                 detail: `Más de ${tables.lowStockThreshold} unidades y sin vencimientos cerca`,
               },
               {
                 id: "low",
                 label: "Stock bajo",
                 value: charts.health.low,
-                color: "bg-amber-400",
+                color: "bg-amber-200",
                 detail: `${tables.lowStockThreshold} unidades o menos`,
               },
               {
                 id: "expiring",
                 label: "Por vencer",
                 value: charts.health.expiring,
-                color: "bg-orange-500",
+                color: "bg-orange-200",
                 detail: `Algún lote vence en ${tables.expiryWindowDays} días`,
               },
               {
                 id: "expired",
                 label: "Con vencidos",
                 value: charts.health.expired,
-                color: "bg-rose-800",
+                color: "bg-rose-300",
                 detail: "Tienen lotes vencidos con existencia",
               },
               {
                 id: "out",
                 label: "Sin stock",
                 value: charts.health.out,
-                color: "bg-rose-500",
+                color: "bg-rose-200",
                 detail: "Se vendían y hoy no hay",
               },
             ]}
@@ -288,15 +296,6 @@ export function ReportInventoryContent({
             />
           </div>
         </div>
-      </ReportPanel>
-
-      <ReportPanel
-        animar={animar}
-        title="Lectura rápida"
-        icon={<Gauge size={16} aria-hidden />}
-        hint="Qué se acaba, qué se vence y cuánta plata hay en góndola."
-      >
-        <ReportInsightList items={insights} />
       </ReportPanel>
 
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">

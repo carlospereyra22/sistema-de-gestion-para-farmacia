@@ -15,7 +15,8 @@ export type ReportTab =
   | "products"
   | "inventory"
   | "purchases"
-  | "customers";
+  | "customers"
+  | "accounts";
 
 export type ReportComparison = "previous" | "yearAgo" | "none";
 export type ReportGranularity = "hour" | "day" | "week" | "month";
@@ -360,8 +361,16 @@ export type ReportProducts = ReportResponse<
     categories: ReportBreakdownItem[];
     /** Productos con ventas y stock, para rotación contra margen (o ventas). */
     rotation: ReportProductRow[];
-    /** Curva de Pareto (SISTEMA-117): hasta 40, de mayor a menor venta. */
-    pareto: { name: string; valueMinor: MoneyMinor; cumulativePct: number }[];
+    /**
+     * Curva de Pareto (SISTEMA-117): todos los productos vendidos (hasta 300),
+     * de mayor a menor venta, con su clase ABC.
+     */
+    pareto: {
+      name: string;
+      valueMinor: MoneyMinor;
+      cumulativePct: number;
+      abc: "A" | "B" | "C";
+    }[];
     /** Clasificación ABC: A hasta el 80 % de la venta, B hasta el 95 %, C el resto. */
     abc: { id: "A" | "B" | "C"; products: number; sharePct: number | null }[];
   },

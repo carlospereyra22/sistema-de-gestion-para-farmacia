@@ -14,6 +14,7 @@ import { ReportProductsContent } from "./report-products";
 import { ReportInventoryContent } from "./report-inventory";
 import { ReportPurchasesContent } from "./report-purchases";
 import { ReportCustomersContent } from "./report-customers";
+import { ReportAccountsContent } from "./report-accounts";
 import {
   agingOption,
   profitTrendOption,
@@ -163,8 +164,18 @@ describe("pestaña Productos", () => {
       ],
       rotation: [product],
       pareto: [
-        { name: "Ibuprofeno 400", valueMinor: "300000", cumulativePct: 75 },
-        { name: "Shampoo", valueMinor: "100000", cumulativePct: 100 },
+        {
+          name: "Ibuprofeno 400",
+          valueMinor: "300000",
+          cumulativePct: 75,
+          abc: "A",
+        },
+        {
+          name: "Shampoo",
+          valueMinor: "100000",
+          cumulativePct: 100,
+          abc: "B",
+        },
       ],
       abc: [
         { id: "A", products: 1, sharePct: 75 },
@@ -199,7 +210,8 @@ describe("pestaña Productos", () => {
       "Nunca vendido",
       "Valor a costo",
       "¿Qué productos sostienen el negocio?",
-      "que nunca falten",
+      "Imprescindibles",
+      "Clasificación ABC.",
     ])
       expect(html).toContain(text);
   });
@@ -475,9 +487,29 @@ describe("pestaña Clientes", () => {
     },
   };
 
-  it("compara lo fiado con lo cobrado y la deuda vencida", () => {
-    const html = renderToStaticMarkup(
+  it("Clientes mide la fidelidad y Cuentas corrientes la deuda, cada una en su pestaña", () => {
+    const loyaltyHtml = renderToStaticMarkup(
       <ReportCustomersContent
+        data={data}
+        comparison="previous"
+        onGranularity={noop}
+      />,
+    );
+    for (const text of [
+      "Recompra",
+      "Retención",
+      "Compran cada (días)",
+      "18,5 %",
+      "Frecuentes",
+      "En riesgo",
+      "Rosa Díaz",
+      "cada 20 d",
+      "¿Vuelven los que llegan?",
+    ])
+      expect(loyaltyHtml).toContain(text);
+    expect(loyaltyHtml).not.toContain("Fiado y cobrado");
+    const html = renderToStaticMarkup(
+      <ReportAccountsContent
         data={data}
         comparison="previous"
         onGranularity={noop}
@@ -488,23 +520,9 @@ describe("pestaña Clientes", () => {
       "50 %",
       "la deuda sube",
       "Deuda vencida",
-      "40 % del saldo",
+      "Parte vencida del saldo",
       "45 d",
       "Sin cobros en el período.",
-    ])
-      expect(html).toContain(text);
-    for (const text of [
-      "Fidelidad",
-      "18,5 % de lo facturado tiene cliente identificado",
-      "Compran cada",
-      "21 días",
-      "Frecuentes",
-      "En riesgo",
-      "Rosa Díaz",
-      "cada 20 d",
-      "Cohortes",
-      "50 %",
-      "Cuenta corriente",
     ])
       expect(html).toContain(text);
     // Nunca datos personales en la vista general.

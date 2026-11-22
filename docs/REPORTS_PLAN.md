@@ -372,6 +372,30 @@ muestra que parte de lo facturado tiene cliente):
   llegaron no se muestran) y **clientes para recuperar** (en riesgo o perdidos, los que
   mas compraron primero).
 
+## Colores suaves, lectura rapida arriba y Cuentas corrientes aparte (SISTEMA-118, 22/11/2026)
+
+Pedido del usuario:
+
+- **Nada de colores fuertes en Reportes**: `reportCategorical` y `reportStatus` son
+  pastel (verde agua, lavanda, durazno, rosa claro, celeste); rankings y columnas en
+  verde suave (`reportPalette[3]`); mapa de calor hasta un verde medio; segmentos,
+  salud del stock, cohortes y la barra "de cada $100" en tonos 100-300 de Tailwind.
+- **Orden fijo en todas las pestanas**: KPIs, debajo la "Lectura rapida" y despues la
+  pieza central y el resto.
+- **Rentabilidad**: la cuenta (vendiste - te costo la mercaderia = ganaste) en una
+  sola tarjeta suave, con la barra "de cada $100 que vendes" en pastel.
+- **Productos**: la curva de Pareto muestra todos los productos vendidos (hasta 300),
+  cada uno con el color de su clase; la linea cruza el 80 % donde termina la clase A.
+  Al lado, la clasificacion ABC explicada: A imprescindibles, B importantes, C
+  complementarios, con cuantos productos son, que parte de la venta hacen y que
+  hacer.
+- **Cuentas corrientes es una pestana propia** (`report-accounts.tsx`, slug
+  `cuentas-corrientes`, mismo permiso y mismos datos de `reports/customers`): saldo,
+  deuda vencida, cobrado y deudores; fiado y cobrado, antiguedad, mayores deudores y
+  ultimos cobros. **Clientes** queda para la fidelidad (KPIs de recompra, retencion y
+  frecuencia; estados, nuevos y recurrentes, cohortes, para recuperar y mejores
+  clientes).
+
 ## Tareas
 
 1. **Mapa de metricas y contratos.** Matriz metrica -> fuente -> formula -> limitaciones;

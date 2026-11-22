@@ -230,10 +230,18 @@ export function ReportProfitabilityContent({
 
       <ReportPanel
         animar={animar}
+        title="Lectura rápida"
+        icon={<Coins size={16} aria-hidden />}
+        hint="Dónde se gana y dónde se pierde margen."
+      >
+        <ReportInsightList items={insights} />
+      </ReportPanel>
+
+      <ReportPanel
+        animar={animar}
         title="De la venta a la ganancia"
         icon={<Coins size={16} aria-hidden />}
         hint="La cuenta del período: lo que vendiste menos lo que te costó la mercadería es lo que ganaste."
-        className="border-teal-200/70"
       >
         <ProfitEquation
           salesMinor={salesWithCost}
@@ -242,15 +250,6 @@ export function ReportProfitabilityContent({
           withoutCostMinor={salesWithoutCost}
           profitPerTicketMinor={kpis.profitPerTicket.value}
         />
-      </ReportPanel>
-
-      <ReportPanel
-        animar={animar}
-        title="Lectura rápida"
-        icon={<Coins size={16} aria-hidden />}
-        hint="Dónde se gana y dónde se pierde margen."
-      >
-        <ReportInsightList items={insights} />
       </ReportPanel>
 
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
@@ -446,7 +445,7 @@ export function ReportProfitabilityContent({
   );
 }
 
-/** Una cifra de la cuenta: etiqueta, monto y aclaración, con su color. */
+/** Una cifra de la cuenta: etiqueta con su punto de color, monto y aclaración. */
 function EquationTerm({
   label,
   value,
@@ -458,16 +457,19 @@ function EquationTerm({
   detail: string;
   tone: "sales" | "cost" | "profit";
 }): ReactElement {
-  const look = {
-    sales: "border-sky-200 bg-sky-50/70 text-sky-800",
-    cost: "border-rose-200 bg-rose-50/70 text-rose-700",
-    profit: "border-emerald-300 bg-emerald-50 text-emerald-800",
+  const dot = {
+    sales: "bg-sky-200",
+    cost: "bg-rose-200",
+    profit: "bg-emerald-200",
   }[tone];
   return (
-    <div className={`min-w-0 flex-1 rounded-xl border px-4 py-3 ${look}`}>
-      <p className="text-xs font-medium">{label}</p>
+    <div className="min-w-0 flex-1 px-1">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        <span className={`size-2.5 rounded-full ${dot}`} aria-hidden />
+        {label}
+      </p>
       <p
-        className={`mt-0.5 truncate font-semibold tabular-nums text-slate-900 ${tone === "profit" ? "text-2xl" : "text-xl"}`}
+        className={`mt-1 truncate font-semibold tabular-nums ${tone === "profit" ? "text-2xl text-emerald-700" : "text-xl text-slate-800"}`}
         title={value}
       >
         {value}
@@ -480,7 +482,7 @@ function EquationTerm({
 const Operator = ({ sign }: { sign: string }) => (
   <span
     aria-hidden
-    className="grid size-8 shrink-0 place-items-center self-center rounded-full bg-slate-100 text-lg font-semibold text-slate-500"
+    className="hidden shrink-0 self-center text-2xl font-light text-slate-300 md:block"
   >
     {sign}
   </span>
@@ -512,7 +514,7 @@ function ProfitEquation({
   const markup = cost > 0 ? Math.round((profit / cost) * 1000) / 10 : null;
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
+      <div className="flex flex-col gap-4 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-4 md:flex-row md:items-stretch md:gap-3">
         <EquationTerm
           tone="sales"
           label="Vendiste"
@@ -539,10 +541,10 @@ function ProfitEquation({
         <p className="mb-2 text-sm font-semibold text-slate-800">
           De cada $100 que vendés
         </p>
-        <div className="flex h-9 w-full overflow-hidden rounded-lg bg-slate-100 text-xs font-semibold">
+        <div className="flex h-8 w-full overflow-hidden rounded-full bg-slate-100 text-xs font-semibold">
           {costShare > 0 ? (
             <span
-              className="reportes-barra flex items-center justify-center bg-rose-500 text-white"
+              className="reportes-barra flex items-center justify-center bg-rose-100 text-rose-800"
               style={{ width: `${costShare}%` }}
             >
               {costShare >= 12 ? `$${costShare} son costo` : `$${costShare}`}
@@ -550,7 +552,7 @@ function ProfitEquation({
           ) : null}
           {profitShare > 0 ? (
             <span
-              className="reportes-barra flex items-center justify-center border-l-2 border-white bg-emerald-500 text-white"
+              className="reportes-barra flex items-center justify-center border-l-2 border-white bg-emerald-100 text-emerald-800"
               style={{ width: `${profitShare}%`, "--fila": 1 } as CSSProperties}
             >
               {profitShare >= 12

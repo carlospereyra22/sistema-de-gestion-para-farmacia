@@ -118,9 +118,9 @@ export function rankingOption(
         id: "ranking",
         type: "bar",
         barMaxWidth: 18,
-        itemStyle: { borderRadius: [0, 4, 4, 0], color: reportPalette[1] },
+        itemStyle: { borderRadius: [0, 4, 4, 0], color: reportPalette[3] },
         // Al pasar el mouse la barra se oscurece apenas, sin cambiar de tamaño.
-        emphasis: { itemStyle: { color: reportPalette[0] } },
+        emphasis: { itemStyle: { color: reportPalette[2] } },
         label: {
           show: true,
           position: "right",

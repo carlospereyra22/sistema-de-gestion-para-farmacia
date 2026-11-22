@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   Boxes,
+  BookUser,
   ContactRound,
   LayoutDashboard,
   Lock,
@@ -38,6 +39,7 @@ import { ReportProductsTab } from "./report-products";
 import { ReportInventoryTab } from "./report-inventory";
 import { ReportPurchasesTab } from "./report-purchases";
 import { ReportCustomersTab } from "./report-customers";
+import { ReportAccountsTab } from "./report-accounts";
 import {
   ReportEmptyState,
   ReportErrorState,
@@ -53,6 +55,7 @@ const tabIcons: Record<ReportTab, LucideIcon> = {
   inventory: Boxes,
   purchases: Truck,
   customers: ContactRound,
+  accounts: BookUser,
 };
 
 /** Todas las pestañas están hechas (SISTEMA-115 y SISTEMA-116). */
@@ -253,6 +256,7 @@ function ReportTabContent({
     return <ReportInventoryTab {...common} onOpenInventory={onOpenInventory} />;
   if (tab === "purchases") return <ReportPurchasesTab {...common} />;
   if (tab === "customers") return <ReportCustomersTab {...common} />;
+  if (tab === "accounts") return <ReportAccountsTab {...common} />;
   return (
     <div className={reportCardClass}>
       <ReportEmptyState

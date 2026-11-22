@@ -212,10 +212,18 @@ export function ReportPurchasesContent({
 
       <ReportPanel
         animar={animar}
+        title="Lectura rápida"
+        icon={<Truck size={16} aria-hidden />}
+        hint="A quién se le compra, qué subió y qué falta pagar o recibir."
+      >
+        <ReportInsightList items={insights} />
+      </ReportPanel>
+
+      <ReportPanel
+        animar={animar}
         title="Calendario de pagos a proveedores"
         icon={<CalendarDays size={16} aria-hidden />}
         hint="Saldo de facturas según cuándo vence, contando desde hoy. Para planificar la caja."
-        className="border-teal-200/70"
       >
         <div className="grid gap-5 xl:grid-cols-[1fr_2.2fr]">
           <div className="grid content-center gap-2.5">
@@ -246,15 +254,6 @@ export function ReportPurchasesContent({
             height={250}
           />
         </div>
-      </ReportPanel>
-
-      <ReportPanel
-        animar={animar}
-        title="Lectura rápida"
-        icon={<Truck size={16} aria-hidden />}
-        hint="A quién se le compra, qué subió y qué falta pagar o recibir."
-      >
-        <ReportInsightList items={insights} />
       </ReportPanel>
 
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">

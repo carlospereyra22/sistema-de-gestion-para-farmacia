@@ -59,6 +59,7 @@ export const REPORT_TABS = [
   "inventory",
   "purchases",
   "customers",
+  "accounts",
 ] as const satisfies readonly ReportTab[];
 export const REPORT_DEFAULTS = {
   timezone: "America/Argentina/Buenos_Aires",
