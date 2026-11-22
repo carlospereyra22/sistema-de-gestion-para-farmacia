@@ -16,3 +16,25 @@ deploy/oracle/catalogo-mensual/*.sh text eol=lf
 deploy/oracle/catalogo-mensual/*.service text eol=lf
 deploy/oracle/catalogo-mensual/*.timer text eol=lf
 scripts/external-catalog/*.sql text eol=lf
+# Migraciones (SISTEMA-114): Prisma guarda la huella del archivo tal como se
+# aplicó, con sus finales de línea. Todas en LF, salvo las que test aplicó con
+# CRLF; si cambian, el publicador frena con "Migracion aplicada modificada".
+apps/api/prisma/migrations/**/migration.sql text eol=lf
+apps/api/prisma/migrations/20261031000000_report_permissions/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261102020311_organization_document_template/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261102022844_branch_print_format/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261102144443_product_barcode_per_organization/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261102154305_medicine_reference_snapshot/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261105180000_payable_permissions/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261105190000_movement_unit_cost/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261106000000_medicine_catalog_pending/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261106030000_supplier_return_optional_supplier/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261106040000_inventory_movement_supplier/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261108005020_offline_sales/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261108060000_factura_en_espera/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261108080000_offline_device_key/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261108100000_offline_cash/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261109120000_offline_accounts/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261109130000_offline_customer_update/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261109140000_padron_arca/migration.sql text eol=crlf
+apps/api/prisma/migrations/20261109150000_padron_plataforma/migration.sql text eol=crlf
