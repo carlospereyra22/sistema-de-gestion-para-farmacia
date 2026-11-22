@@ -83,9 +83,13 @@ export function trendOption(
  */
 export function rankingOption(
   items: readonly { name: string; value: number; share?: number | null }[],
-  format: "money" | "units",
+  format: "money" | "units" | "percent",
 ) {
   const rows = [...items].reverse();
+  const plain = (value: number) =>
+    format === "percent"
+      ? `${value.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`
+      : value.toLocaleString("es-AR");
   return {
     grid: { left: 8, right: 96, top: 4, bottom: 4, containLabel: true },
     tooltip: {
@@ -94,7 +98,9 @@ export function rankingOption(
       valueFormatter: (value: number) =>
         format === "money"
           ? tooltipMoney(value)
-          : `${value.toLocaleString("es-AR")} u.`,
+          : format === "percent"
+            ? plain(value)
+            : `${value.toLocaleString("es-AR")} u.`,
     },
     xAxis: { type: "value", show: false },
     yAxis: {
@@ -127,9 +133,7 @@ export function rankingOption(
             value: number;
             data: { share?: number | null };
           }) =>
-            (format === "money"
-              ? axisMoney(value)
-              : value.toLocaleString("es-AR")) +
+            (format === "money" ? axisMoney(value) : plain(value)) +
             (data.share === undefined || data.share === null
               ? ""
               : ` · ${data.share.toLocaleString("es-AR")} %`),

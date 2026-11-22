@@ -277,3 +277,236 @@ export type ReportSales = ReportResponse<
     };
   }
 >;
+
+/** Agrupación temporal de las pestañas con evolución (SISTEMA-116). */
+export type ReportTrendUnit = "day" | "week" | "month";
+
+/* ---------------------------- Rentabilidad ---------------------------- */
+
+export type ReportProfitabilityKpi =
+  "grossProfit" | "marginPct" | "costOfSales" | "profitPerTicket";
+
+/** Ventas netas con costo, costo y ganancia de un grupo (producto, categoría...). */
+export type ReportProfitRow = {
+  id: string | null;
+  name: string;
+  /** Ventas netas de las líneas con costo de lote. */
+  netSalesMinor: MoneyMinor;
+  costMinor: MoneyMinor;
+  profitMinor: MoneyMinor;
+  /** Ganancia / ventas con costo × 100; null sin ventas. Ponderado por importe. */
+  marginPct: number | null;
+  units: number;
+};
+
+/** Pestaña Rentabilidad (SISTEMA-116). Cifras estimadas por costo de lote. */
+export type ReportProfitability = ReportResponse<
+  ReportProfitabilityKpi,
+  {
+    trendUnit: ReportTrendUnit;
+    trend: {
+      bucket: string;
+      profitMinor: MoneyMinor;
+      netSalesMinor: MoneyMinor;
+      marginPct: number | null;
+    }[];
+    /** Hasta 20, ordenados por ganancia. */
+    products: ReportProfitRow[];
+    categories: ReportProfitRow[];
+  },
+  {
+    /** Cada sucursal con su margen y la variación en puntos porcentuales. */
+    branches: (ReportProfitRow & {
+      previousMarginPct: number | null;
+      changePp: number | null;
+      sharePct: number | null;
+    })[];
+    /** Productos vendidos con margen por debajo del objetivo. */
+    lowMargin: ReportProfitRow[];
+    marginTargetPct: number;
+    /** Ventas netas con costo / ventas netas × 100. */
+    costCoveragePct: number | null;
+  }
+>;
+
+/* ------------------------------ Productos ----------------------------- */
+
+export type ReportProductsKpi =
+  "activeProducts" | "paretoProducts" | "staleProducts" | "lowStock";
+
+export type ReportProductRow = {
+  id: string;
+  name: string;
+  category: string | null;
+  units: number;
+  netSalesMinor: MoneyMinor;
+  /** null sin permiso de costos o sin costo de lote. */
+  profitMinor: MoneyMinor | null;
+  marginPct: number | null;
+  /** Stock vendible actual en las sucursales del alcance. */
+  stock: number;
+  /** Unidades vendidas / stock actual: aproximada (no reconstruye el promedio). */
+  rotation: number | null;
+};
+
+/** Pestaña Productos (SISTEMA-116). */
+export type ReportProducts = ReportResponse<
+  ReportProductsKpi,
+  {
+    /** Hasta 20, por unidades netas. */
+    top: ReportProductRow[];
+    categories: ReportBreakdownItem[];
+    /** Productos con ventas y stock, para rotación contra margen (o ventas). */
+    rotation: ReportProductRow[];
+  },
+  {
+    /** Productos activos con stock y sin ventas en `staleDays` días. */
+    stale: {
+      id: string;
+      name: string;
+      category: string | null;
+      stock: number;
+      /** Stock × costo; null sin permiso de costos. */
+      stockValueMinor: MoneyMinor | null;
+      lastSaleAt: string | null;
+      daysWithoutSales: number | null;
+    }[];
+    staleDays: number;
+    /** Cuántos productos hacen el 80 % de las ventas netas y sobre cuántos con ventas. */
+    pareto: { products: number; ofProducts: number; sharePct: number | null };
+  }
+>;
+
+/* ----------------------------- Inventario ----------------------------- */
+
+export type ReportInventoryKpi =
+  "stockValue" | "lowStock" | "outOfStock" | "expiringLots";
+
+/** Pestaña Inventario (SISTEMA-116). Estado actual; la evolución usa movimientos. */
+export type ReportInventory = ReportResponse<
+  ReportInventoryKpi,
+  {
+    trendUnit: ReportTrendUnit;
+    /**
+     * Stock al cierre de cada tramo, reconstruido con InventoryMovement.
+     * `valueMinor` es null sin permiso de costos.
+     */
+    trend: { bucket: string; units: number; valueMinor: MoneyMinor | null }[];
+    /** Valor a costo (o unidades sin permiso) por categoría. */
+    categories: (ReportBreakdownItem & { units: number })[];
+  },
+  {
+    expiring: {
+      lotId: string;
+      product: string;
+      lot: string;
+      branch: string;
+      expiresAt: string;
+      quantity: number;
+      daysLeft: number;
+      valueMinor: MoneyMinor | null;
+    }[];
+    /** Productos con poco stock: unidades, venta diaria y días que alcanza. */
+    critical: {
+      id: string;
+      name: string;
+      stock: number;
+      dailyUnits: number | null;
+      coverageDays: number | null;
+    }[];
+    lowStockThreshold: number;
+    expiryWindowDays: number;
+    /** Unidades vendibles, vencidas y totales. */
+    units: { sellable: number; expired: number };
+    showsValue: boolean;
+  }
+>;
+
+/* ------------------------------- Compras ------------------------------ */
+
+export type ReportPurchasesKpi =
+  "received" | "activeSuppliers" | "pendingInvoices" | "costChange";
+
+/** Pestaña Compras (SISTEMA-116). Lo recibido y lo facturado nunca se suman. */
+export type ReportPurchases = ReportResponse<
+  ReportPurchasesKpi,
+  {
+    trendUnit: ReportTrendUnit;
+    trend: ReportSeriesPoint[];
+    suppliers: ReportBreakdownItem[];
+  },
+  {
+    /** Facturado por proveedores en el período (aparte de lo recibido). */
+    invoicedMinor: MoneyMinor;
+    pendingInvoices: {
+      id: string;
+      supplier: string;
+      document: string;
+      issuedOn: string;
+      dueOn: string | null;
+      balanceMinor: MoneyMinor;
+      daysOverdue: number;
+    }[];
+    /** Saldo pendiente total y vencido. */
+    pendingTotals: { balanceMinor: MoneyMinor; overdueMinor: MoneyMinor };
+    costIncreases: {
+      id: string;
+      name: string;
+      previousCostMinor: MoneyMinor;
+      currentCostMinor: MoneyMinor;
+      changePct: number;
+    }[];
+    pendingReceipts: {
+      purchaseId: string;
+      supplier: string;
+      reference: string | null;
+      orderedAt: string | null;
+      ordered: number;
+      received: number;
+      remaining: number;
+      remainingValueMinor: MoneyMinor;
+      daysWaiting: number | null;
+    }[];
+  }
+>;
+
+/* ------------------------------ Clientes ------------------------------ */
+
+export type ReportCustomersKpi =
+  "activeCustomers" | "accountBalance" | "collected" | "debtors";
+
+/** Pestaña Clientes y cuentas corrientes (SISTEMA-116). Sin DNI, CUIT ni teléfono. */
+export type ReportCustomers = ReportResponse<
+  ReportCustomersKpi,
+  {
+    trendUnit: ReportTrendUnit;
+    /** Vendido a cuenta y cobrado por tramo (nunca se suman entre sí). */
+    trend: {
+      bucket: string;
+      soldOnAccountMinor: MoneyMinor;
+      collectedMinor: MoneyMinor;
+      previousCollectedMinor: MoneyMinor | null;
+    }[];
+    topCustomers: (ReportBreakdownItem & { tickets: number })[];
+    /** Saldo por atraso: al día, 1–30, 31–60, 61–90, 91–120, >120 y sin vencimiento. */
+    aging: { id: string; name: string; value: MoneyMinor }[];
+  },
+  {
+    debtors: {
+      id: string;
+      name: string;
+      balanceMinor: MoneyMinor;
+      overdueMinor: MoneyMinor;
+      oldestDaysOverdue: number;
+      lastPaymentAt: string | null;
+    }[];
+    collections: {
+      id: string;
+      customer: string;
+      branch: string;
+      createdAt: string;
+      amountMinor: MoneyMinor;
+      method: string;
+    }[];
+  }
+>;

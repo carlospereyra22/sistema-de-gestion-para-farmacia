@@ -220,3 +220,125 @@ export function ReportUpdatingFrame({
     </div>
   );
 }
+
+export type ReportInsightItem = {
+  icon: ReactNode;
+  title: string;
+  value: string;
+  detail?: ReactNode;
+  tone?: "good" | "bad" | "neutral";
+};
+
+/** Lectura rápida: tarjetas chicas con lo que más conviene mirar del período. */
+export function ReportInsightList({
+  items,
+}: {
+  items: readonly ReportInsightItem[];
+}): ReactElement {
+  return (
+    <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      {items.map((item, index) => (
+        <li
+          key={item.title}
+          className="reportes-fila flex min-w-0 items-start gap-3 rounded-lg border border-slate-100 px-3 py-2.5"
+          style={{ "--fila": index } as CSSProperties}
+        >
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-marca-970 text-marca-535">
+            {item.icon}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[11px] text-slate-500">
+              {item.title}
+            </span>
+            <span
+              className="block truncate text-sm font-semibold text-slate-800 tabular-nums"
+              title={item.value}
+            >
+              {item.value}
+            </span>
+            {item.detail ? (
+              <span
+                className={`block text-[11px] tabular-nums ${
+                  item.tone === "good"
+                    ? "text-emerald-700"
+                    : item.tone === "bad"
+                      ? "text-rose-600"
+                      : "text-slate-500"
+                }`}
+              >
+                {item.detail}
+              </span>
+            ) : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export type ReportColumn<T> = {
+  label: string;
+  /** Montos y cantidades a la derecha. */
+  numeric?: boolean;
+  render: (row: T) => ReactNode;
+  /** Clase extra de la celda (color de mora, por ejemplo). */
+  tone?: (row: T) => string;
+};
+
+/**
+ * Tabla de reportes: encabezado suave, filas que aparecen en la primera
+ * entrada, montos alineados a la derecha y desplazamiento horizontal en
+ * pantallas chicas.
+ */
+export function ReportTable<T>({
+  rows,
+  columns,
+  rowKey,
+  minWidth = 560,
+  empty,
+}: {
+  rows: readonly T[];
+  columns: readonly ReportColumn<T>[];
+  rowKey: (row: T) => string;
+  minWidth?: number;
+  empty: string;
+}): ReactElement {
+  if (!rows.length)
+    return <p className="py-6 text-center text-sm text-slate-500">{empty}</p>;
+  return (
+    <div className="max-h-[420px] overflow-auto">
+      <table className="w-full text-sm" style={{ minWidth }}>
+        <thead className="sticky top-0 z-[1] bg-slate-50 text-left text-[11px] uppercase text-slate-500">
+          <tr>
+            {columns.map((column) => (
+              <th
+                key={column.label}
+                className={`px-3 py-2 font-semibold ${column.numeric ? "text-right" : ""}`}
+              >
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr
+              key={rowKey(row)}
+              className="reportes-fila border-t border-slate-100 transition-colors duration-150 hover:bg-slate-50"
+              style={{ "--fila": Math.min(index, 12) } as CSSProperties}
+            >
+              {columns.map((column) => (
+                <td
+                  key={column.label}
+                  className={`px-3 py-2 ${column.numeric ? "text-right tabular-nums" : "text-slate-800"} ${column.tone?.(row) ?? ""}`}
+                >
+                  {column.render(row)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

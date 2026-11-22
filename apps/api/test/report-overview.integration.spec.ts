@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
@@ -9,6 +9,11 @@ import { ReportAccessService } from "../src/reports/report-access.service";
 import { ReportOverviewService } from "../src/reports/report-overview.service";
 import { ReportSalesData } from "../src/reports/report-sales-data";
 import { ReportSalesService } from "../src/reports/report-sales.service";
+import { ReportProfitabilityService } from "../src/reports/report-profitability.service";
+import { ReportProductsService } from "../src/reports/report-products.service";
+import { ReportInventoryService } from "../src/reports/report-inventory.service";
+import { ReportPurchasesService } from "../src/reports/report-purchases.service";
+import { ReportCustomersService } from "../src/reports/report-customers.service";
 
 /**
  * Caso armado a mano (octubre 2026, importes en centavos):
@@ -530,5 +535,111 @@ describe("report overview isolated schema", () => {
         now,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  // Resto de las pestañas (SISTEMA-116) sobre el mismo caso.
+  const services = () => {
+    const access = new ReportAccessService(db);
+    const data = new ReportSalesData(db);
+    return {
+      profitability: new ReportProfitabilityService(db, access, data),
+      products: new ReportProductsService(db, access, data),
+      inventory: new ReportInventoryService(db, access),
+      purchases: new ReportPurchasesService(db, access),
+      customers: new ReportCustomersService(db, access),
+    };
+  };
+
+  it("Rentabilidad: misma ganancia que el Resumen y margen ponderado", async () => {
+    const [result, overview] = await Promise.all([
+      services().profitability.profitability(
+        fixture.owner,
+        fixture.org.id,
+        october,
+        now,
+      ),
+      reports.overview(fixture.owner, fixture.org.id, october, now),
+    ]);
+    expect(result.kpis.grossProfit.value).toBe(overview.kpis.grossProfit.value);
+    // Ventas con costo 3000, costo 1200: margen 60 %; anterior 2000/400: 80 %.
+    expect(result.kpis.marginPct).toMatchObject({
+      value: "60",
+      previous: "80",
+      changePp: -20,
+    });
+    expect(result.kpis.costOfSales.value).toBe("1200");
+    const sum = (values: string[]) =>
+      values.reduce((total, value) => total + BigInt(value), 0n).toString();
+    expect(sum(result.charts.trend.map((row) => row.profitMinor))).toBe("1800");
+    expect(sum(result.tables.branches.map((row) => row.profitMinor))).toBe(
+      "1800",
+    );
+    expect(result.tables.costCoveragePct).toBe(75);
+  });
+
+  it("Rentabilidad exige el permiso de costos", async () => {
+    const limited = await user(
+      fixture.org.id,
+      ["REPORT_READ"],
+      [fixture.centro.id],
+    );
+    await expect(
+      services().profitability.profitability(
+        limited,
+        fixture.org.id,
+        october,
+        now,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("Productos: top, Pareto y stock del alcance", async () => {
+    const result = await services().products.products(
+      fixture.owner,
+      fixture.org.id,
+      october,
+      now,
+    );
+    expect(result.charts.top[0]).toMatchObject({ units: 3 });
+    expect(result.kpis.paretoProducts.value).toBe("1");
+    expect(result.tables.pareto.ofProducts).toBe(1);
+    expect(Number(result.kpis.activeProducts.value)).toBeGreaterThan(0);
+  });
+
+  it("Inventario, Compras y Clientes responden con permisos y exigen los suyos", async () => {
+    const full = await user(
+      fixture.org.id,
+      ["REPORT_READ", "REPORT_PROFIT_READ", "PURCHASE_READ", "ACCOUNT_READ"],
+      [fixture.centro.id, fixture.norte.id],
+    );
+    const tabs = services();
+    const inventory = await tabs.inventory.inventory(
+      full,
+      fixture.org.id,
+      october,
+      now,
+    );
+    expect(inventory.charts.trend).toHaveLength(31);
+    expect(inventory.tables.showsValue).toBe(true);
+    const purchases = await tabs.purchases.purchases(
+      full,
+      fixture.org.id,
+      october,
+      now,
+    );
+    expect(purchases.meta.report).toBe("purchases");
+    const customers = await tabs.customers.customers(
+      full,
+      fixture.org.id,
+      october,
+      now,
+    );
+    expect(customers.charts.aging).toHaveLength(7);
+    await expect(
+      tabs.purchases.purchases(fixture.owner, fixture.org.id, october, now),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      tabs.customers.customers(fixture.owner, fixture.org.id, october, now),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

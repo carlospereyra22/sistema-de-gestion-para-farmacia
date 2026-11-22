@@ -6,6 +6,11 @@ import { ReportFiltersController } from "./report-filters.controller";
 import { ReportOverviewService } from "./report-overview.service";
 import { ReportSalesData } from "./report-sales-data";
 import { ReportSalesService } from "./report-sales.service";
+import { ReportProfitabilityService } from "./report-profitability.service";
+import { ReportProductsService } from "./report-products.service";
+import { ReportInventoryService } from "./report-inventory.service";
+import { ReportPurchasesService } from "./report-purchases.service";
+import { ReportCustomersService } from "./report-customers.service";
 import { ReportsController } from "./reports.controller";
 import { ReportsService } from "./reports.service";
 @Module({
@@ -17,6 +22,11 @@ import { ReportsService } from "./reports.service";
     ReportOverviewService,
     ReportSalesData,
     ReportSalesService,
+    ReportProfitabilityService,
+    ReportProductsService,
+    ReportInventoryService,
+    ReportPurchasesService,
+    ReportCustomersService,
   ],
   exports: [ReportAccessService],
 })

@@ -285,6 +285,53 @@ rol en Configuracion → Roles y permisos.
 - Pendiente para la tarea de Interaccion: filtros cruzados (clic en una hora o
   medio de pago) y detalle de tickets.
 
+## Rentabilidad, Productos, Inventario, Compras y Clientes (SISTEMA-116, 22/11/2026)
+
+Endpoints `organizations/:organizationId/reports/{profitability,products,inventory,purchases,customers}`
+(`report-*.service.ts`), con la forma comun de `report-tab-helpers.ts`: rechazan los
+filtros que no usan, exigen su permiso **en la API** (403) y devuelven `meta`, `kpis`,
+`charts` y `tables`. Web: `report-<pestana>.tsx` con `ReportTabLoader`,
+`ReportInsightList` y `ReportTable` (`report-panel.tsx`); graficos en
+`lib/report-charts-tabs.ts`. Todas con "Lectura rapida" (lo que mas conviene mirar),
+el estilo y la animacion del Resumen, y funcionan con una o varias sucursales.
+
+- **Rentabilidad** (`REPORT_PROFIT_READ`): ganancia bruta, margen ponderado (variacion
+  en pp), costo de ventas y ganancia por ticket, todo **estimado** con el costo del lote
+  y con aviso de cobertura. Ganancia y margen en el tiempo (columnas + linea, dos ejes),
+  productos mas rentables por ganancia o por margen (por margen, solo con 3 o mas
+  unidades), margen por categoria, ganancia por sucursal y tabla ingresos/costo/ganancia
+  con variacion en pp. **Margen objetivo 20 %**: productos con 2 o mas unidades por
+  debajo aparecen en "margen bajo"; el sistema no cambia precios.
+- **Productos**: activos (no archivados en todas las sucursales del alcance),
+  **cuantos productos hacen el 80 % de la venta** (Pareto), sin movimiento en N dias
+  (activos con stock, por defecto 30) y stock bajo. Top por unidades, facturacion o
+  ganancia; participacion por categoria; rotacion (unidades / stock actual,
+  **aproximada**) contra margen o ventas con cortes en el promedio; tabla de productos
+  parados con su valor a costo.
+- **Inventario**: valor del stock a costo (sin permiso de costos: unidades), stock bajo,
+  **sin stock = productos vendidos en los ultimos 90 dias que hoy no tienen stock
+  vendible** (no todo el catalogo nunca comprado) y lotes por vencer. **Evolucion
+  reconstruida**: stock al cierre de cada tramo = stock actual menos los movimientos
+  posteriores (`InventoryMovement`, con signo y lote); el valor usa el costo actual del
+  lote. Capital por categoria, **stock critico con dias de cobertura** (stock / venta
+  diaria de los ultimos 30 dias) y vencimientos (vencidos primero).
+- **Compras** (`PURCHASE_READ`): recibido (cantidad recibida x costo, por fecha de
+  recepcion), proveedores activos, facturas con saldo y **variacion de costos
+  ponderada por lo comprado** (ultimo costo del periodo contra el ultimo anterior).
+  Lo facturado por proveedores se informa **aparte** y nunca se suma a lo recibido.
+  Evolucion, por proveedor, mayores aumentos, facturas pendientes con mora y
+  recepciones pendientes con dias de espera.
+- **Clientes** (`ACCOUNT_READ`): clientes con compras, saldo de cuenta corriente,
+  cobrado (creditos con medio de pago) y clientes con deuda. **Vendido a cuenta contra
+  cobrado** en el tiempo, mejores clientes, **antiguedad de saldos por vencimiento de
+  cada venta, imputando el saldo de la venta mas nueva a la mas vieja (FIFO: lo cobrado
+  salda primero lo mas viejo)**, mayores deudores con vencido y ultimo pago, y ultimos
+  cobros. Sin DNI, CUIT ni telefono.
+- Tests: `report-tabs.spec.ts` (reglas puras), integracion en
+  `test/report-overview.integration.spec.ts` (Rentabilidad concilia con el Resumen,
+  permisos 403) y `report-tabs.test.tsx`.
+- Pendiente (tareas 11 y 12): filtros cruzados, detalle de transacciones y exportacion.
+
 ## Tareas
 
 1. **Mapa de metricas y contratos.** Matriz metrica -> fuente -> formula -> limitaciones;

@@ -491,6 +491,15 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   cambiar la API o bajar cambios hay que reconstruir la imagen (`-Reconstruir`).
   `gestion_dev` sigue para los tests de integración. Ver `DOCKER.md`.
 
+- **Pestañas de Reportes completas (SISTEMA-115 y SISTEMA-116, 22/11/2026).**
+  Pedido del usuario: todas con KPIs y gráficos que den valor y el estilo del Resumen.
+  Definiciones elegidas: "sin stock" cuenta sólo productos vendidos en los últimos 90
+  días que hoy no tienen stock (contar todo el catálogo nunca comprado sería ruido);
+  la antigüedad de saldos imputa el saldo de la venta más nueva a la más vieja (FIFO);
+  el margen objetivo de la alerta es 20 %; la evolución del stock se reconstruye con
+  los movimientos. Ventas y Resumen comparten consultas para dar las mismas cifras.
+  Ver `REPORTS_PLAN.md`.
+
 - **Aportes de las farmacias al catálogo externo (SISTEMA-112, 22/11/2026).**
   Decisión del usuario: lo que una farmacia carga y el catálogo no tiene se ofrece a
   todas, sin revisión previa, con la etiqueta "cargado por una farmacia" y por debajo

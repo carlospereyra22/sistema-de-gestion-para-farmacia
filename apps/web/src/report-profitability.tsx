@@ -1,0 +1,412 @@
+import { useMemo, useState, type ReactElement } from "react";
+import {
+  AlertTriangle,
+  BadgeDollarSign,
+  Coins,
+  Percent,
+  ReceiptText,
+  Store,
+  Tags,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
+import type { ReportProfitability, ReportProfitRow } from "@gestion/contracts";
+import { rankingOption } from "./lib/report-charts";
+import { donutOption } from "./lib/report-charts-ventas";
+import {
+  columnsOption,
+  formatPercent,
+  formatPp,
+  profitTrendOption,
+  trendUnitOptions,
+} from "./lib/report-charts-tabs";
+import { formatMoneyMinor } from "./lib/report-format";
+import type { ReportView } from "./lib/report-view";
+import { ReportKpiCard } from "./report-kpi";
+import {
+  ReportInsightList,
+  ReportPanel,
+  ReportPanelChart,
+  ReportSegmented,
+  ReportTable,
+  ReportWarnings,
+  type ReportInsightItem,
+} from "./report-panel";
+import { ReportEmptyState, reportCardClass } from "./report-states";
+import { ReportTabLoader } from "./report-tab-loader";
+
+export function ReportProfitabilityTab(props: {
+  token: string;
+  organizationId: string;
+  view: ReportView;
+  active?: boolean;
+}): ReactElement {
+  return (
+    <ReportTabLoader
+      tab="profitability"
+      {...props}
+      active={props.active ?? true}
+    >
+      {({ data, animar, onGranularity }) => (
+        <ReportProfitabilityContent
+          data={data}
+          animar={animar}
+          onGranularity={onGranularity}
+        />
+      )}
+    </ReportTabLoader>
+  );
+}
+
+const money = (value: string) => formatMoneyMinor(value);
+
+/**
+ * Pestaña Rentabilidad (SISTEMA-116): cuánto se gana, con qué margen y en qué.
+ * Todo es estimado con el costo de lote; no es ganancia neta.
+ */
+export function ReportProfitabilityContent({
+  data,
+  animar = false,
+  onGranularity,
+}: {
+  data: ReportProfitability;
+  animar?: boolean;
+  onGranularity: (unit: ReportProfitability["charts"]["trendUnit"]) => void;
+}): ReactElement {
+  const { kpis, charts, tables, meta } = data;
+  const [ranking, setRanking] = useState<"profit" | "margin">("profit");
+  const severalBranches = tables.branches.length > 1;
+  const options = useMemo(() => {
+    // Por margen sólo productos con algo de volumen: una venta suelta con
+    // margen alto no es un producto rentable.
+    const products = [...charts.products]
+      .filter((row) => ranking === "profit" || row.units >= 3)
+      .sort((left, right) =>
+        ranking === "margin"
+          ? (right.marginPct ?? 0) - (left.marginPct ?? 0)
+          : Number(BigInt(right.profitMinor) - BigInt(left.profitMinor)),
+      )
+      .slice(0, 10);
+    return {
+      trend: profitTrendOption(charts.trend, charts.trendUnit),
+      products: rankingOption(
+        products.map((row) => ({
+          name: `${row.name} (${row.units} u.)`,
+          value:
+            ranking === "margin"
+              ? (row.marginPct ?? 0)
+              : Number(row.profitMinor),
+        })),
+        ranking === "margin" ? "percent" : "money",
+      ),
+      categories: columnsOption(
+        charts.categories.slice(0, 8).map((row) => ({
+          name: row.name,
+          value: row.marginPct ?? 0,
+          label: formatPercent(row.marginPct),
+        })),
+        "percent",
+      ),
+      branches: donutOption(
+        tables.branches.map((row) => ({
+          name: row.name,
+          value: Math.max(0, Number(row.profitMinor)),
+        })),
+      ),
+    };
+  }, [charts, tables.branches, ranking]);
+
+  const best = charts.products[0];
+  const worstCategory = [...charts.categories]
+    .filter((row) => row.marginPct !== null)
+    .sort((left, right) => left.marginPct! - right.marginPct!)[0];
+  const insights: ReportInsightItem[] = [];
+  if (best)
+    insights.push({
+      icon: <Trophy size={16} aria-hidden />,
+      title: "Producto que más ganancia deja",
+      value: best.name,
+      detail: `${money(best.profitMinor)} · margen ${formatPercent(best.marginPct)}`,
+    });
+  if (charts.categories[0])
+    insights.push({
+      icon: <Tags size={16} aria-hidden />,
+      title: "Categoría más rentable",
+      value: charts.categories[0].name,
+      detail: `${money(charts.categories[0].profitMinor)} de ganancia`,
+    });
+  if (worstCategory && worstCategory !== charts.categories[0])
+    insights.push({
+      icon: <TrendingDown size={16} aria-hidden />,
+      title: "Categoría con menor margen",
+      value: worstCategory.name,
+      detail: `Margen ${formatPercent(worstCategory.marginPct)}`,
+      tone: "bad",
+    });
+  insights.push({
+    icon: <AlertTriangle size={16} aria-hidden />,
+    title: `Productos bajo ${tables.marginTargetPct} % de margen`,
+    value: tables.lowMargin.length.toLocaleString("es-AR"),
+    detail: tables.lowMargin.length
+      ? "Revisá su precio o su costo"
+      : "Ninguno por debajo del objetivo",
+    tone: tables.lowMargin.length ? "bad" : "good",
+  });
+  insights.push({
+    icon: <Coins size={16} aria-hidden />,
+    title: "Ventas con costo conocido",
+    value: formatPercent(tables.costCoveragePct),
+    detail: "El resto no entra en el margen",
+  });
+
+  if (kpis.costOfSales.value === "0" && kpis.grossProfit.value === "0")
+    return (
+      <div className={reportCardClass}>
+        <ReportEmptyState
+          title="Sin ventas con costo en el período"
+          description="La rentabilidad se calcula con el costo de los lotes vendidos."
+        />
+      </div>
+    );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ReportKpiCard
+          animar={animar}
+          orden={0}
+          label="Ganancia bruta estimada"
+          icon={<TrendingUp size={18} aria-hidden />}
+          kpi={kpis.grossProfit}
+          help="Ventas netas con costo menos el costo de los lotes vendidos. No descuenta gastos fijos ni impuestos: no es ganancia neta."
+        />
+        <ReportKpiCard
+          animar={animar}
+          orden={1}
+          label="Margen bruto"
+          icon={<Percent size={18} aria-hidden />}
+          kpi={kpis.marginPct}
+          help="Ganancia / ventas con costo × 100, ponderado por importe. La variación es en puntos porcentuales. Margen no es recargo: un recargo del 25 % sobre el costo es un margen del 20 %."
+        />
+        <ReportKpiCard
+          animar={animar}
+          orden={2}
+          label="Costo de ventas"
+          icon={<ReceiptText size={18} aria-hidden />}
+          kpi={kpis.costOfSales}
+          higherIsBetter={false}
+          help="Costo de los lotes vendidos, menos el de lo devuelto."
+        />
+        <ReportKpiCard
+          animar={animar}
+          orden={3}
+          label="Ganancia por ticket"
+          icon={<BadgeDollarSign size={18} aria-hidden />}
+          kpi={kpis.profitPerTicket}
+          help="Ganancia bruta estimada dividida la cantidad de tickets."
+        />
+      </div>
+      <ReportWarnings warnings={meta.dataQuality.warnings} />
+
+      <ReportPanel
+        animar={animar}
+        title="Lectura rápida"
+        icon={<Coins size={16} aria-hidden />}
+        hint="Dónde se gana y dónde se pierde margen."
+      >
+        <ReportInsightList items={insights} />
+      </ReportPanel>
+
+      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+        <ReportPanel
+          animar={animar}
+          orden={0}
+          title="Ganancia y margen"
+          icon={<TrendingUp size={16} aria-hidden />}
+          hint="Columnas: ganancia bruta. Línea: margen % (eje derecho)."
+          action={
+            <ReportSegmented
+              label="Agrupar por"
+              value={charts.trendUnit}
+              options={trendUnitOptions}
+              onChange={onGranularity}
+            />
+          }
+        >
+          <ReportPanelChart
+            tipo="barras"
+            option={options.trend}
+            label="Evolución de ganancia y margen"
+          />
+        </ReportPanel>
+        <ReportPanel
+          animar={animar}
+          orden={1}
+          title="Productos más rentables"
+          icon={<Trophy size={16} aria-hidden />}
+          hint={
+            ranking === "margin"
+              ? "Mayor margen entre los que vendieron 3 o más unidades."
+              : "Mayor ganancia total; entre paréntesis, las unidades."
+          }
+          action={
+            <ReportSegmented
+              label="Ordenar productos por"
+              value={ranking}
+              options={[
+                { id: "profit", label: "Ganancia" },
+                { id: "margin", label: "Margen %" },
+              ]}
+              onChange={setRanking}
+            />
+          }
+        >
+          {charts.products.length ? (
+            <ReportPanelChart
+              tipo="barras"
+              option={options.products}
+              label="Productos más rentables"
+              height={300}
+            />
+          ) : (
+            <ReportEmptyState title="Sin productos con costo" />
+          )}
+        </ReportPanel>
+      </div>
+
+      <div
+        className={`grid gap-4 ${severalBranches ? "xl:grid-cols-[1.4fr_1fr]" : ""}`}
+      >
+        <ReportPanel
+          animar={animar}
+          orden={0}
+          title="Margen por categoría"
+          icon={<Tags size={16} aria-hidden />}
+          hint="Ponderado por importe: pesa más lo que más se vende."
+        >
+          {charts.categories.length ? (
+            <ReportPanelChart
+              tipo="barras"
+              option={options.categories}
+              label="Margen por categoría"
+            />
+          ) : (
+            <ReportEmptyState title="Sin categorías con costo" />
+          )}
+        </ReportPanel>
+        {severalBranches ? (
+          <ReportPanel
+            animar={animar}
+            orden={1}
+            title="Ganancia por sucursal"
+            icon={<Store size={16} aria-hidden />}
+            hint="Participación de cada sucursal en la ganancia."
+          >
+            <ReportPanelChart
+              tipo="torta"
+              option={options.branches}
+              label="Ganancia por sucursal"
+              height={220}
+            />
+          </ReportPanel>
+        ) : null}
+      </div>
+
+      {severalBranches ? (
+        <ReportPanel
+          animar={animar}
+          title="Ingresos, costo y ganancia por sucursal"
+          icon={<Store size={16} aria-hidden />}
+          hint="La variación de margen es en puntos porcentuales contra el período comparado."
+        >
+          <ReportTable
+            rows={tables.branches}
+            rowKey={(row) => row.id ?? row.name}
+            empty="Sin sucursales"
+            minWidth={680}
+            columns={[
+              { label: "Sucursal", render: (row) => row.name },
+              {
+                label: "Ventas con costo",
+                numeric: true,
+                render: (row) => money(row.netSalesMinor),
+              },
+              {
+                label: "Costo",
+                numeric: true,
+                render: (row) => money(row.costMinor),
+              },
+              {
+                label: "Ganancia",
+                numeric: true,
+                render: (row) => money(row.profitMinor),
+              },
+              {
+                label: "Margen",
+                numeric: true,
+                render: (row) => formatPercent(row.marginPct),
+              },
+              {
+                label: "Var. margen",
+                numeric: true,
+                render: (row) => formatPp(row.changePp),
+                tone: (row) =>
+                  row.changePp === null || row.changePp === 0
+                    ? "text-slate-400"
+                    : row.changePp > 0
+                      ? "text-emerald-700"
+                      : "text-rose-600",
+              },
+              {
+                label: "% ganancia",
+                numeric: true,
+                render: (row) => formatPercent(row.sharePct),
+              },
+            ]}
+          />
+        </ReportPanel>
+      ) : null}
+
+      <ReportPanel
+        animar={animar}
+        title={`Productos con margen bajo (menos de ${tables.marginTargetPct} %)`}
+        icon={<AlertTriangle size={16} aria-hidden />}
+        hint="Vendieron 2 o más unidades. Revisá su precio de venta o el costo de compra: el sistema no cambia precios solo."
+      >
+        <ReportTable<ReportProfitRow>
+          rows={tables.lowMargin}
+          rowKey={(row) => row.id ?? row.name}
+          empty="Ningún producto por debajo del margen objetivo."
+          columns={[
+            { label: "Producto", render: (row) => row.name },
+            {
+              label: "Unidades",
+              numeric: true,
+              render: (row) => row.units.toLocaleString("es-AR"),
+            },
+            {
+              label: "Ventas",
+              numeric: true,
+              render: (row) => money(row.netSalesMinor),
+            },
+            {
+              label: "Ganancia",
+              numeric: true,
+              render: (row) => money(row.profitMinor),
+            },
+            {
+              label: "Margen",
+              numeric: true,
+              render: (row) => formatPercent(row.marginPct),
+              tone: (row) =>
+                (row.marginPct ?? 0) < 0
+                  ? "text-rose-600 font-semibold"
+                  : "text-amber-700",
+            },
+          ]}
+        />
+      </ReportPanel>
+    </div>
+  );
+}
