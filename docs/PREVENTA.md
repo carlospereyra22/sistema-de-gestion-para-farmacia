@@ -20,6 +20,11 @@ si la farmacia no los tenía (no se tocan si ya existen).
 Apagado: la gestión no muestra **Preventa**, la versión celular no se abre y la API
 responde 403. No se borra nada.
 
+Con Catálogo online también habilitado, la farmacia puede elegir ver los pedidos
+de los dos módulos juntos (SISTEMA-119): en la gestión, la pestaña Pedidos sale de
+acá y pasa a la pantalla **Pedidos**; la versión celular no cambia. Ver
+`PEDIDOS.md`.
+
 ## Roles y permisos
 
 | Permiso            | Para qué                                                               | Lo trae                                     |

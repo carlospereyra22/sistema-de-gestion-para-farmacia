@@ -15,6 +15,7 @@ import { OrganizationDocumentTemplate } from "./organization-document-template";
 import { OrganizationPrintFormat } from "./organization-print-format";
 import { FiscalSettingsPanel } from "./fiscal-settings";
 import { UserTicketNameDialog } from "./user-ticket-names";
+import { OrganizacionVistaPedidos } from "./organizacion-vista-pedidos";
 import {
   changeBranchStatus,
   createBranch,
@@ -58,6 +59,7 @@ export function OrganizationWorkspace({
   onNameChange,
   onLogoSaved,
   onUsers,
+  vistaPedidos,
 }: {
   token: string;
   organizationId: string;
@@ -67,6 +69,12 @@ export function OrganizationWorkspace({
   onNameChange: (name: string) => void;
   onLogoSaved?: () => void;
   onUsers: () => void;
+  /** Con Catálogo online y Preventa: verlos juntos o no (SISTEMA-119). */
+  vistaPedidos?: {
+    unificados: boolean;
+    puedeCambiar: boolean;
+    onCambio: (unificados: boolean) => void;
+  };
 }) {
   return (
     // El título va en la barra de arriba, como en los demás módulos
@@ -128,6 +136,15 @@ export function OrganizationWorkspace({
       <div hidden={tab !== "fiscal"}>
         <FiscalSettingsPanel token={token} organizationId={organizationId} />
       </div>
+      {tab === "general" && vistaPedidos ? (
+        <div className="mt-5">
+          <OrganizacionVistaPedidos
+            token={token}
+            organizationId={organizationId}
+            {...vistaPedidos}
+          />
+        </div>
+      ) : null}
       {tab === "general" && (
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <section className={`${card} flex items-start gap-4 bg-teal-50/40`}>

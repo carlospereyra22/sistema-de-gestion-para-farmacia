@@ -38,6 +38,7 @@ import {
   pesos,
 } from "./lib/preventa";
 import { ProductFilterSelect } from "./product-filter-select";
+import { SelectorFecha } from "./selector-fecha";
 import {
   DialogoAsignar,
   PreventaPedidoDetalle,
@@ -75,6 +76,79 @@ const ESTADOS_FILTRO: { id: Filtro["estado"]; label: string }[] = [
   { id: "DELIVERED", label: "Entregados" },
   { id: "CANCELLED", label: "Cancelados" },
 ];
+
+/**
+ * Pedidos tomados sin señal que esperan para mandarse. También la muestra la
+ * pantalla Pedidos (SISTEMA-119).
+ */
+export function BandejaDeSalida({
+  bandeja,
+  usuarioId,
+  organizationId,
+}: {
+  bandeja: PedidoEnBandeja[];
+  usuarioId: string;
+  organizationId: string;
+}) {
+  if (!bandeja.length) return null;
+  return (
+    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+      <p className="flex items-center gap-1.5 text-sm font-bold text-amber-900">
+        <CloudOff size={16} aria-hidden />
+        {bandeja.length} pedido{bandeja.length === 1 ? "" : "s"} sin enviar
+      </p>
+      <p className="text-xs text-amber-900">
+        Se mandan solos cuando vuelve la señal.
+      </p>
+      <ul className="mt-2 grid gap-1.5">
+        {bandeja.map((p) => (
+          <li
+            key={p.requestId}
+            className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold text-slate-900">
+                {p.customerName}
+              </span>
+              <span className="block text-xs text-slate-500">
+                {fechaHora(p.tomadoEl)} · {pesos(p.totalEstimadoMinor)} estimado
+              </span>
+              {p.error ? (
+                <span className="block text-xs font-semibold text-rose-700">
+                  {p.error}
+                </span>
+              ) : null}
+            </span>
+            {p.error ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="Reintentar"
+                  className="grid size-9 place-items-center rounded-lg text-teal-700 hover:bg-teal-50"
+                  onClick={() =>
+                    reintentarDeBandeja(usuarioId, organizationId, p.requestId)
+                  }
+                >
+                  <RotateCcw size={16} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Descartar"
+                  className="grid size-9 place-items-center rounded-lg text-rose-700 hover:bg-rose-50"
+                  onClick={() =>
+                    quitarDeBandeja(usuarioId, organizationId, p.requestId)
+                  }
+                >
+                  <Trash2 size={16} aria-hidden />
+                </button>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /**
  * Pedidos de preventa (SISTEMA-108). El preventista ve los suyos; quien
@@ -168,72 +242,11 @@ export function PreventaPedidos({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {bandeja.length ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
-          <p className="flex items-center gap-1.5 text-sm font-bold text-amber-900">
-            <CloudOff size={16} aria-hidden />
-            {bandeja.length} pedido{bandeja.length === 1 ? "" : "s"} sin enviar
-          </p>
-          <p className="text-xs text-amber-900">
-            Se mandan solos cuando vuelve la señal.
-          </p>
-          <ul className="mt-2 grid gap-1.5">
-            {bandeja.map((p) => (
-              <li
-                key={p.requestId}
-                className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold text-slate-900">
-                    {p.customerName}
-                  </span>
-                  <span className="block text-xs text-slate-500">
-                    {fechaHora(p.tomadoEl)} · {pesos(p.totalEstimadoMinor)}{" "}
-                    estimado
-                  </span>
-                  {p.error ? (
-                    <span className="block text-xs font-semibold text-rose-700">
-                      {p.error}
-                    </span>
-                  ) : null}
-                </span>
-                {p.error ? (
-                  <>
-                    <button
-                      type="button"
-                      aria-label="Reintentar"
-                      className="grid size-9 place-items-center rounded-lg text-teal-700 hover:bg-teal-50"
-                      onClick={() =>
-                        reintentarDeBandeja(
-                          contexto.usuario.id,
-                          organizationId,
-                          p.requestId,
-                        )
-                      }
-                    >
-                      <RotateCcw size={16} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Descartar"
-                      className="grid size-9 place-items-center rounded-lg text-rose-700 hover:bg-rose-50"
-                      onClick={() =>
-                        quitarDeBandeja(
-                          contexto.usuario.id,
-                          organizationId,
-                          p.requestId,
-                        )
-                      }
-                    >
-                      <Trash2 size={16} aria-hidden />
-                    </button>
-                  </>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <BandejaDeSalida
+        bandeja={bandeja}
+        usuarioId={contexto.usuario.id}
+        organizationId={organizationId}
+      />
 
       <div className="flex items-center gap-2">
         <label className="relative min-w-0 flex-1">
@@ -474,28 +487,28 @@ export function PreventaPedidos({
               icono={<CalendarDays size={16} aria-hidden />}
             >
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs font-medium text-slate-500">
-                  Desde
-                  <input
-                    type="date"
-                    className={campo}
+                <div className="text-xs font-medium text-slate-500">
+                  <p className="mb-1">Desde</p>
+                  <SelectorFecha
+                    compact
+                    label="Desde"
                     value={borrador.desde}
-                    onChange={(e) =>
-                      setBorrador((f) => ({ ...f, desde: e.target.value }))
-                    }
+                    max={borrador.hasta || undefined}
+                    vacio="Cualquier fecha"
+                    onChange={(desde) => setBorrador((f) => ({ ...f, desde }))}
                   />
-                </label>
-                <label className="text-xs font-medium text-slate-500">
-                  Hasta
-                  <input
-                    type="date"
-                    className={campo}
+                </div>
+                <div className="text-xs font-medium text-slate-500">
+                  <p className="mb-1">Hasta</p>
+                  <SelectorFecha
+                    compact
+                    label="Hasta"
                     value={borrador.hasta}
-                    onChange={(e) =>
-                      setBorrador((f) => ({ ...f, hasta: e.target.value }))
-                    }
+                    min={borrador.desde || undefined}
+                    vacio="Cualquier fecha"
+                    onChange={(hasta) => setBorrador((f) => ({ ...f, hasta }))}
                   />
-                </label>
+                </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {[
@@ -550,7 +563,7 @@ export function PreventaPedidos({
                   value={borrador.vendedor}
                   icon={<UserRound size={16} aria-hidden />}
                   options={[
-                    { value: "", label: "Todos los preventistas" },
+                    { value: "", label: "Todos" },
                     ...equipo
                       .filter((m) => m.vende)
                       .map((m) => ({ value: m.userId, label: m.name })),

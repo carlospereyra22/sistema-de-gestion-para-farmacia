@@ -18,4 +18,4 @@ donde se usan:
 3. Guardarlo en la carpeta del lugar donde va y, si es nuevo, sumarlo al mapa de
    `src/lib/iconos-menu-lateral.ts`.
 
-Preventa es la única sección sin imagen propia: sigue con el ícono de la librería (`lucide-react`). Administración (usuarios, roles y permisos, organización) también usa estas imágenes.
+Todas las secciones tienen imagen propia (Pedidos y Preventa desde SISTEMA-119). Administración (usuarios, roles y permisos, organización) también usa estas imágenes.

@@ -9,6 +9,7 @@ import { CatalogModule } from "./catalog/catalog.module";
 import { CashModule } from "./cash/cash.module";
 import { CatalogoOnlineModule } from "./catalogo-online/catalogo-online.module";
 import { PreventaModule } from "./preventa/preventa.module";
+import { PedidosModule } from "./pedidos/pedidos.module";
 
 import { EnvironmentModule } from "./config/environment.module";
 import { validateEnvironment } from "./config/environment.validation";
@@ -43,6 +44,7 @@ import { UsersModule } from "./users/users.module";
     CashModule,
     CatalogoOnlineModule,
     PreventaModule,
+    PedidosModule,
     InventoryModule,
     SalesModule,
     OffersModule,

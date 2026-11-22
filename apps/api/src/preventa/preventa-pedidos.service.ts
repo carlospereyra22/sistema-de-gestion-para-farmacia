@@ -44,6 +44,8 @@ export type PedidoPreventaNuevo = {
 
 export type FiltroPedidos = {
   estado?: EstadoPreventa;
+  /** Varios estados juntos (pantalla Pedidos, SISTEMA-119). */
+  estados?: readonly EstadoPreventa[];
   vendedorId?: string;
   repartidorId?: string;
   clienteId?: string;
@@ -196,6 +198,7 @@ export class PreventaPedidosService {
     const where: Prisma.PreventaOrderWhereInput = {
       organizationId,
       ...(filtro.estado ? { status: filtro.estado } : {}),
+      ...(filtro.estados ? { status: { in: [...filtro.estados] } } : {}),
       ...(filtro.clienteId ? { customerId: filtro.clienteId } : {}),
       ...(filtro.vendedorId ? { sellerId: filtro.vendedorId } : {}),
       ...(filtro.repartidorId ? { delivererId: filtro.repartidorId } : {}),
@@ -233,6 +236,16 @@ export class PreventaPedidosService {
         enReparto: pedidos.filter((p) => p.status === "IN_DELIVERY").length,
       },
     };
+  }
+
+  /** Pedidos pendientes que el usuario ve, sin filtros (pantalla Pedidos). */
+  async pendientes(actorId: string, organizationId: string) {
+    const acceso = await accesoPreventa(this.prisma, actorId, organizationId);
+    return this.prisma.preventaOrder.count({
+      where: {
+        AND: [{ organizationId, status: "PENDING" }, this.alcance(acceso, {})],
+      },
+    });
   }
 
   /** Lo que cada uno puede ver: quien administra todo; el resto, lo suyo. */

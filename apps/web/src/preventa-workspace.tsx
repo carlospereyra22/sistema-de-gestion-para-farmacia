@@ -38,7 +38,7 @@ import { PreventaComisiones } from "./preventa-comisiones";
 import { PreventaConfiguracion } from "./preventa-configuracion";
 import { PreventaNuevoPedido } from "./preventa-nuevo-pedido";
 import { PreventaOfertas } from "./preventa-ofertas";
-import { PreventaPedidos } from "./preventa-pedidos";
+import { BandejaDeSalida, PreventaPedidos } from "./preventa-pedidos";
 import { PreventaReparto } from "./preventa-reparto";
 import { PreventaResumen } from "./preventa-resumen";
 import { PreventaMenuLateral } from "./preventa-menu-lateral";
@@ -67,6 +67,10 @@ export function PreventaWorkspace({
   movil,
   movilChrome,
   onAbrirMovil,
+  sinPedidos = false,
+  incrustado = false,
+  editarAlAbrir = null,
+  onVolverAPedidos,
 }: {
   token: string;
   organizationId: string;
@@ -79,12 +83,28 @@ export function PreventaWorkspace({
     onLogout: () => void;
   };
   onAbrirMovil?: () => void;
+  /**
+   * La farmacia ve los pedidos en la pantalla Pedidos (SISTEMA-119): en la
+   * gestión no hay pestaña Pedidos. La versión celular la conserva.
+   */
+  sinPedidos?: boolean;
+  /** Dentro de Pedidos (SISTEMA-119): sin margen propio. */
+  incrustado?: boolean;
+  /** Pedido para editar que llega desde la pantalla Pedidos. */
+  editarAlAbrir?: PedidoPreventa | null;
+  /** Al terminar o cancelar esa edición, volver a la pantalla Pedidos. */
+  onVolverAPedidos?: () => void;
 }) {
+  const ocultarPedidos = sinPedidos && !movil;
   const [contexto, setContexto] = useState<ContextoPreventa | null>(null);
   const [error, setError] = useState("");
-  const [seccion, setSeccion] = useState<SeccionPreventa | null>(null);
+  const [seccion, setSeccion] = useState<SeccionPreventa | null>(
+    editarAlAbrir ? "nuevo" : null,
+  );
   const [equipo, setEquipo] = useState<MiembroEquipo[]>([]);
-  const [editando, setEditando] = useState<PedidoPreventa | null>(null);
+  const [editando, setEditando] = useState<PedidoPreventa | null>(
+    editarAlAbrir,
+  );
   const [clienteParaPedido, setClienteParaPedido] =
     useState<ClientePreventa | null>(null);
   const [aviso, setAviso] = useState("");
@@ -100,11 +120,15 @@ export function PreventaWorkspace({
       .contexto(token, organizationId)
       .then((datos) => {
         setContexto(datos);
-        setSeccion((actual) => actual ?? seccionInicial(datos.permisos));
+        setSeccion(
+          (actual) =>
+            actual ??
+            seccionInicial(datos.permisos, { sinPedidos: ocultarPedidos }),
+        );
         setError("");
       })
       .catch((causa) => setError(mensajeDe(causa)));
-  }, [token, organizationId]);
+  }, [token, organizationId, ocultarPedidos]);
 
   useEffect(cargarContexto, [cargarContexto]);
 
@@ -171,7 +195,9 @@ export function PreventaWorkspace({
       </div>
     );
 
-  const visibles = seccionesVisibles(contexto.permisos);
+  const visibles = seccionesVisibles(contexto.permisos, {
+    sinPedidos: ocultarPedidos,
+  });
   const ir = (destino: SeccionPreventa) => {
     setSeccion(destino);
     setAviso("");
@@ -181,6 +207,12 @@ export function PreventaWorkspace({
       setClienteParaPedido(null);
     }
     window.scrollTo({ top: 0 });
+  };
+  // Sin pestaña Pedidos, lo que se edita vuelve a la pantalla Pedidos.
+  const alTerminarEdicion = () => {
+    setEditando(null);
+    if (ocultarPedidos && onVolverAPedidos) onVolverAPedidos();
+    else ir(ocultarPedidos ? (visibles[0] ?? "clientes") : "pedidos");
   };
 
   const contenido: Record<SeccionPreventa, () => ReactNode> = {
@@ -192,16 +224,13 @@ export function PreventaWorkspace({
         contexto={contexto}
         editando={editando}
         clienteInicial={clienteParaPedido}
-        onCancelarEdicion={() => {
-          setEditando(null);
-          ir("pedidos");
-        }}
+        onCancelarEdicion={alTerminarEdicion}
         onListo={(_pedido, mensaje) => {
           const eraEdicion = Boolean(editando);
           setEditando(null);
           setClienteParaPedido(null);
           setRecarga((n) => n + 1);
-          if (eraEdicion) ir("pedidos");
+          if (eraEdicion) alTerminarEdicion();
           else {
             // Como en la app anterior: listo para el próximo cliente.
             setPedidoNuevo((n) => n + 1);
@@ -299,6 +328,14 @@ export function PreventaWorkspace({
         </Aviso>
       ) : null}
       {aviso ? <Aviso tipo="bien">{aviso}</Aviso> : null}
+      {/* Sin pestaña Pedidos, lo que espera señal se ve acá. */}
+      {ocultarPedidos ? (
+        <BandejaDeSalida
+          bandeja={bandeja}
+          usuarioId={contexto.usuario.id}
+          organizationId={organizationId}
+        />
+      ) : null}
     </>
   );
 
@@ -350,7 +387,9 @@ export function PreventaWorkspace({
     );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+    <div
+      className={`flex min-h-0 flex-1 flex-col gap-4 ${incrustado ? "" : "p-4 sm:p-6"}`}
+    >
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200">
         <div
           role="tablist"

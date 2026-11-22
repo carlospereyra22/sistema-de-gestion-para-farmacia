@@ -23,6 +23,10 @@ panel de plataforma (detalle de la farmacia → **Módulos → Catálogo online*
 
 No se borra nada: al prenderlo de nuevo vuelve como estaba.
 
+Con Preventa también habilitada, la farmacia puede elegir ver los pedidos de los
+dos módulos juntos (SISTEMA-119): la pestaña Pedidos sale de acá y pasa a la
+pantalla **Pedidos**. Ver `PEDIDOS.md`.
+
 ## Para la farmacia
 
 Menú **Catálogo online**, con tres pestañas:

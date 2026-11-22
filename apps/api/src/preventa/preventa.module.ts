@@ -19,5 +19,7 @@ import { PreventaService } from "./preventa.service";
     PreventaPedidosService,
     PreventaComisionesService,
   ],
+  // La pantalla Pedidos (SISTEMA-119) lee los pedidos con este servicio.
+  exports: [PreventaPedidosService],
 })
 export class PreventaModule {}
