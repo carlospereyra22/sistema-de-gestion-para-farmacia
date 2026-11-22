@@ -1452,9 +1452,9 @@ export function WorkspaceShell({
                     className={`flex min-h-11 w-full items-center ${color || imagen ? "gap-2" : "gap-3"} rounded-xl border px-3 py-2.5 text-left text-sm leading-5 ${active ? "border-marca-908 bg-marca-970 font-semibold text-marca-535 shadow-[0_3px_10px_rgb(8_127_112_/_7%)]" : "border-transparent text-slate-600 hover:border-slate-100 hover:bg-niebla-973 hover:text-slate-800"}`}
                   >
                     <span
-                      // Íconos propios en 28 px con margen negativo arriba y
+                      // Íconos propios en 25 px con margen negativo arriba y
                       // abajo, así el renglón no crece.
-                      className={`grid ${color || imagen ? "-my-0.5 size-7" : "size-6"} shrink-0 place-items-center rounded-md ${active ? "bg-white text-marca-535 shadow-sm" : "text-slate-500"}`}
+                      className={`grid ${color || imagen ? "-my-0.5 size-[25px]" : "size-6"} shrink-0 place-items-center rounded-md ${active ? "bg-white text-marca-535 shadow-sm" : "text-slate-500"}`}
                     >
                       {/* Los propios tienen más detalle: un poco más grandes. */}
                       {color ? (
@@ -1462,10 +1462,10 @@ export function WorkspaceShell({
                           src={color}
                           alt=""
                           aria-hidden="true"
-                          className="size-7 object-contain"
+                          className="size-[25px] object-contain"
                         />
                       ) : imagen ? (
-                        <IconoImagen url={imagen} className="size-7" />
+                        <IconoImagen url={imagen} className="size-[25px]" />
                       ) : (
                         <Icon className="size-4" />
                       )}
@@ -1492,10 +1492,10 @@ export function WorkspaceShell({
                 }
                 className={administrationButtonClass("users")}
               >
-                <span className="-my-0.5 grid size-7 shrink-0 place-items-center text-current">
+                <span className="-my-0.5 grid size-[25px] shrink-0 place-items-center text-current">
                   <IconoImagen
                     url={ICONOS_MENU_LATERAL["Usuarios"]}
-                    className="size-7"
+                    className="size-[25px]"
                   />
                 </span>
                 <span>Usuarios</span>
@@ -1511,10 +1511,10 @@ export function WorkspaceShell({
                 }
                 className={administrationButtonClass("roles")}
               >
-                <span className="-my-0.5 grid size-7 shrink-0 place-items-center text-current">
+                <span className="-my-0.5 grid size-[25px] shrink-0 place-items-center text-current">
                   <IconoImagen
                     url={ICONOS_MENU_LATERAL["Roles y permisos"]}
-                    className="size-7"
+                    className="size-[25px]"
                   />
                 </span>
                 <span>Roles y permisos</span>
@@ -1530,10 +1530,10 @@ export function WorkspaceShell({
                 }
                 className={administrationButtonClass("branches")}
               >
-                <span className="-my-0.5 grid size-7 shrink-0 place-items-center text-current">
+                <span className="-my-0.5 grid size-[25px] shrink-0 place-items-center text-current">
                   <IconoImagen
                     url={ICONOS_MENU_LATERAL["Organización"]}
-                    className="size-7"
+                    className="size-[25px]"
                   />
                 </span>
                 <span>Organización</span>

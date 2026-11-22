@@ -482,3 +482,14 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   para que un faltante no quede oculto si se confirma sin contar), pero debajo se
   muestra el efectivo esperado con el botón "Coincide", que lo completa con un clic,
   igual que "Usar" en el fondo inicial.
+
+- **La API local se usa siempre en Docker (SISTEMA-111, 22/11/2026).** Decisión del
+  usuario: en la PC se trabaja con `Iniciar Gestion - Docker.cmd`, con la base
+  propia de Docker como datos de trabajo; no se copiaron los de `gestion_dev`. La
+  API nativa (`Iniciar Gestion - Pruebas.cmd`) queda sin uso diario; además Windows
+  empezó a bloquear su binario nativo de argon2 con Control de aplicaciones. Tras
+  cambiar la API o bajar cambios hay que reconstruir la imagen (`-Reconstruir`).
+  `gestion_dev` sigue para los tests de integración. Ver `DOCKER.md`.
+
+- **Íconos propios del menú lateral en 25 px (SISTEMA-111, 22/11/2026).** A 28 px
+  se veían grandes; se achicaron a 25 px, con los de Administración también.

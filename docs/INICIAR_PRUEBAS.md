@@ -1,5 +1,11 @@
 # Abrir la app de pruebas en Windows
 
+> **Sin uso diario desde el 22/11/2026 (SISTEMA-111).** Para trabajar en la PC se
+> usa siempre **Iniciar Gestion - Docker.cmd** (ver `DOCKER.md`, "Uso diario en la
+> PC"), que tiene su propia base. Este lanzador y la base `gestion_dev` quedan para
+> casos puntuales; `gestion_dev` se sigue usando en los tests de integración. Lo
+> cargado en `gestion_dev` no aparece en Docker, ni al revés.
+
 Hacé doble clic en **Iniciar Gestion - Pruebas.cmd**, en la carpeta del proyecto. Abre un panel de escritorio con el estado de la app y botones **Iniciar gestión**, **Detener**, **Abrir en el navegador** y **Ver registros**. Iniciar espera a que la interfaz y la API/base estén listas; el navegador se abre desde su botón. Los servidores quedan en segundo plano. Cerrar el panel o el navegador no los apaga: usá Detener. Al reiniciar Windows, volvé a usar el archivo.
 
 El panel usa WPF de Windows y PowerShell, sin dependencias nuevas. Las comprobaciones HTTP y las operaciones largas no bloquean la ventana. Detener pide confirmación, conserva PostgreSQL y termina únicamente los árboles de procesos registrados por el lanzador, comprobando PID, fecha de inicio, tipo de proceso y carpeta del proyecto. No busca ni mata todos los procesos Node ni termina procesos desconocidos por puerto. Si encuentra una instancia externa, informa la limitación. Al detener se interrumpe el servicio de pruebas; terminá las operaciones y guardá tu trabajo antes.

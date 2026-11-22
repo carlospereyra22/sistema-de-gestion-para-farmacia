@@ -76,9 +76,11 @@ Sin Docker en la PC, decirlo en el informe: no se puede dar por probado. Docker
 esta dentro de WSL: correr estos comandos en la terminal de Ubuntu desde
 `/mnt/c/<carpeta del repo>`, o anteponer `wsl` desde PowerShell.
 
-En la PC, lo normal es el lanzador (`scripts/docker-local.ps1`, ver
-`docs/DOCKER.md`, "Uso diario en la PC"): `iniciar [-Reconstruir]`, `detener`,
-`estado` y `copiar-datos`. Si se cambia el compose local o el flujo, actualizar
+En la PC, la API **siempre** corre en Docker (desde SISTEMA-111) con el lanzador
+(`scripts/docker-local.ps1`, ver `docs/DOCKER.md`, "Uso diario en la PC"):
+`iniciar [-Reconstruir]`, `detener`, `estado` y `copiar-datos`. Despues de
+cambiar `apps/api`, reconstruir con `iniciar -Reconstruir` antes de probar desde la
+web. `copiar-datos` reemplaza la base de Docker: solo si el usuario lo pide. Si se cambia el compose local o el flujo, actualizar
 ese script y esa seccion. A mano, desde Ubuntu:
 
 ```powershell

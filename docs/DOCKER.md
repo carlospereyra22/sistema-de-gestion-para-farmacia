@@ -54,21 +54,31 @@ valores de ejemplo: 10 + 10 + 5 + 3 = 28 por ambiente.
 ## Uso diario en la PC
 
 Requiere Docker dentro de WSL, instalado una vez (`INSTALACION.md`, sección 2).
+
+**Desde el 22/11/2026 (SISTEMA-111) es la forma de trabajar de todos los días.**
+`Iniciar Gestion - Pruebas.cmd` (API nativa con `gestion_dev`) quedó sin uso
+diario: las dos usan el puerto 3000, así que nunca se usan a la vez.
+
 La API en Docker usa **su propia base** (dentro de Docker), separada de
-`gestion_dev`: lo que se haga en la prueba no toca los datos de desarrollo, y
-el worker actualiza precios a las 9 y a las 17 sobre esa copia.
+`gestion_dev`: son los datos de trabajo de la PC. El worker actualiza precios a
+las 9 y a las 17 sobre esa base. Lo que se cargue en una base no aparece en la
+otra. Al pasar a Docker se empezó con lo que ya tenía su base; no se copiaron los
+datos de `gestion_dev`.
 
-La prueba con Docker **reemplaza** a `Iniciar Gestion - Pruebas.cmd` mientras
-está encendida: las dos usan el puerto 3000. Se usa una u otra.
+La API en Docker **no recarga sola** con cada cambio de código: corre la imagen
+tal como se construyó. Si la imagen quedó vieja, la API rechaza los campos nuevos
+que manda la web (error 400) y parece que "no guarda" (pasó con el logo a color
+de SISTEMA-110). Por eso, después de tocar `apps/api` o de un `git pull` con
+cambios de la API, siempre reconstruir.
 
-| Cuándo                                    | Qué hacer                                                                                              |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Prender la PC y querer probar con Docker  | Doble clic en **Iniciar Gestion - Docker.cmd**                                                         |
-| Terminar o volver al modo de siempre      | Doble clic en **Detener Gestion - Docker.cmd**; después, si se quiere, `Iniciar Gestion - Pruebas.cmd` |
-| Se bajaron cambios de la API (`git pull`) | `scripts/docker-local.ps1 iniciar -Reconstruir` (reconstruye la imagen, unos minutos)                  |
-| Traer los datos actuales de `gestion_dev` | `scripts/docker-local.ps1 copiar-datos` (reemplaza los datos de la prueba; `gestion_dev` sólo se lee)  |
-| Ver si está todo arriba                   | `scripts/docker-local.ps1 estado`                                                                      |
-| Apagar la PC                              | Se puede apagar directo. Al prenderla, todo arranca apagado: volver a **Iniciar Gestion - Docker.cmd** |
+| Cuándo                                             | Qué hacer                                                                                                              |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Prender la PC para trabajar                        | Doble clic en **Iniciar Gestion - Docker.cmd**                                                                         |
+| Terminar                                           | Doble clic en **Detener Gestion - Docker.cmd**                                                                         |
+| Se cambió código de la API o se bajaron cambios    | `scripts/docker-local.ps1 iniciar -Reconstruir` (reconstruye la imagen, unos minutos)                                  |
+| Traer los datos de `gestion_dev` (sólo si se pide) | `scripts/docker-local.ps1 copiar-datos`. **Reemplaza** todos los datos de la base de Docker; `gestion_dev` sólo se lee |
+| Ver si está todo arriba                            | `scripts/docker-local.ps1 estado`                                                                                      |
+| Apagar la PC                                       | Se puede apagar directo. Al prenderla, todo arranca apagado: volver a **Iniciar Gestion - Docker.cmd**                 |
 
 Los comandos `scripts/docker-local.ps1 ...` se corren en PowerShell desde la
 carpeta del proyecto, con `powershell -ExecutionPolicy Bypass -File` adelante.
