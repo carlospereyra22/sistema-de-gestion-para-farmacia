@@ -60,6 +60,25 @@ describe("external product suggestions", () => {
     for (const code of ["7791274197865", "abc", "00000000", "2000000000015"])
       expect(externalGtin(code)).toBeNull();
   });
+  it("identifica la ficha cargada por una farmacia sin nombrarla", () => {
+    const fields = externalProductFields(
+      {
+        code: "7791293022925",
+        gtin14: "07791293022925",
+        name: "Shampoo Suave Manzanilla",
+        brand: "Suave",
+        presentation: "930 ml",
+        scope_group: "Cuidado personal",
+        source: "farmacia",
+        fingerprint: "aporte",
+        license: "APORTE_DE_FARMACIA",
+      },
+      [],
+    );
+    expect(fields.description).toContain(
+      "Fuente: cargado por una farmacia · Código: 7791293022925",
+    );
+  });
   it("copies only descriptive fields and exact existing category matches", () => {
     const candidate: ExternalProductCandidate = {
       code: "7791274197864",

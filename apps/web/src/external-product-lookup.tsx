@@ -523,6 +523,11 @@ export function ExternalProductLookup({
                             "La fuente tiene diferencias: revisá la presentación."}
                         </span>
                       )}
+                      {candidate.source === "farmacia" && (
+                        <span className="mt-1 block text-[11px] text-amber-700">
+                          Cargado por una farmacia: revisá el envase.
+                        </span>
+                      )}
                       {candidate.source === "openbeauty" && (
                         <span className="block text-[10px] text-slate-400">
                           Open Beauty Facts contributors · ODbL

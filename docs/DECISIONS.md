@@ -491,5 +491,15 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   cambiar la API o bajar cambios hay que reconstruir la imagen (`-Reconstruir`).
   `gestion_dev` sigue para los tests de integración. Ver `DOCKER.md`.
 
+- **Aportes de las farmacias al catálogo externo (SISTEMA-112, 22/11/2026).**
+  Decisión del usuario: lo que una farmacia carga y el catálogo no tiene se ofrece a
+  todas, sin revisión previa, con la etiqueta "cargado por una farmacia" y por debajo
+  de las tiendas. Se guarda en `aporte_farmacia` dentro de `catalogo_juncos_external`
+  y lo junta el worker cada 10 minutos (no el alta del producto: así cubre altas sin
+  conexión, fotos agregadas después y ediciones, y nunca frena una venta). Rol propio
+  que sólo escribe ese esquema; las fichas de las tiendas siguen de sólo lectura. Cada
+  fila lleva el ambiente porque test y producción comparten la base. Ver
+  `EXTERNAL_PRODUCT_CATALOG.md`.
+
 - **Íconos propios del menú lateral en 25 px (SISTEMA-111, 22/11/2026).** A 28 px
   se veían grandes; se achicaron a 25 px, con los de Administración también.

@@ -181,7 +181,9 @@ export function externalProductFields(
       )
         ? `Fuente de categoría: ${candidate.attribute_sources.category_path.source_ref}`
         : "",
-      `Fuente: ${candidate.source} · Código: ${candidate.code}`,
+      candidate.source === "farmacia"
+        ? `Fuente: cargado por una farmacia · Código: ${candidate.code}`
+        : `Fuente: ${candidate.source} · Código: ${candidate.code}`,
       candidate.source_review_reason
         ? `Verificación pendiente: ${candidate.source_review_reason}`
         : "",

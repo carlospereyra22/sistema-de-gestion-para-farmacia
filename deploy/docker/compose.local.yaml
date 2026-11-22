@@ -23,6 +23,10 @@ x-app: &app
   env_file:
     - path: ../../.cache/docker-local/clave-fiscal.env
       required: false
+    # Catálogo externo y aportes de las farmacias (SISTEMA-112); lo crea
+    # `scripts/docker-local.ps1 catalogo-externo`. Sin él, la API no lo consulta.
+    - path: ../../.cache/docker-local/catalogo-externo.env
+      required: false
   # WSL se apaga cuando no queda ninguna terminal de Ubuntu abierta: al volver a
   # abrirla, los contenedores arrancan solos.
   restart: unless-stopped
@@ -47,6 +51,7 @@ x-sin-tareas: &sin-tareas
   PRICE_REFRESH_SCHEDULER: "off"
   FISCAL_QUEUE_WORKER: "off"
   SUBSCRIPTION_SCHEDULER: "off"
+  CATALOG_APORTES_SCHEDULER: "off"
   DATABASE_CONNECTION_LIMIT: "10"
 
 services:

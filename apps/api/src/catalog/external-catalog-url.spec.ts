@@ -16,6 +16,20 @@ describe("external catalogue local connection", () => {
   ])("rejects unsafe fallback %s", (url) => {
     expect(() => externalCatalogUrl(undefined, url)).toThrow();
   });
+  it("acepta la base de Docker (db) sólo fuera de producción", () => {
+    const docker = "postgresql://lector@db:5432/catalogo_juncos_external";
+    expect(new URL(externalCatalogUrl(docker, undefined, false)).hostname).toBe(
+      "db",
+    );
+    expect(() => externalCatalogUrl(docker, undefined, true)).toThrow();
+    expect(() =>
+      externalCatalogUrl(
+        undefined,
+        "postgresql://user@db:5432/gestion_dev",
+        false,
+      ),
+    ).toThrow();
+  });
   it("does not fall back when an explicit connection is invalid", () => {
     expect(() =>
       externalCatalogUrl(

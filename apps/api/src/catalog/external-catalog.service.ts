@@ -7,7 +7,15 @@ import {
 import { Prisma, PrismaClient } from "@prisma/client";
 import { canonicalGtin } from "./external-gtin";
 import type { CategoryEvidence } from "./category-classification";
-import { externalCatalogUrl } from "./external-catalog-url";
+import {
+  externalCatalogUrl,
+  hostCatalogoPermitido,
+} from "./external-catalog-url";
+import {
+  ambienteAportes,
+  fichaDeAporte,
+  type FilaAporte,
+} from "./aportes-farmacia";
 import {
   retailerMedicineMatches,
   type RetailMedicineRow,
@@ -87,7 +95,7 @@ export class ExternalCatalogService implements OnModuleDestroy {
     }
     if (
       !["postgresql:", "postgres:"].includes(url.protocol) ||
-      !["localhost", "127.0.0.1"].includes(url.hostname) ||
+      !hostCatalogoPermitido(url.hostname) ||
       url.pathname !== "/catalogo_juncos_external"
     )
       throw new ServiceUnavailableException(
@@ -115,14 +123,24 @@ export class ExternalCatalogService implements OnModuleDestroy {
         },
         { timeout: 5000 },
       );
+      // Las tiendas tienen prioridad: un aporte de farmacia sólo se ofrece
+      // cuando ninguna fuente publicada tiene el código (SISTEMA-112).
+      const aportes =
+        groups.reference.length + groups.beauty.length
+          ? []
+          : await this.aportes(client, gtin14, organizationId);
       return {
         code,
         gtin14,
-        matched: groups.reference.length + groups.beauty.length > 0,
+        matched:
+          groups.reference.length + groups.beauty.length + aportes.length > 0,
         requiresReview: true,
         automaticSelection: false,
         physicallyVerified: false,
-        reference: groups.reference.map((r) => r.payload),
+        reference: [
+          ...groups.reference.map((r) => r.payload),
+          ...(aportes as Candidate[]),
+        ],
         openBeauty: {
           attribution: "Open Beauty Facts contributors",
           license: "ODbL-1.0",
@@ -137,6 +155,38 @@ export class ExternalCatalogService implements OnModuleDestroy {
       throw new ServiceUnavailableException(
         "No se pudo consultar el catálogo externo. La carga manual sigue disponible.",
       );
+    }
+  }
+
+  /**
+   * Aportes de otras farmacias del mismo ambiente. Si la tabla no existe o no
+   * hay permiso, se sigue sin aportes: nunca deja sin catálogo a la farmacia.
+   */
+  private async aportes(
+    client: PrismaClient,
+    gtin14: string,
+    organizationId: string,
+  ) {
+    const ambiente = ambienteAportes(process.env.CATALOG_APORTES_AMBIENTE);
+    if (!ambiente) return [];
+    try {
+      const filas = await client.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+          await tx.$executeRaw`SET LOCAL statement_timeout = '2000ms'`;
+          return tx.$queryRaw<FilaAporte[]>(
+            Prisma.sql`SELECT gtin14, nombre, marca, presentacion, categoria_ruta, foto, foto_sha256, actualizado
+              FROM aporte_farmacia.producto
+              WHERE ambiente=${ambiente} AND gtin14=CAST(${gtin14} AS char(14)) AND vigente
+                AND organization_id <> CAST(${organizationId} AS uuid)
+              ORDER BY actualizado DESC LIMIT 3`,
+          );
+        },
+        { timeout: 4000 },
+      );
+      return filas.map(fichaDeAporte);
+    } catch {
+      return [];
     }
   }
 

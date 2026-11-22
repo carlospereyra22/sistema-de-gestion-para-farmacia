@@ -5,6 +5,7 @@
 #   powershell -ExecutionPolicy Bypass -File scripts/docker-local.ps1 detener
 #   powershell -ExecutionPolicy Bypass -File scripts/docker-local.ps1 estado
 #   powershell -ExecutionPolicy Bypass -File scripts/docker-local.ps1 copiar-datos
+#   powershell -ExecutionPolicy Bypass -File scripts/docker-local.ps1 catalogo-externo
 #
 # O con doble clic: "Iniciar Gestion - Docker.cmd" y "Detener Gestion - Docker.cmd".
 #
@@ -12,12 +13,13 @@
 # apaga solo cuando no le queda ningún proceso de Windows conectado: este script
 # deja uno oculto mientras la prueba está encendida y lo cierra al detener.
 #
-# No toca la base gestion_dev salvo para LEERLA en copiar-datos. No es para
+# No toca la base gestion_dev salvo para LEERLA en copiar-datos, ni el catálogo
+# externo de Windows salvo para LEERLO en catalogo-externo. No es para
 # producción. Ver docs/DOCKER.md, "Uso diario en la PC".
 
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("iniciar", "detener", "estado", "copiar-datos")]
+  [ValidateSet("iniciar", "detener", "estado", "copiar-datos", "catalogo-externo")]
   [string]$Accion = "estado",
   [string]$Distro = "Ubuntu",
   [switch]$Reconstruir,
@@ -246,9 +248,127 @@ function CopiarDatos {
   Escribir "Listo: la base de Docker tiene una copia de gestion_dev. Se entra con los usuarios de siempre." "Green"
 }
 
+function RutaWsl([string]$ruta) {
+  return "/mnt/" + $ruta.Substring(0, 1).ToLower() + ($ruta.Substring(2) -replace '\\', '/')
+}
+
+# Corre un comando de psql dentro del contenedor de la base; devuelve la salida.
+function PsqlEnDocker([string]$base, [string]$argumentos) {
+  $comando = "docker compose -f $compose exec -T db psql -q -U gestion_docker -d $base $argumentos"
+  return (& wsl.exe -d $Distro --cd $raiz -- bash -c $comando)
+}
+
+# Corre un archivo SQL en una base de Docker; devuelve el código de salida.
+function SqlEnDocker([string]$base, [string]$archivo, [string]$variables = "") {
+  $comando = "docker compose -f $compose exec -T db psql -q -U gestion_docker -d $base " +
+    "-v ON_ERROR_STOP=1 $variables --single-transaction < '$(RutaWsl $archivo)'"
+  & wsl.exe -d $Distro --cd $raiz -- bash -c $comando | Out-Host
+  return $LASTEXITCODE
+}
+
+# Catálogo externo en la base de Docker (SISTEMA-112): copia las fichas de las
+# tiendas del catálogo de Windows (catalogo_juncos_external, sólo se lee) sin
+# tocar los aportes de las farmacias, y configura la API y el worker para usarlo.
+function CatalogoExterno {
+  Escribir "== Catálogo externo en la base de Docker ==" "Cyan"
+  $pgDump = Get-ChildItem "C:\Program Files\PostgreSQL\*\bin\pg_dump.exe" -ErrorAction SilentlyContinue |
+    Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+  if (-not $pgDump) { Fallar "No encontré pg_dump.exe (viene con PostgreSQL de Windows)." }
+  $env_ = Join-Path $raiz "apps\api\.env"
+  if (-not (Test-Path $env_)) { Fallar "Falta apps/api/.env." }
+  $linea = Get-Content $env_ | Where-Object { $_ -match '^\s*DATABASE_URL\s*=' } | Select-Object -First 1
+  if (-not $linea) { Fallar "apps/api/.env no tiene DATABASE_URL." }
+  $url = [Uri](($linea -replace '^\s*DATABASE_URL\s*=\s*', '').Trim().Trim('"').Trim("'"))
+  if ($url.AbsolutePath.TrimStart('/') -ne "gestion_dev" -or @("localhost", "127.0.0.1") -notcontains $url.Host) {
+    Fallar "Por seguridad sólo se lee el catálogo de esta PC (localhost)."
+  }
+  $credenciales = $url.UserInfo.Split(':', 2)
+  $puerto = if ($url.Port -gt 0) { $url.Port } else { 5432 }
+
+  ComprobarWsl
+  MantenerWslEncendido
+
+  $copia = Join-Path $carpeta "catalogo-externo.dump"
+  Escribir "Leyendo el catálogo externo de Windows (no se modifica)..."
+  $anterior = $env:PGPASSWORD
+  try {
+    if ($credenciales.Count -gt 1) { $env:PGPASSWORD = [Uri]::UnescapeDataString($credenciales[1]) }
+    & $pgDump --format=custom --schema=reference_catalog --schema=beauty_odbl --no-owner --no-acl `
+      --host $url.Host --port $puerto --username ([Uri]::UnescapeDataString($credenciales[0])) `
+      --dbname catalogo_juncos_external --file $copia
+    if ($LASTEXITCODE -ne 0) { Fallar "pg_dump falló. ¿Existe catalogo_juncos_external en esta PC?" }
+  } finally {
+    $env:PGPASSWORD = $anterior
+  }
+
+  if ((Compose @("up", "-d", "--wait", "db")) -ne 0) { Fallar "No arrancó la base de Docker." }
+  $existe = (PsqlEnDocker "gestion_docker" "-tAc `"SELECT 1 FROM pg_database WHERE datname='catalogo_juncos_external'`"") -join ""
+  if ($existe.Trim() -ne "1") {
+    PsqlEnDocker "gestion_docker" "-c 'CREATE DATABASE catalogo_juncos_external'" | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fallar "No se pudo crear la base del catálogo en Docker." }
+  }
+
+  Escribir "Cargando las fichas de las tiendas (los aportes de las farmacias se conservan)..."
+  $restaurar = "docker compose -f $compose exec -T db pg_restore -U gestion_docker -d catalogo_juncos_external " +
+    "--clean --if-exists --no-owner --no-acl --single-transaction < '$(RutaWsl $copia)'"
+  & wsl.exe -d $Distro --cd $raiz -- bash -c $restaurar | Out-Host
+  if ($LASTEXITCODE -ne 0) { Fallar "pg_restore falló. El catálogo de Docker quedó como estaba." }
+  Remove-Item $copia -ErrorAction SilentlyContinue
+
+  # Claves propias de esta PC, fuera del repositorio; se reutilizan si ya existen.
+  $archivoEnv = Join-Path $carpeta "catalogo-externo.env"
+  $previo = if (Test-Path $archivoEnv) { (Get-Content $archivoEnv) -join "`n" } else { "" }
+  $claveLector = if ($previo -match 'catalogo_lector:([0-9a-f]{32})@') { $Matches[1] } else { [guid]::NewGuid().ToString("N") }
+  $claveAportes = if ($previo -match 'catalogo_aportes:([0-9a-f]{32})@') { $Matches[1] } else { [guid]::NewGuid().ToString("N") }
+
+  $roles = Join-Path $carpeta "catalogo-roles.sql"
+  @(
+    "DO `$`$ BEGIN",
+    "  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'catalogo_lector') THEN CREATE ROLE catalogo_lector LOGIN; END IF;",
+    "  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'catalogo_aportes') THEN CREATE ROLE catalogo_aportes LOGIN; END IF;",
+    "END `$`$;",
+    "ALTER ROLE catalogo_lector PASSWORD '$claveLector';",
+    "ALTER ROLE catalogo_aportes PASSWORD '$claveAportes';",
+    "GRANT CONNECT ON DATABASE catalogo_juncos_external TO catalogo_lector, catalogo_aportes;"
+  ) | Set-Content -Encoding ascii $roles
+  $codigo = SqlEnDocker "gestion_docker" $roles
+  Remove-Item $roles -ErrorAction SilentlyContinue
+  if ($codigo -ne 0) { Fallar "No se pudieron crear los permisos del catálogo." }
+
+  $permisos = Join-Path $carpeta "catalogo-permisos.sql"
+  @(
+    "GRANT USAGE ON SCHEMA reference_catalog, beauty_odbl TO catalogo_lector;",
+    "GRANT SELECT ON reference_catalog.product, beauty_odbl.product, reference_catalog.medicine_fallback TO catalogo_lector;"
+  ) | Set-Content -Encoding ascii $permisos
+  $esquema = Join-Path $raiz "scripts\external-catalog\aportes-schema.sql"
+  $codigo = SqlEnDocker "catalogo_juncos_external" $esquema "-v lector=catalogo_lector -v escritor=catalogo_aportes"
+  if ($codigo -eq 0) { $codigo = SqlEnDocker "catalogo_juncos_external" $permisos }
+  Remove-Item $permisos -ErrorAction SilentlyContinue
+  if ($codigo -ne 0) { Fallar "No se pudo preparar el esquema de aportes." }
+
+  # Todas las farmacias de la base de Docker pueden consultar el catálogo.
+  $consulta = Join-Path $carpeta "catalogo-organizaciones.sql"
+  'SELECT string_agg(id::text, '','') FROM "Organization";' | Set-Content -Encoding ascii $consulta
+  $organizaciones = (& wsl.exe -d $Distro --cd $raiz -- bash -c ("docker compose -f $compose exec -T db " +
+    "psql -q -U gestion_docker -d gestion_docker -tA < '$(RutaWsl $consulta)'")) -join ""
+  Remove-Item $consulta -ErrorAction SilentlyContinue
+  @(
+    "EXTERNAL_CATALOG_PREVIEW=true",
+    "EXTERNAL_CATALOG_ORGANIZATION_ID=$($organizaciones.Trim())",
+    "EXTERNAL_CATALOG_DATABASE_URL=postgresql://catalogo_lector:$claveLector@db:5432/catalogo_juncos_external",
+    "CATALOG_APORTES_AMBIENTE=local",
+    "CATALOG_APORTES_DATABASE_URL=postgresql://catalogo_aportes:$claveAportes@db:5432/catalogo_juncos_external"
+  ) | Set-Content -Encoding ascii $archivoEnv
+
+  Escribir "Reiniciando la API y el worker con el catálogo..."
+  Compose @("up", "-d") | Out-Null
+  Escribir "Listo: la API de Docker consulta el catálogo externo y el worker junta los aportes." "Green"
+}
+
 switch ($Accion) {
   "iniciar" { Iniciar }
   "detener" { Detener }
   "estado" { Estado }
   "copiar-datos" { CopiarDatos }
+  "catalogo-externo" { CatalogoExterno }
 }
