@@ -34,11 +34,23 @@ Monorepo pnpm (Node 24, pnpm 11), monolito modular:
   varios roles (API x2, worker de tareas programadas, migraciones). Ver
   `docs/DOCKER.md`.
 
-Desarrollo local: `Iniciar Gestion - Pruebas.cmd` o `pnpm dev` (web
-`localhost:5173`, API `localhost:3000`, PostgreSQL nativo `gestion_dev`).
-Probar la API en Docker (dentro de WSL): `Iniciar Gestion - Docker.cmd` /
-`Detener Gestion - Docker.cmd` (`scripts/docker-local.ps1`); usa el mismo puerto
-3000, se usa uno u otro.
+Desarrollo local (desde el 22/11/2026, SISTEMA-111): **siempre con la API en
+Docker** dentro de WSL. `Iniciar Gestion - Docker.cmd` / `Detener Gestion -
+Docker.cmd` (`scripts/docker-local.ps1`) levantan la API (`localhost:3000` y
+`3002`), el worker, las migraciones y **su propia base** dentro de Docker, y abren
+la web (`localhost:5173`). Los datos de la PC son los de esa base, no los de
+`gestion_dev`.
+
+- La API en Docker no recarga sola: despues de tocar `apps/api` o de un `git pull`
+  con cambios de API, correr `scripts/docker-local.ps1 iniciar -Reconstruir`. Con
+  una imagen vieja la API rechaza campos nuevos (paso con el logo en SISTEMA-110).
+- Para mirar datos locales, consultar la base de Docker (`gestion-local-db-1`), no
+  `gestion_dev`.
+- No correr `docker-local.ps1 copiar-datos` sin que el usuario lo pida: reemplaza
+  los datos de Docker con los de `gestion_dev`.
+- `Iniciar Gestion - Pruebas.cmd` / `pnpm dev` (API nativa con `gestion_dev`)
+  quedan sin uso diario. PostgreSQL nativo `gestion_dev` se sigue usando para los
+  tests de integracion (`apps/api/test/`).
 
 ## Indice de documentacion (`docs/`)
 
