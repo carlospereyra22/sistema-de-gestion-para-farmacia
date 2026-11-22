@@ -103,6 +103,9 @@ model Organization {
   catalogEnabled  Boolean            @default(false)
   /// Módulo Preventa (SISTEMA-108): lo habilita el panel de plataforma.
   preventaEnabled Boolean            @default(false)
+  /// Pedidos del catálogo y de preventa en una sola pantalla (SISTEMA-119).
+  /// Lo elige la farmacia; sólo vale con los dos módulos habilitados.
+  unifiedOrders   Boolean            @default(false)
   createdAt       DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
   branches        Branch[]

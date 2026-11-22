@@ -15,5 +15,7 @@ import { CatalogoPublicoService } from "./catalogo-publico.service";
   imports: [AuthModule],
   controllers: [CatalogoOnlineController, CatalogoPublicoController],
   providers: [CatalogoOnlineService, CatalogoPublicoService, LimiteDeLogin],
+  // La pantalla Pedidos (SISTEMA-119) lee los pedidos con este servicio.
+  exports: [CatalogoOnlineService],
 })
 export class CatalogoOnlineModule {}

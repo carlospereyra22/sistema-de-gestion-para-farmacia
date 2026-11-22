@@ -50,6 +50,9 @@ export type CambioUsuarioPortal = {
 /** Acciones de la farmacia sobre un pedido (cancelar es sólo del cliente). */
 export type DecisionPedido = Exclude<AccionPedido, "cancelar">;
 
+/** 00:00 de un día civil de Argentina (UTC-3), como en Preventa. */
+const inicioDelDia = (fecha: string) => new Date(`${fecha}T03:00:00.000Z`);
+
 const pedidoConRenglones = {
   items: { orderBy: { productName: "asc" } },
 } as const;
@@ -306,7 +309,13 @@ export class CatalogoOnlineService {
   async pedidos(
     actorId: string,
     organizationId: string,
-    filtro: { estado?: EstadoPedido },
+    filtro: {
+      estado?: EstadoPedido;
+      /** Varios estados y rango de fechas: pantalla Pedidos (SISTEMA-119). */
+      estados?: readonly EstadoPedido[];
+      desde?: string;
+      hasta?: string;
+    },
   ) {
     await this.exigir(actorId, organizationId, ["SALE_READ"]);
     const [pedidos, recibidos] = await this.prisma.$transaction([
@@ -314,6 +323,21 @@ export class CatalogoOnlineService {
         where: {
           organizationId,
           ...(filtro.estado ? { status: filtro.estado } : {}),
+          ...(filtro.estados ? { status: { in: [...filtro.estados] } } : {}),
+          ...(filtro.desde || filtro.hasta
+            ? {
+                createdAt: {
+                  ...(filtro.desde ? { gte: inicioDelDia(filtro.desde) } : {}),
+                  ...(filtro.hasta
+                    ? {
+                        lt: new Date(
+                          inicioDelDia(filtro.hasta).getTime() + 86_400_000,
+                        ),
+                      }
+                    : {}),
+                },
+              }
+            : {}),
         },
         orderBy: { createdAt: "desc" },
         take: 200,
