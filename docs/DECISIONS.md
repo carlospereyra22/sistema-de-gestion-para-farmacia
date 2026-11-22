@@ -501,5 +501,14 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   fila lleva el ambiente porque test y producción comparten la base. Ver
   `EXTERNAL_PRODUCT_CATALOG.md`.
 
+- **Actualización mensual del catálogo externo en el servidor (SISTEMA-113, 22/11/2026).**
+  Decisión del usuario: las 5 tiendas se vuelven a descargar solas una vez por mes en
+  el servidor y se suman los productos nuevos. Como el servidor todavía no usa Docker
+  y los descargadores son Python con navegador (Playwright), corre con un temporizador
+  de systemd y `uv`, no en la imagen de la API (la agrandaría ~500 MB) ni como
+  servicio. Instala sólo si los controles de cobertura y de "sólo sumar" dan bien.
+  Las publicaciones de capturas se hacen sobre la base existente para no perder los
+  aportes. Ver `EXTERNAL_PRODUCT_CATALOG.md` y `deploy/oracle/catalogo-mensual/`.
+
 - **Íconos propios del menú lateral en 25 px (SISTEMA-111, 22/11/2026).** A 28 px
   se veían grandes; se achicaron a 25 px, con los de Administración también.

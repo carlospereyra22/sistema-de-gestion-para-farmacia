@@ -12,3 +12,7 @@ deploy/docker/*.env text eol=lf
 deploy/docker/*.nginx text eol=lf
 apps/api/Dockerfile text eol=lf
 .dockerignore text eol=lf
+deploy/oracle/catalogo-mensual/*.sh text eol=lf
+deploy/oracle/catalogo-mensual/*.service text eol=lf
+deploy/oracle/catalogo-mensual/*.timer text eol=lf
+scripts/external-catalog/*.sql text eol=lf

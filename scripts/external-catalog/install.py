@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, unquote
@@ -25,6 +26,29 @@ def local_credentials():
         raise ValueError("Only the local development installation is allowed")
     return dict(host=url.hostname, port=url.port or 5432, user=unquote(url.username), password=unquote(url.password))
 
+def server_credentials():
+    """Servidor (SISTEMA-113): conexión directa a la base del catálogo, sólo local.
+    Nunca se conecta a la base comercial."""
+    url = urlsplit(os.environ["CATALOGO_DATABASE_URL"].strip())
+    if url.scheme not in {"postgresql", "postgres"} or url.hostname not in {"localhost", "127.0.0.1"} or url.path != "/" + DB:
+        raise ValueError("CATALOGO_DATABASE_URL must point to the local catalogo_juncos_external")
+    return dict(host=url.hostname, port=url.port or 5432, user=unquote(url.username or ""), password=unquote(url.password or ""))
+
+def postgres_tool(name):
+    found = shutil.which(name)
+    if found:
+        return found
+    windows = pathlib.Path(r"C:\Program Files\PostgreSQL\18\bin") / (name + ".exe")
+    if windows.exists():
+        return str(windows)
+    raise FileNotFoundError(name + " not found")
+
+def backup_directory():
+    configured = os.environ.get("CATALOGO_RESPALDOS")
+    if configured:
+        return pathlib.Path(configured)
+    return pathlib.Path(os.environ["LOCALAPPDATA"]) / "FarmaciaJuncos/RespaldosLocales"
+
 def commercial_counts(credentials):
     with psycopg.connect(**credentials, dbname="gestion_dev", options="-c default_transaction_read_only=on") as conn:
         return {table: conn.execute(psycopg.sql.SQL("SELECT count(*) FROM {}").format(psycopg.sql.Identifier(table))).fetchone()[0] for table in ["Product", "ProductBarcode", "ProductPrice", "Purchase", "Sale", "InventoryMovement"]}
@@ -35,17 +59,24 @@ def main():
     p.add_argument("--manifest", type=pathlib.Path, required=True)
     p.add_argument("--attachments", type=pathlib.Path, nargs="*", default=[])
     a = p.parse_args()
-    credentials = local_credentials()
-    before = commercial_counts(credentials)
-    with psycopg.connect(**credentials, dbname="postgres", autocommit=True) as admin:
-        exists = admin.execute("SELECT 1 FROM pg_database WHERE datname=%s", (DB,)).fetchone()
-        if not exists:
-            admin.execute(psycopg.sql.SQL("CREATE DATABASE {}").format(psycopg.sql.Identifier(DB)))
+    server = bool(os.environ.get("CATALOGO_DATABASE_URL"))
+    credentials = server_credentials() if server else local_credentials()
+    # En el servidor no hay acceso a la base comercial: no se cuenta nada ahí.
+    before = None if server else commercial_counts(credentials)
+    if server:
+        exists = True  # En el servidor la base ya existe; nunca se crea desde acá.
+    else:
+        with psycopg.connect(**credentials, dbname="postgres", autocommit=True) as admin:
+            exists = admin.execute("SELECT 1 FROM pg_database WHERE datname=%s", (DB,)).fetchone()
+            if not exists:
+                admin.execute(psycopg.sql.SQL("CREATE DATABASE {}").format(psycopg.sql.Identifier(DB)))
     if exists:
-        target = pathlib.Path(os.environ["LOCALAPPDATA"]) / "FarmaciaJuncos/RespaldosLocales" / ("catalogo-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".dump")
+        folder = backup_directory()
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / ("catalogo-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".dump")
         env = dict(os.environ, PGPASSWORD=credentials["password"])
-        subprocess.run([r"C:\Program Files\PostgreSQL\18\bin\pg_dump.exe", "-h", credentials["host"], "-p", str(credentials["port"]), "-U", credentials["user"], "-d", DB, "-Fc", "-f", str(target)], env=env, check=True)
-        subprocess.run([r"C:\Program Files\PostgreSQL\18\bin\pg_restore.exe", "--list", str(target)], stdout=subprocess.DEVNULL, check=True)
+        subprocess.run([postgres_tool("pg_dump"), "-h", credentials["host"], "-p", str(credentials["port"]), "-U", credentials["user"], "-d", DB, "-Fc", "-f", str(target)], env=env, check=True)
+        subprocess.run([postgres_tool("pg_restore"), "--list", str(target)], stdout=subprocess.DEVNULL, check=True)
         print("Existing external database backed up:", target)
     path = a.prepared / "candidates.jsonl"
     prepared_hash = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -104,7 +135,7 @@ def main():
         conn.execute('ANALYZE beauty_odbl.candidate')
         conn.execute('ANALYZE reference_catalog.source_record')
         stored = conn.execute("SELECT source,count(*),count(DISTINCT gtin14) FROM (SELECT source,gtin14 FROM reference_catalog.candidate WHERE eligible UNION ALL SELECT source,gtin14 FROM beauty_odbl.candidate WHERE eligible) s GROUP BY source ORDER BY source").fetchall()
-    after = commercial_counts(credentials)
+    after = None if server else commercial_counts(credentials)
     result = {"status": "IMPORTED_TO_LOCAL_POSTGRES", "database": DB, "batch": batch, "imported_at": datetime.now(timezone.utc).isoformat(), "unique_codes_in_database": total, "by_source": stored, "commercial_counts_before": before, "commercial_counts_after": after, "commercial_counts_unchanged": before == after, "production_enabled": False}
     (a.prepared / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     (a.prepared / "postgres-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

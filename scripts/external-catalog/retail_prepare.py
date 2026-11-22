@@ -95,7 +95,9 @@ def retail_scope(name, brand, category, full_catalog=False):
     # Explicit dietary taxonomy is authoritative for supplements, unless a
     # medicinal active ingredient/type in the title contradicts it.
     medicinal = re.search(r'\b(ibuprofeno|paracetamol|aspirina|amoxicilina|diclofenac|omeprazol|loratadina|minoxidil|ketoconazol|hidrocortisona|antibiotico\w*|antimicotico\w*|antiparasitario\w*|permetrina)\b', normalized(name))
-    if re.search(r'\b(suplementos?|multivitaminicos?|nutricion deportiva)\b', path) and not medicinal:
+    # Farmamix renombró su rama de suplementos (22/11/2026, SISTEMA-113):
+    # "Suplemento Nutricional" pasó a "Nutrición Funcional" y "Nutrición Diaria".
+    if re.search(r'\b(suplementos?|multivitaminicos?|nutricion deportiva|nutricion funcional|nutricion diaria)\b', path) and not medicinal:
         return 'candidate', 'Suplementos y nutrición', '', ''
     if full_catalog and status != 'candidate' and not medicinal:
         # The narrow SEPA classifier must not discard explicit retail departments.
@@ -115,7 +117,8 @@ def retail_scope(name, brand, category, full_catalog=False):
                 (r'\b(cuidado oral|higiene bucal|salud bucal)\b', 'Higiene bucal'),
                 (r'\b(perfumes|fragancias|colonias)\b', 'Perfumería'),
                 (r'\b(bebes|maternidad|universo bebe)\b', 'Bebés y maternidad'),
-                (r'\b(ortopedia)\b', 'Ortopedia'),
+                (r'\b(ortopedia|soporte y movilidad)\b', 'Ortopedia'),
+                (r'\b(accesorios de cuidado|insumos de cuidado)\b', 'Insumos y primeros auxilios'),
                 (r'\b(afeitado|depilacion)\b', 'Afeitado y depilación'),
                 (r'\b(higiene|bano)\b', 'Higiene corporal'),
             ]:
