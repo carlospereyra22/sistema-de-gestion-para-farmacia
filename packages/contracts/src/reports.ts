@@ -251,6 +251,8 @@ export type ReportSales = ReportResponse<
     }[];
     paymentMethods: ReportBreakdownItem[];
     categories: (ReportBreakdownItem & { units: number })[];
+    /** Hasta 40 por unidades netas, con su venta neta (para ordenar por importe). */
+    topProducts: (ReportBreakdownItem & { units: number })[];
   },
   {
     branches: ReportSalesBranchRow[];

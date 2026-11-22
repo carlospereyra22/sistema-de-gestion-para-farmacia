@@ -96,6 +96,7 @@ export class ReportSalesService {
       heatmap,
       categories,
       payments,
+      topProducts,
       discounts,
       previousDiscounts,
       branches,
@@ -116,6 +117,7 @@ export class ReportSalesService {
       this.heatmap(sales(period)),
       this.salesData.categories(organizationId, sales(period), returns(period)),
       this.salesData.payments(sales(period)),
+      this.salesData.topProducts(sales(period), returns(period), 40),
       this.discounts(sales(period)),
       previous ? this.discounts(sales(previous)) : null,
       this.prisma.branch.findMany({
@@ -255,6 +257,13 @@ export class ReportSalesService {
             value: row.amount,
           })),
         ),
+        topProducts: topProducts.map((row) => ({
+          id: row.id,
+          name: row.name,
+          value: row.amount.toString(),
+          sharePct: sharePct(row.amount, netOf(total)),
+          units: row.units,
+        })),
         categories: categories.map((row) => ({
           id: row.id,
           name: row.name,

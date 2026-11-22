@@ -17,6 +17,7 @@ import {
   Tags,
   TicketPercent,
   TrendingUp,
+  Trophy,
   Undo2,
   Wallet,
 } from "lucide-react";
@@ -134,6 +135,9 @@ export function ReportSalesContent({
   const [categoryMetric, setCategoryMetric] = useState<"amount" | "units">(
     "amount",
   );
+  const [productMetric, setProductMetric] = useState<"units" | "amount">(
+    "units",
+  );
   const showBranchLines =
     severalBranches && trendView === "branches" && charts.branchTrend.length;
   const options = useMemo(
@@ -153,6 +157,22 @@ export function ReportSalesContent({
       ),
       hours: hourOption(charts.byHour, comparisonLabel),
       heatmap: heatmapOption(charts.heatmap),
+      products: rankingOption(
+        charts.topProducts
+          .slice()
+          .sort((left, right) =>
+            productMetric === "units"
+              ? right.units - left.units
+              : Number(BigInt(right.value) - BigInt(left.value)),
+          )
+          .slice(0, 10)
+          .map((item) => ({
+            name: item.name,
+            value: productMetric === "units" ? item.units : Number(item.value),
+            share: productMetric === "units" ? undefined : item.sharePct,
+          })),
+        productMetric === "units" ? "units" : "money",
+      ),
       categories: rankingOption(
         charts.categories
           .slice()
@@ -170,7 +190,7 @@ export function ReportSalesContent({
         categoryMetric === "units" ? "units" : "money",
       ),
     }),
-    [charts, comparisonLabel, showBranchLines, categoryMetric],
+    [charts, comparisonLabel, showBranchLines, categoryMetric, productMetric],
   );
   const empty = kpis.tickets.value === "0";
   const paymentsTotal = charts.paymentMethods
@@ -234,35 +254,6 @@ export function ReportSalesContent({
             <SalesInsights data={data} />
           </ReportPanel>
 
-          <ReportPanel
-            animar={animar}
-            title="¿Cuándo se vende?"
-            icon={<CalendarDays size={16} aria-hidden />}
-            hint="Facturado por día de la semana y hora. Para armar turnos, reponer antes del pico y elegir cuándo lanzar una oferta."
-            className="border-teal-200/70"
-          >
-            <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
-              <ReportPanelChart
-                tipo="mapa"
-                option={options.heatmap}
-                label="Mapa de calor de ventas por día y hora"
-                height={300}
-              />
-              <div>
-                <p className="mb-1 text-xs font-semibold text-slate-700">
-                  Por hora
-                  {comparisonLabel ? ", contra el período comparado" : ""}
-                </p>
-                <ReportPanelChart
-                  tipo="barras"
-                  option={options.hours}
-                  label="Ventas por hora"
-                  height={280}
-                />
-              </div>
-            </div>
-          </ReportPanel>
-
           <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
             <ReportPanel
               animar={animar}
@@ -300,39 +291,74 @@ export function ReportSalesContent({
                 tipo="linea"
                 option={options.trend}
                 label="Evolución de ventas netas"
+                height={300}
               />
             </ReportPanel>
             <ReportPanel
               animar={animar}
               orden={1}
-              title="Medios de pago"
-              icon={<CreditCard size={16} aria-hidden />}
-              hint="Sobre lo facturado; los pagos mixtos se reparten y el vuelto sale del efectivo."
+              title="Productos más vendidos"
+              icon={<Trophy size={16} aria-hidden />}
+              hint={
+                productMetric === "units"
+                  ? "Unidades netas de devoluciones."
+                  : "Ventas netas de cada producto y su parte del total."
+              }
+              action={
+                <ReportSegmented
+                  label="Ordenar productos por"
+                  value={productMetric}
+                  options={[
+                    { id: "units", label: "Unidades" },
+                    { id: "amount", label: "Facturación" },
+                  ]}
+                  onChange={setProductMetric}
+                />
+              }
             >
-              {charts.paymentMethods.length ? (
-                <>
-                  <ReportPanelChart
-                    tipo="torta"
-                    option={options.payments}
-                    label="Ventas por medio de pago"
-                    height={220}
-                  />
-                  <p className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-xs tabular-nums">
-                    <span className="text-slate-500">Total facturado</span>
-                    <span className="font-semibold text-slate-900">
-                      {formatMoneyMinor(paymentsTotal)}
-                    </span>
-                  </p>
-                </>
+              {charts.topProducts.length ? (
+                <ReportPanelChart
+                  tipo="barras"
+                  option={options.products}
+                  label="Productos más vendidos"
+                  height={300}
+                />
               ) : (
-                <ReportEmptyState title="Sin cobros en el período" />
+                <ReportEmptyState title="Sin productos vendidos en el período" />
               )}
             </ReportPanel>
           </div>
 
-          <div
-            className={`grid gap-4 ${severalBranches ? "xl:grid-cols-[1fr_1.4fr]" : ""}`}
+          <ReportPanel
+            animar={animar}
+            title="¿Cuándo se vende?"
+            icon={<CalendarDays size={16} aria-hidden />}
+            hint="Facturado por día de la semana y hora. Para armar turnos, reponer antes del pico y elegir cuándo lanzar una oferta."
+            className="border-teal-200/70"
           >
+            <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+              <ReportPanelChart
+                tipo="mapa"
+                option={options.heatmap}
+                label="Mapa de calor de ventas por día y hora"
+                height={300}
+              />
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-700">
+                  Por hora
+                  {comparisonLabel ? ", contra el período comparado" : ""}
+                </p>
+                <ReportPanelChart
+                  tipo="barras"
+                  option={options.hours}
+                  label="Ventas por hora"
+                  height={280}
+                />
+              </div>
+            </div>
+          </ReportPanel>
+
+          <div className="grid gap-4 xl:grid-cols-2">
             <ReportPanel
               animar={animar}
               orden={0}
@@ -369,25 +395,48 @@ export function ReportSalesContent({
                 <ReportEmptyState title="Sin categorías con ventas" />
               )}
             </ReportPanel>
-            {severalBranches ? (
-              <ReportPanel
-                animar={animar}
-                orden={1}
-                title="Detalle por sucursal"
-                icon={<Store size={16} aria-hidden />}
-                hint={
-                  comparisonLabel
-                    ? `Variación contra ${comparisonLabel.toLowerCase()}.`
-                    : undefined
-                }
-              >
-                <BranchTable
-                  data={data}
-                  showChange={Boolean(comparisonLabel)}
-                />
-              </ReportPanel>
-            ) : null}
+            <ReportPanel
+              animar={animar}
+              orden={1}
+              title="Medios de pago"
+              icon={<CreditCard size={16} aria-hidden />}
+              hint="Sobre lo facturado; los pagos mixtos se reparten y el vuelto sale del efectivo."
+            >
+              {charts.paymentMethods.length ? (
+                <>
+                  <ReportPanelChart
+                    tipo="torta"
+                    option={options.payments}
+                    label="Ventas por medio de pago"
+                    height={220}
+                  />
+                  <p className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-xs tabular-nums">
+                    <span className="text-slate-500">Total facturado</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatMoneyMinor(paymentsTotal)}
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <ReportEmptyState title="Sin cobros en el período" />
+              )}
+            </ReportPanel>
           </div>
+
+          {severalBranches ? (
+            <ReportPanel
+              animar={animar}
+              title="Detalle por sucursal"
+              icon={<Store size={16} aria-hidden />}
+              hint={
+                comparisonLabel
+                  ? `Variación contra ${comparisonLabel.toLowerCase()}.`
+                  : undefined
+              }
+            >
+              <BranchTable data={data} showChange={Boolean(comparisonLabel)} />
+            </ReportPanel>
+          ) : null}
         </>
       )}
     </div>

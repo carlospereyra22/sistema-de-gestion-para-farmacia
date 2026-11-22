@@ -71,6 +71,15 @@ const sales = (branches = 2): ReportSales => ({
       { id: "CASH", name: "CASH", value: "150000", sharePct: 30 },
       { id: "CARD", name: "CARD", value: "350000", sharePct: 70 },
     ],
+    topProducts: [
+      {
+        id: "p1",
+        name: "Ibuprofeno 400",
+        value: "300000",
+        sharePct: 75,
+        units: 3,
+      },
+    ],
     categories: [
       {
         id: "c1",
@@ -146,6 +155,15 @@ describe("pestaña Ventas (SISTEMA-115)", () => {
       "20 %",
     ])
       expect(html).toContain(text);
+  });
+
+  it("arriba la evolución con los productos más vendidos; el mapa de calor, después", () => {
+    const html = render(sales());
+    const evolution = html.indexOf("Evolución de ventas");
+    const products = html.indexOf("Productos más vendidos");
+    const heatmap = html.indexOf("¿Cuándo se vende?");
+    expect(evolution).toBeLessThan(products);
+    expect(products).toBeLessThan(heatmap);
   });
 
   it("con varias sucursales ofrece la evolución por sucursal y la tabla comparativa", () => {

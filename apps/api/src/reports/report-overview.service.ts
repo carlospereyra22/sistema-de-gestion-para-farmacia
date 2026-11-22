@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
 import {
   REPORT_DEFAULTS,
   type ReportBreakdownItem,
@@ -20,11 +19,9 @@ import {
 import { argentineDate, type ReportRange } from "./report-period";
 import {
   emptyTotals,
-  LINE,
   netOf,
   profitOf,
   ReportSalesData,
-  RETURNED,
   returnsWhere,
   salesWhere,
   sumTotals,
@@ -107,7 +104,7 @@ export class ReportOverviewService {
         : null,
       this.salesData.categories(organizationId, sales(period), returns(period)),
       this.salesData.payments(sales(period)),
-      this.products(sales(period), returns(period)),
+      this.salesData.topProducts(sales(period), returns(period), 10),
       this.alerts(branchIds, today, lowStock, expiryDays),
       this.prisma.branch.findMany({
         where: { id: { in: branchIds } },
@@ -229,39 +226,6 @@ export class ReportOverviewService {
         cashClosures,
       },
     };
-  }
-
-  /** Top 10 productos por unidades netas de devoluciones. */
-  private async products(sales: Prisma.Sql, returns: Prisma.Sql) {
-    const [sold, returned] = await Promise.all([
-      this.prisma.$queryRaw<
-        { id: string; name: string; units: number; amount: bigint }[]
-      >`
-        SELECT p.id, p.name, sum(si.quantity)::int AS units, sum(${LINE})::bigint AS amount
-        FROM "Sale" s JOIN "SaleItem" si ON si."saleId" = s.id
-        JOIN "Product" p ON p.id = si."productId"
-        WHERE ${sales} GROUP BY p.id, p.name`,
-      this.prisma.$queryRaw<{ id: string; units: number; amount: bigint }[]>`
-        SELECT si."productId" AS id, sum(cri.quantity)::int AS units,
-          sum(${RETURNED})::bigint AS amount
-        FROM "CustomerReturn" cr
-        JOIN "CustomerReturnItem" cri ON cri."customerReturnId" = cr.id
-        JOIN "SaleItem" si ON si.id = cri."saleItemId"
-        WHERE ${returns} AND si."productId" IS NOT NULL GROUP BY 1`,
-    ]);
-    const back = new Map(returned.map((row) => [row.id, row]));
-    return sold
-      .map((row) => ({
-        ...row,
-        units: row.units - (back.get(row.id)?.units ?? 0),
-        amount: row.amount - (back.get(row.id)?.amount ?? 0n),
-      }))
-      .filter((row) => row.units > 0)
-      .sort(
-        (left, right) =>
-          right.units - left.units || (right.amount > left.amount ? 1 : -1),
-      )
-      .slice(0, 10);
   }
 
   /**
