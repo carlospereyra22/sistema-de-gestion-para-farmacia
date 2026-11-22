@@ -16,6 +16,7 @@ export function CatalogoOnlineWorkspace({
   canSeeOrders,
   canManageOrders,
   canConfigure,
+  incrustado = false,
   onError,
 }: {
   token: string;
@@ -24,6 +25,8 @@ export function CatalogoOnlineWorkspace({
   canSeeOrders: boolean;
   canManageOrders: boolean;
   canConfigure: boolean;
+  /** Dentro de Pedidos (SISTEMA-119): sin margen propio. */
+  incrustado?: boolean;
   onError: (message: string) => void;
 }) {
   const pestanas = pestanasVisibles(canSeeOrders, canConfigure);
@@ -31,7 +34,9 @@ export function CatalogoOnlineWorkspace({
     pestanas[0]?.id ?? "pedidos",
   );
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+    <div
+      className={`flex min-h-0 flex-1 flex-col gap-4 ${incrustado ? "" : "p-6"}`}
+    >
       <div
         role="tablist"
         aria-label="Secciones del catálogo online"

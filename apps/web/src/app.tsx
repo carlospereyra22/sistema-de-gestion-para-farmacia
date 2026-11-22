@@ -176,6 +176,8 @@ export function App(): ReactElement {
   // Preventa (SISTEMA-108): módulo aparte y, para quien sólo vende o
   // reparte, la versión celular a pantalla completa.
   const [preventaHabilitada, setPreventaHabilitada] = useState(false);
+  // Pedidos del catálogo y de preventa juntos (SISTEMA-119).
+  const [pedidosUnificados, setPedidosUnificados] = useState(false);
   const [modoPreventa, setModoPreventa] = useState<ModoPreventa | null>(
     leerModoPreventa,
   );
@@ -322,6 +324,7 @@ export function App(): ReactElement {
     );
     setCatalogoHabilitado(Boolean(membership?.organization?.catalogEnabled));
     setPreventaHabilitada(Boolean(membership?.organization?.preventaEnabled));
+    setPedidosUnificados(Boolean(membership?.organization?.unifiedOrders));
     setAccessToken(token);
     setOrganizationId(profile.organizations[0]?.organizationId);
   };
@@ -859,6 +862,8 @@ export function App(): ReactElement {
               permissionCodes={permissionCodes}
               catalogoHabilitado={catalogoHabilitado}
               preventaHabilitada={preventaHabilitada}
+              pedidosUnificados={pedidosUnificados}
+              onPedidosUnificadosChange={setPedidosUnificados}
               onAbrirPreventaMovil={() => elegirModoPreventa("movil")}
               volverAPreventaSiempre={abrePreventaMovil({
                 habilitada: preventaHabilitada,

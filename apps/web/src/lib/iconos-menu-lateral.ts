@@ -10,6 +10,8 @@ import inventario from "../assets/iconos/menu-lateral/inventario.png";
 import listasDePrecios from "../assets/iconos/menu-lateral/listas-de-precios.png";
 import ofertas from "../assets/iconos/menu-lateral/ofertas.png";
 import organizacion from "../assets/iconos/menu-lateral/organizacion.png";
+import pedidos from "../assets/iconos/menu-lateral/pedidos.png";
+import preventa from "../assets/iconos/menu-lateral/preventa.png";
 import productos from "../assets/iconos/menu-lateral/productos.png";
 import proveedores from "../assets/iconos/menu-lateral/proveedores.png";
 import reportes from "../assets/iconos/menu-lateral/reportes.png";
@@ -24,7 +26,9 @@ import ventas from "../assets/iconos/menu-lateral/ventas.png";
 export const ICONOS_MENU_LATERAL = {
   Inicio: inicio,
   Ventas: ventas,
+  Pedidos: pedidos,
   "Catálogo online": catalogoOnline,
+  Preventa: preventa,
   Productos: productos,
   "Categorías y laboratorios": categoriasYLaboratorios,
   "Listas de precios": listasDePrecios,

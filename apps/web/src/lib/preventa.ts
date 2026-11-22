@@ -339,16 +339,22 @@ export const SECCIONES: Record<
   configuracion: { label: "Configuración", corto: "Ajustes" },
 };
 
-/** Qué secciones ve cada uno según sus permisos de preventa. */
-export function seccionesVisibles(permisos: {
-  vender: boolean;
-  repartir: boolean;
-  administrar: boolean;
-}): SeccionPreventa[] {
+/**
+ * Qué secciones ve cada uno según sus permisos de preventa. `sinPedidos`: la
+ * farmacia ve los pedidos en la pantalla Pedidos (SISTEMA-119).
+ */
+export function seccionesVisibles(
+  permisos: {
+    vender: boolean;
+    repartir: boolean;
+    administrar: boolean;
+  },
+  { sinPedidos = false }: { sinPedidos?: boolean } = {},
+): SeccionPreventa[] {
   const { vender, repartir, administrar } = permisos;
   const lista: SeccionPreventa[] = [];
   if (vender) lista.push("nuevo");
-  lista.push("pedidos");
+  if (!sinPedidos) lista.push("pedidos");
   if (repartir || administrar) lista.push("reparto");
   lista.push("clientes");
   if (vender) lista.push("ofertas");
@@ -358,12 +364,15 @@ export function seccionesVisibles(permisos: {
 }
 
 /** La primera pantalla: el preventista arma pedidos; el repartidor reparte. */
-export function seccionInicial(permisos: {
-  vender: boolean;
-  repartir: boolean;
-  administrar: boolean;
-}): SeccionPreventa {
-  if (permisos.administrar) return "pedidos";
+export function seccionInicial(
+  permisos: {
+    vender: boolean;
+    repartir: boolean;
+    administrar: boolean;
+  },
+  { sinPedidos = false }: { sinPedidos?: boolean } = {},
+): SeccionPreventa {
+  if (permisos.administrar) return sinPedidos ? "reparto" : "pedidos";
   if (permisos.vender) return "nuevo";
   return "reparto";
 }

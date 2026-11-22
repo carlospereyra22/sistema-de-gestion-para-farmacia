@@ -82,6 +82,9 @@ import { PriceListsWorkspace } from "./price-lists-workspace";
 import { OfertasWorkspace } from "./ofertas-workspace";
 import { CatalogoOnlineWorkspace } from "./catalogo-online-workspace";
 import { PreventaWorkspace } from "./preventa-workspace";
+import { PedidosModulo } from "./pedidos-modulo";
+import type { PestanaPedidos } from "./lib/pedidos";
+import type { PedidoPreventa } from "./lib/preventa-api";
 import { ProductOffersCard } from "./product-offers-card";
 import { FichaMedicamento } from "./ficha-medicamento";
 import { ProspectoPastilla } from "./prospecto-venta";
@@ -406,6 +409,7 @@ import {
   BadgePercent,
   Store,
   Route,
+  Inbox,
   Smartphone,
   Info,
   Trash2,
@@ -489,6 +493,7 @@ const views: {
 }[] = [
   { name: "Inicio", icon: LayoutDashboard },
   { name: "Ventas", icon: ShoppingCart },
+  { name: "Pedidos", icon: Inbox },
   { name: "Catálogo online", icon: Store },
   { name: "Preventa", icon: Route },
   { name: "Productos", icon: Package },
@@ -577,6 +582,8 @@ export function WorkspaceShell({
   permissionCodes,
   catalogoHabilitado = false,
   preventaHabilitada = false,
+  pedidosUnificados = false,
+  onPedidosUnificadosChange,
   onAbrirPreventaMovil,
   volverAPreventaSiempre = false,
   onLogout,
@@ -591,6 +598,9 @@ export function WorkspaceShell({
   catalogoHabilitado?: boolean;
   /** La farmacia tiene el módulo Preventa (SISTEMA-108). */
   preventaHabilitada?: boolean;
+  /** Pedidos del catálogo y de preventa en una sola pantalla (SISTEMA-119). */
+  pedidosUnificados?: boolean;
+  onPedidosUnificadosChange?: (unificados: boolean) => void;
   /** Abre la preventa a pantalla completa (versión celular). */
   onAbrirPreventaMovil?: () => void;
   /** Quien trabaja en la preventa ve "Volver a Preventa" en cualquier tamaño. */
@@ -602,15 +612,66 @@ export function WorkspaceShell({
   const location = readWorkspaceLocation(searchParams);
   // Una pantalla sin permiso se reemplaza por Inicio, también si llega por la dirección.
   // Catálogo online y Preventa son módulos aparte: sin ellos la pantalla no existe.
+  // Pedidos (SISTEMA-119) existe sólo si la farmacia eligió verlos juntos y
+  // tiene los dos módulos; entonces Catálogo online queda para configurarlo.
+  const pedidosJuntos =
+    pedidosUnificados && catalogoHabilitado && preventaHabilitada;
   const puedeVer = (nombre: View) =>
     canOpenView(nombre, permissionCodes) &&
     (nombre !== "Catálogo online" || catalogoHabilitado) &&
-    (nombre !== "Preventa" || preventaHabilitada);
+    (nombre !== "Preventa" || preventaHabilitada) &&
+    (nombre !== "Pedidos" || pedidosJuntos);
+  // Con los pedidos juntos, Catálogo online y Preventa salen del menú y se
+  // abren como pestañas de Pedidos (también si llegan por la dirección).
+  const accesoPedidos = {
+    verPedidos:
+      pedidosJuntos &&
+      [
+        "SALE_READ",
+        "PREVENTA_SELL",
+        "PREVENTA_DELIVER",
+        "PREVENTA_MANAGE",
+      ].some((code) => permissionCodes.includes(code)),
+    verPreventa: pedidosJuntos && puedeVer("Preventa"),
+    configurarCatalogo:
+      pedidosJuntos &&
+      catalogoHabilitado &&
+      permissionCodes.includes("ORGANIZATION_MANAGE"),
+  };
+  const dentroDePedidos = (nombre: View) =>
+    pedidosJuntos && (nombre === "Catálogo online" || nombre === "Preventa");
+  const enElMenu = (nombre: View) =>
+    puedeVer(nombre) && !dentroDePedidos(nombre);
+  const [pestanaPedidos, setPestanaPedidos] = useState<PestanaPedidos>(() =>
+    location.view === "Preventa"
+      ? "preventa"
+      : location.view === "Catálogo online"
+        ? "catalogo"
+        : "pedidos",
+  );
+  // Editar un pedido de preventa desde Pedidos abre Preventa → Nuevo pedido.
+  const [preventaParaEditar, setPreventaParaEditar] =
+    useState<PedidoPreventa | null>(null);
   const abrirPreventa =
     preventaHabilitada && puedeVer("Preventa")
       ? onAbrirPreventaMovil
       : undefined;
-  const view = puedeVer(location.view) ? location.view : "Inicio";
+  const view: View =
+    dentroDePedidos(location.view) && puedeVer("Pedidos")
+      ? "Pedidos"
+      : puedeVer(location.view)
+        ? location.view
+        : "Inicio";
+  // Una dirección vieja (?pagina=preventa) abre su pestaña dentro de Pedidos.
+  useEffect(() => {
+    if (!pedidosJuntos) return;
+    if (location.view === "Preventa") setPestanaPedidos("preventa");
+    else if (location.view === "Catálogo online") setPestanaPedidos("catalogo");
+  }, [pedidosJuntos, location.view]);
+  useEffect(() => {
+    if (view !== "Pedidos" || pestanaPedidos !== "preventa")
+      setPreventaParaEditar(null);
+  }, [view, pestanaPedidos]);
   const { administrationTab, organizationTab, salesScreen } = location;
   useLayoutEffect(() => {
     const previous = window.history.scrollRestoration;
@@ -1177,7 +1238,7 @@ export function WorkspaceShell({
       <header
         ref={sidebar.header}
         data-sidebar={sidebar.expanded ? "expanded" : "collapsed"}
-        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Catálogo online" || view === "Preventa" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" || view === "Organización" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
+        className={`workspace-header ${view === "Productos" ? "workspace-products-header" : ""} ${view === "Listas de precios" || view === "Ofertas" || view === "Catálogo online" || view === "Preventa" || view === "Pedidos" || view === "Clientes" || view === "Proveedores" || view === "Compras" || view === "Inventario" || view === "Productos" || view === "Inicio" || view === "Ventas" || view === "Caja" || view === "Cuentas corrientes" || view === "Categorías y laboratorios" || view === "Transferencias" || view === "Administración" || view === "Organización" ? "workspace-sales-header" : ""} flex h-[82px] items-center justify-between border-b border-slate-200 bg-white px-6`}
       >
         <div className="flex h-full items-center gap-3">
           {/* La marca es la parte de arriba del menú lateral: mismo ancho y
@@ -1206,6 +1267,7 @@ export function WorkspaceShell({
             view === "Ofertas" ||
             view === "Catálogo online" ||
             view === "Preventa" ||
+            view === "Pedidos" ||
             view === "Clientes" ||
             view === "Proveedores" ||
             view === "Inventario" ||
@@ -1237,6 +1299,8 @@ export function WorkspaceShell({
                 <Store size={22} aria-hidden />
               ) : view === "Preventa" ? (
                 <Route size={22} aria-hidden />
+              ) : view === "Pedidos" ? (
+                <Inbox size={22} aria-hidden />
               ) : view === "Clientes" ? (
                 <ContactRound size={22} aria-hidden />
               ) : view === "Inventario" ? (
@@ -1435,7 +1499,7 @@ export function WorkspaceShell({
           </p>
           <nav aria-label="Operación de farmacia" className="space-y-1">
             {views
-              .filter(({ name }) => puedeVer(name))
+              .filter(({ name }) => enElMenu(name))
               .map(({ name, icon: Icon }) => {
                 const imagen = iconoPropio(name);
                 // Prueba local de íconos a color (sólo en desarrollo).
@@ -1568,6 +1632,7 @@ export function WorkspaceShell({
             view !== "Transferencias" &&
             view !== "Reportes" &&
             view !== "Administración" &&
+            view !== "Pedidos" &&
             view !== "Organización" && (
               <div className="workspace-page-heading flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -1678,6 +1743,26 @@ export function WorkspaceShell({
               branches={branches}
               movil={false}
               onAbrirMovil={onAbrirPreventaMovil}
+            />
+          ) : null}
+          {ready && view === "Pedidos" ? (
+            <PedidosModulo
+              key={`pedidos:${organizationId}`}
+              token={accessToken!}
+              organizationId={organizationId!}
+              branches={branches}
+              pestana={pestanaPedidos}
+              onPestana={(pestana) => {
+                setPestanaPedidos(pestana);
+                // La dirección queda en Pedidos aunque viniera de un módulo.
+                if (location.view !== "Pedidos") setPage("Pedidos");
+              }}
+              acceso={accesoPedidos}
+              canManageCatalog={permissionCodes.includes("SALE_MANAGE")}
+              preventaParaEditar={preventaParaEditar}
+              onEditarPreventa={setPreventaParaEditar}
+              onAbrirPreventaMovil={onAbrirPreventaMovil}
+              onError={setMessage}
             />
           ) : null}
           {ready && view === "Ofertas" ? (
@@ -1878,6 +1963,18 @@ export function WorkspaceShell({
                 setSavedOrganizationName({ organizationId, name })
               }
               onUsers={() => openAdministration("users")}
+              vistaPedidos={
+                catalogoHabilitado && preventaHabilitada
+                  ? {
+                      unificados: pedidosUnificados,
+                      puedeCambiar: permissionCodes.includes(
+                        "ORGANIZATION_MANAGE",
+                      ),
+                      onCambio: (unificados) =>
+                        onPedidosUnificadosChange?.(unificados),
+                    }
+                  : undefined
+              }
             />
           ) : null}
           {ready && view === "Administración" ? (

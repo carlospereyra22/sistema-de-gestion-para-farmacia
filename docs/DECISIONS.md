@@ -517,6 +517,15 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   fila lleva el ambiente porque test y producción comparten la base. Ver
   `EXTERNAL_PRODUCT_CATALOG.md`.
 
+- **Pedidos del catálogo y de preventa en una sola pantalla, opcional (SISTEMA-119, 22/11/2026).**
+  Pedido del usuario: quien tiene los dos módulos no debería mirar en dos lugares,
+  pero tiene que poder elegirlo. Lo elige la farmacia (Organización → Datos
+  generales), no la plataforma: es cómo trabaja, no algo que se contrata. La
+  pantalla Pedidos sólo lee con los servicios de cada módulo y cada pedido se
+  resuelve con las acciones de su módulo; no hay un pedido "nuevo" ni estados
+  nuevos, sólo grupos para leerlos igual. La versión celular de preventa no cambia.
+  Ver `PEDIDOS.md`.
+
 - **Finales de línea de las migraciones fijados en `.gitattributes` (SISTEMA-114, 22/11/2026).**
   Prisma guarda la huella de cada migración con sus finales de línea, y el publicador
   empaqueta la carpeta de la PC. Con `core.autocrlf` de Windows, una migración que se

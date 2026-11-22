@@ -358,6 +358,8 @@ export type CurrentUserProfile = {
       catalogEnabled?: boolean;
       /** Módulo Preventa (SISTEMA-108), lo habilita la plataforma. */
       preventaEnabled?: boolean;
+      /** Pedidos del catálogo y de preventa juntos (SISTEMA-119). */
+      unifiedOrders?: boolean;
     };
   }[];
 };

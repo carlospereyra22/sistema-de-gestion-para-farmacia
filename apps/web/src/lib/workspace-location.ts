@@ -8,6 +8,7 @@ const pages = {
   ofertas: "Ofertas",
   catalogo: "Catálogo online",
   preventa: "Preventa",
+  pedidos: "Pedidos",
   inventario: "Inventario",
   ventas: "Ventas",
   caja: "Caja",

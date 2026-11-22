@@ -142,4 +142,18 @@ describe("preventa: secciones", () => {
       seccionesVisibles({ vender: false, repartir: false, administrar: true }),
     ).toContain("configuracion");
   });
+
+  it("sin pestaña Pedidos cuando la farmacia los ve juntos (SISTEMA-119)", async () => {
+    const { seccionesVisibles, seccionInicial } = await import("./preventa");
+    const admin = { vender: false, repartir: false, administrar: true };
+    expect(seccionesVisibles(admin, { sinPedidos: true })).not.toContain(
+      "pedidos",
+    );
+    expect(seccionInicial(admin, { sinPedidos: true })).toBe("reparto");
+    expect(seccionInicial(admin)).toBe("pedidos");
+    const preventista = { vender: true, repartir: false, administrar: false };
+    expect(seccionesVisibles(preventista, { sinPedidos: true })[0]).toBe(
+      "nuevo",
+    );
+  });
 });

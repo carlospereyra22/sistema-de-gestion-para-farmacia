@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { MapPin, RefreshCw, Store, Truck } from "lucide-react";
+import {
+  ArrowLeft,
+  Ban,
+  Check,
+  MapPin,
+  PackageCheck,
+  RefreshCw,
+  Store,
+  Truck,
+} from "lucide-react";
+
+import { Boton } from "./boton";
 
 import {
   decidirPedido,
@@ -206,7 +217,7 @@ export function CatalogoPedidos({
         </div>
       </section>
       {pedido ? (
-        <DetallePedido
+        <DetallePedidoCatalogo
           key={pedido.id}
           pedido={pedido}
           canManage={canManage}
@@ -237,15 +248,22 @@ export function CatalogoPedidos({
   );
 }
 
-function DetallePedido({
+/**
+ * Detalle de un pedido del catálogo con las acciones de la farmacia. Lo usa
+ * la pestaña Pedidos del catálogo (panel al costado) y la pantalla Pedidos
+ * (SISTEMA-119), dentro de un diálogo (`enDialogo`).
+ */
+export function DetallePedidoCatalogo({
   pedido,
   canManage,
   descuentaStock,
+  enDialogo = false,
   onDecidir,
 }: {
   pedido: PedidoDeLaFarmacia;
   canManage: boolean;
   descuentaStock: boolean;
+  enDialogo?: boolean;
   onDecidir: (accion: DecisionPedido, nota?: string) => Promise<void>;
 }) {
   const [enviando, setEnviando] = useState(false);
@@ -261,7 +279,13 @@ function DetallePedido({
     }
   };
   return (
-    <aside className="flex min-h-0 flex-col gap-4 overflow-auto rounded-xl border border-slate-200 bg-white p-5">
+    <aside
+      className={
+        enDialogo
+          ? "flex flex-col gap-4"
+          : "flex min-h-0 flex-col gap-4 overflow-auto rounded-xl border border-slate-200 bg-white p-5"
+      }
+    >
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs text-slate-500">Pedido</p>
@@ -361,55 +385,54 @@ function DetallePedido({
                   rows={2}
                 />
               </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={enviando}
-                  onClick={() => void decidir("rechazar", nota)}
-                  className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
-                >
-                  Rechazar pedido
-                </button>
-                <button
-                  type="button"
+              <div className="flex flex-wrap justify-end gap-2">
+                <Boton
+                  icono={<ArrowLeft size={15} />}
                   onClick={() => setRechazando(false)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 >
                   Volver
-                </button>
+                </Boton>
+                <Boton
+                  variante="peligro"
+                  icono={<Ban size={15} />}
+                  disabled={enviando}
+                  onClick={() => void decidir("rechazar", nota)}
+                >
+                  Rechazar pedido
+                </Boton>
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {pedido.status === "RECEIVED" ? (
-                <button
-                  type="button"
-                  disabled={enviando}
-                  onClick={() => void decidir("confirmar")}
-                  className="flex-1 rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
-                >
-                  Confirmar pedido
-                </button>
-              ) : null}
-              {pedido.status === "CONFIRMED" ? (
-                <button
-                  type="button"
-                  disabled={enviando}
-                  onClick={() => void decidir("entregar")}
-                  className="flex-1 rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
-                >
-                  Marcar entregado
-                </button>
-              ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
               {pedido.status === "RECEIVED" || pedido.status === "CONFIRMED" ? (
-                <button
-                  type="button"
+                <Boton
+                  variante="peligro"
+                  icono={<Ban size={15} />}
                   disabled={enviando}
                   onClick={() => setRechazando(true)}
-                  className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
                 >
                   Rechazar
-                </button>
+                </Boton>
+              ) : null}
+              {pedido.status === "RECEIVED" ? (
+                <Boton
+                  variante="primario"
+                  icono={<Check size={15} />}
+                  disabled={enviando}
+                  onClick={() => void decidir("confirmar")}
+                >
+                  Confirmar pedido
+                </Boton>
+              ) : null}
+              {pedido.status === "CONFIRMED" ? (
+                <Boton
+                  variante="primario"
+                  icono={<PackageCheck size={15} />}
+                  disabled={enviando}
+                  onClick={() => void decidir("entregar")}
+                >
+                  Marcar entregado
+                </Boton>
               ) : null}
             </div>
           )}

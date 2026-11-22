@@ -13,6 +13,15 @@ const viewPermissions: Partial<Record<WorkspaceView, readonly string[]>> = {
   Ofertas: ["OFFER_READ"],
   "Catálogo online": ["SALE_READ", "ORGANIZATION_MANAGE"],
   Preventa: ["PREVENTA_SELL", "PREVENTA_DELIVER", "PREVENTA_MANAGE"],
+  // Pedidos del catálogo y de preventa juntos (SISTEMA-119): ver alguno, o
+  // configurar el catálogo, que con la vista unida está adentro.
+  Pedidos: [
+    "SALE_READ",
+    "ORGANIZATION_MANAGE",
+    "PREVENTA_SELL",
+    "PREVENTA_DELIVER",
+    "PREVENTA_MANAGE",
+  ],
   Inventario: ["INVENTORY_READ"],
   Caja: ["CASH_READ"],
   Compras: ["PURCHASE_READ", "PURCHASE_RECEIVE"],

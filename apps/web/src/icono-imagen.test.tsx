@@ -17,7 +17,9 @@ it("el menú lateral tiene un ícono propio por sección", () => {
   expect(Object.keys(ICONOS_MENU_LATERAL)).toEqual([
     "Inicio",
     "Ventas",
+    "Pedidos",
     "Catálogo online",
+    "Preventa",
     "Productos",
     "Categorías y laboratorios",
     "Listas de precios",

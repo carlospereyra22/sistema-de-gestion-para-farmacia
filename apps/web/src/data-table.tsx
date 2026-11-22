@@ -159,11 +159,13 @@ export function CellText({
   );
 }
 
-export type StatusTone = "ok" | "warning" | "danger" | "muted";
+export type StatusTone = "ok" | "warning" | "info" | "danger" | "muted";
 
 const statusDot: Record<StatusTone, string> = {
   ok: "bg-emerald-500",
   warning: "bg-amber-500",
+  // En curso: ya resuelto, falta terminarlo (SISTEMA-119).
+  info: "bg-sky-500",
   danger: "bg-rose-500",
   muted: "bg-slate-400",
 };
