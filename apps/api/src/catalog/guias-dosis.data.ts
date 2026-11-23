@@ -97,7 +97,7 @@ const TANDA_1: FilaDosis[] = [
   [
     "paracetamol",
     "Dolor y fiebre.",
-    "500 mg-1 g cada 6-8 h (máx. 3-4 g/día). Niños: según peso. Inyectable: uso hospitalario, 1 g IV en 15 min cada 6 h (máx. 4 g/día; menos de 50 kg: 15 mg/kg).",
+    "Adultos: 500 mg-1 g cada 6-8 h (máx. 3-4 g/día). Niños: 10-15 mg/kg cada 6 h (máx. 60 mg/kg/día); comprimidos infantiles de 80 o 160 mg según el peso. Inyectable: uso hospitalario, 1 g IV en 15 min cada 6 h (máx. 4 g/día; menos de 50 kg: 15 mg/kg).",
   ],
   ["amlodipina", "Presión alta y angina de pecho.", "5-10 mg cada 24 h."],
   [
@@ -123,7 +123,7 @@ const TANDA_1: FilaDosis[] = [
   [
     "omeprazol",
     "Acidez, reflujo y úlcera.",
-    "20 mg cada 24 h en ayunas (20-40 mg). Inyectable: uso hospitalario, 40 mg IV cada 24 h.",
+    "Acidez (venta libre, 10-20 mg): 20 mg cada 24 h en ayunas, hasta 14 días. Reflujo o úlcera: 20-40 mg cada 24 h según indicación médica. Inyectable: uso hospitalario, 40 mg IV cada 24 h.",
   ],
   [
     "carbohidratos+asoc.",
@@ -225,8 +225,8 @@ const TANDA_1: FilaDosis[] = [
   ],
   [
     "aminoácidos+asoc.",
-    "Nutrición especial (alimento para propósitos médicos).",
-    "Tomas cada 3-4 h o según indique el médico o nutricionista.",
+    "Crema: hidratación y cuidado de la piel. Oral: suplemento nutricional.",
+    "Crema: aplicar cada 12-24 h. Oral: 1 toma cada 24 h, según envase.",
   ],
   [
     "proteínas+asoc.",
@@ -390,7 +390,7 @@ const TANDA_1: FilaDosis[] = [
   [
     "pantoprazol",
     "Acidez, reflujo y úlcera.",
-    "40 mg cada 24 h antes del desayuno. Inyectable: uso hospitalario, 40 mg IV cada 24 h.",
+    "Acidez (venta libre, 20 mg): 20 mg cada 24 h antes del desayuno, hasta 14 días. Reflujo o úlcera: 40 mg cada 24 h según indicación médica. Inyectable: uso hospitalario, 40 mg IV cada 24 h.",
   ],
   [
     "paroxetina",
@@ -417,7 +417,7 @@ const TANDA_1: FilaDosis[] = [
   [
     "diclofenac potásico",
     "Dolor agudo e inflamación.",
-    "50 mg cada 8-12 h con comida (máx. 150 mg/día).",
+    "Venta libre (25 mg): 25 mg cada 4-6 h si hace falta (máx. 75 mg/día). Con receta: 50 mg cada 8-12 h con comida (máx. 150 mg/día).",
   ],
   [
     "pramipexol",
@@ -596,11 +596,11 @@ const TANDA_1: FilaDosis[] = [
     "Asma y EPOC.",
     "1-2 inhalaciones cada 12 h; enjuagarse la boca después.",
   ],
-  ["fexofenadina", "Alergia.", "120-180 mg cada 24 h."],
+  ["fexofenadina", "Alergia.", "120-180 mg cada 24 h, o 60 mg cada 12 h."],
   [
     "hialurónico,ác.",
-    "Hidratación de piel, ojos o articulaciones.",
-    "Gotas: cada 4-8 h. Crema: cada 12-24 h. Inyección articular: la aplica el médico.",
+    "Óvulos o gel vaginal: sequedad vaginal. Crema: hidratación de la piel. Colirio: ojo seco. Inyectable: dolor articular (lo aplica el médico).",
+    "Óvulo o gel vaginal: 1 cada 24-72 h. Crema: aplicar cada 12-24 h. Colirio: 1-2 gotas cada 4-8 h. Inyectable: la aplica el médico, cada 7 días según indicación.",
   ],
   [
     "loperamida",
@@ -613,11 +613,15 @@ const TANDA_1: FilaDosis[] = [
     "Cada 7 días (una vez por SEMANA, no diario); dosis según indicación médica. Inyectable: también una vez por SEMANA, en la dosis que indica el médico.",
   ],
   ["telmisartán", "Presión alta.", "40-80 mg cada 24 h."],
-  ["bromhexina", "Mucolítico: tos con flema.", "8 mg cada 8 h."],
+  [
+    "bromhexina",
+    "Mucolítico: tos con flema.",
+    "Adultos: 8-16 mg cada 8 h. Niños de 6-12 años: 4 mg cada 8 h; de 2-6 años: 2 mg cada 8 h.",
+  ],
   [
     "carboximetilcelulosa sód.+asoc.",
-    "Lágrimas artificiales (ojo seco).",
-    "1-2 gotas cada 4-6 h o cuando haga falta.",
+    "Colirio: ojo seco (lágrimas artificiales). Crema o polvo: adhesivo para prótesis dentales.",
+    "Colirio: 1-2 gotas cada 4-6 h o cuando haga falta. Crema o polvo: aplicar cada 12-24 h al colocar la prótesis.",
   ],
   ["desloratadina", "Alergia.", "5 mg cada 24 h."],
   [
@@ -662,7 +666,11 @@ const TANDA_1: FilaDosis[] = [
     "Tratamiento oncológico (páncreas, pulmón, vejiga).",
     `Infusión en el hospital cada 7 días según el ciclo; ${ESP}`,
   ],
-  ["láctico,ác.+asoc.", "Higiene íntima femenina.", "Uso cada 12-24 h."],
+  [
+    "láctico,ác.+asoc.",
+    "Higiene íntima femenina.",
+    "Higiene externa: usar cada 12-24 h. Gel vaginal: 1 aplicación cada 24-72 h.",
+  ],
   [
     "metilfenidato",
     "TDAH.",
@@ -896,7 +904,7 @@ const TANDA_1: FilaDosis[] = [
   [
     "famotidina",
     "Acidez y úlcera.",
-    "20 mg cada 12 h o 40 mg cada 24 h a la noche.",
+    "Acidez (venta libre, 10 mg): 10 mg cuando aparece, se puede repetir cada 12 h (máx. 20 mg/día). Úlcera: 20 mg cada 12 h o 40 mg cada 24 h según indicación médica.",
   ],
   [
     "fluoxetina",
@@ -1106,8 +1114,8 @@ const TANDA_1: FilaDosis[] = [
   ],
   [
     "acetilsalicílico,ác.+cafeína",
-    "Malestar estomacal, acidez y dolor de cabeza (resaca).",
-    "1 sobre disuelto en agua cada 6 h si hace falta (máx. 4 por día).",
+    "Dolor de cabeza y dolores leves a moderados.",
+    "1-2 comprimidos cada 6-8 h si hace falta, con comida (máx. 4 g de aspirina por día).",
   ],
   [
     "sodio,bicarbonato+asoc.",

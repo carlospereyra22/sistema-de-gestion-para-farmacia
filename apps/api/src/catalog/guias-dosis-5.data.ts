@@ -166,7 +166,11 @@ const FILAS: FilaDosis[] = [
     "Movimientos involuntarios (corea).",
     "12,5-25 mg cada 8 h; se ajusta.",
   ],
-  ["tetrapéptidos+asoc.", "Ojos irritados.", "1-2 gotas cada 6-8 h."],
+  [
+    "tetrapéptidos+asoc.",
+    "Crema: piel sensible con rojeces. Gotas: ojos irritados.",
+    "Crema: aplicar cada 12 h. Gotas: 1-2 gotas cada 6-8 h.",
+  ],
   [
     "tioridazina",
     "Ansiedad y psicosis.",
@@ -991,8 +995,8 @@ const FILAS: FilaDosis[] = [
   ],
   [
     "gas refrigerante",
-    "Golpes y dolor por frío local.",
-    "Aplicar unos segundos; repetir cada 2-4 h si hace falta.",
+    "Golpes, torceduras y dolor muscular por frío local (uso externo).",
+    "Uso externo: rociar a 15-20 cm sobre la zona unos segundos; se puede repetir cada 4-6 h. No inhalar.",
   ],
   [
     "gelatina modificada",

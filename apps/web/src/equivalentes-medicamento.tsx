@@ -159,7 +159,7 @@ export function ListaEquivalentes({
         : `Otros con ${datos.principioActivo}`,
       detalle: datos.composicionAbierta
         ? "Fórmulas parecidas: la composición puede variar entre marcas."
-        : "Otra concentración o forma farmacéutica.",
+        : "Otra concentración, forma o liberación, o sin la concentración publicada para comparar.",
       filas: datos.mismaDroga,
       comparable: false,
     },

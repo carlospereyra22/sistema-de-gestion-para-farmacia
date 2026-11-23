@@ -585,7 +585,7 @@ const FILAS: FilaDosis[] = [
   [
     "benzocaína+asoc.",
     "Dolor de muelas, boca o garganta.",
-    "Aplicar cada 4-6 h si hace falta.",
+    "Según el envase: aplicar sobre la zona cada 4-6 h si hace falta, hasta ir al odontólogo.",
   ],
   ["bepotastina,besilato", "Alergia ocular.", "1 gota cada 12 h."],
   [
@@ -598,7 +598,11 @@ const FILAS: FilaDosis[] = [
     "Glaucoma o pestañas (cosmético).",
     "1 gota cada 24 h a la noche.",
   ],
-  ["biotina+asoc.", "Uñas o cabello frágiles.", "Aplicar u tomar cada 24 h."],
+  [
+    "biotina+asoc.",
+    "Uñas o cabello frágiles.",
+    "Gel o laca para uñas: aplicar cada 24 h. Oral: 1 toma cada 24 h.",
+  ],
   [
     "bupivacaína+epinefrina",
     "Anestesia local.",
@@ -843,7 +847,11 @@ const FILAS: FilaDosis[] = [
     "Anemia por falta de hierro.",
     `${HOSP}, cada 48-168 h según el esquema.`,
   ],
-  ["homatropina,metilbr.", "Cólicos.", "Gotas cada 6-8 h según peso."],
+  [
+    "homatropina,metilbr.",
+    "Cólicos y espasmos abdominales.",
+    "Comprimidos: 1-2 cada 6-8 h. Gotas: cada 6-8 h según peso en niños, como indica el envase.",
+  ],
   [
     "ibuprofeno+codeína",
     "Dolor moderado.",

@@ -217,6 +217,17 @@ permiso `CATALOG_READ`). Se consulta sola al abrir un producto guardado.
 - Si no hay coincidencia por código ni principio activo, se busca el nombre exacto
   del producto en la base de medicamentos (solo si todas las coincidencias dan el
   mismo principio activo).
+- **Ficha publicada de la marca (SISTEMA-123)**: si el medicamento está vinculado a
+  su ficha de [PR Vademécum Argentina](https://ar.prvademecum.com) (`MedicineMonograph`,
+  compartida), la tarjeta muestra el prospecto de esa marca: indicaciones, modo de
+  uso (título "Cómo se usa (prospecto)", incluye la dosis de chicos), composición y
+  el enlace a la fuente. La vía sale del modo de uso cuando lo dice sin dudas. La
+  guía por principio activo queda para lo que no tiene ficha. Ver
+  `MEDICINE_CATALOG.md`, "Fichas de PR Vademécum".
+- La guía elige de su texto la parte de la forma del producto, también en "para qué
+  sirve" ("Colirio: ojo seco. Crema o polvo: adhesivo dental."), y la forma se aclara
+  con el nombre ("EVACARE CREMA VAGINAL"). "Sprays/Aerosoles" del padrón es para
+  inhalar sólo si la presentación lo dice (inhal., dosis); si no, uso externo.
 - "Buscar prospecto" abre una búsqueda web (el padrón no publica el link), e
   "Indicaciones de la farmacia" (campo `description` del producto) es una nota libre
   de cada farmacia.
@@ -226,7 +237,12 @@ permiso `CATALOG_READ`). Se consulta sola al abrir un producto guardado.
 `GET organizations/:org/branches/:branch/catalog/equivalentes` (permiso
 `CATALOG_READ` y acceso a la sucursal) devuelve, desde la base de medicamentos:
 
-- **Equivalentes**: misma droga del padrón (`guideKey`), misma forma y misma dosis.
+- **Equivalentes**: misma droga del padrón (`guideKey`), misma forma, misma dosis
+  **conocida en los dos** y misma liberación (SISTEMA-123). En uso externo, además, el
+  mismo tipo: gel, crema, pomada, loción… ("VOLTAREN EMULGEL" no equivale a una crema
+  ni a "VOLTAREN 12HS EMULGEL"). "12 HS", "RETARD", "LP", "lib.prol." marcan
+  liberación prolongada, y un comprimido efervescente, masticable, dispersable o
+  sublingual no equivale a uno común.
   - Dosis: de la presentación o el nombre, con todos los componentes ("320/25 mg"
     ≠ "160/25 mg"), en mg o mg/ml para comparar ("1 g" = "1000 mg", "2%" =
     "100 mg/5 ml", "5 g/100 g" = "5%"), pegada al texto ("50mgcomp", "Ped.250 mg"),
@@ -234,12 +250,14 @@ permiso `CATALOG_READ`). Se consulta sola al abrir un producto guardado.
     "AMLODICORD 5"; nunca el envase: "x20", "4 x 4").
   - Si al elegido le falta la dosis, se toma de otras presentaciones con el mismo
     nombre **y la misma forma**, cuando todas dicen lo mismo.
-  - Sin dosis escrita: dos presentaciones se dan por iguales solo si en esa forma la
-    droga casi nunca la escribe (dipirona en comprimidos) y el nombre no marca otra
-    potencia ("FORTE", "PLUS", "DUO", "PED.", proporciones "14:1"…). Si no, van a
-    **Para confirmar** (plegado), con el aviso de la fila.
-- **Otros con la misma droga**: otra concentración o forma, sin "Mejor $/u" ni
-  porcentaje (no se comparan precios entre dosis distintas).
+  - Sin la dosis de los dos no hay equivalencia: desde el 23/11/2026 no se dan por
+    iguales dos presentaciones sin dosis ni quedan "para confirmar" (pedido del
+    usuario: no tiene que marcar nada a mano). La dosis que falta en el padrón sale
+    de la composición de la ficha de la marca (PR Vademécum o AlfaBeta).
+  - Si la dosis sale sólo del número del nombre (sin unidad), un "FORTE", "PLUS",
+    "DUO", "PED." o proporción "14:1" en un solo nombre marca otra potencia.
+- **Otros con la misma droga**: otra concentración, forma o liberación, o sin la
+  concentración publicada para comparar; sin "Mejor $/u" ni porcentaje.
 - Fórmulas abiertas ("+asoc.", multivitamínicos, minerales): no hay equivalentes,
   solo **Productos relacionados**. Categorías que no son una droga (cosméticos,
   accesorios, protectores solares, alimentos, fórmulas infantiles): sin alternativas.

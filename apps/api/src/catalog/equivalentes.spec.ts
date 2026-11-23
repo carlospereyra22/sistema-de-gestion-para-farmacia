@@ -110,8 +110,8 @@ describe("equivalentes de un medicamento", () => {
     ).toBe("igual");
   });
 
-  it("FORTE, PED. y similares no son iguales sin dosis escrita", () => {
-    const { equivalentes } = separarAlternativas(
+  it("sin la concentración de los dos, no es equivalente ni queda para confirmar", () => {
+    const { equivalentes, mismaDroga } = separarAlternativas(
       { ...sinBase, forma: COMP, dosis: null, nombre: "DIOXAFLEX GESIC" },
       [
         item({ name: "ALGICLER" }),
@@ -120,12 +120,92 @@ describe("equivalentes de un medicamento", () => {
       ],
       new Map(),
     );
-    expect(
-      equivalentes.map((fila) => [fila.nombre, fila.dosisConfirmada]),
-    ).toEqual([
-      ["ALGICLER", true],
-      ["OXAGESIC FORTE", false],
-      ["OPTAMOX DUO 14:1", false],
+    expect(equivalentes).toEqual([]);
+    expect(mismaDroga).toHaveLength(3);
+  });
+
+  it("FORTE, PED. y similares no son iguales cuando la dosis sale del nombre", () => {
+    const { equivalentes, mismaDroga } = separarAlternativas(
+      {
+        ...sinBase,
+        forma: COMP,
+        dosis: dosisDe("DOLO 50", "comp.x 10"),
+        nombre: "DOLO 50",
+      },
+      [item({ name: "DOLO 50 FORTE" }), item({ name: "OTRO 50" })],
+      new Map(),
+    );
+    expect(equivalentes.map((fila) => fila.nombre)).toEqual(["OTRO 50"]);
+    expect(mismaDroga.map((fila) => fila.nombre)).toEqual(["DOLO 50 FORTE"]);
+  });
+
+  it("gel no equivale a crema ni la liberación prolongada a la común", () => {
+    const GEL = "Cremas/Geles/Pomadas/Ungüentos";
+    const { equivalentes, mismaDroga } = separarAlternativas(
+      {
+        ...sinBase,
+        forma: GEL,
+        dosis: dosisDe("VOLTAREN EMULGEL", "1.16 g/100 g"),
+        nombre: "VOLTAREN EMULGEL",
+        presentacion: "pomo x 30 g",
+      },
+      [
+        item({
+          name: "VOLTAREN EMULGEL",
+          presentation: "pomo x 100 g",
+          pharmaceuticalForm: GEL,
+          doseText: "1.16 g/100 g",
+        }),
+        item({
+          name: "VOLTAREN 12HS EMULGEL",
+          presentation: "pomo x 50 g",
+          pharmaceuticalForm: GEL,
+          doseText: "2.32 g/100 g",
+        }),
+        item({
+          name: "OTRO",
+          presentation: "cr.x 30 g",
+          pharmaceuticalForm: GEL,
+          doseText: "1.16 g/100 g",
+        }),
+      ],
+      new Map(),
+    );
+    expect(equivalentes.map((fila) => fila.nombre)).toEqual([
+      "VOLTAREN EMULGEL",
+    ]);
+    expect(mismaDroga.map((fila) => fila.nombre).sort()).toEqual([
+      "OTRO",
+      "VOLTAREN 12HS EMULGEL",
+    ]);
+    const prolongada = separarAlternativas(
+      {
+        ...sinBase,
+        forma: COMP,
+        dosis: dosisDe("X", "75 mg comp.x 10"),
+        nombre: "X",
+      },
+      [item({ name: "Y RETARD", presentation: "75 mg comp.x 10" })],
+      new Map(),
+    );
+    expect(prolongada.equivalentes).toEqual([]);
+    // Efervescente no equivale a un comprimido común.
+    const efervescente = separarAlternativas(
+      {
+        ...sinBase,
+        forma: COMP,
+        dosis: dosisDe("VITAMINA C", "1 g comp.x 30"),
+        nombre: "VITAMINA C",
+        presentacion: "1 g comp.x 30",
+      },
+      [
+        item({ name: "REDOXON", presentation: "eferv.1 g comp.x 30" }),
+        item({ name: "OTRA C", presentation: "1 g comp.x 10" }),
+      ],
+      new Map(),
+    );
+    expect(efervescente.equivalentes.map((fila) => fila.nombre)).toEqual([
+      "OTRA C",
     ]);
   });
 
@@ -244,31 +324,32 @@ describe("equivalentes de un medicamento", () => {
       "ACTRON  400 RAPIDA ACCION NF",
       "FABOGESIC 400 RAPIDA ACCION",
       "SINDOL 400 VL",
-      "ACTRON",
     ]);
-    // Sin dosis escrita: entra, pero para confirmar.
-    expect(equivalentes.at(-1)?.dosisConfirmada).toBe(false);
+    expect(equivalentes.every((fila) => fila.dosisConfirmada)).toBe(true);
+    // Sin dosis escrita no se da por igual: queda con la misma droga.
     expect(mismaDroga.map((fila) => fila.nombre).sort()).toEqual([
+      "ACTRON",
       "ACTRON 600 RAPIDA ACCION",
       "IBU 400",
     ]);
   });
 
-  it("dipironas: comprimidos sin dosis escrita son equivalentes entre sí", () => {
+  it("dipironas: equivalentes con la dosis de la ficha de cada marca", () => {
     const { equivalentes, mismaDroga } = separarAlternativas(
       {
         itemIds: new Set(["NOVALGINA"]),
         codigos: new Set(),
         forma: COMP,
-        dosis: null,
+        dosis: dosisDe("NOVALGINA", "500 mg"),
       },
       [
         item({ id: "NOVALGINA" }),
-        item({ name: "DIOXADOL", priceMinor: 957_600n }),
+        item({ name: "DIOXADOL", priceMinor: 957_600n, doseText: "500 mg" }),
         item({
           name: "NOVEMINA",
           presentation: "comp.x 40",
           priceMinor: 2_878_600n,
+          doseText: "500 mg",
         }),
         item({
           name: "NOVACLER",
@@ -293,8 +374,15 @@ describe("equivalentes de un medicamento", () => {
 
   it("muestra el precio y el stock de la farmacia cuando tiene el producto", () => {
     const { equivalentes } = separarAlternativas(
-      { ...sinBase, forma: COMP, dosis: null },
-      [item({ name: "CON STOCK", priceMinor: 900n, codigos: ["2"] })],
+      { ...sinBase, forma: COMP, dosis: dosisDe("X", "500 mg") },
+      [
+        item({
+          name: "CON STOCK",
+          priceMinor: 900n,
+          codigos: ["2"],
+          doseText: "500 mg",
+        }),
+      ],
       new Map([
         ["2", { id: "p", nombre: "CON STOCK", precioMinor: 1_200n, stock: 5 }],
       ]),

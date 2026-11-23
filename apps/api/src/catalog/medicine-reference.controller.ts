@@ -36,6 +36,8 @@ import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
 import { canonicalGtin } from "./external-gtin";
 import { elegirFoto } from "./fotos-medicamentos";
+import { viaDeFicha } from "./monografias";
+import { MonografiasService } from "./monografias.service";
 
 class BaseLocalQueryDto {
   @IsOptional() @IsString() @MaxLength(120) version?: string;
@@ -89,6 +91,7 @@ export class MedicineReferenceController {
     private readonly alfabeta: AlfaBetaService,
     private readonly externalCatalog: ExternalCatalogService,
     private readonly medicineCatalog: MedicineCatalogService,
+    private readonly monografias: MonografiasService,
   ) {}
 
   @Get("barcode/:code")
@@ -241,6 +244,12 @@ export class MedicineReferenceController {
       "CATALOG_READ",
     );
     const codigos = query.codigos ? query.codigos.split(",") : [];
+    // La ficha publicada de la marca (SISTEMA-123) manda sobre la guía por
+    // principio activo, que queda para lo que no tiene ficha.
+    const publicada = await this.monografias.deProducto(codigos, query.q);
+    const monografia = publicada
+      ? { ...publicada, via: viaDeFicha(publicada.dosage) ?? "" }
+      : null;
     // Primero la guía guardada por principio activo; el padrón en vivo queda
     // para lo que no se pudo vincular.
     const producto = { forma: query.forma, presentacion: query.presentacion };
@@ -250,7 +259,7 @@ export class MedicineReferenceController {
       query.q,
       producto,
     );
-    if (guia) return { guia, ficha: null };
+    if (guia || monografia) return { guia, ficha: null, monografia };
     const ficha = await this.references.fichaTerapeutica(query.q, codigos);
     const guiaPadron = ficha
       ? await this.medicineCatalog.guiaDe(ficha.principioActivo, [], "", {
@@ -258,7 +267,7 @@ export class MedicineReferenceController {
           presentacion: ficha.presentacion || query.presentacion,
         })
       : null;
-    return { guia: guiaPadron, ficha };
+    return { guia: guiaPadron, ficha, monografia: null };
   }
 
   @Get("alfabeta")

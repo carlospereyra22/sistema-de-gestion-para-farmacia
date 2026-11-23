@@ -167,6 +167,7 @@ export class EquivalentesService {
           ) ??
           dosisPorNombre(base?.name ?? datos.nombre ?? "", filas, forma),
         nombre: base?.name ?? datos.nombre ?? "",
+        presentacion: base?.presentation ?? datos.presentacion ?? "",
         // "+asoc.": el padrón no detalla los otros componentes; vitaminas y
         // minerales varían de una marca a otra.
         composicionAbierta,

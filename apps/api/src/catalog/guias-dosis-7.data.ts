@@ -380,8 +380,8 @@ const FILAS: FilaDosis[] = [
   ],
   [
     "diclofenac",
-    "Dolor muscular y articular (gel).",
-    "Aplicar cada 6-12 h según concentración.",
+    "Dolor e inflamación.",
+    "Oral: 50 mg cada 8-12 h con comida (máx. 150 mg/día); venta libre de 25 mg: cada 4-6 h si hace falta (máx. 75 mg/día). Gel: aplicar cada 6-8 h.",
   ],
   [
     "diclofenac sódico+misoprostol",
@@ -699,8 +699,8 @@ const FILAS: FilaDosis[] = [
   ],
   [
     "fluticasona,propionato",
-    "Rinitis alérgica o asma.",
-    "Spray nasal: cada 24 h. Inhalador: cada 12 h.",
+    "Spray nasal: rinitis alérgica. Inhalador: asma.",
+    "Spray nasal: 2 aplicaciones en cada fosa cada 24 h (luego 1 si alcanza). Inhalador: 100-500 mcg cada 12 h según indicación médica.",
   ],
   [
     "form.para enf.inflamatorias",

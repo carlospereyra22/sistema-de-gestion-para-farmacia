@@ -59,4 +59,39 @@ describe("ficha terapéutica", () => {
     expect(esPresentacionPediatrica("ACTRON PEDIATRICO 4%", "")).toBe(true);
     expect(esPresentacionPediatrica("NOVALGINA", "comp.x 10")).toBe(false);
   });
+  it("usa el prospecto de la marca y completa con la guía lo que falta", () => {
+    const monografia = {
+      name: "VOLTAREN EMULGEL",
+      laboratory: "HALEON ARG",
+      therapeuticAction: "Analgésico-antiinflamatorio de uso tópico.",
+      composition: "Cada 100 g contiene: Diclofenaco Dietilamónico 1.16 g.",
+      indications: "Alivio del dolor y la inflamación localizada.",
+      dosage: "Tópica. Aplicar 3 a 4 veces al día.",
+      presentations: "Envases de 30, 60 y 100 g.",
+      sourceUrl:
+        "https://ar.prvademecum.com/medicamento/voltaren-emulgel-13689/",
+      via: "uso externo",
+    };
+    const completo = resumenFicha({ guia, ficha: null, monografia });
+    expect(completo).toMatchObject({
+      paraQueSirve: "Alivio del dolor y la inflamación localizada.",
+      dosis: "Tópica. Aplicar 3 a 4 veces al día.",
+      dosisGeneradaConIa: false,
+      deProspecto: true,
+      via: "uso externo",
+      fuente: { nombre: "PR Vademécum" },
+    });
+    // Sin modo de uso en la ficha: la dosis de la guía, marcada como tal.
+    const sinUso = resumenFicha({
+      guia,
+      ficha: null,
+      monografia: { ...monografia, dosage: "" },
+    });
+    expect(sinUso).toMatchObject({
+      paraQueSirve: "Alivio del dolor y la inflamación localizada.",
+      dosis: "400 mg cada 6-8 h.",
+      dosisGeneradaConIa: true,
+      deProspecto: false,
+    });
+  });
 });

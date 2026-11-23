@@ -159,6 +159,39 @@ versiona desde el 05/11/2026 (SISTEMA-35): al regenerarlo, commitear el archivo.
 uv run --python 3.12 python scripts/medicine-catalog/exportar.py <carpeta> data/medicine-catalog/catalogo.jsonl
 ```
 
+## Fichas de PR Vademécum (SISTEMA-123)
+
+Para que el prospecto y las equivalencias sean exactos, cada marca se vincula con su
+ficha publicada en [PR Vademécum Argentina](https://ar.prvademecum.com):
+composición, indicaciones, modo de uso y presentaciones del prospecto, con su enlace.
+
+- **Tabla:** `MedicineMonograph` (compartida, una fila por ficha, `source =
+"prvademecum"`) y `MedicineCatalogItem.monographId`.
+- **Vínculo:** nombre exacto (sin tildes, signos ni espacios: "SINDOL 400 V.L." =
+  "SINDOL 400 VL"). Si hay varias fichas con ese nombre, la del mismo laboratorio y
+  sólo si es una. Ante cualquier duda, sin ficha: es mejor no mostrar una ficha que
+  mostrar la de otro producto.
+- **Concentración:** si la presentación no la escribe y no la trajo AlfaBeta, se lee
+  de la composición: por unidad ("Cada óvulo contiene 200 mg"), por ml en líquidos o
+  por cada 100 g o ml en uso externo ("1.16 g/100 g"). Se guarda en `doseText` con
+  `doseSource = "prvademecum"`; las equivalencias la usan como si estuviera escrita.
+- **Lector:** `scripts/medicine-catalog/prvademecum.py`. Sólo páginas públicas que
+  `robots.txt` permite, de a una por segundo, con caché en disco (se puede cortar y
+  retomar). No usa el buscador interno del sitio. Primero arma el índice desde las
+  páginas de cada principio activo; después lee sólo las fichas cuyo nombre está en
+  la base.
+
+```powershell
+# Nombres de la base (uno por línea) y archivo de fichas:
+uv run --python 3.12 python scripts/medicine-catalog/prvademecum.py --cache data/medicine-catalog/prvademecum --nombres data/medicine-catalog/nombres.txt --salida data/medicine-catalog/monografias.json
+# Carga (también recarga las guías corregidas):
+pnpm --filter @gestion/api catalogo-medicamentos guias
+pnpm --filter @gestion/api catalogo-medicamentos monografias data/medicine-catalog/monografias.json
+```
+
+En test y producción, con el archivo subido al VPS:
+`sudo bash import-medicine-catalog.sh <preprod|prod> /tmp/monografias.json monografias`.
+
 ## Pasar a otro ambiente
 
 Migraciones de esta funcionalidad, en orden. Son aditivas: no modifican datos existentes.
