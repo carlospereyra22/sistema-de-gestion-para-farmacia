@@ -517,6 +517,15 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   fila lleva el ambiente porque test y producción comparten la base. Ver
   `EXTERNAL_PRODUCT_CATALOG.md`.
 
+- **Fotos de las tiendas en medicamentos (SISTEMA-122, 23/11/2026).** Pedido del
+  usuario: poner la foto de los medicamentos que coinciden con la base, para todas
+  las farmacias y también en los productos ya cargados sin foto. Se usan todos los
+  medicamentos de la base (no sólo venta libre) y sólo tiendas argentinas (sin
+  Farmacorp). Las fotos viven en el catálogo externo, como las demás; el worker las
+  copia a `ProductImage` por código exacto y una sola vez por producto
+  (`Product.fotoTiendaEn`), así nunca pisa ni repone una foto que alguien quitó.
+  Ver `EXTERNAL_PRODUCT_CATALOG.md`.
+
 - **Pedidos del catálogo y de preventa en una sola pantalla, opcional (SISTEMA-119, 22/11/2026).**
   Pedido del usuario: quien tiene los dos módulos no debería mirar en dos lugares,
   pero tiene que poder elegirlo. Lo elige la farmacia (Organización → Datos

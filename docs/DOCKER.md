@@ -35,7 +35,8 @@ autorización: los archivos del servidor todavía no se ejecutaron nunca.
 Las tareas se apagan con las variables que ya existían:
 `PRICE_REFRESH_SCHEDULER=off`, `FISCAL_QUEUE_WORKER=off`,
 `SUBSCRIPTION_SCHEDULER=off`, y la de los aportes de las farmacias al catálogo
-externo (SISTEMA-112), `CATALOG_APORTES_SCHEDULER=off`. Las acciones a pedido (actualizar precios de una
+externo (SISTEMA-112), `CATALOG_APORTES_SCHEDULER=off`, y la de fotos de
+medicamentos (SISTEMA-122), `MEDICINE_PHOTOS_SCHEDULER=off`. Las acciones a pedido (actualizar precios de una
 farmacia, enviar una factura desde la web) siguen funcionando en la API.
 
 `/app/entrada` es un enlace que el Dockerfile crea hacia `dist/src` o `dist`,

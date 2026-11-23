@@ -115,6 +115,22 @@ En `/etc/gestion-preprod/environment` (test), lo mismo con
 `CATALOG_APORTES_AMBIENTE=test`. Reiniciar cada API después de publicar la versión
 con SISTEMA-112.
 
+## 6. Fotos de medicamentos (SISTEMA-122, una vez)
+
+La tabla `reference_catalog.medicine_image` y la vista `reference_catalog.medicine_photo`
+las crea la primera carga que corra con SISTEMA-122 (la mensual o una a mano).
+Después de esa carga, dar lectura de la vista a los dos roles de lectura:
+
+```bash
+for lector in gestion_preprod_catalog <rol de lectura de producción>; do
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -d catalogo_juncos_external -c "GRANT SELECT ON reference_catalog.medicine_photo TO \"$lector\""
+done
+```
+
+Hasta entonces el worker avisa en el registro que no encontró fotos y sigue; no
+frena nada. No hace falta ninguna variable nueva: usa
+`EXTERNAL_CATALOG_DATABASE_URL` y `EXTERNAL_CATALOG_ORGANIZATION_ID`.
+
 ## Operación
 
 | Qué                      | Comando                                                            |

@@ -20,6 +20,7 @@ import {
   retailerMedicineMatches,
   type RetailMedicineRow,
 } from "./retail-medicine-fallback";
+import type { FotoMedicamento } from "./fotos-medicamentos";
 type Candidate = {
   code: string;
   gtin14: string;
@@ -203,6 +204,29 @@ export class ExternalCatalogService implements OnModuleDestroy {
       { timeout: 5000 },
     );
     return retailerMedicineMatches(code, rows);
+  }
+
+  /**
+   * Fotos de tiendas argentinas por código exacto, para medicamentos de la base
+   * (SISTEMA-122). Sólo lee la vista `medicine_photo`.
+   */
+  async fotosDeMedicamentos(
+    organizationId: string,
+    gtins: string[],
+  ): Promise<FotoMedicamento[]> {
+    const codigos = [...new Set(gtins.map((gtin) => canonicalGtin(gtin)))];
+    if (!codigos.length) return [];
+    return this.connection(organizationId).$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+        await tx.$executeRaw`SET LOCAL statement_timeout = '5000ms'`;
+        return tx.$queryRaw<FotoMedicamento[]>(
+          Prisma.sql`SELECT gtin14::text AS gtin14, source, source_ref AS "sourceRef", sha256::text AS sha256, foto, prioridad
+            FROM reference_catalog.medicine_photo WHERE gtin14 = ANY(CAST(${codigos} AS char(14)[]))`,
+        );
+      },
+      { timeout: 10_000 },
+    );
   }
 
   async categoryEvidence(

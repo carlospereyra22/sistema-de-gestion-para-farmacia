@@ -40,7 +40,7 @@ Estado y Próx. venc. usan sólo lotes con unidades y siguen el mismo orden que 
 
 ## Fotos manuales de productos
 
-Usuarios con `CATALOG_MANAGE` pueden subir, cambiar o quitar una foto al crear o editar un producto desde cualquier dispositivo compatible. `CATALOG_READ` permite verla solo dentro de su organización. El backend revalida permisos y pertenencia del producto; no hay URLs públicas ni búsquedas automáticas de imágenes.
+Usuarios con `CATALOG_MANAGE` pueden subir, cambiar o quitar una foto al crear o editar un producto desde cualquier dispositivo compatible. `CATALOG_READ` permite verla solo dentro de su organización. El backend revalida permisos y pertenencia del producto; no hay URLs públicas ni búsquedas automáticas de imágenes. Única excepción (SISTEMA-122): los productos sin foto cuyo código coincide con la base de medicamentos reciben una sola vez la foto de una tienda argentina, ya guardada en el catálogo externo; nunca se reemplaza ni se repone una foto quitada. Ver `EXTERNAL_PRODUCT_CATALOG.md`.
 
 Productos muestra Foto → Producto → Código de barras. La miniatura carga cuando se acerca al área visible y permite ampliar la foto. Los productos sin foto conservan un marcador neutro.
 

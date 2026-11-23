@@ -34,6 +34,8 @@ import { CatalogService } from "./catalog.service";
 import { MedicineCatalogService } from "./medicine-catalog.service";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
+import { canonicalGtin } from "./external-gtin";
+import { elegirFoto } from "./fotos-medicamentos";
 
 class BaseLocalQueryDto {
   @IsOptional() @IsString() @MaxLength(120) version?: string;
@@ -103,6 +105,14 @@ export class MedicineReferenceController {
     );
     // Primero la base propia. Una coincidencia única se vincula sola.
     const catalogMatches = await this.medicineCatalog.byBarcode(code);
+    if (catalogMatches.length === 1) {
+      // Foto de una tienda para el alta (SISTEMA-122); sin ella sigue igual.
+      const foto = await this.fotoDeTienda(
+        organizationId,
+        catalogMatches[0]!.barcode,
+      );
+      if (foto) catalogMatches[0] = { ...catalogMatches[0]!, foto };
+    }
     if (catalogMatches.length)
       return {
         matches: catalogMatches,
@@ -145,6 +155,26 @@ export class MedicineReferenceController {
       automaticSelection: false,
       officialUnavailable,
     };
+  }
+
+  private async fotoDeTienda(
+    organizationId: string,
+    barcode: string,
+  ): Promise<string | undefined> {
+    try {
+      const gtin14 = canonicalGtin(barcode);
+      const elegida = elegirFoto(
+        { id: "", organizationId, gtins: [gtin14] },
+        await this.externalCatalog.fotosDeMedicamentos(organizationId, [
+          gtin14,
+        ]),
+      );
+      return elegida
+        ? `data:image/jpeg;base64,${elegida.content.toString("base64")}`
+        : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   // Toda la base para buscar sin conexión en la PC (SISTEMA-69).

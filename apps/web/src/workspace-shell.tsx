@@ -4440,6 +4440,16 @@ function Products({
                         scannedMedicine.current = reference;
                         externalFilled.current = null;
                         applyReference(reference, true);
+                        // Foto de una tienda (SISTEMA-122): nunca pisa una
+                        // foto elegida, quitada o ya guardada.
+                        if (
+                          reference.foto &&
+                          productImage === undefined &&
+                          !editingProduct?.image
+                        ) {
+                          externalImage.current = reference.foto;
+                          setProductImage(reference.foto);
+                        }
                       }}
                       onRetailMedicine={applyRetailMedicine}
                       onCode={startCodeSearch}

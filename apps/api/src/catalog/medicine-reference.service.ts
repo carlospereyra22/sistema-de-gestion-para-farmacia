@@ -62,6 +62,8 @@ export type MedicineReference = {
   referenceUrl?: string | null;
   officialDelisted?: boolean;
   laboratoryMismatch?: string | null;
+  // Foto de una tienda, sólo al escanear un código de la base (SISTEMA-122).
+  foto?: string;
 };
 
 type PriceRemediesCandidate = MedicineReference & { score: number };
