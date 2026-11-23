@@ -7,7 +7,7 @@ import {
   guardarConfiguracionCatalogo,
   type ConfiguracionCatalogo,
 } from "./lib/catalogo-online-api";
-import { direccionDelCatalogo, SITIO_CATALOGO } from "./lib/catalogo-online";
+import { direccionDelCatalogo, sitioDelCatalogo } from "./lib/catalogo-online";
 import { ProductFilterSelect } from "./product-filter-select";
 
 const campo =
@@ -92,7 +92,10 @@ export function CatalogoConfiguracion({
     setAviso("");
     setDatos({ ...datos, [clave]: valor });
   };
-  const direccion = direccionDelCatalogo(SITIO_CATALOGO, datos.slug);
+  const sitio = sitioDelCatalogo();
+  const direccion = sitio ? direccionDelCatalogo(sitio, datos.slug) : "";
+  // Sin sitio publicado no hay link que copiar ni abrir.
+  const linkListo = datos.exists && Boolean(sitio);
 
   const guardar = async (event: FormEvent) => {
     event.preventDefault();
@@ -131,9 +134,16 @@ export function CatalogoConfiguracion({
           <p className="text-sm font-medium text-slate-800">
             Link para tus clientes
           </p>
-          <p className="truncate font-mono text-sm text-slate-600">
-            {direccion}
-          </p>
+          {sitio ? (
+            <p className="truncate font-mono text-sm text-slate-600">
+              {direccion}
+            </p>
+          ) : (
+            <p className="text-sm text-slate-600">
+              El sitio público del catálogo todavía no está publicado. Avisá a
+              soporte para habilitarlo.
+            </p>
+          )}
           {!datos.exists ? (
             <p className="text-xs text-amber-700">
               Guardá la configuración para crear el catálogo.
@@ -143,19 +153,19 @@ export function CatalogoConfiguracion({
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={!datos.exists}
+            disabled={!linkListo}
             onClick={() => void navigator.clipboard?.writeText(direccion)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
           >
             <Copy size={15} aria-hidden /> Copiar
           </button>
           <a
-            href={datos.exists ? direccion : undefined}
+            href={linkListo ? direccion : undefined}
             target="_blank"
             rel="noreferrer"
-            aria-disabled={!datos.exists}
+            aria-disabled={!linkListo}
             className={`inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 ${
-              datos.exists ? "" : "pointer-events-none opacity-50"
+              linkListo ? "" : "pointer-events-none opacity-50"
             }`}
           >
             <ExternalLink size={15} aria-hidden /> Abrir

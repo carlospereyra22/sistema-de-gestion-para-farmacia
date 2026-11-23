@@ -2,7 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { Interruptor } from "./catalogo-configuracion";
-import { direccionDelCatalogo, pestanasVisibles } from "./lib/catalogo-online";
+import {
+  direccionDelCatalogo,
+  pestanasVisibles,
+  sitioDelCatalogo,
+} from "./lib/catalogo-online";
 import { EstadoPedidoEtiqueta } from "./catalogo-pedidos";
 
 describe("catálogo online: pantallas", () => {
@@ -47,5 +51,28 @@ describe("catálogo online: pantallas", () => {
     expect(
       direccionDelCatalogo("https://catalogo.ejemplo.com/", "farmacia-perez"),
     ).toBe("https://catalogo.ejemplo.com/farmacia-perez");
+  });
+
+  it("cada ambiente usa su sitio del catálogo (SISTEMA-120)", () => {
+    // Test: la gestión de test apunta al catálogo de test.
+    expect(
+      sitioDelCatalogo(
+        "preprod-sistema-de-gestion.netlify.app",
+        false,
+        undefined,
+      ),
+    ).toBe("https://preprod-catalogo-sistema-de-gestion.netlify.app");
+    // Un ambiente sin sitio publicado no inventa un link a localhost.
+    expect(
+      sitioDelCatalogo("sistema-de-gestion22.netlify.app", false, undefined),
+    ).toBeNull();
+    // En la PC, el de desarrollo.
+    expect(sitioDelCatalogo("localhost", false, undefined)).toBe(
+      "http://localhost:5175",
+    );
+    // Compilado con la variable, manda la variable.
+    expect(
+      sitioDelCatalogo("cualquiera.app", false, "https://catalogo.ejemplo.com"),
+    ).toBe("https://catalogo.ejemplo.com");
   });
 });

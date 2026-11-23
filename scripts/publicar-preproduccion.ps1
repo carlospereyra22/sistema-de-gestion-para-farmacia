@@ -17,6 +17,8 @@ $remoteHost = if ($env:GESTION_PREPROD_HOST) { $env:GESTION_PREPROD_HOST } else 
 $remoteUser = if ($env:GESTION_PREPROD_SSH_USER) { $env:GESTION_PREPROD_SSH_USER } else { 'ubuntu' }
 $remote = $remoteUser + '@' + $remoteHost
 $target = Join-Path $project 'SUBIR-A-NETLIFY-PREPROD'
+# Sitio publico del catalogo online de test (SISTEMA-120): otro sitio de Netlify.
+$catalogTarget = Join-Path $project 'SUBIR-A-NETLIFY-CATALOGO-PREPROD'
 
 function Run([string]$Program, [string[]]$Arguments) {
     & $Program @Arguments
@@ -110,6 +112,34 @@ $redirects = @"
     [Text.UTF8Encoding]::new($false)
 )
 
+# Sitio del catalogo (SISTEMA-120). El paquete de produccion no lo incluye: se
+# compila aca, desde el mismo main limpio, y solo reenvia /api/v1/catalogo/* a
+# la API de test (ver docs/CATALOGO_ONLINE.md).
+$previousApiUrl = $env:VITE_API_URL
+$env:VITE_API_URL = '/api/v1'
+try {
+    Push-Location $project
+    try { Run 'pnpm.cmd' @('--filter','@gestion/catalogo','build') } finally { Pop-Location }
+} finally {
+    $env:VITE_API_URL = $previousApiUrl
+}
+$catalogDist = Join-Path $project 'apps\catalogo\dist'
+if (-not (Test-Path -LiteralPath (Join-Path $catalogDist 'index.html') -PathType Leaf)) { throw 'Falta el sitio del catalogo compilado.' }
+$catalogFrontend = Join-Path $stage.FullName 'netlify-catalogo-preprod-ready'
+Copy-Item -LiteralPath $catalogDist -Destination $catalogFrontend -Recurse
+foreach ($file in Get-ChildItem -LiteralPath $catalogFrontend -Recurse -File) {
+    if ($file.Name -like '.env*' -or $file.Extension -in @('.key','.pem','.dump')) { throw 'Archivo privado en el sitio del catalogo.' }
+}
+$catalogRedirects = @"
+/api/v1/catalogo/* https://$remoteHost/preprod/api/v1/catalogo/:splat 200!
+/* /index.html 200
+"@
+[IO.File]::WriteAllText(
+    (Join-Path $catalogFrontend '_redirects'),
+    $catalogRedirects,
+    [Text.UTF8Encoding]::new($false)
+)
+
 if ($PrepareOnly) {
     Write-Host "PREPARACION PREPRODUCCION OK: $frontend"
     Write-Host 'No se contactó el VPS ni se reemplazó SUBIR-A-NETLIFY-PREPROD.'
@@ -172,4 +202,9 @@ if (Test-Path -LiteralPath $target) {
     Move-Item -LiteralPath $target -Destination (Join-Path $stage.FullName 'netlify-preprod-anterior')
 }
 Move-Item -LiteralPath $frontend -Destination $target
+if (Test-Path -LiteralPath $catalogTarget) {
+    Move-Item -LiteralPath $catalogTarget -Destination (Join-Path $stage.FullName 'netlify-catalogo-preprod-anterior')
+}
+Move-Item -LiteralPath $catalogFrontend -Destination $catalogTarget
 Write-Host "PREPRODUCCION LISTA. Subir a Netlify: $target"
+Write-Host "Catalogo online de test, a su propio sitio de Netlify: $catalogTarget"
