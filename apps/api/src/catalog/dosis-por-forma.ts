@@ -32,7 +32,7 @@ const POR_FORMA: [RegExp, CategoriaForma][] = [
   [/oftalm/, "oftalmico"],
   [/gotas oticas/, "otico"],
   [/nasal/, "nasal"],
-  [/nebuliz|para inhalar|diskus|sprays\/aerosoles/, "inhalatorio"],
+  [/nebuliz|para inhalar|diskus/, "inhalatorio"],
   [/ampollas bebibles|jarabe|gotas orales/, "liquido"],
   [/ampollas\/|jeringa|autoinyector|parent/, "inyectable"],
   [/ovulos|vaginal/, "vaginal"],
@@ -64,15 +64,28 @@ const POR_PRESENTACION: [RegExp, CategoriaForma][] = [
 export function categoriaDeForma(
   forma?: string | null,
   presentacion?: string | null,
+  // El nombre también aclara: "EVACARE CREMA VAGINAL" con "crema x 35 g".
+  nombre?: string | null,
 ): CategoriaForma | null {
   const textoForma = normalizado(forma ?? "");
   const textoPresentacion = normalizado(presentacion ?? "");
+  const aclaracion = `${textoPresentacion} ${normalizado(nombre ?? "")}`;
   // La presentación aclara lo que la forma del padrón agrupa: "crema vag.",
   // "spray nasal" o "ung.oft." no son de la piel ni para inhalar.
-  if (/\bvag/.test(textoPresentacion)) return "vaginal";
-  if (/\boft|oftalm|colirio/.test(textoPresentacion)) return "oftalmico";
-  if (/nasal/.test(textoPresentacion)) return "nasal";
-  if (/\botic/.test(textoPresentacion)) return "otico";
+  if (/\bvag/.test(aclaracion)) return "vaginal";
+  if (/\boft|oftalm|colirio/.test(aclaracion)) return "oftalmico";
+  if (/nasal/.test(aclaracion)) return "nasal";
+  if (/\botic/.test(aclaracion)) return "otico";
+  // "Sprays/Aerosoles" agrupa inhaladores con sprays de uso externo (frío
+  // local, antisépticos): para inhalar sólo si la presentación lo dice.
+  // El padrón junta en "Sprays/Aerosoles" inhaladores, sprays nasales y de uso
+  // externo: sólo se decide si la presentación lo dice; si no, sin forma.
+  if (/sprays\/aerosoles/.test(textoForma))
+    return /inhal|nebu|hfa|puff|ellipta|diskus|turbuhaler|breezhaler|respimat|aerocamara/.test(
+      aclaracion,
+    )
+      ? "inhalatorio"
+      : null;
   // Sobres para tomar que el padrón agrupa con los polvos de uso rectal.
   if (/\bsob(res?)?\b/.test(textoPresentacion) && /rectal/.test(textoForma))
     return "solido";
@@ -251,4 +264,47 @@ export function esCombinacionConGuiaSimple(
     normalizado(nombre),
   );
   return combinada && !guia.activeIngredient.includes("+");
+}
+
+/**
+ * "Para qué sirve" de la forma de la presentación cuando el texto separa usos
+ * por forma ("Colirio: ojo seco. Crema o polvo: adhesivo dental."). Sin
+ * etiquetas de forma, o si ninguna es de esta forma, el texto completo.
+ */
+export function usoParaForma(
+  uso: string,
+  via: string,
+  categoria: CategoriaForma | null,
+): string {
+  if (!uso || !categoria) return uso;
+  const etiqueta = /(^|[.;]\s+)([A-ZÁÉÍÓÚÑ][^.:;]{0,45}):\s*/g;
+  const conEtiqueta = [...uso.matchAll(etiqueta)].some(
+    (coincidencia) => categoriasDeEtiqueta(coincidencia[2] ?? "", via) !== null,
+  );
+  if (!conEtiqueta) return uso;
+  const propia = dosisParaForma(uso, via, categoria);
+  return propia.otraForma || !propia.dosis ? uso : propia.dosis;
+}
+
+/** Formas que nombran las etiquetas de un texto ("Spray nasal:", "Inhalador:"). */
+export function formasDelTexto(texto: string, via: string): CategoriaForma[] {
+  const etiqueta = /(^|[.;]\s+)([A-ZÁÉÍÓÚÑ][^.:;]{0,45}):\s*/g;
+  const formas = new Set<CategoriaForma>();
+  for (const coincidencia of texto.matchAll(etiqueta))
+    for (const forma of categoriasDeEtiqueta(coincidencia[2] ?? "", via) ?? [])
+      formas.add(forma);
+  return [...formas];
+}
+
+/**
+ * Vía que se muestra cuando la forma de la presentación no se pudo decidir: la
+ * de la única forma que nombra el texto ("Uso externo: rociar…"); si nombra
+ * varias, ninguna (mejor nada que una vía equivocada); sin etiquetas, la del
+ * padrón.
+ */
+export function viaSinForma(texto: string, via: string): string {
+  const formas = formasDelTexto(texto, via);
+  if (!formas.length) return via;
+  const vias = new Set(formas.map((forma) => VIA_DE_CATEGORIA[forma]));
+  return vias.size === 1 ? [...vias][0]! : "";
 }

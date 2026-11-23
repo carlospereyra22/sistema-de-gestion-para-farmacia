@@ -2,6 +2,8 @@
 # Carga la base de medicamentos (SISTEMA-26) en el release activo de un ambiente.
 # Solo agrega lo que falta: repetirla no pisa precios ya actualizados.
 # Uso en el VPS: sudo bash import-medicine-catalog.sh <preprod|prod> <archivo.jsonl>
+# Fichas de PR Vademécum (SISTEMA-123) y guías corregidas:
+#   sudo bash import-medicine-catalog.sh <preprod|prod> <monografias.json> monografias
 set +x
 set -euo pipefail
 test "$EUID" -eq 0
@@ -29,6 +31,12 @@ run() {
     --setenv=FISCAL_QUEUE_WORKER=off \
     /usr/local/bin/node "$cli" "$@"
 }
+
+if [ "${3:-}" = monografias ]; then
+  run guias
+  run monografias "$file"
+  exit 0
+fi
 
 echo "Antes en $1:"
 run estado

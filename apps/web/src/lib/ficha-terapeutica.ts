@@ -44,9 +44,24 @@ export type DosisPediatrica = {
   nota?: string;
 };
 
+// Ficha publicada de la marca (PR Vademécum, SISTEMA-123): el prospecto.
+export type MonografiaMedicamento = {
+  name: string;
+  laboratory: string;
+  therapeuticAction: string;
+  composition: string;
+  indications: string;
+  dosage: string;
+  presentations: string;
+  sourceUrl: string;
+  /** Vía según el modo de uso, si lo dice sin dudas. */
+  via: string;
+};
+
 export type RespuestaFicha = {
   guia: GuiaPrincipioActivo | null;
   ficha: FichaTerapeutica | null;
+  monografia?: MonografiaMedicamento | null;
 };
 
 // Lo que muestra la tarjeta, venga de la guía, del padrón en vivo o de ambos.
@@ -63,10 +78,35 @@ export type ResumenFicha = {
   /** No hay dosis para esta forma: se remite al prospecto. */
   dosisDeOtraForma: boolean;
   pediatrica: DosisPediatrica | null;
+  /** Uso y dosis del prospecto de la marca, no orientativos por droga. */
+  deProspecto: boolean;
+  composicion: string;
+  fuente: { nombre: string; url: string } | null;
 };
 
 export function resumenFicha(respuesta: RespuestaFicha): ResumenFicha | null {
-  const { guia, ficha } = respuesta;
+  const { guia, ficha, monografia } = respuesta;
+  if (monografia && (monografia.indications || monografia.dosage))
+    return {
+      // Lo que la ficha no trae (algunas sólo tienen indicaciones), de la guía.
+      paraQueSirve:
+        monografia.indications || guia?.usage || monografia.therapeuticAction,
+      accionTerapeutica:
+        monografia.indications || guia?.usage
+          ? monografia.therapeuticAction
+          : "",
+      dosis: monografia.dosage || guia?.dosage || "",
+      dosisGeneradaConIa: !monografia.dosage && guia?.dosageSource === "ia",
+      via: monografia.via || guia?.route || ficha?.via || "",
+      condicionVenta: ficha?.condicionVenta ?? "",
+      principioActivo: guia?.activeIngredient || ficha?.principioActivo || "",
+      dosisPresentacion: guia?.presentationDose ?? "",
+      dosisDeOtraForma: !monografia.dosage && (guia?.dosageOtherForm ?? false),
+      pediatrica: guia?.pediatric ?? null,
+      deProspecto: !!monografia.dosage,
+      composicion: monografia.composition,
+      fuente: { nombre: "PR Vademécum", url: monografia.sourceUrl },
+    };
   const accion = ficha?.accionTerapeutica || guia?.therapeuticAction || "";
   const uso = guia?.usage ?? "";
   if (!accion && !uso) return null;
@@ -82,6 +122,9 @@ export function resumenFicha(respuesta: RespuestaFicha): ResumenFicha | null {
     dosisPresentacion: guia?.presentationDose ?? "",
     dosisDeOtraForma: guia?.dosageOtherForm ?? false,
     pediatrica: guia?.pediatric ?? null,
+    deProspecto: false,
+    composicion: "",
+    fuente: null,
   };
 }
 

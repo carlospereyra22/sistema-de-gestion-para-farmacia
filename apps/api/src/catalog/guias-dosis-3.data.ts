@@ -387,8 +387,8 @@ const FILAS: FilaDosis[] = [
   ],
   [
     "oximetazolina",
-    "Congestión nasal.",
-    "1-2 aplicaciones por fosa cada 12 h, máx. 3-5 días.",
+    "Gotas o spray nasal: congestión nasal. Colirio: ojos rojos e irritados.",
+    "Nasal: 1-2 aplicaciones en cada fosa cada 12 h, no más de 3 días. Colirio: 1-2 gotas cada 6 h, no más de 3 días.",
   ],
   [
     "paracetamol+fenilefrina",
@@ -878,7 +878,11 @@ const FILAS: FilaDosis[] = [
   ["agalsidasa beta", "Enfermedad de Fabry.", `Infusión cada 14 días; ${ESP}`],
   ["amantadina", "Parkinson.", "100 mg cada 12 h."],
   ["amikacina", "Infecciones bacterianas graves.", `${HOSP}, cada 24 h.`],
-  ["aminoácidos", "Nutrición parenteral.", `${HOSP}, en infusión continua.`],
+  [
+    "aminoácidos",
+    "Oral: suplemento de aminoácidos. Inyectable: nutrición parenteral (uso hospitalario).",
+    "Oral: 1 toma cada 24 h, según envase. Inyectable: uso hospitalario, en infusión continua.",
+  ],
   [
     "aminoácidos+vit.b12",
     "Cansancio y falta de apetito.",

@@ -67,8 +67,8 @@ const FILAS: FilaDosis[] = [
   ["mentol", "Garganta y congestión.", "1 pastilla cada 2-3 h."],
   [
     "mentol+alcanfor+asoc.",
-    "Congestión nasal (bálsamo).",
-    "Aplicar en el pecho cada 8-12 h o inhalar los vapores.",
+    "Congestión nasal y del pecho (bálsamo).",
+    "Según el envase: aplicar en pecho, espalda y cuello cada 8-12 h.",
   ],
   ["mentol+eucaliptol", "Dolor muscular (gel).", "Aplicar cada 6-8 h."],
   ["meperidina", "Dolor intenso.", `${HOSP}, cada 3-4 h.`],

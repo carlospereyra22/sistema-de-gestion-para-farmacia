@@ -73,7 +73,11 @@ export function DatosFicha({
       </Dato>
       {(resumen.dosis || resumen.dosisDeOtraForma || resumen.pediatrica) && (
         <Dato
-          titulo={`Cada cuánto se suele ${/^oral/.test(resumen.via) || !resumen.via ? "tomar" : "usar"} (adultos)`}
+          titulo={
+            resumen.deProspecto
+              ? "Cómo se usa (prospecto)"
+              : `Cada cuánto se suele ${/^oral/.test(resumen.via) || !resumen.via ? "tomar" : "usar"} (adultos)`
+          }
           ancho
         >
           {resumen.dosis ? (
@@ -93,6 +97,7 @@ export function DatosFicha({
           {resumen.pediatrica ? (
             <CalculadoraInfantil dosis={resumen.pediatrica} mgPorMl={mgMl} />
           ) : (
+            !resumen.deProspecto &&
             esPresentacionPediatrica(nombre, presentacion) && (
               <span className="mt-1 block text-xs font-medium text-amber-700">
                 Presentación líquida o pediátrica: en niños la dosis va según el
@@ -117,6 +122,24 @@ export function DatosFicha({
             {resumen.principioActivo}
           </span>
         </Dato>
+      )}
+      {resumen.composicion && (
+        <Dato titulo="Composición" ancho>
+          {resumen.composicion}
+        </Dato>
+      )}
+      {resumen.fuente && (
+        <p className="text-xs text-slate-500 sm:col-span-2">
+          Fuente:{" "}
+          <a
+            href={resumen.fuente.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-teal-700 underline-offset-2 hover:underline"
+          >
+            {resumen.fuente.nombre}
+          </a>
+        </p>
       )}
     </dl>
   );

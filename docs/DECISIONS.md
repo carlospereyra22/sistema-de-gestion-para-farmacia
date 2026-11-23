@@ -517,6 +517,17 @@ Se reutiliza el formato térmico de ventas (80 mm) para imprimir luego de cobrar
   fila lleva el ambiente porque test y producción comparten la base. Ver
   `EXTERNAL_PRODUCT_CATALOG.md`.
 
+- **Prospecto de la marca y equivalencias sólo con dosis comprobada (SISTEMA-123, 23/11/2026).**
+  La revisión de los 600 medicamentos de la demo encontró prospectos que no
+  correspondían al producto (una guía por droga para todas sus formas) y 788
+  equivalencias "confirmadas" sin dosis en ninguno de los dos productos. Pedido del
+  usuario: que sea preciso y que no tenga que marcar nada a mano. Se toma la ficha
+  publicada de cada marca en PR Vademécum Argentina (prospecto y composición), leída
+  de páginas públicas que `robots.txt` permite, de a una por segundo; no se usa su
+  buscador interno. Equivalente sólo con la misma dosis conocida en los dos, misma
+  forma (y tipo en uso externo) y misma liberación; lo demás va a "Otros con la
+  droga". Ver `MEDICINE_CATALOG.md` y `PRODUCTS.md`.
+
 - **Fotos de las tiendas en medicamentos (SISTEMA-122, 23/11/2026).** Pedido del
   usuario: poner la foto de los medicamentos que coinciden con la base, para todas
   las farmacias y también en los productos ya cargados sin foto. Se usan todos los

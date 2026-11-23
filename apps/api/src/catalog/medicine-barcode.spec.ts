@@ -1,3 +1,4 @@
+import type { MonografiasService } from "./monografias.service";
 import {
   MedicineReferenceService,
   parsePriceMinor,
@@ -27,6 +28,9 @@ const row = {
 const noCatalog = {
   byBarcode: jest.fn().mockResolvedValue([]),
 } as unknown as MedicineCatalogService;
+const sinFichas = {
+  deProducto: jest.fn().mockResolvedValue(null),
+} as unknown as MonografiasService;
 
 describe("medicine barcode lookup", () => {
   afterEach(() => jest.restoreAllMocks());
@@ -110,6 +114,7 @@ describe("medicine barcode lookup", () => {
             { source: "alfabeta" },
           ]),
       } as unknown as MedicineCatalogService,
+      sinFichas,
     );
     const request = { auth: { sub: "actor" } } as AuthenticatedRequest;
     const code = "7793640215479";
@@ -132,6 +137,7 @@ describe("medicine barcode lookup", () => {
         medicineFallback: jest.fn().mockResolvedValue([]),
       } as unknown as ExternalCatalogService,
       noCatalog,
+      sinFichas,
     );
     const request = { auth: { sub: "actor" } } as AuthenticatedRequest;
     expect(
@@ -169,6 +175,7 @@ describe("medicine barcode lookup", () => {
         medicineFallback: jest.fn().mockResolvedValue([fallback]),
       } as unknown as ExternalCatalogService,
       noCatalog,
+      sinFichas,
     );
     expect(
       await controller.barcode(
@@ -195,6 +202,7 @@ describe("medicine barcode lookup", () => {
       {} as AlfaBetaService,
       {} as ExternalCatalogService,
       { search } as unknown as MedicineCatalogService,
+      sinFichas,
     );
     const request = { auth: { sub: "actor" } } as AuthenticatedRequest;
     expect(

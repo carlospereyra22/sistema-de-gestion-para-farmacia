@@ -241,6 +241,53 @@ function modificadoresDe(nombre: string): string {
   );
 }
 
+// Liberación prolongada: "12 HS", "RETARD", "LP", "lib.prol." no equivalen a
+// la común aunque la dosis sea la misma.
+const PROLONGADA =
+  /(?:^|[^a-z0-9])(retard|lp|l\.p|ap|a\.p|xr|xl|sr|od|12 ?hs?|24 ?hs?|12 horas|24 horas|lib\.? ?prol|liberacion prolongada|prolongada|depot)(?![a-z0-9])/;
+
+export function liberacionDe(nombre: string, presentacion: string): string {
+  return PROLONGADA.test(normalizado(`${nombre} ${presentacion}`))
+    ? "prolongada"
+    : "comun";
+}
+
+// Dentro de "Cremas/Geles/Pomadas/Ungüentos" o "Solución de uso externo", el
+// tipo concreto: un gel no es una crema.
+const SUBFORMAS: [RegExp, string][] = [
+  [/gel/, "gel"],
+  [/\b(cr|crema)\b/, "crema"],
+  [/\b(pda|pom|pomada)\b/, "pomada"],
+  [/\b(ung|unguento)\b/, "unguento"],
+  [/\b(loc|locion)\b/, "locion"],
+  [/\b(emuls|emulsion)\b/, "emulsion"],
+  [/\b(spray|aerosol)\b/, "spray"],
+  [/\b(pvo|polvo|talco)\b/, "polvo"],
+  [/\b(sol|solucion)\b/, "solucion"],
+];
+
+export function subformaTopica(nombre: string, presentacion: string): string {
+  const texto = normalizado(`${presentacion} ${nombre}`);
+  return SUBFORMAS.find(([regla]) => regla.test(texto))?.[1] ?? "";
+}
+
+// Cómo se toma un comprimido: un efervescente, masticable, dispersable o
+// sublingual no equivale a uno común aunque el padrón los agrupe.
+const MODOS: [RegExp, string][] = [
+  [/eferv/, "efervescente"],
+  [/mast/, "masticable"],
+  [/disp|bucodisp|orodisp/, "dispersable"],
+  [/subl/, "sublingual"],
+];
+
+export function modoDeTomar(nombre: string, presentacion: string): string {
+  const texto = normalizado(`${presentacion} ${nombre}`);
+  return MODOS.find(([regla]) => regla.test(texto))?.[1] ?? "";
+}
+
+// "Cápsulas/Softgels" no es tópica: no se busca "gel" en la forma del padrón.
+const FORMAS_TOPICAS = /crema|pomada|unguento|uso externo|locion|emulsion/;
+
 function textoDosis(valor: Dosis): string {
   if (!valor) return "";
   return `${valor.valores.join("/")}${valor.unidad ? ` ${valor.unidad}` : ""}`;
@@ -361,6 +408,7 @@ export function separarAlternativas(
     itemIds: Set<string>;
     codigos: Set<string>;
     nombre?: string;
+    presentacion?: string;
     // Fórmula "+asoc." o multivitamínico: el padrón no detalla todos los
     // componentes, así que no se ofrecen equivalentes, solo relacionados.
     composicionAbierta?: boolean;
@@ -371,12 +419,6 @@ export function separarAlternativas(
   const equivalentes: Alternativa[] = [];
   const mismaDroga: Alternativa[] = [];
   const forma = normalizado(base.forma.trim());
-  // Sin dosis del elegido: si en esa forma casi nadie la escribe (dipirona en
-  // comprimidos), una dosis escrita marca otra concentración ("1 g"); si la
-  // mayoría la escribe (ibuprofeno en cápsulas), queda para confirmar.
-  const deLaForma = items.filter((item) => forma && formaDe(item) === forma);
-  const conDosis = deLaForma.filter((item) => dosisDeItem(item)).length;
-  const dosisHabitual = conDosis * 2 > deLaForma.length;
   const vistos = new Set<string>();
   const codigosVistos = new Set<string>();
   for (const item of items) {
@@ -399,24 +441,36 @@ export function separarAlternativas(
       .map((codigo) => productoPorCodigo.get(codigo))
       .find(Boolean);
     const mismaForma = !!forma && formaDe(item) === forma;
+    // Equivalente sólo con la concentración conocida y la misma en los dos
+    // (SISTEMA-123): sin el dato no se da por igual ni se deja para confirmar.
     const dosisItem = dosisDeItem(item);
-    let dosis =
-      !base.dosis && dosisItem && !dosisHabitual
-        ? "distinta"
-        : compararDosis(base.dosis, dosisItem, !dosisHabitual);
-    // Sin dosis escrita en ninguno, "FORTE", "PED." y similares marcan otra
-    // potencia: no se dan por iguales.
+    const mismaDosis =
+      !!base.dosis &&
+      !!dosisItem &&
+      compararDosis(base.dosis, dosisItem) === "igual";
+    const mismaLiberacion =
+      liberacionDe(base.nombre ?? "", base.presentacion ?? "") ===
+      liberacionDe(item.name, item.presentation);
+    const mismoTipo =
+      !FORMAS_TOPICAS.test(forma) ||
+      subformaTopica(base.nombre ?? "", base.presentacion ?? "") ===
+        subformaTopica(item.name, item.presentation);
+    // Sin unidad de un lado ("IBU 400"), un "FORTE" o "PED." en un solo nombre
+    // marca otra potencia.
+    const mismasVariantes =
+      (!!base.dosis?.unidad && !!dosisItem?.unidad) ||
+      modificadoresDe(base.nombre ?? "") === modificadoresDe(item.name);
     if (
-      dosis === "igual" &&
-      !base.dosis &&
-      !dosisItem &&
-      modificadoresDe(base.nombre ?? "") !== modificadoresDe(item.name)
+      mismaForma &&
+      mismaDosis &&
+      mismaLiberacion &&
+      mismoTipo &&
+      modoDeTomar(base.nombre ?? "", base.presentacion ?? "") ===
+        modoDeTomar(item.name, item.presentation) &&
+      mismasVariantes &&
+      !base.composicionAbierta
     )
-      dosis = "sin dato";
-    if (mismaForma && dosis !== "distinta" && !base.composicionAbierta)
-      equivalentes.push(
-        alternativa(item, producto, dosis === "igual" ? null : AVISO_DOSIS),
-      );
+      equivalentes.push(alternativa(item, producto, null));
     else mismaDroga.push(alternativa(item, producto, null));
   }
   return {

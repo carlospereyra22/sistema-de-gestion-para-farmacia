@@ -2,6 +2,8 @@ import { DOSIS_PEDIATRICAS } from "./dosis-pediatricas";
 import {
   categoriaDeForma,
   dosisParaForma,
+  usoParaForma,
+  viaSinForma,
   esCombinacionConGuiaSimple,
   viaParaForma,
 } from "./dosis-por-forma";
@@ -865,7 +867,7 @@ export class MedicineCatalogService {
     const encontrada = await this.guiaPorCodigoOPrincipio(
       principioActivo,
       codigos,
-      producto,
+      { ...producto, nombre },
     );
     // "BUSCAPINA COMPOSITUM" con la guía de una sola droga (otra fuente le
     // pone solo "dipirona"): esa dosis no es la de la combinación.
@@ -897,7 +899,7 @@ export class MedicineCatalogService {
   private async guiaPorCodigoOPrincipio(
     principioActivo: string | undefined,
     codigos: string[],
-    producto: { forma?: string; presentacion?: string },
+    producto: { forma?: string; presentacion?: string; nombre?: string },
   ) {
     const gtins = codigos
       .map((code) => gtinOf(code))
@@ -916,6 +918,7 @@ export class MedicineCatalogService {
                 doseText: true,
                 pharmaceuticalForm: true,
                 presentation: true,
+                name: true,
               },
             },
           },
@@ -933,14 +936,22 @@ export class MedicineCatalogService {
     // no, la cargada en el producto.
     const categoriasBase = new Set(
       filas.map((fila) =>
-        categoriaDeForma(fila.item.pharmaceuticalForm, fila.item.presentation),
+        categoriaDeForma(
+          fila.item.pharmaceuticalForm,
+          fila.item.presentation,
+          fila.item.name,
+        ),
       ),
     );
     const [categoriaBase] = categoriasBase;
     const categoria =
       categoriasBase.size === 1 && categoriaBase
         ? categoriaBase
-        : categoriaDeForma(producto.forma, producto.presentacion);
+        : categoriaDeForma(
+            producto.forma,
+            producto.presentacion,
+            producto.nombre,
+          );
     const candidatas = [
       ...filas.map((fila) => fila.item.guideKey),
       claveGuia(principioActivo ?? ""),
@@ -967,11 +978,14 @@ export class MedicineCatalogService {
       const deLaForma = dosisParaForma(guia.dosage, guia.route, categoria);
       return {
         ...guia,
+        usage: usoParaForma(guia.usage, guia.route, categoria),
         dosage: deLaForma.dosis,
         // La dosis guardada es de otra forma (ampolla, gel…): se remite al
         // prospecto en vez de mostrar la de los comprimidos.
         dosageOtherForm: deLaForma.otraForma,
-        route: viaParaForma(guia.route, categoria),
+        route: categoria
+          ? viaParaForma(guia.route, categoria)
+          : viaSinForma(guia.dosage, guia.route),
         // Jarabes, gotas y suspensiones: dosis infantil por kilo, si hay.
         pediatric:
           categoria === "liquido" ? (DOSIS_PEDIATRICAS[clave] ?? null) : null,

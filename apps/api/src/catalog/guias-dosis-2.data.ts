@@ -180,7 +180,7 @@ const FILAS: FilaDosis[] = [
   [
     "hedera helix",
     "Tos con flema.",
-    "Cada 8 h, según envase (adultos 5-7,5 ml de jarabe).",
+    "Cada 8 h según el envase: la cantidad depende de la edad y de la concentración del jarabe (adultos y mayores de 12 años, 5-7,5 ml del jarabe común).",
   ],
   [
     "itraconazol",
@@ -278,8 +278,8 @@ const FILAS: FilaDosis[] = [
   ],
   [
     "ginkgo biloba+asoc.",
-    "Memoria y circulación.",
-    "Cada 12-24 h con las comidas.",
+    "Oral: memoria y circulación. Loción o crema: cuidado de la piel, según el producto.",
+    "Oral: 1 toma cada 12-24 h según envase. Loción o crema: aplicar cada 12-24 h.",
   ],
   [
     "glicerina+asoc.",
@@ -360,8 +360,8 @@ const FILAS: FilaDosis[] = [
   ["ambrisentan", "Hipertensión pulmonar.", `5-10 mg cada 24 h; ${ESP}`],
   [
     "arginina",
-    "Lubricante íntimo o suplemento.",
-    "Gel: en cada uso. Oral: cada 12-24 h.",
+    "Gel: lubricante íntimo. Oral: suplemento de arginina.",
+    "Gel: aplicar en cada uso. Oral: 1 toma cada 12-24 h según envase.",
   ],
   ["benzoílo,peróxido", "Acné.", "Aplicar cada 12-24 h; empezar cada 24 h."],
   [
@@ -376,8 +376,8 @@ const FILAS: FilaDosis[] = [
   ],
   [
     "carboximetilcelulosa sódica",
-    "Lágrimas artificiales (ojo seco).",
-    "1-2 gotas cada 4-6 h o cuando haga falta.",
+    "Colirio: ojo seco (lágrimas artificiales). Crema o polvo: adhesivo para prótesis dentales.",
+    "Colirio: 1-2 gotas cada 4-6 h o cuando haga falta. Crema o polvo: aplicar cada 12-24 h al colocar la prótesis.",
   ],
   [
     "carfilzomib",
@@ -553,7 +553,7 @@ const FILAS: FilaDosis[] = [
   [
     "gramicidina+neomicina+asoc.",
     "Dolor e infección de garganta.",
-    "1 pastilla cada 2-3 h dejándola disolver (máx. según envase).",
+    "Según el envase: 2-3 aplicaciones del spray en la garganta cada 4-6 h, o 1 pastilla cada 2-3 h dejándola disolver.",
   ],
   [
     "hidroxipropilmetilcelulosa",
@@ -681,8 +681,8 @@ const FILAS: FilaDosis[] = [
   ],
   [
     "extractos vegetales+asoc.",
-    "Relajación o alivio muscular, según el producto.",
-    "Aplicar u tomar cada 8-12 h según envase.",
+    "Según el producto: relajación, alivio muscular o cuidado de la piel.",
+    "Gel o bálsamo: aplicar cada 8-12 h. Oral: 1 toma cada 8-12 h según envase.",
   ],
   ["ezetimibe", "Colesterol alto.", "10 mg cada 24 h."],
   [
@@ -939,7 +939,7 @@ const FILAS: FilaDosis[] = [
   [
     "nicotina",
     "Dejar de fumar.",
-    "Parche: cada 24 h. Chicle o pastilla: 1 cada 1-2 h cuando aparecen las ganas (máx. según envase).",
+    "Comprimidos para chupar: 1 cada 1-2 h cuando aparecen las ganas de fumar (máx. 15 por día). Chicles: 1 cada 1-2 h (máx. 24 por día). Parche: 1 cada 24 h.",
   ],
   [
     "penicilina g benzatínica",

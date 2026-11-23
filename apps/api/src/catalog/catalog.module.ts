@@ -13,6 +13,7 @@ import { MedicineReferenceController } from "./medicine-reference.controller";
 import { MedicineReferenceService } from "./medicine-reference.service";
 import { ExternalCatalogService } from "./external-catalog.service";
 import { AportesFarmaciaService } from "./aportes-farmacia.service";
+import { MonografiasService } from "./monografias.service";
 import { FotosMedicamentosService } from "./fotos-medicamentos.service";
 import { ExternalCatalogController } from "./external-catalog.controller";
 import { EquivalentesController } from "./equivalentes.controller";
@@ -30,6 +31,7 @@ import { EquivalentesService } from "./equivalentes.service";
   providers: [
     ExternalCatalogService,
     AportesFarmaciaService,
+    MonografiasService,
     FotosMedicamentosService,
     AlfaBetaService,
     CatalogService,

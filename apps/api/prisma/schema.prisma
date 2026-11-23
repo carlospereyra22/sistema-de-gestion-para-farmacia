@@ -407,11 +407,40 @@ model MedicineCatalogItem {
   // composición publicada (`doseSource`: "alfabeta"). SISTEMA-108.
   doseText           String                   @default("") @db.VarChar(60)
   doseSource         String                   @default("") @db.VarChar(20)
+  // Ficha publicada de la marca (SISTEMA-123): prospecto y composición.
+  monographId        String?                  @db.Uuid
+  monograph          MedicineMonograph?       @relation(fields: [monographId], references: [id], onDelete: SetNull)
   createdAt          DateTime                 @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime                 @updatedAt @db.Timestamptz(6)
   barcodes           MedicineCatalogBarcode[]
 
   @@index([priceSource])
+  @@index([name])
+  @@index([monographId])
+}
+
+// Ficha de cada marca publicada en PR Vademécum Argentina (SISTEMA-123),
+// compartida por todas las organizaciones: composición, indicaciones y modo de
+// uso del prospecto, con su enlace. Se carga con
+// `catalogo-medicamentos monografias <archivo>` y se vincula por nombre exacto.
+model MedicineMonograph {
+  id                String                @id @default(uuid()) @db.Uuid
+  source            String                @db.VarChar(20)
+  sourceId          Int
+  name              String
+  laboratory        String                @default("")
+  therapeuticAction String                @default("")
+  composition       String                @default("")
+  indications       String                @default("")
+  dosage            String                @default("")
+  presentations     String                @default("")
+  sourceUrl         String
+  fetchedAt         DateTime              @db.Timestamptz(6)
+  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
+  items             MedicineCatalogItem[]
+
+  @@unique([source, sourceId])
   @@index([name])
 }
 

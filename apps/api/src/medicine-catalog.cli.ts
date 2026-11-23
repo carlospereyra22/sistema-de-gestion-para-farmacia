@@ -3,6 +3,7 @@ import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 
 import type { CatalogImportRecord } from "./catalog/medicine-catalog.service";
+import type { Monografia } from "./catalog/monografias";
 
 // Comando de servidor para la base de medicamentos (SISTEMA-26). Uso:
 //   pnpm --filter @gestion/api catalogo-medicamentos estado
@@ -12,8 +13,10 @@ import type { CatalogImportRecord } from "./catalog/medicine-catalog.service";
 // `actualizar` lee Precios de Remedios y AlfaBeta sin tocar productos.
 // `guias` carga las guías por principio activo (SISTEMA-108).
 // `dosis-marcas` completa la dosis de las marcas cargadas sin dosis escrita.
+// `monografias <archivo.json>` carga las fichas de PR Vademécum (SISTEMA-123),
+// armadas con scripts/medicine-catalog/prvademecum.py.
 const USO =
-  "Uso: catalogo-medicamentos <estado | importar <archivo.jsonl> | actualizar | guias | dosis-marcas>";
+  "Uso: catalogo-medicamentos <estado | importar <archivo.jsonl> | actualizar | guias | dosis-marcas | monografias <archivo.json>>";
 
 async function main(): Promise<void> {
   // Sin temporizador: este proceso sólo ejecuta el comando y termina.
@@ -73,6 +76,18 @@ async function main(): Promise<void> {
               logger.log(mensaje),
             ),
           ),
+        );
+        break;
+      }
+      case "monografias": {
+        if (!argument) throw new Error(USO);
+        const { MonografiasService } =
+          await import("./catalog/monografias.service");
+        const fichas = JSON.parse(
+          await readFile(argument, "utf8"),
+        ) as Monografia[];
+        logger.log(
+          JSON.stringify(await app.get(MonografiasService).importar(fichas)),
         );
         break;
       }
