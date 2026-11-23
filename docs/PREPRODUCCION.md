@@ -20,6 +20,16 @@ ventas, caja, stock, sesiones, usuarios y documentos son exclusivos de
 - Web: se publica manualmente en **otro sitio de Netlify** y se usa la carpeta
   `SUBIR-A-NETLIFY-PREPROD`. Nunca subir esa carpeta sobre
   `sistema-de-gestion22`, que corresponde a producción.
+- Bóveda (SISTEMA-120, 22/11/2026): clave maestra **propia de test** en
+  `/etc/gestion-preprod-vault/vault.key` (copia en
+  `/var/backups/gestion-secrets/preprod-vault.key`), cargada con el agregado
+  `gestion-preprod-api.service.d/40-preprod-vault.conf`. Cifra el secreto del
+  código de los superadmin y las credenciales fiscales de prueba. Sin ella, dar de
+  alta el código del superadmin respondía "El servidor no pudo completar la
+  operación". La prepara `deploy/oracle/prepare-preprod-vault.sh` (idempotente,
+  nunca usa la clave de producción y reinicia sólo la API de test); la instalación
+  la llama sola y las publicaciones no la tocan. En un ambiente ya creado:
+  `sudo bash deploy/oracle/prepare-preprod-vault.sh` desde el release activo.
 
 La primera instalación crea una organización y un propietario nuevos. No usa seed
 demo, no copia datos productivos ni reutiliza la clave JWT de producción. La clave

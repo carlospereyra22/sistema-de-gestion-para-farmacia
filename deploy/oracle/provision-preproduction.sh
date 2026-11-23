@@ -138,6 +138,9 @@ nginx -t
 systemctl daemon-reload
 systemctl enable --now gestion-preprod-api
 systemctl reload nginx
+# Clave propia de la bóveda (SISTEMA-120): sin ella no se puede dar de alta el
+# código de un superadmin. Reinicia la API de test y espera que responda.
+bash "$release/deploy/oracle/prepare-preprod-vault.sh"
 
 for attempt in {1..30}; do
   if curl -fsS --max-time 5 http://127.0.0.1:3001/api/v1/health | grep -Fq '"status":"ok"'; then break; fi
