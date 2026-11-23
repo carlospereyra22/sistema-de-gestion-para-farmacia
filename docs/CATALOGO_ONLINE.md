@@ -138,9 +138,23 @@ Y aunque llegara a la API, el usuario del portal no es un `User`: su correo y
 contraseña no sirven para la gestión.
 
 En la PC: `pnpm dev:catalogo` (puerto 5175); el lanzador de pruebas lo levanta solo.
-La gestión arma el link con `VITE_CATALOGO_URL` (por defecto `http://localhost:5175`).
 
-Para publicar (pendiente, requiere autorización):
+**Dirección del sitio por ambiente (SISTEMA-120).** Test reusa la compilación de
+la gestión de producción, así que la dirección no se fija al compilar: la web la
+toma de `SITIOS_DEL_CATALOGO` (`apps/web/src/lib/catalogo-online.ts`) según el
+sitio donde está abierta la gestión. Si se compiló con `VITE_CATALOGO_URL`, manda
+esa. En la PC, `http://localhost:5175`. Un ambiente sin sitio publicado no muestra
+un link roto: Configuración dice que todavía no está publicado. La farmacia elige
+el final del link ("Final del link", único entre todas las farmacias).
+
+**Test:** gestión `preprod-sistema-de-gestion.netlify.app` → catálogo
+`preprod-catalogo-sistema-de-gestion.netlify.app`. `Publicar Preproduccion`
+compila `apps/catalogo` desde `main` y deja `SUBIR-A-NETLIFY-CATALOGO-PREPROD`,
+con `_redirects` que sólo reenvía `/api/v1/catalogo/*` a la API de test. Se sube
+a mano a ese sitio de Netlify (nunca al de la gestión). Con el proxy, las llamadas
+son del mismo origen y no hace falta `CATALOGO_ORIGIN`.
+
+Para publicar en producción (pendiente, requiere autorización):
 
 - Crear un sitio de Netlify nuevo para `apps/catalogo/dist`, compilado con
   `VITE_API_URL=/api/v1`.

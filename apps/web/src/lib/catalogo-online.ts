@@ -61,9 +61,33 @@ export const pesos = (minor: string | number | bigint) =>
 export const numeroDePedido = (numero: number) =>
   String(numero).padStart(6, "0");
 
-/** Sitio del catálogo público (otro sitio, separado de la gestión). */
-export const SITIO_CATALOGO =
-  import.meta.env.VITE_CATALOGO_URL ?? "http://localhost:5175";
+/**
+ * Sitio público del catálogo de cada ambiente, según el sitio donde está
+ * abierta la gestión (SISTEMA-120). Test reusa la compilación de producción,
+ * así que la dirección no puede quedar fija al compilar. Un ambiente nuevo se
+ * agrega acá cuando se publica su sitio del catálogo (docs/CATALOGO_ONLINE.md).
+ */
+export const SITIOS_DEL_CATALOGO: Readonly<Record<string, string>> = {
+  "preprod-sistema-de-gestion.netlify.app":
+    "https://preprod-catalogo-sistema-de-gestion.netlify.app",
+};
+
+/**
+ * Sitio del catálogo para esta gestión: `VITE_CATALOGO_URL` si se compiló con
+ * ella, el del ambiente o, en la PC, el de desarrollo. `null` si el ambiente
+ * todavía no tiene su sitio publicado.
+ */
+export function sitioDelCatalogo(
+  host: string = typeof location === "undefined" ? "" : location.hostname,
+  desarrollo: boolean = import.meta.env.DEV,
+  compilado: string | undefined = import.meta.env.VITE_CATALOGO_URL,
+): string | null {
+  if (compilado) return compilado;
+  if (SITIOS_DEL_CATALOGO[host]) return SITIOS_DEL_CATALOGO[host];
+  return desarrollo || host === "localhost" || host === "127.0.0.1"
+    ? "http://localhost:5175"
+    : null;
+}
 
 /** Link que la farmacia le pasa al cliente. */
 export const direccionDelCatalogo = (sitio: string, slug: string) =>
