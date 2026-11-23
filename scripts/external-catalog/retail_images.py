@@ -82,63 +82,78 @@ def alternate_images(record, failed_url):
             and not row.get('image_review_reason')]
 
 
-def run(prepared, cache_dir=None):
+def new_client():
     import httpx
+    return httpx.Client(timeout=25, limits=httpx.Limits(max_connections=12, max_keepalive_connections=12), headers={'User-Agent': 'CatalogoJuncos/1.0 (product photo reference)'})
+
+
+def previous_failures_of(report):
+    data = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    return {row['url']: row for row in data.get('failed_requests', []) + data.get('failures', [])}
+
+
+def fetch_photo(url, cache, client, host_limits, previous_failures):
+    """Foto de la caché o bajada y comprimida. Una falla definitiva anterior
+    (404, 403, 401, 429) se devuelve con su 'error' sin volver a pedirla."""
+    key = hashlib.sha256(url.encode()).hexdigest()
+    path = cache / (key + '.json')
+    if not permitted(url):
+        raise ValueError('Image host outside allowlist')
+    if path.exists():
+        return json.loads(path.read_text(encoding='utf-8'))
+    prior = previous_failures.get(url)
+    if prior and any(status in prior['error'] for status in ("'404 ", "'403 ", "'401 ", "'429 ")):
+        return dict(prior)
+    with host_limits[urlsplit(url).hostname]:
+        time.sleep(.3)
+        destination = download_url(url)
+        requested_url = destination
+        for redirect in range(4):
+            with client.stream('GET', destination) as response:
+                if response.is_redirect:
+                    from urllib.parse import urljoin
+                    destination = urljoin(destination, response.headers['location'])
+                    if not permitted(destination):
+                        raise ValueError('Image redirect outside source allowlist')
+                    continue
+                response.raise_for_status()
+                chunks = []
+                count = 0
+                for chunk in response.iter_bytes():
+                    count += len(chunk)
+                    if count > 10 * 1024 * 1024:
+                        raise ValueError('Image exceeds 10 MB')
+                    chunks.append(chunk)
+                raw = b''.join(chunks)
+                break
+        else:
+            raise ValueError('Too many image redirects')
+    if len(raw) > 10 * 1024 * 1024:
+        raise ValueError('Image exceeds 10 MB')
+    image = compress(raw)
+    result = {'data_url': 'data:image/jpeg;base64,' + base64.b64encode(image).decode(),
+              'original_sha256': hashlib.sha256(raw).hexdigest(), 'sha256': hashlib.sha256(image).hexdigest(),
+              'url': url, 'download_url': requested_url}
+    path.write_text(json.dumps(result), encoding='utf-8')
+    return result
+
+
+def run(prepared, cache_dir=None):
     records = json.loads((prepared / 'canonical.json').read_text(encoding='utf-8'))
     cache = cache_dir or prepared / 'images'
     cache.mkdir(exist_ok=True)
     selected = [(r, select_image(r)) for r in records]
     selected = [(r, row) for r, row in selected if row]
-    previous_report = prepared / 'image-report.json'
-    previous_data = json.loads(previous_report.read_text(encoding='utf-8')) if previous_report.exists() else {}
-    previous_failures = {row['url']: row for row in previous_data.get('failed_requests', []) + previous_data.get('failures', [])}
+    previous_failures = previous_failures_of(prepared / 'image-report.json')
     host_limits = {host: Semaphore(4) for host in HOSTS}
-    client = httpx.Client(timeout=25, limits=httpx.Limits(max_connections=12, max_keepalive_connections=12), headers={'User-Agent': 'CatalogoJuncos/1.0 (product photo reference)'})
+    client = new_client()
     def download(pair):
         record, row = pair
         url = row['image_url']
-        key = hashlib.sha256(url.encode()).hexdigest()
-        path = cache / (key + '.json')
         try:
-            if not permitted(url):
-                raise ValueError('Image host outside allowlist')
-            if path.exists():
-                result = json.loads(path.read_text(encoding='utf-8'))
-            else:
-                prior = previous_failures.get(url)
-                if prior and any(status in prior['error'] for status in ("'404 ", "'403 ", "'401 ", "'429 ")):
-                    return dict(prior, gtin14=record['gtin14'])
-                with host_limits[urlsplit(url).hostname]:
-                    time.sleep(.3)
-                    destination = download_url(url)
-                    requested_url = destination
-                    for redirect in range(4):
-                        with client.stream('GET', destination) as response:
-                            if response.is_redirect:
-                                from urllib.parse import urljoin
-                                destination = urljoin(destination, response.headers['location'])
-                                if not permitted(destination):
-                                    raise ValueError('Image redirect outside source allowlist')
-                                continue
-                            response.raise_for_status()
-                            chunks = []
-                            count = 0
-                            for chunk in response.iter_bytes():
-                                count += len(chunk)
-                                if count > 10 * 1024 * 1024:
-                                    raise ValueError('Image exceeds 10 MB')
-                                chunks.append(chunk)
-                            raw = b''.join(chunks)
-                            break
-                    else:
-                        raise ValueError('Too many image redirects')
-                if len(raw) > 10 * 1024 * 1024:
-                    raise ValueError('Image exceeds 10 MB')
-                image = compress(raw)
-                result = {'data_url': 'data:image/jpeg;base64,' + base64.b64encode(image).decode(),
-                          'original_sha256': hashlib.sha256(raw).hexdigest(), 'sha256': hashlib.sha256(image).hexdigest(),
-                          'url': url, 'download_url': requested_url}
-                path.write_text(json.dumps(result), encoding='utf-8')
+            result = fetch_photo(url, cache, client, host_limits, previous_failures)
+            if 'error' in result:
+                return dict(result, gtin14=record['gtin14'])
             return dict(result, gtin14=record['gtin14'], canonical_fingerprint=record['payload']['fingerprint'],
                         source=row['source'], source_ref=row['source_ref'], source_fingerprint=row['fingerprint'],
                         license='SOURCE_IMAGE_NO_OPEN_LICENSE_GRANTED')

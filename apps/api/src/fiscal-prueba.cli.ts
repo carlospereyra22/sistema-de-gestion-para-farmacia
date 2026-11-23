@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   process.env.PRICE_REFRESH_SCHEDULER = "off";
   process.env.SUBSCRIPTION_SCHEDULER = "off";
   process.env.CATALOG_APORTES_SCHEDULER = "off";
+  process.env.MEDICINE_PHOTOS_SCHEDULER = "off";
   process.env.FISCAL_QUEUE_WORKER = "off";
   const args = process.argv.slice(2);
   const comando = args[0];

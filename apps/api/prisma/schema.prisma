@@ -276,6 +276,9 @@ model Product {
   priceManual Boolean @default(false)
   externalReferenceUpdatedAt DateTime? @db.Timestamptz(6)
   externalReferenceCheckedAt DateTime? @db.Timestamptz(6)
+  // Foto de una tienda puesta sola por coincidir el código con la base de
+  // medicamentos (SISTEMA-122). Se pone una sola vez: si la quitan, no vuelve.
+  fotoTiendaEn DateTime? @db.Timestamptz(6)
   saleUnit       SaleUnit        @default(BOX)
   prescriptionRequired Boolean @default(false)
   active         Boolean         @default(true)

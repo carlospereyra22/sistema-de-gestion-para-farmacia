@@ -14,7 +14,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from rules import gtin_error
 from catalog_normalization import canonical_records
-from image_payload import attach_image
+from image_payload import MEDICINE_SOURCES, attach_image, jpeg_bytes
 
 DB = "catalogo_juncos_external"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -53,6 +53,20 @@ def commercial_counts(credentials):
     with psycopg.connect(**credentials, dbname="gestion_dev", options="-c default_transaction_read_only=on") as conn:
         return {table: conn.execute(psycopg.sql.SQL("SELECT count(*) FROM {}").format(psycopg.sql.Identifier(table))).fetchone()[0] for table in ["Product", "ProductBarcode", "ProductPrice", "Purchase", "Sale", "InventoryMovement"]}
 
+def medicine_rows(path):
+    """Fotos de medicamentos validadas (SISTEMA-122): código válido, tienda argentina y JPEG íntegro."""
+    rows = []
+    seen = set()
+    for line in path.read_text(encoding='utf-8').splitlines():
+        r = json.loads(line)
+        if r['gtin14'] in seen or len(r['gtin14']) != 14 or gtin_error(r['gtin14']):
+            raise ValueError('Medicine photo with invalid or repeated code')
+        if r['source'] not in MEDICINE_SOURCES:
+            raise ValueError('Medicine photo from a source outside Argentina')
+        seen.add(r['gtin14'])
+        rows.append(dict(r, foto=jpeg_bytes(r['data_url'], r['sha256'])))
+    return rows
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("prepared", type=pathlib.Path)
@@ -84,7 +98,12 @@ def main():
     image_hash = hashlib.sha256(image_path.read_bytes()).hexdigest() if image_path.exists() else None
     inventory_path = a.prepared / 'inventory.jsonl'
     inventory_hash = hashlib.sha256(inventory_path.read_bytes()).hexdigest() if inventory_path.exists() else ''
-    batch = hashlib.sha256((prepared_hash + ':' + (image_hash or '') + ':' + inventory_hash).encode()).hexdigest()
+    medicine_path = a.prepared / 'medicine-images.jsonl'
+    medicine_hash = hashlib.sha256(medicine_path.read_bytes()).hexdigest() if medicine_path.exists() else ''
+    batch_key = prepared_hash + ':' + (image_hash or '') + ':' + inventory_hash
+    if medicine_hash:
+        batch_key += ':' + medicine_hash
+    batch = hashlib.sha256(batch_key.encode()).hexdigest()
     report = json.loads((a.prepared / "report.json").read_text(encoding="utf-8"))
     manifest = json.loads(a.manifest.read_text(encoding="utf-8"))
     manifest["prepared_sha256"] = prepared_hash
@@ -94,6 +113,9 @@ def main():
     images = {r['gtin14']: r for r in (json.loads(line) for line in image_path.read_text(encoding='utf-8').splitlines())} if image_path.exists() else {}
     if image_path.exists():
         manifest['images_sha256'] = image_hash
+    medicine_photos = medicine_rows(medicine_path) if medicine_path.exists() else None
+    if medicine_photos is not None:
+        manifest['medicine_images_sha256'] = medicine_hash
     for line in path.read_text(encoding="utf-8").splitlines():
         r = json.loads(line)
         if gtin_error(r["code"]) or r["gtin14"] != r["code"].zfill(14) or not r["name"]:
@@ -119,6 +141,12 @@ def main():
             conn.execute(psycopg.sql.SQL("UPDATE {}.candidate SET eligible=false WHERE source = ANY(%s)").format(psycopg.sql.Identifier(schema)), (sources,))
             with conn.cursor() as cur:
                 cur.executemany(psycopg.sql.SQL("INSERT INTO {}.candidate(source,fingerprint,gtin14,payload,batch_id) VALUES (%s,%s,%s,%s,%s) ON CONFLICT(source,fingerprint) DO UPDATE SET payload=EXCLUDED.payload,batch_id=EXCLUDED.batch_id,updated_at=now(),eligible=true").format(psycopg.sql.Identifier(schema)), [(r["source"], r["fingerprint"], r["gtin14"], Jsonb(r), batch) for r in own])
+        if medicine_photos is not None:
+            # Se reemplaza completa: una foto que la tienda sacó no queda colgada.
+            conn.execute('DELETE FROM reference_catalog.medicine_image')
+            with conn.cursor() as cur:
+                cur.executemany('INSERT INTO reference_catalog.medicine_image(gtin14,source,source_ref,url,sha256,foto,batch_id) VALUES (%s,%s,%s,%s,%s,%s,%s)',
+                    [(r['gtin14'], r['source'], r['source_ref'], r['url'], r['sha256'], r['foto'], batch) for r in medicine_photos])
         conn.execute((pathlib.Path(__file__).parent / "normalized-schema.sql").read_text(encoding="utf-8"))
         normalized_rows = canonical_records(rows)
         for record in normalized_rows:
@@ -134,6 +162,7 @@ def main():
         conn.execute('ANALYZE reference_catalog.candidate')
         conn.execute('ANALYZE beauty_odbl.candidate')
         conn.execute('ANALYZE reference_catalog.source_record')
+        conn.execute('ANALYZE reference_catalog.medicine_image')
         stored = conn.execute("SELECT source,count(*),count(DISTINCT gtin14) FROM (SELECT source,gtin14 FROM reference_catalog.candidate WHERE eligible UNION ALL SELECT source,gtin14 FROM beauty_odbl.candidate WHERE eligible) s GROUP BY source ORDER BY source").fetchall()
     after = None if server else commercial_counts(credentials)
     result = {"status": "IMPORTED_TO_LOCAL_POSTGRES", "database": DB, "batch": batch, "imported_at": datetime.now(timezone.utc).isoformat(), "unique_codes_in_database": total, "by_source": stored, "commercial_counts_before": before, "commercial_counts_after": after, "commercial_counts_unchanged": before == after, "production_enabled": False}

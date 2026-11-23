@@ -343,7 +343,7 @@ function CatalogoExterno {
   $permisos = Join-Path $carpeta "catalogo-permisos.sql"
   @(
     "GRANT USAGE ON SCHEMA reference_catalog, beauty_odbl TO catalogo_lector;",
-    "GRANT SELECT ON reference_catalog.product, beauty_odbl.product, reference_catalog.medicine_fallback TO catalogo_lector;"
+    "GRANT SELECT ON reference_catalog.product, beauty_odbl.product, reference_catalog.medicine_fallback, reference_catalog.medicine_photo TO catalogo_lector;"
   ) | Set-Content -Encoding ascii $permisos
   $esquema = Join-Path $raiz "scripts\external-catalog\aportes-schema.sql"
   $codigo = SqlEnDocker "catalogo_juncos_external" $esquema "-v lector=catalogo_lector -v escritor=catalogo_aportes"

@@ -174,6 +174,11 @@ def main():
         if correr([AQUI / "retail_images.py", preparado, "--cache", datos / "images"],
                   registros / "fotos.log"):
             raise Detener("Falló la descarga de fotos.")
+        # Fotos de medicamentos (SISTEMA-122): una foto que no baja no frena nada.
+        registrar("Bajando fotos de medicamentos...")
+        if correr([AQUI / "medicine_images.py", preparado, "--cache", datos / "images"],
+                  registros / "fotos-medicamentos.log"):
+            raise Detener("Falló la descarga de fotos de medicamentos.")
         registrar("Auditando la cobertura...")
         if correr([AQUI / "coverage_audit.py", refresco, preparado], registros / "auditoria.log"):
             raise Detener("La auditoría de cobertura no cerró.")
